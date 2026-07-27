@@ -1,0 +1,62 @@
+# --- Secrets / configuración local ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.yml
+.watchgate.local.yml
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# --- Node / dashboard frontend ---
+node_modules/
+dashboard/frontend/dist/
+dashboard/frontend/build/
+dashboard/backend/dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Bases de datos locales / dashboard ---
+*.sqlite3
+*.db
+
+# --- RAG / índices y caches del sistema ---
+src/watchgate/rag/index/
+*.faiss
+*.index
+.cache/
+
+# --- Logs ---
+*.log
+logs/
+
+# --- Sistemas operativos ---
+.DS_Store
+Thumbs.db
+
+# --- Editores / IDEs ---
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# --- Casos de prueba con payloads reales (si se añaden, no publicar en claro) ---
+tests/fixtures/**/*.secret
