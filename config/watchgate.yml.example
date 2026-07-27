@@ -1,0 +1,27 @@
+# Copiar como .watchgate.yml en la raíz del repositorio a analizar.
+# Ver memoria del proyecto (docs/WatchGate_memoria.pdf), Anexo técnico A.2, A.0.0 y A.3.3.
+
+# Pesos por capa (deben sumar 1; si una capa se desactiva con peso 0,
+# las restantes se renormalizan para conservar la escala 0-100).
+weights:
+  static: 0.25          # Semgrep / YARA sobre el código modificado
+  dependencies: 0.20    # OSV, typosquatting, CVEs conocidas
+  reputation: 0.15      # Identidad declarada vs. historial real de la cuenta
+  semantic: 0.40        # LLM + RAG local sobre la intención del cambio
+
+# Umbrales del semáforo de riesgo (0-100)
+thresholds:
+  yellow: 31   # >= 31 -> riesgo medio, revisión humana reforzada
+  red: 66      # >= 66 -> riesgo alto
+
+# Si es true, bloquea el merge cuando el resultado es rojo
+block_on_red: true
+
+# Control de coste de tokens en la capa semántica (Anexo A.3.3)
+semantic:
+  budget_per_repo: null   # límite de llamadas/tokens por repo (null = sin límite)
+  cache_identical_diffs: true
+
+# Muestreo de auditoría: fracción de PRs que se envían igualmente a la capa
+# semántica aunque un cortocircuito (A.3.4, objetivo ampliado) los descartaría
+audit_sampling: 0.05
