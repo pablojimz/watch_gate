@@ -2,13 +2,15 @@
 
 Sistema de *scoring* de riesgo para la revisión automatizada de *pull requests* en pipelines CI/CD.
 
-Proyecto presentado a los **Premios de la Cátedra de Ciberseguridad a la Innovación en Ciberseguridad e Inteligencia Artificial** (Universidad de Málaga). Memoria completa en [`docs/WatchGate_memoria.pdf`](docs/WatchGate_memoria.pdf).
+Proyecto presentado a los **Premios de la Cátedra de Ciberseguridad a la Innovación en Ciberseguridad e Inteligencia Artificial** (Universidad de Málaga). Memoria completa en [`docs/WatchGate_memoria.pdf`](docs/WatchGate_memoria.pdf) y especificación de construcción módulo a módulo en [`docs/WatchGate_spec_implementacion_IA.md`](docs/WatchGate_spec_implementacion_IA.md) — es la referencia autoritativa para implementar cada fichero (interfaz exacta, algoritmo, casos límite y test de aceptación). Reparto de tareas del equipo en [`docs/plan_tareas_equipo.md`](docs/plan_tareas_equipo.md).
 
 ## Equipo
 
 - Javier Martín Jurado — capa semántica y de reputación
-- Pablo Jiménez Castro — núcleo, orquestador y agregador
-- Pablo Ayllón García — capa estática/dependencias y dashboard
+- Pablo Ayllón García — núcleo, orquestador y agregador
+- Pablo Jiménez Castro — capa estática/dependencias y dashboard
+
+*(Reparto de líneas actualizado respecto a la memoria original — ver [`docs/plan_tareas_equipo.md`](docs/plan_tareas_equipo.md) para el detalle.)*
 
 ## El problema
 
@@ -51,39 +53,45 @@ Detalle completo de la arquitectura (A.0–A.4), formato de salida, fórmula de 
 
 ## Estructura del repositorio
 
+Sigue exactamente el árbol de la especificación de implementación (`docs/WatchGate_spec_implementacion_IA.md`, §0). Cada módulo de `watchgate/` es de momento un *stub* (docstring apuntando a la sección de la spec que lo rige); la lógica se implementa siguiendo el reparto de `docs/plan_tareas_equipo.md`.
+
 ```
 watch_gate/
-├── docs/                         # Memoria del proyecto y documentación técnica
-├── src/watchgate/
-│   ├── core/                     # A.0  Núcleo agnóstico de plataforma
-│   ├── adapters/                 # A.0.1 Adaptadores finos por plataforma
-│   │   ├── github_action/
-│   │   ├── gitlab_ci/
-│   │   └── git_interno/
-│   ├── orchestrator/             # A.1  Orquestador determinista
-│   ├── layers/                   # A.3  Capas de análisis
-│   │   ├── static/               #   3a Estática (Semgrep/YARA)
-│   │   ├── dependencies/         #   3b Dependencias (OSV, typosquatting)
-│   │   ├── reputation/           #   3c Reputación del autor
-│   │   └── semantic/             #   3d Semántica (LLM + RAG)
-│   ├── aggregator/                # A.2  Agregador de scoring
-│   └── rag/corpus/                # Corpus local para la capa semántica
-├── dashboard/                     # A.4  Dashboard de postura de seguridad
-│   ├── backend/
-│   └── frontend/
-├── tests/
-│   ├── fixtures/benign_prs/       # Casos de prueba benignos
-│   ├── fixtures/malicious_prs/    # Casos de prueba maliciosos
-│   ├── unit/
-│   └── integration/
-├── config/                        # watchgate.yml de ejemplo (pesos, umbrales)
-├── scripts/                       # Utilidades de desarrollo
-└── .github/workflows/             # Adaptador de referencia (GitHub Action)
+├── pyproject.toml
+├── Makefile
+├── .watchgate.yml.example
+├── watchgate/                          # paquete Python instalable
+│   ├── cli.py
+│   ├── config.py
+│   ├── core/                           # A.0  Núcleo agnóstico de plataforma (sin red, sin adapters/dashboard)
+│   │   ├── diffparser.py
+│   │   ├── models.py                   # contratos de datos — base de todo lo demás
+│   │   ├── layers/                     # A.3  Capas de análisis
+│   │   │   ├── base.py                 #   Interfaz común + LAYER_REGISTRY (A.0.0)
+│   │   │   ├── static_layer.py         #   3a Estática (Semgrep/YARA)
+│   │   │   ├── deps_layer.py           #   3b Dependencias (OSV, typosquatting)
+│   │   │   ├── reputation_layer.py     #   3c Reputación del autor
+│   │   │   └── _semantic/              #   3d Semántica (prompting, tools, client, layer)
+│   │   ├── rag/corpus/                 # Corpus local para la capa semántica
+│   │   ├── orchestrator.py             # A.1  Orquestador determinista
+│   │   ├── aggregator.py               # A.2  Agregador de scoring
+│   │   ├── cost_control.py             # A.3.3 Control de coste de tokens
+│   │   └── shortcircuit.py             # A.3.4 (objetivo ampliado)
+│   ├── adapters/github_action/         # A.0.1 Adaptador de referencia
+│   └── dashboard/                       # A.4  Dashboard de postura de seguridad
+│       ├── backend/
+│       └── frontend/
+├── rules/{semgrep,yara}/                 # Reglas de la capa estática
+├── datasets/{few_shot,typosquat_reference}/
+├── tests/{unit,integration,cases}/       # cases/ = 10 casos PR completos (§14)
+├── docs/                                  # Memoria, spec de implementación, plan de tareas
+├── scripts/                               # Utilidades de desarrollo
+└── .github/workflows/watchgate.yml       # Workflow de referencia (GitHub Action)
 ```
 
 ## Configuración
 
-Pesos y umbrales de semáforo configurables por repositorio en `.watchgate.yml` (ver [`config/watchgate.yml.example`](config/watchgate.yml.example)):
+Pesos y umbrales de semáforo configurables por repositorio en `.watchgate.yml` (ver [`.watchgate.yml.example`](.watchgate.yml.example)):
 
 ```yaml
 weights:    { static: 0.25, dependencies: 0.20, reputation: 0.15, semantic: 0.40 }
