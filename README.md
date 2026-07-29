@@ -101,9 +101,10 @@ block_on_red: true
 
 ## Estado del desarrollo
 
-En fase de diseño de arquitectura (memoria entregada). Implementación aún sin iniciar — arranca con el plan de trabajo de julio-agosto 2026 (ver memoria, secciones 5 y 6):
+Arquitectura y spec de implementación cerradas (memoria entregada + `docs/WatchGate_spec_implementacion_IA.md`). Reparto de trabajo en `docs/plan_tareas_equipo.md`:
 
-- [ ] Núcleo agnóstico de plataforma + interfaz común entre capas (A.0, A.0.0)
+- [x] Fase 0 — contratos de datos (`core/models.py`) + interfaz común de capas y registro (`core/layers/base.py`, A.0.0)
+- [ ] `diffparser.py` (A.0)
 - [ ] Capa estática (Semgrep/YARA)
 - [ ] Capa de dependencias (OSV, typosquatting)
 - [ ] Capa de reputación
