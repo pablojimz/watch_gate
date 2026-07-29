@@ -1,5 +1,5 @@
 # Copiar como .watchgate.yml en la raíz del repositorio a analizar.
-# Ver memoria del proyecto (docs/WatchGate_memoria.pdf), Anexo técnico A.2, A.0.0 y A.3.3.
+# Ver docs/WatchGate_spec_implementacion_IA.md §0 (config.py) y memoria, Anexo técnico A.2, A.0.0, A.3.3.
 
 # Pesos por capa (deben sumar 1; si una capa se desactiva con peso 0,
 # las restantes se renormalizan para conservar la escala 0-100).
@@ -17,11 +17,12 @@ thresholds:
 # Si es true, bloquea el merge cuando el resultado es rojo
 block_on_red: true
 
-# Control de coste de tokens en la capa semántica (Anexo A.3.3)
-semantic:
-  budget_per_repo: null   # límite de llamadas/tokens por repo (null = sin límite)
-  cache_identical_diffs: true
+# Cortocircuitos en extremos de riesgo (A.3.4, objetivo ampliado)
+shortcircuit_enabled: false
+audit_sampling: 0.05   # fracción de PRs que igualmente se envían a la capa semántica
 
-# Muestreo de auditoría: fracción de PRs que se envían igualmente a la capa
-# semántica aunque un cortocircuito (A.3.4, objetivo ampliado) los descartaría
-audit_sampling: 0.05
+# Control de coste de tokens en la capa semántica (A.3.3)
+semantic:
+  max_diff_tokens: 6000
+  monthly_budget_tokens: null   # null = sin límite
+  cache_identical_diffs: true
