@@ -9,8 +9,11 @@ lint:
 	poetry run mypy
 	poetry run lint-imports
 
+# `python -m pytest` (no el script `pytest` suelto): así el intérprete añade el
+# directorio actual a sys.path y watchgate se resuelve aunque el mecanismo de
+# instalación editable (basado en un .pth) falle en el entorno de turno.
 test:
-	poetry run pytest --cov --cov-report=term-missing
+	poetry run python -m pytest --cov --cov-report=term-missing
 
 run-demo:
-	poetry run watchgate analyze --base HEAD~1 --head HEAD
+	poetry run python -m watchgate.cli analyze --base HEAD~1 --head HEAD

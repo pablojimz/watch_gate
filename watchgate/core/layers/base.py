@@ -29,6 +29,7 @@ LAYER_REGISTRY: dict[str, type[AnalysisLayer]] = {}
 
 
 def register_layer(cls: type[AnalysisLayer]) -> type[AnalysisLayer]:
+    """Decorador: da de alta la capa en LAYER_REGISTRY bajo su `cls.name`."""
     LAYER_REGISTRY[cls.name] = cls
     return cls
 
