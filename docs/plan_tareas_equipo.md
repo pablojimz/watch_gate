@@ -132,16 +132,21 @@ Fuera de estos tres puntos, ninguna persona necesita esperar a otra para avanzar
 
 ## Nota de entorno (para replicar la Fase 0 en tu máquina)
 
-El `pyproject.toml` usa `poetry`, pero si no lo tienes instalado, esto es equivalente para arrancar:
+El proyecto usa `poetry` de verdad (no un `pip install` a mano). Si tu sistema trae un Python más antiguo (macOS suele traer 3.9), instala primero 3.11:
 
 ```bash
-brew install python@3.11        # el equipo del sistema puede ser más antiguo (3.9)
-/opt/homebrew/bin/python3.11 -m venv .venv
-source .venv/bin/activate
-pip install -e .                # instala watchgate + todas las deps de pyproject.toml
-pip install pytest pytest-cov import-linter mypy ruff
+brew install python@3.11 poetry
+cd watch_gate
+poetry env use /opt/homebrew/bin/python3.11   # solo la primera vez
+poetry install                                 # crea .venv/ y resuelve poetry.lock
+make lint
+make test
 ```
 
-**Aviso de dependencias (afecta a la Línea 3, no a la Fase 0):** `import-linter` exige `rich>=14.2.0`, pero `semgrep` fija `rich~=13.5.2` — hay un choque de versiones entre ambas. Con `rich` en la versión que pide `import-linter` todo lo de Fase 0 funciona; si al instalar `semgrep` para `static_layer.py` pip degrada `rich` de vuelta, puede que haga falta revisar si eso rompe algo de `import-linter` en CI. Pendiente de resolver cuando se empiece la Línea 3 (Pablo Jiménez Castro).
+`poetry.lock` está commiteado — todo el equipo instala exactamente las mismas versiones, así que si `make lint`/`make test` te falla en local con las versiones que trae `poetry install`, es un bug real, no un problema de tu entorno.
 
-**Verificado en verde:** `pytest tests/unit` (14/14, 100% cobertura sobre lo implementado), `ruff check .`, `ruff format --check .`, `mypy` (strict sobre `watchgate/core/`).
+**Por qué `make test` usa `poetry run python -m pytest` y no `poetry run pytest` a secas:** en algunos entornos (detectado en macOS durante esta revisión), los ficheros que `pip`/`poetry` escriben en `.venv` — incluido el `.pth` del que depende la instalación editable de `watchgate` — se crean con el atributo `hidden` del filesystem, y las versiones recientes de Python endurecidas en seguridad **ignoran silenciosamente cualquier `.pth` marcado como hidden**. El síntoma es `ModuleNotFoundError: No module named 'watchgate'` al ejecutar el script `pytest` suelto, aunque `pip show watchgate` diga que está instalado. `python -m pytest` no depende de ese `.pth`: añade el directorio actual a `sys.path`, así que watchgate se resuelve igual. Si os encontráis el mismo `ModuleNotFoundError` con alguna otra herramienta instalada como script de consola (no solo pytest), aplicad el mismo patrón: `poetry run python -m <herramienta>` en vez de `poetry run <herramienta>`.
+
+**Sobre el choque de versiones de `rich` que se apuntó aquí en la revisión anterior:** era un falso positivo, producido por instalar paquetes con `pip` suelto sin resolver el árbol de dependencias completo (`pip` no comprobaba lo que ya tenía instalado). Con `poetry install` real, el resolutor fija `semgrep` en una versión (1.172.0) cuya dependencia es `rich>=13.5.2` (no la fijación estricta `~=13.5.2` que parecía en la instalación suelta), y `import-linter` pide `rich>=14.2.0` — ambas conviven sin problema en `rich 15.0.0`. No hay ninguna acción pendiente aquí.
+
+**Verificado en verde con el toolchain real bloqueado por `poetry.lock`** (`ruff 0.5.7`, `mypy 1.20.2`, `pytest 8.4.2`, `import-linter 2.13`): `make lint` (ruff check + ruff format --check + mypy --strict + lint-imports) y `make test` (14/14, 100% cobertura sobre lo implementado), ejecutados tal cual los usará el equipo — no solo con un venv improvisado.
