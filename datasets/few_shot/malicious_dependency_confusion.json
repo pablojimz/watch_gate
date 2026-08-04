@@ -1,0 +1,9 @@
+{
+  "diff_summary": "Añade una línea nueva a requirements.txt: `acme-internal-auth-utils==9.9.9`. El proyecto es interno de la empresa 'Acme'; no existe ningún registro previo de este paquete en el proyecto ni documentación de un paquete privado con ese nombre. El número de versión (9.9.9) es inusualmente alto para un paquete de utilidades internas. El mensaje de commit dice 'bump internal auth utils'.",
+  "expected_output": {
+    "risk_score": 75,
+    "category": "backdoor",
+    "justification": "El nombre sigue la convención de nombrado interna de la organización (prefijo 'acme-internal-') pero se resuelve desde un registro público sin historial previo en el proyecto, con un número de versión artificialmente alto -- patrón característico de dependency confusion, donde un paquete público con el mismo nombre que uno privado y una versión más alta lo sustituye silenciosamente en el build.",
+    "confidence": "media"
+  }
+}
