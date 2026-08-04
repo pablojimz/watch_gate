@@ -27,6 +27,7 @@ class FileChange(BaseModel):
     additions: int
     deletions: int
     is_binary: bool = False
+    language: str | None = None  # inferido de la extensión de path; None si no se reconoce
 
 
 class CommitAuthor(BaseModel):
