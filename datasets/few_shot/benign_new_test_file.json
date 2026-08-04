@@ -1,0 +1,9 @@
+{
+  "diff_summary": "Añade un fichero nuevo `tests/test_invoice_totals.py` (status: added) con tres casos de test unitario para la función `compute_total()`, usando `pytest` y datos de ejemplo hardcodeados en el propio test. No hace llamadas de red, no toca ficheros de build ni dependencias, y no se referencia desde ningún otro fichero del PR salvo por el propio test runner.",
+  "expected_output": {
+    "risk_score": 5,
+    "category": "ninguna",
+    "justification": "Es un fichero de test nuevo con aserciones locales sobre datos hardcodeados, sin llamadas de red, ejecución de código externo ni cambios a scripts de build o dependencias.",
+    "confidence": "alta"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "diff_summary": "Renombra la función calculate_total a compute_total en varios ficheros del módulo de facturación, sin cambios de comportamiento. Incluye la actualización de los tests existentes para reflejar el nuevo nombre. No toca dependencias ni scripts de build.",
+  "expected_output": {
+    "risk_score": 5,
+    "category": "ninguna",
+    "justification": "El cambio es un renombrado puramente cosmético de una función existente, sin nueva lógica, llamadas de red ni cambios de dependencias.",
+    "confidence": "alta"
+  }
+}
