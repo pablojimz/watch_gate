@@ -107,8 +107,8 @@ Arquitectura y spec de implementación cerradas (memoria entregada + `docs/Watch
 - [ ] `diffparser.py` (A.0)
 - [ ] Capa estática (Semgrep/YARA)
 - [ ] Capa de dependencias (OSV, typosquatting)
-- [ ] Capa de reputación
-- [ ] Capa semántica (LLM + RAG local)
+- [x] Capa de reputación
+- [x] Capa semántica (LLM + RAG local) — pendiente de `cost_control.py` real para integrar del todo
 - [ ] Orquestador determinista + agregador de *scoring* (A.1, A.2)
 - [ ] Adaptador de GitHub Action de referencia (A.0.1)
 - [ ] Dashboard de postura de seguridad (2.1, A.4)

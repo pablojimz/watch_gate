@@ -1,0 +1,98 @@
+"""Tests de watchgate/core/layers/reputation_layer.py (spec §6)."""
+
+from watchgate.core.layers.reputation_layer import ReputationLayer
+from watchgate.core.models import NormalizedDiff, ReputationMetadata
+
+
+def _empty_diff() -> NormalizedDiff:
+    return NormalizedDiff(
+        base_sha="a" * 40,
+        head_sha="a" * 40,
+        repo_path="/tmp/repo",
+        files=[],
+        commit_messages=[],
+        authors=[],
+    )
+
+
+def _clean_reputation(**overrides: object) -> ReputationMetadata:
+    base = dict(
+        author_login="ana",
+        author_account_age_days=400,
+        author_prior_contributions_to_repo=12,
+        commit_email_matches_verified_email=True,
+        commit_is_signed=True,
+        signing_key_seen_before_for_login=True,
+        repo_has_history_of_signed_commits=True,
+    )
+    base.update(overrides)
+    return ReputationMetadata(**base)
+
+
+def test_skips_when_no_reputation_metadata_present():
+    result = ReputationLayer().analyze(_empty_diff(), {})
+    assert result.skipped is True
+    assert result.skip_reason == "Sin metadatos de plataforma disponibles"
+    assert result.risk_score == 0
+
+
+def test_skips_when_reputation_key_has_wrong_type():
+    result = ReputationLayer().analyze(_empty_diff(), {"reputation": {"not": "a model"}})
+    assert result.skipped is True
+
+
+def test_no_signals_gives_zero_risk_and_clean_justification():
+    result = ReputationLayer().analyze(_empty_diff(), {"reputation": _clean_reputation()})
+    assert result.skipped is False
+    assert result.risk_score == 0
+    assert "no se han detectado" in result.justification.lower()
+
+
+def test_atomic_arch_simulated_case_scores_at_least_75():
+    """Test de aceptación de la spec: cuenta de 2 días, 0 contribuciones, email no
+    verificado -> risk_score >= 75 (30 + 20 + 25 = 75)."""
+    reputation = _clean_reputation(
+        author_account_age_days=2,
+        author_prior_contributions_to_repo=0,
+        commit_email_matches_verified_email=False,
+        commit_is_signed=False,
+        signing_key_seen_before_for_login=None,
+        repo_has_history_of_signed_commits=False,
+    )
+    result = ReputationLayer().analyze(_empty_diff(), {"reputation": reputation})
+    assert result.risk_score >= 75
+    assert "2 días" in result.justification
+    assert "no tiene contribuciones previas" in result.justification.lower()
+    assert "no coincide con un email verificado" in result.justification.lower()
+
+
+def test_repo_signs_but_commit_is_not_signed_adds_30():
+    reputation = _clean_reputation(
+        commit_is_signed=False,
+        signing_key_seen_before_for_login=None,
+        repo_has_history_of_signed_commits=True,
+    )
+    result = ReputationLayer().analyze(_empty_diff(), {"reputation": reputation})
+    assert result.risk_score == 30
+    assert "no está firmado" in result.justification
+
+
+def test_signed_with_key_never_seen_before_adds_40():
+    reputation = _clean_reputation(signing_key_seen_before_for_login=False)
+    result = ReputationLayer().analyze(_empty_diff(), {"reputation": reputation})
+    assert result.risk_score == 40
+    assert "nunca se había visto antes" in result.justification
+
+
+def test_score_is_capped_at_100():
+    reputation = _clean_reputation(
+        author_account_age_days=1,
+        author_prior_contributions_to_repo=0,
+        commit_email_matches_verified_email=False,
+        commit_is_signed=False,
+        signing_key_seen_before_for_login=None,
+        repo_has_history_of_signed_commits=True,
+    )
+    # 30 (edad) + 20 (sin contribuciones) + 25 (email) + 30 (no firmado) = 105 -> tope 100
+    result = ReputationLayer().analyze(_empty_diff(), {"reputation": reputation})
+    assert result.risk_score == 100

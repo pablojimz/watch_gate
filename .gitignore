@@ -48,6 +48,17 @@ pnpm-debug.log*
 *.log
 logs/
 
+# --- Auxiliares de compilación LaTeX (docs/presentacion) ---
+*.aux
+*.nav
+*.out
+*.snm
+*.toc
+*.vrb
+*.fdb_latexmk
+*.fls
+*.synctex.gz
+
 # --- Sistemas operativos ---
 .DS_Store
 Thumbs.db

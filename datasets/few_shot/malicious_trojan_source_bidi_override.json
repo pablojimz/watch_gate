@@ -1,0 +1,9 @@
+{
+  "diff_summary": "Modifica auth/permissions.py añadiendo una línea que, leída visualmente en el diff, parece un comentario inocuo ('// TODO: revisar permisos por defecto'). El texto crudo de la línea contiene caracteres de control Unicode bidireccional (U+202E RIGHT-TO-LEFT OVERRIDE y U+2066/U+2069 LEFT-TO-RIGHT ISOLATE) que reordenan el renderizado visual: el comentario aparente oculta una condición real fuera de cualquier comentario, 'if user.role == \"guest\": user.role = \"admin\"', que el compilador/intérprete sí ejecuta aunque no se vea en el diff renderizado. El mensaje de commit dice 'minor comment cleanup'.",
+  "expected_output": {
+    "risk_score": 98,
+    "category": "escalada_privilegios",
+    "justification": "La línea contiene caracteres de control Unicode bidireccional (técnica Trojan Source, CVE-2021-42574) que hacen que una escalada de privilegios real (asignar rol admin a un invitado) se renderice visualmente como parte de un comentario inocuo, invisible a una revisión humana del diff.",
+    "confidence": "alta"
+  }
+}
