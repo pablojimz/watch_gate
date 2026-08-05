@@ -33,20 +33,23 @@ En cuanto esto está mergeado, las tres líneas arrancan **en paralelo**.
 
 ## Fase 1 — Trabajo en paralelo por línea
 
-### Línea 1 — Pablo Ayllón García (núcleo, orquestador, agregador)
+### Línea 1 — Pablo Ayllón García (núcleo, orquestador, agregador, CLI) ✅ HECHO
 
-- [ ] **`diffparser.py`** (§2) — `parse_diff(repo_path, base_sha, head_sha) -> NormalizedDiff`, sin red, usando `GitPython`.
+- [x] **`diffparser.py`** (§2) — `parse_diff(repo_path, base_sha, head_sha) -> NormalizedDiff`, sin red, usando `GitPython`.
   Casos límite a testear explícitamente: diff vacío (`base_sha == head_sha`), archivo renombrado sin cambio de contenido, archivo binario (`is_binary=True`), historial con merge commits (usar `first_parent=True` al iterar).
-  **Hecho cuando:** test con repo git real generado en `tempfile.mkdtemp()` (2 commits) devuelve exactamente los ficheros y autores esperados.
+  **Hecho cuando:** test con repo git real generado en `tempfile.mkdtemp()` (2 commits) devuelve exactamente los ficheros y autores esperados. ✅ Verificado en `tests/unit/test_diffparser.py`.
 
-- [ ] **`aggregator.py` + `comment_template.py`** (§10) — `aggregate()`, `_semaforo()`, plantilla Jinja2 del comentario.
-  **Hecho cuando:** con el ejemplo exacto de la memoria (estática 20, deps 10, reputación 40, semántica 85; pesos 0.25/0.20/0.15/0.40) el resultado es `score == 47` y `semaforo == AMARILLO`. Este test de regresión no debe fallar nunca.
+- [x] **`aggregator.py` + `comment_template.py`** (§10) — `aggregate()`, `_semaforo()`, plantilla Jinja2 del comentario.
+  **Hecho cuando:** con el ejemplo exacto de la memoria (estática 20, deps 10, reputación 40, semántica 85; pesos 0.25/0.20/0.15/0.40) el resultado es `score == 47` y `semaforo == AMARILLO`. Este test de regresión no debe fallar nunca. ✅ Verificado en `tests/unit/test_aggregator.py`.
 
-- [ ] **`orchestrator.py`** (§9) — `run_analysis()` con `ThreadPoolExecutor`, filtro únicamente por `weight > 0` (sin ningún otro `if` de qué capa ejecutar).
-  **Hecho cuando:** test con 4 capas *fake* (una con latencia simulada de 2s) muestra tiempo total ~2s (paralelo), no ~8s (secuencial).
+- [x] **`orchestrator.py`** (§9) — `run_analysis()` con `ThreadPoolExecutor`, filtro únicamente por `weight > 0` (sin ningún otro `if` de qué capa ejecutar).
+  **Hecho cuando:** test con 4 capas *fake* (una con latencia simulada de 2s) muestra tiempo total ~2s (paralelo), no ~8s (secuencial). ✅ Verificado en `tests/unit/test_orchestrator.py`.
 
-- [ ] **`cost_control.py`** (§8) — `CostController` (estimación de tokens, truncado, cache SQLite, presupuesto mensual). Esquema exacto: `semantic_cache(diff_hash, output_json, created_at)`, `token_usage(repo, month, tokens_used)`.
-  **Hecho cuando:** con presupuesto agotado simulado, `SemanticLayer.analyze` devuelve `skipped=True` **sin** llamar al LLM (mock HTTP con `call_count == 0`).
+- [x] **`cost_control.py`** (§8) — `CostController` (estimación de tokens, truncado, cache SQLite, presupuesto mensual). Esquema exacto: `semantic_cache(diff_hash, output_json, created_at)`, `token_usage(repo, month, tokens_used)`.
+  **Hecho cuando:** con presupuesto agotado simulado, `SemanticLayer.analyze` devuelve `skipped=True` **sin** llamar al LLM (mock HTTP con `call_count == 0`). ✅ Verificado en `tests/unit/test_cost_control.py`.
+
+- [x] **`cli.py`** (§9, §12) — CLI con subcomandos `watchgate analyze` (análisis de diff, formato Markdown o JSON, cortocircuito) y `watchgate rag reindex`.
+  **Hecho cuando:** ejecución de `watchgate analyze` y `watchgate rag reindex` parsea argumentos y ejecuta el pipeline. ✅ Verificado en `tests/unit/test_cli.py`.
 
 ### Línea 2 — Javier Martín Jurado (reputación y semántica) ✅ HECHO
 
@@ -184,7 +187,7 @@ Coordinado por Pablo Ayllón García (dueño del núcleo/orquestador):
 - [ ] Wiring end-to-end: orquestador + 4 capas reales + agregador.
 - [ ] `adapters/github_action/` (§12) — necesita orquestador + reputación ya resueltos. **Pendiente de decidir:** el workflow de ejemplo hace `pip install watchgate` (asume publicación); para desarrollo usar `pip install .` desde el checkout hasta que exista publicación real.
   Test de seguridad obligatorio: grep sobre los logs de una ejecución simulada buscando el valor literal de `WATCHGATE_LLM_API_KEY` — falla si aparece.
-- [ ] `shortcircuit.py` (§11, opcional/objetivo ampliado).
+- [x] `shortcircuit.py` (§11, opcional/objetivo ampliado). ✅ Verificado en `tests/unit/test_shortcircuit.py`.
 - [ ] `tests/cases/` — los 10 casos mínimos (§14), repartidos por quién posee la capa que cada caso ejerce principalmente:
 
   | Caso | Semáforo esperado | Propietario |
