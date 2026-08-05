@@ -14,12 +14,12 @@ from pathlib import Path
 try:
     from langchain_text_splitters import RecursiveCharacterTextSplitter
 except ImportError:
-    RecursiveCharacterTextSplitter = None
+    RecursiveCharacterTextSplitter = None  # type: ignore[assignment, misc]
 
 try:
     import chromadb
 except ImportError:
-    chromadb = None
+    chromadb = None  # type: ignore[assignment]
 
 CORPUS_DIR = Path(__file__).resolve().parent / "corpus"
 DEFAULT_INDEX_PATH = ".watchgate/rag_index"
