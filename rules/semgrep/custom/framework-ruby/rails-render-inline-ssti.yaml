@@ -1,0 +1,24 @@
+rules:
+  - id: rails-render-inline-ssti
+    languages: [ruby]
+    severity: ERROR
+    message: >-
+      Found render inline: with a template string built via interpolation
+      instead of a fixed literal. `render inline:` compiles its argument as
+      an ERB template at request time; if any interpolated value comes from
+      user input, an attacker can inject ERB syntax
+      (<%= system('id') %>) to achieve Server-Side Template Injection and
+      full remote code execution. Never build the inline template string
+      from user input; pass user data as a local variable to a fixed
+      template/partial instead.
+    metadata:
+      category: security
+      confidence: HIGH
+      cwe: "CWE-1336: Improper Neutralization of Special Elements Used in a Template Engine"
+      owasp: ["A03:2021 - Injection"]
+      references:
+        - https://cwe.mitre.org/data/definitions/1336.html
+        - https://api.rubyonrails.org/classes/ActionController/Base.html
+        - https://blog.trailofbits.com/2021/01/14/2020-cyberweek-writeups-ruby-server-side-template-injection/
+    patterns:
+      - pattern: 'render inline: "...#{$X}..."'

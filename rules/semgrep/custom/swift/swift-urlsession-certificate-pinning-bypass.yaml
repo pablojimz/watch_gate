@@ -1,0 +1,25 @@
+rules:
+  - id: swift-urlsession-certificate-pinning-bypass
+    languages: [swift]
+    severity: ERROR
+    message: >-
+      Found a URLSession authentication challenge handler that unconditionally
+      trusts the server certificate (calling the completion handler with
+      .useCredential and a credential built directly from the presented
+      trust, without validating it against a pinned certificate/public key or
+      at least the challenge's protection space). This disables TLS
+      certificate validation entirely, allowing a man-in-the-middle attacker
+      with any certificate to intercept and modify all traffic. Validate the
+      server trust (e.g. compare against a pinned certificate/public key hash)
+      before calling the completion handler with .useCredential.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: "CWE-295: Improper Certificate Validation"
+      owasp: ["A02:2021 - Cryptographic Failures"]
+      references:
+        - https://cwe.mitre.org/data/definitions/295.html
+        - https://developer.apple.com/documentation/foundation/urlsessiondelegate/urlsession(_:didreceive:completionhandler:)
+        - https://owasp.org/www-community/controls/Certificate_and_Public_Key_Pinning
+    patterns:
+      - pattern: 'completionHandler(.useCredential, URLCredential(trust: challenge.protectionSpace.serverTrust!))'

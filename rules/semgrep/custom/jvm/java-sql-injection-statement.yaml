@@ -1,0 +1,25 @@
+rules:
+  - id: java-sql-injection-statement
+    languages: [java]
+    severity: ERROR
+    message: >-
+      Found a SQL query built with Java string concatenation and executed via
+      Statement (execute/executeQuery/executeUpdate), instead of
+      PreparedStatement with bound parameters. If any concatenated value comes
+      from user input, this allows SQL injection. Use PreparedStatement with
+      "?" placeholders and setString/setInt/... instead of building the query
+      as a String.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: "CWE-89: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')"
+      owasp: ["A03:2021 - Injection"]
+      references:
+        - https://cwe.mitre.org/data/definitions/89.html
+        - https://owasp.org/www-community/attacks/SQL_Injection
+        - https://docs.oracle.com/javase/tutorial/jdbc/basics/prepared.html
+    patterns:
+      - pattern-either:
+          - pattern: $STMT.execute($QUERY + $X)
+          - pattern: $STMT.executeQuery($QUERY + $X)
+          - pattern: $STMT.executeUpdate($QUERY + $X)

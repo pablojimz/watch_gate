@@ -1,0 +1,24 @@
+rules:
+  - id: django-debug-true-production
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Found DEBUG = True hardcoded in a Django settings module. With DEBUG
+      enabled, unhandled exceptions render a full interactive traceback page
+      showing source code, local variables (often including secrets/session
+      data), installed apps, and the full request - a well-known and
+      frequently exploited information-disclosure misconfiguration when
+      accidentally shipped to production. Read DEBUG from an environment
+      variable that defaults to False (e.g.
+      os.environ.get("DEBUG", "False") == "True").
+    metadata:
+      category: security
+      confidence: HIGH
+      cwe: "CWE-215: Insertion of Sensitive Information Into Debugging Code"
+      owasp: ["A05:2021 - Security Misconfiguration"]
+      references:
+        - https://cwe.mitre.org/data/definitions/215.html
+        - https://docs.djangoproject.com/en/5.0/ref/settings/#debug
+        - https://docs.djangoproject.com/en/5.0/topics/security/#site-security-for-admin-and-staff
+    patterns:
+      - pattern: DEBUG = True

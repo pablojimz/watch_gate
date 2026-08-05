@@ -1,0 +1,25 @@
+rules:
+  - id: javascript-jwt-verify-disabled
+    languages: [js, ts]
+    severity: ERROR
+    message: >-
+      Found a JWT being decoded without verifying its signature (`jwt.decode()`)
+      or verified while accepting the `none` algorithm. An attacker can forge a
+      token with arbitrary claims (e.g. `{"role":"admin"}`) and the application
+      will trust it, leading to full authentication/authorization bypass. Always
+      use `jwt.verify()` with an explicit `algorithms` allow-list that does not
+      include `"none"`.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: "CWE-347: Improper Verification of Cryptographic Signature"
+      owasp:
+        - "A02:2021 - Cryptographic Failures"
+      references:
+        - https://cwe.mitre.org/data/definitions/347.html
+        - https://github.com/auth0/node-jsonwebtoken#jwtverifytoken-secretorpublickey-options-callback
+        - https://auth0.com/blog/critical-vulnerabilities-in-json-web-token-libraries/
+    patterns:
+      - pattern-either:
+          - pattern: jwt.decode($TOKEN, ...)
+          - pattern: 'jwt.verify($TOKEN, $SECRET, {..., algorithms: [..., "none", ...], ...})'

@@ -1,0 +1,29 @@
+rules:
+  - id: powershell-invoke-expression-dynamic
+    languages: [generic]
+    severity: ERROR
+    message: >-
+      Found a use of Invoke-Expression (or its alias iex). Invoke-Expression
+      runs its argument as PowerShell code; if the string is ever built from
+      user input, a downloaded file, or any external/mutable source, this is
+      arbitrary code execution. This rule flags every use, including literal
+      strings, following the same zero-exception policy as Microsoft's own
+      PSScriptAnalyzer rule AvoidUsingInvokeExpression: static analysis of the
+      call site alone cannot prove the argument will never become dynamic
+      later. Avoid Invoke-Expression entirely; there is almost always a safer,
+      purpose-built cmdlet for what you are trying to do.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: "CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code ('Eval Injection')"
+      owasp: ["A03:2021 - Injection"]
+      references:
+        - https://cwe.mitre.org/data/definitions/95.html
+        - https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/invoke-expression
+        - https://learn.microsoft.com/en-us/powershell/utility-modules/psscriptanalyzer/rules/avoidusinginvokeexpression
+    options:
+      generic_ellipsis_max_span: 0
+    patterns:
+      - pattern-either:
+          - pattern: Invoke-Expression ...
+          - pattern: iex ...

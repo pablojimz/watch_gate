@@ -1,0 +1,28 @@
+rules:
+  - id: spring-spel-injection
+    languages: [java]
+    severity: ERROR
+    message: >-
+      Found a Spring Expression Language (SpEL) ExpressionParser evaluating
+      an expression string that is not a fixed literal. SpEL expressions
+      can call arbitrary Java methods (including
+      T(java.lang.Runtime).exec(...) via the T() type-reference operator);
+      if the expression string is influenced by user input, this is remote
+      code execution. This exact class of bug caused CVE-2022-22963 (Spring
+      Cloud Function) and CVE-2018-1273 (Spring Data Commons). Never build
+      a SpEL expression from user input; if dynamic expressions are truly
+      required, use a SimpleEvaluationContext (which disables type
+      references and constructor/bean access) instead of the default
+      StandardEvaluationContext.
+    metadata:
+      category: security
+      confidence: HIGH
+      cwe: "CWE-917: Improper Neutralization of Special Elements used in an Expression Language Statement ('Expression Language Injection')"
+      owasp: ["A03:2021 - Injection"]
+      references:
+        - https://cwe.mitre.org/data/definitions/917.html
+        - https://nvd.nist.gov/vuln/detail/CVE-2022-22963
+        - https://nvd.nist.gov/vuln/detail/CVE-2018-1273
+    patterns:
+      - pattern: $PARSER.parseExpression($EXPR)
+      - pattern-not: $PARSER.parseExpression("...")

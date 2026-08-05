@@ -4,13 +4,26 @@
 
 Este documento resume el estado del catálogo de reglas Semgrep auditado en este repositorio (ver el detalle fila-por-fila en [rules-audit-report.md](rules-audit-report.md)). Estas reglas están pendientes de pasar a la Fase 2 (estructura `/SEMGREP` en `Repo-reglas-SEMGREP-y-YARA`).
 
-## Total: 714 reglas aprobadas
+## ⚠️ Problema de licencia detectado (resuelto)
 
-| Fuente | Reglas | Descripción |
-|---|---|---|
-| [`trailofbits/semgrep-rules`](https://github.com/trailofbits/semgrep-rules) | 112 | Auditadas una por una (Fase 1): patrón, tests, severity/confidence, referencias. Licencia AGPLv3. 8 reglas del set original fueron rechazadas (bug demostrado, CWE incoherente, no eran de seguridad...). |
-| Reglas propias | 49 | Escritas y validadas en 4 tandas para cubrir huecos de alto impacto no cubiertos por las fuentes de terceros (inyección SQL, deserialización insegura, command injection, etc. en varios lenguajes). Cada una con YAML + fixture de test propio, 100% verificadas con `semgrep --test`. |
-| [`semgrep/semgrep-rules`](https://github.com/semgrep/semgrep-rules) (registro oficial) | 553 | Importación masiva de las ~2.080 reglas oficiales, filtradas automáticamente por: pasa `semgrep --test` + `category: security` + `confidence` distinto de LOW. No revisadas manualmente patrón a patrón (inviable a esa escala). |
+Las 553 reglas del registro oficial de Semgrep están bajo la **Semgrep Rules License v1.0**, que **prohíbe expresamente la redistribución** ("no puedes distribuir las reglas, ni ponerlas a disposición de otros"), incluso en un repo privado con acceso de lectura a terceros. GitHub tampoco permite restringir el acceso de lectura a una sola carpeta dentro de un mismo repo (los permisos son a nivel de repo completo), así que aislarlas en una subcarpeta no las protege.
+
+**Decisión**: esas 553 reglas **no se incluyen** en el registro redistribuible. En su lugar, se reescribió desde cero un subconjunto de 15 reglas de alto impacto (vulnerabilidades con CVE real conocido, en Django/Flask/Express/Spring/Rails) como obra independiente — sin partir del código de las reglas originales — lo que las libera de la restricción de licencia. Detalle completo del mapeo regla↔CVE en [vulnerability-mapping.md](vulnerability-mapping.md).
+
+## ✅ Actualización: las reglas ya están instaladas permanentemente
+
+Todo lo aprobado (ver tabla siguiente) está copiado de forma permanente en [`rules/semgrep/`](../rules/semgrep/) dentro de este mismo repositorio (`third-party/<fuente>/` + `custom/`), con [`NOTICE.md`](../rules/semgrep/NOTICE.md) explicando las licencias y [`registry.json`](../rules/semgrep/registry.json) como índice completo. Verificado con `semgrep --test` tras la instalación.
+
+## Total: 778 reglas aprobadas y redistribuibles
+
+| Fuente | Reglas | Licencia | Descripción |
+|---|---|---|---|
+| [`trailofbits/semgrep-rules`](https://github.com/trailofbits/semgrep-rules) | 112 | AGPL-3.0 | Auditadas una por una (Fase 1): patrón, tests, severity/confidence, referencias. 8 reglas del set original fueron rechazadas (bug demostrado, CWE incoherente, no eran de seguridad...). |
+| Reglas propias | 64 | Propia (a definir) | Escritas y validadas en 5 tandas para cubrir huecos de alto impacto no cubiertos por las fuentes de terceros (inyección SQL, deserialización insegura, command injection, SSTI, etc. en varios lenguajes y frameworks, incluyendo vulnerabilidades con CVE real como Log4Shell). Cada una con YAML + fixture de test propio, 100% verificadas con `semgrep --test`. |
+| [`opengrep/opengrep-rules`](https://github.com/opengrep/opengrep-rules) | 556 | LGPL-2.1 + Commons Clause | Fork abierto (Dic-2024) del registro oficial de Semgrep, **sin** la restricción de redistribución del original — solo prohíbe vender el software. Filtro automático: pasa test + `category: security` + `confidence` no-LOW. Recupera contenido que el registro oficial no pudo entregar por licencia, incluyendo 360 reglas de Terraform y 175 de detección de secretos (gitleaks). |
+| [`elttam/semgrep-rules`](https://github.com/elttam/semgrep-rules) | 6 | MIT | Firma de pentesting; mismo filtro automático. |
+| [`0xdea/semgrep-rules`](https://github.com/0xdea/semgrep-rules) | 40 | MIT | Reglas de investigación de vulnerabilidades en C/C++ (Marco Ivaldi); mismo filtro automático. |
+| ~~[`semgrep/semgrep-rules`](https://github.com/semgrep/semgrep-rules) (registro oficial)~~ | ~~553~~ **0 instaladas** | Semgrep Rules License v1.0 | Se probaron y documentaron 553 reglas que pasaban los criterios de calidad, pero **se excluyeron por incompatibilidad de licencia** (prohíbe redistribución). `opengrep/opengrep-rules` (arriba) cubre gran parte del mismo contenido sin esa restricción. |
 
 ### Fuentes descartadas (0 reglas aportadas)
 
@@ -32,19 +45,7 @@ Este documento resume el estado del catálogo de reglas Semgrep auditado en este
 | YAML | 24 | 0 | 28 | **52** |
 | Go | 17 | 0 | 27 | **44** |
 | PHP | 0 | 5 | 24 | **29** |
-| HCL / Terraform | 9 | 0 | 4 | **13** |
-| Scala | 0 | 0 | 11 | **11** |
-| C / C++ | 0 | 7 | 2 | **9** |
-| Bash | 0 | 1 | 6 | **7** |
-| C# / .NET | 0 | 7 | 0 | **7** |
-| Dockerfile | 0 | 2 | 5 | **7** |
-| Swift | 1 | 4 | 2 | **7** |
-| Regex (cadenas de conexión) | 2 | 4 | 0 | **6** |
-| JSON | 0 | 1 | 4 | **5** |
-| Rust | 1 | 4 | 0 | **5** |
-| Clojure | 0 | 1 | 3 | **4** |
-| HTML | 0 | 1 | 1 | **2** |
-| OCaml | 0 | 1 | 1 | **2** |
+|
 | **TOTAL** | **112** | **49** | **553** | **714** |
 
 ## Notas importantes

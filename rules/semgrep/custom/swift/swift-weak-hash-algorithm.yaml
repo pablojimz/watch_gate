@@ -1,0 +1,26 @@
+rules:
+  - id: swift-weak-hash-algorithm
+    languages: [swift]
+    severity: WARNING
+    message: >-
+      Found use of MD5 or SHA1 (via CryptoKit's Insecure namespace or the
+      CommonCrypto CC_MD5/CC_SHA1 functions). Both are cryptographically
+      broken and must not be used for security purposes such as password
+      hashing, digital signatures, or integrity checks on
+      attacker-influenced data. Use SHA256 or stronger from CryptoKit for
+      integrity checks, and a dedicated password hashing function for
+      passwords.
+    metadata:
+      category: security
+      confidence: HIGH
+      cwe: "CWE-327: Use of a Broken or Risky Cryptographic Algorithm"
+      owasp: ["A02:2021 - Cryptographic Failures"]
+      references:
+        - https://cwe.mitre.org/data/definitions/327.html
+        - https://developer.apple.com/documentation/cryptokit/insecure
+    patterns:
+      - pattern-either:
+          - pattern: Insecure.MD5.hash(...)
+          - pattern: Insecure.SHA1.hash(...)
+          - pattern: CC_MD5(...)
+          - pattern: CC_SHA1(...)

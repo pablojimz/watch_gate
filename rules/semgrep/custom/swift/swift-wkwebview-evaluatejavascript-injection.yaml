@@ -1,0 +1,25 @@
+rules:
+  - id: swift-wkwebview-evaluatejavascript-injection
+    languages: [swift]
+    severity: ERROR
+    message: >-
+      Found a call to WKWebView.evaluateJavaScript() where the script string
+      is built via interpolation/concatenation instead of being a fixed
+      literal. If any interpolated value comes from user input or untrusted
+      web content, an attacker can inject arbitrary JavaScript that runs in the
+      context of the loaded page, potentially exfiltrating cookies/tokens or
+      calling any JS bridge exposed to native code. Never interpolate
+      untrusted data directly into JavaScript source; pass it as a JSON-encoded
+      argument instead (e.g. via a safely-escaped JSON.stringify equivalent).
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: "CWE-79: Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')"
+      owasp: ["A03:2021 - Injection"]
+      references:
+        - https://cwe.mitre.org/data/definitions/79.html
+        - https://developer.apple.com/documentation/webkit/wkwebview/evaluatejavascript(_:completionhandler:)
+        - https://owasp.org/www-community/attacks/xss/
+    patterns:
+      - pattern: $WEBVIEW.evaluateJavaScript($SCRIPT, ...)
+      - pattern-not: $WEBVIEW.evaluateJavaScript("...", ...)
