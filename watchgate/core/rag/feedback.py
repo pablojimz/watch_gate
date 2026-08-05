@@ -22,10 +22,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Literal
 
-try:
-    import chromadb
-except ImportError:
-    chromadb = None  # type: ignore[assignment]
+import chromadb
 
 from watchgate.core.rag.indexer import (
     DEFAULT_INDEX_PATH,
@@ -72,12 +69,6 @@ def add_confirmed_case(
         raise ValueError(
             f"case_id inválido: {case_id!r}. Solo se permiten letras, números, "
             "'-' y '_' (evita rutas como '../otro/caso')."
-        )
-
-    if chromadb is None:
-        raise ImportError(
-            "chromadb no está instalado en el entorno. "
-            "Instala las dependencias de RAG para continuar."
         )
 
     content = _render_feedback_document(case_id, title, narrative, verdict)

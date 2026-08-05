@@ -64,20 +64,17 @@ def retrieve_relevant_context(
 
     Devuelve lista vacía si no existe ningún índice todavía (no se ha
     ejecutado `watchgate rag reindex` ni hay ningún caso de feedback)."""
-    try:
-        import chromadb
-        from sentence_transformers import SentenceTransformer
+    import chromadb
+    from sentence_transformers import SentenceTransformer
 
-        client = chromadb.PersistentClient(path=index_path)
-        model = SentenceTransformer(EMBEDDING_MODEL_NAME)
-        query_embedding = model.encode([diff_summary]).tolist()
+    client = chromadb.PersistentClient(path=index_path)
+    model = SentenceTransformer(EMBEDDING_MODEL_NAME)
+    query_embedding = model.encode([diff_summary]).tolist()
 
-        feedback_docs, feedback_metas = _query_collection(
-            client, FEEDBACK_COLLECTION_NAME, query_embedding, feedback_k
-        )
-        corpus_docs, corpus_metas = _query_collection(client, COLLECTION_NAME, query_embedding, k)
-    except Exception:  # noqa: BLE001 - si chromadb no está instalado o no existe el índice, degrade a []
-        return []
+    feedback_docs, feedback_metas = _query_collection(
+        client, FEEDBACK_COLLECTION_NAME, query_embedding, feedback_k
+    )
+    corpus_docs, corpus_metas = _query_collection(client, COLLECTION_NAME, query_embedding, k)
 
     fragments = [
         _to_fragment(text, meta, default_origin="feedback")

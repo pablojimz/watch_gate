@@ -72,6 +72,33 @@ def test_build_system_prompt_deduplicates_overlap_between_same_case_fragments():
     assert "Frase exclusiva de B" in prompt
 
 
+def test_build_system_prompt_deduplicates_overlap_regardless_of_retrieval_order():
+    """La recuperación por similitud no garantiza el orden del documento: el
+    fragmento que va DESPUÉS en el documento puede llegar primero en la lista
+    (caso real observado con xz_utils.md). Aquí el solape está al FINAL del
+    segundo fragmento en vez de al principio -- rama distinta de
+    _strip_known_overlap a la que cubre el test anterior."""
+    shared_tail = "## Por qué es relevante para WatchGate y tal, frase compartida de verdad larga"
+    fragment_first_in_list_but_later_in_doc = RetrievedFragment(
+        text=f"{shared_tail} Frase exclusiva de A, después del solape.",
+        case_name="doc_y",
+    )
+    fragment_second_in_list_but_earlier_in_doc = RetrievedFragment(
+        text=f"Frase exclusiva de B, antes del solape. {shared_tail}",
+        case_name="doc_y",
+    )
+    prompt = build_system_prompt(
+        "app",
+        "Python",
+        "sin datos",
+        [fragment_first_in_list_but_later_in_doc, fragment_second_in_list_but_earlier_in_doc],
+    )
+
+    assert prompt.count(shared_tail) == 1
+    assert "Frase exclusiva de A" in prompt
+    assert "Frase exclusiva de B" in prompt
+
+
 def test_build_system_prompt_does_not_deduplicate_fragments_from_different_cases():
     """Dos fragmentos de casos DISTINTOS que por casualidad comparten texto
     no deben tocarse -- el solape solo es previsible entre chunks del mismo

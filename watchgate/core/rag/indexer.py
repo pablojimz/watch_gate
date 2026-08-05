@@ -11,15 +11,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from pathlib import Path
 
-try:
-    from langchain_text_splitters import RecursiveCharacterTextSplitter
-except ImportError:
-    RecursiveCharacterTextSplitter = None  # type: ignore[assignment, misc]
-
-try:
-    import chromadb
-except ImportError:
-    chromadb = None  # type: ignore[assignment]
+import chromadb
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 CORPUS_DIR = Path(__file__).resolve().parent / "corpus"
 DEFAULT_INDEX_PATH = ".watchgate/rag_index"
@@ -47,24 +40,15 @@ def load_corpus_documents(corpus_dir: Path = CORPUS_DIR) -> list[tuple[str, str]
 
 
 def chunk_document(text: str) -> list[str]:
-    if RecursiveCharacterTextSplitter is None:
-        return [text]
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=_CHUNK_SIZE_CHARS, chunk_overlap=_CHUNK_OVERLAP_CHARS
     )
-    res: list[str] = list(splitter.split_text(text))
-    return res
+    return splitter.split_text(text)
 
 
 def build_index(corpus_dir: Path = CORPUS_DIR, index_path: str = DEFAULT_INDEX_PATH) -> int:
     """Trocea el corpus, genera embeddings y los persiste en la colección
     `attack_patterns` de ChromaDB. Devuelve el número de fragmentos indexados."""
-    if chromadb is None:
-        raise ImportError(
-            "chromadb no está instalado en el entorno. "
-            "Instala las dependencias de RAG para continuar."
-        )
-
     documents = load_corpus_documents(corpus_dir)
     if not documents:
         return 0
