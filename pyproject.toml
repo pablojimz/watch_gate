@@ -77,6 +77,11 @@ testpaths = ["tests"]
 # los ignora en ese caso. `pythonpath` hace que pytest encuentre el paquete
 # sin depender de ese mecanismo.
 pythonpath = ["."]
+filterwarnings = [
+    "ignore::DeprecationWarning:chromadb.*",
+    "ignore::pydantic.warnings.PydanticDeprecatedSince211",
+    "ignore::pydantic.warnings.ArbitraryTypeWarning",
+]
 
 [tool.coverage.run]
 source = ["watchgate/core"]
