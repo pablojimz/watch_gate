@@ -74,6 +74,12 @@ def add_confirmed_case(
             "'-' y '_' (evita rutas como '../otro/caso')."
         )
 
+    if chromadb is None:
+        raise ImportError(
+            "chromadb no está instalado en el entorno. "
+            "Instala las dependencias de RAG para continuar."
+        )
+
     content = _render_feedback_document(case_id, title, narrative, verdict)
 
     feedback_path = Path(feedback_dir)
