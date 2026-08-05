@@ -177,3 +177,12 @@ def test_truncate_diff_prioritizes_flagged_files_and_marks_truncation(controller
     assert result_by_path["suspicious.py"].diff_hunk == flagged.diff_hunk
     # El fichero no marcado, al exceder el presupuesto, queda truncado con marcador.
     assert "truncado" in result_by_path["clean.py"].diff_hunk
+
+
+def test_cost_controller_context_manager_and_idempotent_close():
+    tmp_dir = tempfile.mkdtemp()
+    db_path = str(Path(tmp_dir) / "cost.db")
+    with CostController(db_path=db_path, max_diff_tokens=50, monthly_budget_tokens=1000) as ctrl:
+        assert ctrl.budget_remaining("repo") == 1000
+    # Al salir del bloque con, se cierra automáticamente sin lanzar error
+    ctrl.close()  # La segunda llamada debe ser no-op e idempotente

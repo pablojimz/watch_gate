@@ -8,6 +8,7 @@ import sqlite3
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import final
 
 from watchgate.core.layers._semantic.client import SemanticOutput
 from watchgate.core.models import FileChange, LayerResult, NormalizedDiff
@@ -37,7 +38,14 @@ def diff_hash(diff: NormalizedDiff) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+@final
 class CostController:
+    db_path: str
+    max_diff_tokens: int
+    monthly_budget_tokens: int
+    _conn: sqlite3.Connection | None
+    _lock: threading.Lock
+
     def __init__(self, db_path: str, max_diff_tokens: int, monthly_budget_tokens: int) -> None:
         self.db_path = db_path
         self.max_diff_tokens = max_diff_tokens
@@ -53,11 +61,30 @@ class CostController:
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
         self._lock = threading.Lock()
         with self._lock:
-            self._conn.executescript(_SCHEMA)
+            _ = self._conn.executescript(_SCHEMA)
             self._conn.commit()
 
+    def _get_conn(self) -> sqlite3.Connection:
+        if self._conn is None:
+            raise RuntimeError("CostController se ha cerrado.")
+        return self._conn
+
+    def __enter__(self) -> CostController:
+        return self
+
+    def __exit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
+        self.close()
+
     def close(self) -> None:
-        self._conn.close()
+        if self._conn is not None:
+            try:
+                self._conn.close()
+            except Exception:  # noqa: BLE001
+                pass
+            self._conn = None
+
+    def __del__(self) -> None:
+        self.close()
 
     # -- Tokens ----------------------------------------------------------
 
@@ -121,22 +148,27 @@ class CostController:
         en `_semantic/layer.py`) -- guardar/leer un `dict` suelto rompía esa
         integración (`store_cached` no podía serializar un `SemanticOutput`
         con `json.dumps` directo; reproducido en la revisión)."""
+        conn = self._get_conn()
         with self._lock:
-            row = self._conn.execute(
+            row: tuple[str] | None = conn.execute(
                 "SELECT output_json FROM semantic_cache WHERE diff_hash = ?", (diff_hash_value,)
             ).fetchone()
         if row is None:
             return None
-        return SemanticOutput.model_validate(json.loads(row[0]))
+        raw_json = str(row[0])
+        return SemanticOutput.model_validate(json.loads(raw_json))
 
     def store_cached(self, diff_hash_value: str, output: SemanticOutput) -> None:
+        conn = self._get_conn()
         with self._lock:
-            self._conn.execute(
-                "INSERT OR REPLACE INTO semantic_cache (diff_hash, output_json, created_at) "
-                "VALUES (?, ?, ?)",
+            _ = conn.execute(
+                """
+                INSERT OR REPLACE INTO semantic_cache (diff_hash, output_json, created_at)
+                VALUES (?, ?, ?)
+                """,
                 (diff_hash_value, output.model_dump_json(), datetime.now(UTC).isoformat()),
             )
-            self._conn.commit()
+            conn.commit()
 
     # -- Presupuesto mensual ------------------------------------------------
 
@@ -145,8 +177,9 @@ class CostController:
 
     def record_usage(self, repo: str, tokens_used: int) -> None:
         month = self._current_month()
+        conn = self._get_conn()
         with self._lock:
-            self._conn.execute(
+            _ = conn.execute(
                 """
                 INSERT INTO token_usage (repo, month, tokens_used) VALUES (?, ?, ?)
                 ON CONFLICT(repo, month) DO UPDATE SET
@@ -154,15 +187,16 @@ class CostController:
                 """,
                 (repo, month, tokens_used),
             )
-            self._conn.commit()
+            conn.commit()
 
     def budget_remaining(self, repo: str) -> int:
         month = self._current_month()
+        conn = self._get_conn()
         with self._lock:
-            row = self._conn.execute(
+            row: tuple[int] | None = conn.execute(
                 "SELECT tokens_used FROM token_usage WHERE repo = ? AND month = ?", (repo, month)
             ).fetchone()
-        used = row[0] if row else 0
+        used = int(row[0]) if row else 0
         return self.monthly_budget_tokens - used
 
     def should_skip(self, repo: str) -> bool:
