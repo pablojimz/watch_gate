@@ -66,8 +66,8 @@ strict = true
 files = ["watchgate/core"]
 
 [[tool.mypy.overrides]]
-# google-genai no publica marcador py.typed en esta versión.
-module = ["google.*"]
+# Librerías externas sin marcador py.typed o stubs globales.
+module = ["google.*", "yaml", "chromadb", "sentence_transformers", "langchain_text_splitters.*", "anthropic"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

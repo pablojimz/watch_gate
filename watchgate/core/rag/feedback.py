@@ -22,7 +22,10 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Literal
 
-import chromadb
+try:
+    import chromadb
+except ImportError:
+    chromadb = None
 
 from watchgate.core.rag.indexer import (
     DEFAULT_INDEX_PATH,

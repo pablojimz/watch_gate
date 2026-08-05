@@ -24,18 +24,19 @@ _RECOMENDACION: dict[Semaforo, str] = {
     Semaforo.ROJO: "Bloquear el merge hasta revisión humana explícita.",
 }
 
-_TEMPLATE_SOURCE = """\
-[{{ semaforo_emoji }}] WatchGate: Riesgo {{ semaforo_texto }} ({{ score }}/100)
-
-{% for name, result in layer_results.items() -%}
-{{ name | capitalize }}: {{ result.risk_score }}/100  (peso {{ weights_used.get(name, 0) }}){% if result.skipped %} — omitida: {{ result.skip_reason }}{% endif %}
-{% endfor %}
-{%- if 'semantic' in layer_results and not layer_results['semantic'].skipped %}
-Justificación (capa semántica):
-"{{ layer_results['semantic'].justification }}"
-{% endif %}
--> {{ recomendacion }}
-"""
+_TEMPLATE_SOURCE = (
+    "[{{ semaforo_emoji }}] WatchGate: Riesgo {{ semaforo_texto }} ({{ score }}/100)\n\n"
+    "{% for name, result in layer_results.items() -%}\n"
+    "{{ name | capitalize }}: {{ result.risk_score }}/100  "
+    "(peso {{ weights_used.get(name, 0) }})"
+    "{% if result.skipped %} — omitida: {{ result.skip_reason }}{% endif %}\n"
+    "{% endfor %}\n"
+    "{%- if 'semantic' in layer_results and not layer_results['semantic'].skipped %}\n"
+    "Justificación (capa semántica):\n"
+    '"{{ layer_results[\'semantic\'].justification }}"\n'
+    "{% endif %}\n"
+    "-> {{ recomendacion }}\n"
+)
 
 _env = Environment(trim_blocks=True, lstrip_blocks=True)
 _template = _env.from_string(_TEMPLATE_SOURCE)

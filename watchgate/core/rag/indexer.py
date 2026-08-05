@@ -11,8 +11,15 @@ from __future__ import annotations
 from collections.abc import Mapping
 from pathlib import Path
 
-import chromadb
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+try:
+    from langchain_text_splitters import RecursiveCharacterTextSplitter
+except ImportError:
+    RecursiveCharacterTextSplitter = None
+
+try:
+    import chromadb
+except ImportError:
+    chromadb = None
 
 CORPUS_DIR = Path(__file__).resolve().parent / "corpus"
 DEFAULT_INDEX_PATH = ".watchgate/rag_index"
@@ -40,10 +47,13 @@ def load_corpus_documents(corpus_dir: Path = CORPUS_DIR) -> list[tuple[str, str]
 
 
 def chunk_document(text: str) -> list[str]:
+    if RecursiveCharacterTextSplitter is None:
+        return [text]
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=_CHUNK_SIZE_CHARS, chunk_overlap=_CHUNK_OVERLAP_CHARS
     )
-    return splitter.split_text(text)
+    res: list[str] = list(splitter.split_text(text))
+    return res
 
 
 def build_index(corpus_dir: Path = CORPUS_DIR, index_path: str = DEFAULT_INDEX_PATH) -> int:

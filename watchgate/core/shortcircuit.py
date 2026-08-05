@@ -88,11 +88,24 @@ def evaluate_shortcircuit(
     """
     partial_score = weighted_average(partial_results, weights, layer_names=_PARTIAL_LAYER_NAMES)
 
-    if partial_score >= thresholds["red"]:
-        # Alto riesgo ya con static+deps+reputation: el score combinado con
-        # semantic solo puede subir o igualar (es una media ponderada de
-        # scores no negativos), así que no reabre falsos negativos.
-        return Semaforo.ROJO
+    # El cortocircuito a ROJO solo es seguro si incluso con un score semántico de 0
+    # (el mejor caso para el autor), la media ponderada global resultante sigue siendo
+    # mayor o igual al umbral de ROJO. De lo contrario, añadir la capa semántica con score 0
+    # reduciría la media ponderada y podría bajar el veredicto a AMARILLO o VERDE.
+    active_partial = {
+        k: v
+        for k, v in partial_results.items()
+        if k in _PARTIAL_LAYER_NAMES and not v.skipped and weights.get(k, 0) > 0
+    }
+    partial_weighted_sum = sum(weights[k] * active_partial[k].risk_score for k in active_partial)
+    partial_weight_sum = sum(weights[k] for k in active_partial)
+    semantic_weight = weights.get("semantic", 0.0) if weights.get("semantic", 0.0) > 0 else 0.0
+    total_weight = partial_weight_sum + semantic_weight
+
+    if total_weight > 0:
+        min_possible_score = partial_weighted_sum / total_weight
+        if round(min_possible_score) >= thresholds["red"]:
+            return Semaforo.ROJO
 
     forces_semantic = (
         _matches_forcing_pattern(diff)
