@@ -1,0 +1,28 @@
+rules:
+  - id: spring-file-upload-no-validation
+    languages: [java]
+    severity: WARNING
+    message: >-
+      Found a Spring MVC file upload handler that saves a MultipartFile
+      using the client-supplied original filename
+      (getOriginalFilename()) without validating its extension/content-type
+      first. An attacker can upload a file named e.g. "shell.jsp" (or with a
+      path-traversal-crafted name like "../../webapps/ROOT/shell.jsp") to a
+      web-accessible upload directory and, if the server executes files from
+      that directory, achieve remote code execution via a classic
+      unrestricted-file-upload vulnerability. Validate the extension against
+      an allow-list, store files under a server-generated name (never the
+      client-supplied one), and save outside the webroot/execution path.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: "CWE-434: Unrestricted Upload of File with Dangerous Type"
+      owasp: ["A04:2021 - Insecure Design"]
+      references:
+        - https://cwe.mitre.org/data/definitions/434.html
+        - https://owasp.org/www-community/vulnerabilities/Unrestricted_File_Upload
+    patterns:
+      - pattern: |
+          $TYPE $DEST = $UPLOADDIR + $FILE.getOriginalFilename();
+          ...
+          $FILE.transferTo(...);

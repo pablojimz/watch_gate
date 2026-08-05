@@ -1,0 +1,26 @@
+rules:
+  - id: spring-jpa-query-injection
+    languages: [java]
+    severity: ERROR
+    message: >-
+      Found EntityManager.createQuery()/createNativeQuery() (or a Spring
+      Data JPA @Query-adjacent manual query build) with a JPQL/SQL string
+      built via concatenation instead of a fixed literal. If any part comes
+      from user input, this is JPQL/SQL injection - the JPA equivalent of
+      classic SQL injection, since createNativeQuery() runs against the raw
+      database. Use named/positional parameters (setParameter()) instead of
+      concatenating values into the query string.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: "CWE-89: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')"
+      owasp: ["A03:2021 - Injection"]
+      references:
+        - https://cwe.mitre.org/data/definitions/89.html
+        - https://docs.spring.io/spring-data/jpa/reference/jpa/query-methods.html
+    patterns:
+      - pattern-either:
+          - pattern: $EM.createQuery($JPQL)
+          - pattern: $EM.createNativeQuery($SQL)
+      - pattern-not: $EM.createQuery("...")
+      - pattern-not: $EM.createNativeQuery("...")

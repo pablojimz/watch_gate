@@ -1,0 +1,34 @@
+rules:
+  - id: c-double-free
+    languages: [c, cpp]
+    severity: ERROR
+    message: >-
+      Found a pointer passed to free() twice without being reassigned in
+      between. Calling free() on the same pointer twice is undefined
+      behavior that corrupts the heap allocator's internal bookkeeping.
+      Attackers can exploit double-free bugs to achieve arbitrary code
+      execution by manipulating the resulting heap corruption. Set the
+      pointer to NULL immediately after the first free() (free() on NULL is
+      a documented no-op) to make a second call safe.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: "CWE-415: Double Free"
+      owasp: ["A06:2021 - Vulnerable and Outdated Components"]
+      references:
+        - https://cwe.mitre.org/data/definitions/415.html
+        - https://owasp.org/www-community/vulnerabilities/Doubly_freeing_memory
+    patterns:
+      - pattern: |
+          free($PTR);
+          ...
+          free($PTR);
+      - pattern-not-inside: |
+          free($PTR);
+          $PTR = NULL;
+          ...
+      - pattern-not-inside: |
+          free($PTR);
+          ...
+          $PTR = ...;
+          ...

@@ -1,0 +1,36 @@
+rules:
+  - id: django-extra-raw-sql-injection
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Found QuerySet.extra() or Model.objects.raw() with a SQL fragment
+      built via interpolation/concatenation instead of a fixed literal (or
+      the params= list). Both bypass Django ORM's normal parameterization;
+      if any part of the fragment comes from user input, this is SQL
+      injection. Use the params argument for placeholders
+      (extra(where=["col = %s"], params=[value])) instead of formatting
+      values directly into the SQL string, or avoid extra()/raw() entirely
+      in favor of the standard QuerySet API.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: "CWE-89: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')"
+      owasp: ["A03:2021 - Injection"]
+      references:
+        - https://cwe.mitre.org/data/definitions/89.html
+        - https://docs.djangoproject.com/en/5.0/ref/models/querysets/#extra
+        - https://docs.djangoproject.com/en/5.0/topics/security/#sql-injection-protection
+    patterns:
+      - pattern-either:
+          - patterns:
+              - pattern: $QS.extra(where=[$WHERE])
+              - metavariable-pattern:
+                  metavariable: $WHERE
+                  patterns:
+                    - pattern-not-regex: ^['"][^'"]*['"]$
+          - patterns:
+              - pattern: $MODEL.objects.raw($QUERY)
+              - metavariable-pattern:
+                  metavariable: $QUERY
+                  patterns:
+                    - pattern-not-regex: ^['"][^'"]*['"]$

@@ -1,0 +1,31 @@
+rules:
+  - id: java-xxe-documentbuilderfactory
+    languages: [java]
+    severity: ERROR
+    message: >-
+      Found a DocumentBuilderFactory used to parse XML without disabling
+      external entity resolution (external-general-entities /
+      external-parameter-entities / DOCTYPE). By default, Java's XML parsers
+      resolve external entities and DTDs, which lets an attacker who controls
+      the XML input read arbitrary local files, perform SSRF against internal
+      services, or cause denial of service ("billion laughs"). Disable DOCTYPE
+      declarations entirely
+      (setFeature("http://apache.org/xml/features/disallow-doctype-decl",
+      true)) or at minimum disable external entities before parsing.
+    metadata:
+      category: security
+      confidence: LOW
+      cwe: "CWE-611: Improper Restriction of XML External Entity Reference"
+      owasp: ["A05:2021 - Security Misconfiguration"]
+      references:
+        - https://cwe.mitre.org/data/definitions/611.html
+        - https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html
+    patterns:
+      - pattern: |
+          $DBF = DocumentBuilderFactory.newInstance();
+          ...
+          $DBF.newDocumentBuilder();
+      - pattern-not-inside: |
+          $DBF = DocumentBuilderFactory.newInstance();
+          $DBF.setFeature("...", ...);
+          ...

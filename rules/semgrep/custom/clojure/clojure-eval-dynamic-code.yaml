@@ -1,0 +1,22 @@
+rules:
+  - id: clojure-eval-dynamic-code
+    languages: [clojure]
+    severity: ERROR
+    message: >-
+      Found `eval` called on a value that is not a fixed, literal form.
+      `eval` compiles and runs its argument as Clojure code; if the form is
+      built from user input (e.g. via `read-string` on external data), this
+      is arbitrary code execution on the JVM. Avoid `eval` on any data that
+      is not fully controlled by the developer; use `edn/read-string` for
+      parsing untrusted data instead, never plain `read-string` + `eval`.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: "CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code ('Eval Injection')"
+      owasp: ["A03:2021 - Injection"]
+      references:
+        - https://cwe.mitre.org/data/definitions/95.html
+        - https://clojure.org/reference/reader#_extensible_data_notation_edn
+    patterns:
+      - pattern: (eval $FORM)
+      - pattern-not: (eval '$LITERAL)

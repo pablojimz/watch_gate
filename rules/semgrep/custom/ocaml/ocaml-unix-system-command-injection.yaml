@@ -1,0 +1,25 @@
+rules:
+  - id: ocaml-unix-system-command-injection
+    languages: [ocaml]
+    severity: ERROR
+    message: >-
+      Found Unix.system (or Unix.open_process) called with a command string
+      that is not a fixed literal. Both functions pass their argument to
+      `/bin/sh -c`; if the string is influenced by user input, an attacker
+      can inject shell metacharacters (;, &&, |, $()) to run arbitrary
+      commands. Use Unix.create_process (or Unix.execv/execvp) with an
+      explicit argument array instead, which does not invoke a shell.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: "CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"
+      owasp: ["A03:2021 - Injection"]
+      references:
+        - https://cwe.mitre.org/data/definitions/78.html
+        - https://v2.ocaml.org/api/Unix.html#VALsystem
+    patterns:
+      - pattern-either:
+          - pattern: Unix.system $CMD
+          - pattern: Unix.open_process $CMD
+      - pattern-not: Unix.system "..."
+      - pattern-not: Unix.open_process "..."
