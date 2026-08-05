@@ -59,6 +59,12 @@ def chunk_document(text: str) -> list[str]:
 def build_index(corpus_dir: Path = CORPUS_DIR, index_path: str = DEFAULT_INDEX_PATH) -> int:
     """Trocea el corpus, genera embeddings y los persiste en la colección
     `attack_patterns` de ChromaDB. Devuelve el número de fragmentos indexados."""
+    if chromadb is None:
+        raise ImportError(
+            "chromadb no está instalado en el entorno. "
+            "Instala las dependencias de RAG para continuar."
+        )
+
     documents = load_corpus_documents(corpus_dir)
     if not documents:
         return 0
