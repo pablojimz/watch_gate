@@ -35,6 +35,15 @@ def test_build_system_prompt_renders_placeholders():
     assert '"risk_score"' in prompt
 
 
+def test_build_system_prompt_always_includes_the_verification_reminder():
+    """Hallazgo de la comparativa con/sin RAG (docs/rag_ablation_benchmark.md):
+    el modelo puede inflar el risk_score solo por reconocer el nombre de una
+    técnica conocida, sin verificar si surte efecto de verdad en ese diff.
+    Este recordatorio debe estar siempre, tenga o no contexto RAG."""
+    prompt = build_system_prompt("app", "Python", "sin datos", [])
+    assert "no por la etiqueta de la técnica que reconoces" in prompt
+
+
 def test_build_system_prompt_includes_rag_fragments():
     fragments = [RetrievedFragment(text="curl | bash en PKGBUILD", case_name="atomic_arch")]
     prompt = build_system_prompt("app", "Go", "sin actividad reciente", fragments)

@@ -142,6 +142,19 @@ def _render_few_shot_block(examples: list[dict[str, Any]]) -> str:
     return f"\n\nEjemplos de referencia (few-shot):\n{rendered}\n"
 
 
+_VERIFICATION_REMINDER = """
+
+Antes de asignar un risk_score alto solo porque reconoces el NOMBRE de una
+técnica conocida (por un caso de referencia recuperado arriba, o por tu
+propio conocimiento previo), comprueba el efecto real de ese patrón en ESTE
+diff concreto: ¿el código realmente se ejecuta con el efecto que la técnica
+describe, o queda inerte (p. ej. dentro de un comentario, una rama muerta,
+una condición que nunca se cumple)? Puntúa por lo que el diff hace de
+verdad, no por la etiqueta de la técnica que reconoces en él. Reconocer el
+patrón es una señal para investigar con cuidado, no un veredicto por sí solo.
+"""
+
+
 def _render_dependency_findings(findings: list[dict[str, Any]]) -> str:
     if not findings:
         return ""
@@ -171,6 +184,7 @@ def build_system_prompt(
     examples = FEW_SHOT_EXAMPLES if few_shot_examples is None else few_shot_examples
     return (
         base_prompt
+        + _VERIFICATION_REMINDER
         + _render_dependency_findings(dependency_findings or [])
         + _render_few_shot_block(examples)
     )
