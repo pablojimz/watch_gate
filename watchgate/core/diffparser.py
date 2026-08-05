@@ -14,6 +14,7 @@ from watchgate.core.models import CommitAuthor, FileChange, FileStatus, Normaliz
 
 if TYPE_CHECKING:
     from git import Repo
+    from git.diff import Diff
 
 
 # Mapeo extensión -> lenguaje. Deliberadamente acotado a lo que las capas
@@ -67,7 +68,7 @@ def _infer_language(path: str) -> str | None:
     return _EXTENSION_TO_LANGUAGE.get(ext)
 
 
-def _status_from_diff_item(diff_item: git.diff.Diff) -> FileStatus:
+def _status_from_diff_item(diff_item: Diff) -> FileStatus:
     """Determina el FileStatus a partir de las banderas booleanas del objeto
     Diff de GitPython (`new_file`/`deleted_file`/`renamed_file`), que son más
     fiables que `change_type` (este último llega a `None` en varios casos,
