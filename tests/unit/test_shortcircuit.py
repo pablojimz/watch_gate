@@ -28,9 +28,10 @@ def _diff_with_paths(*paths_and_hunks: tuple[str, str]) -> NormalizedDiff:
     )
 
 
-def test_high_partial_score_shortcircuits_to_rojo_without_calling_llm():
-    """partial_score >= thresholds['red'] -> ROJO directo, sin importar
-    forcing patterns ni el sorteo de auditoría."""
+def test_high_partial_score_shortcircuits_to_rojo_when_min_possible_score_meets_red_threshold():
+    """Si el score mínimo global posible (con semántica = 0) sigue siendo >= red threshold,
+    sí se cortocircuita a ROJO."""
+    heavy_partial_weights = {"static": 0.40, "deps": 0.30, "reputation": 0.20, "semantic": 0.10}
     partial = {
         "static": _lr("static", 90),
         "deps": _lr("deps", 90),
@@ -40,13 +41,34 @@ def test_high_partial_score_shortcircuits_to_rojo_without_calling_llm():
 
     result = evaluate_shortcircuit(
         partial,
-        _WEIGHTS,
+        heavy_partial_weights,
         diff,
         _THRESHOLDS,
-        rng=lambda: 0.99,  # nunca cae en el sorteo
+        rng=lambda: 0.99,
     )
 
     assert result == Semaforo.ROJO
+
+
+def test_high_partial_score_does_not_shortcircuit_if_semantic_could_lower_to_yellow():
+    """Con pesos por defecto (semántica 0.40), partial_score=100 da un score mínimo
+    global de 60 si semántica fuera 0. Como 60 < red (70), NO debe cortocircuitar a ROJO."""
+    partial = {
+        "static": _lr("static", 100),
+        "deps": _lr("deps", 100),
+        "reputation": _lr("reputation", 100),
+    }
+    diff = _diff_with_paths(("a.py", "+ x = 1"))
+
+    result = evaluate_shortcircuit(
+        partial,
+        _WEIGHTS,  # semantic weight is 0.40
+        diff,
+        _THRESHOLDS,
+        rng=lambda: 0.99,
+    )
+
+    assert result is None
 
 
 def test_low_partial_score_and_no_forcing_shortcircuits_to_verde():
@@ -116,6 +138,7 @@ def test_medium_partial_score_never_shortcircuits():
 def test_semantic_layer_excluded_from_partial_score_even_if_present():
     """Si por lo que sea partial_results ya trajera una entrada 'semantic'
     (no debería, pero por robustez), no debe contar en el score parcial."""
+    heavy_partial_weights = {"static": 0.40, "deps": 0.30, "reputation": 0.20, "semantic": 0.10}
     partial = {
         "static": _lr("static", 90),
         "deps": _lr("deps", 90),
@@ -124,7 +147,9 @@ def test_semantic_layer_excluded_from_partial_score_even_if_present():
     }
     diff = _diff_with_paths(("a.py", "+ x = 1"))
 
-    result = evaluate_shortcircuit(partial, _WEIGHTS, diff, _THRESHOLDS, rng=lambda: 0.99)
+    result = evaluate_shortcircuit(
+        partial, heavy_partial_weights, diff, _THRESHOLDS, rng=lambda: 0.99
+    )
 
     assert result == Semaforo.ROJO
 
@@ -171,3 +196,37 @@ def test_has_new_dependencies_detects_package_json():
 
     diff2 = _diff_with_paths(("src/index.js", "+ console.log(1)"))
     assert _has_new_dependencies(diff2) is False
+
+
+def test_shortcircuit_handles_skipped_partial_layers():
+    """Capas parciales omitidas no influyen en la media ponderada."""
+    weights = {"static": 0.50, "deps": 0.20, "reputation": 0.10, "semantic": 0.20}
+    partial = {
+        "static": _lr("static", 100),
+        "deps": _lr("deps", 0, skipped=True),
+        "reputation": _lr("reputation", 100),
+    }
+    diff = _diff_with_paths(("a.py", "+ x = 1"))
+
+    # Active partial weight = static (0.50) + reputation (0.10) = 0.60
+    # Weighted sum = 0.50*100 + 0.10*100 = 60
+    # Total weight = 0.60 + 0.20 (semantic) = 0.80
+    # Min possible score = 60 / 0.80 = 75 >= 70 (ROJO)
+    result = evaluate_shortcircuit(partial, weights, diff, _THRESHOLDS, rng=lambda: 0.99)
+    assert result == Semaforo.ROJO
+
+
+def test_shortcircuit_rounding_boundary():
+    """Verifica que el redondeo de min_possible_score respete el umbral red exactamente."""
+    weights = {"static": 0.694, "semantic": 0.306}
+    partial = {"static": _lr("static", 100)}
+    diff = _diff_with_paths(("a.py", "+ x = 1"))
+
+    # Min possible = 69.4 / 1.00 = 69.4 -> round(69.4) = 69 < 70 -> None
+    result_under = evaluate_shortcircuit(partial, weights, diff, _THRESHOLDS, rng=lambda: 0.99)
+    assert result_under is None
+
+    weights_over = {"static": 0.696, "semantic": 0.304}
+    # Min possible = 69.6 / 1.00 = 69.6 -> round(69.6) = 70 >= 70 -> ROJO
+    result_over = evaluate_shortcircuit(partial, weights_over, diff, _THRESHOLDS, rng=lambda: 0.99)
+    assert result_over == Semaforo.ROJO

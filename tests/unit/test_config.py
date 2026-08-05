@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import os
 import tempfile
 from pathlib import Path
 
 import pytest
+import yaml
 
 from watchgate.config import WatchGateConfig, load_config
 
@@ -41,7 +41,7 @@ def test_malformed_yaml_raises_immediately():
     yaml_path = Path(tmp_dir) / ".watchgate.yml"
     yaml_path.write_text("weights: [this, is, not, a, mapping\n")  # YAML roto a propósito
 
-    with pytest.raises(Exception):  # yaml.YAMLError concreto
+    with pytest.raises(yaml.YAMLError):
         load_config(yaml_path=str(yaml_path))
 
 

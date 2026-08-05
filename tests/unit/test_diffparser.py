@@ -151,7 +151,7 @@ def test_merge_commit_uses_first_parent_only(tmp_repo):
     repo.head.reset(index=True, working_tree=True)
     _write(repo_dir, "feature.py", "feature work\n")
     repo.index.add(["feature.py"])
-    feature_commit = repo.index.commit(
+    repo.index.commit(
         "work on feature", author=git.Actor("Carol", "carol@example.com")
     )
 
