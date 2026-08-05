@@ -145,6 +145,18 @@ def test_gemini_retries_once_on_invalid_json_then_succeeds():
     assert output.risk_score == 20
 
 
+def test_gemini_raises_semantic_parsing_error_after_two_invalid_json_attempts():
+    fake = _FakeGenaiClient(
+        [_gemini_text_response("no json"), _gemini_text_response("sigue sin ser json")]
+    )
+    client = GeminiClient(client=fake)
+
+    with pytest.raises(SemanticParsingError, match="LLM no devolvió JSON válido tras 2 intentos"):
+        client.complete_structured(
+            "sys", "user", tools=[], tool_executor=lambda n, i: None, max_tool_calls=3
+        )
+
+
 def test_gemini_raises_instead_of_looping_forever_if_model_keeps_requesting_tools():
     fake = _FakeGenaiClient(
         [_gemini_function_call_response("t", {}, f"c{i}") for i in range(20)]

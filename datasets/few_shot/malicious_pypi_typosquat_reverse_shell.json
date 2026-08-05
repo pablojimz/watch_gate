@@ -1,0 +1,9 @@
+{
+  "diff_summary": "Nuevo paquete PyPI llamado 'aiogram-sever-patch' (imita el nombre de 'aiogram', un framework popular para bots de Telegram, sugiriendo ser un parche de servidor). Su único módulo, aiogram_sever_patch/__init__.py, no contiene ninguna funcionalidad relacionada con el framework que imita: abre un socket TCP en texto plano a una IP y puerto fijos ('147.45.124.42', 5555), redirige los descriptores estándar (stdin/stdout/stderr) a ese socket con os.dup2, y lanza '/bin/bash -i', envuelto en un try/except que silencia cualquier error.",
+  "expected_output": {
+    "risk_score": 99,
+    "category": "backdoor",
+    "justification": "El módulo entero es una reverse shell en texto plano hacia una IP:puerto codificados (os.dup2 sobre un socket seguido de subprocess.Popen(['/bin/bash', '-i'])), sin relación alguna con la funcionalidad que el nombre del paquete sugiere -- típico de un typosquat cuyo único propósito es la ejecución remota de comandos.",
+    "confidence": "alta"
+  }
+}

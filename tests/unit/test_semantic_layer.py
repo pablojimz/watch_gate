@@ -214,6 +214,66 @@ def test_tool_executor_dispatches_fetch_referenced_file(tmp_path, rag_index_path
     assert result.tool_calls_made == 1
 
 
+def test_tool_executor_dispatches_check_file_reputation(tmp_path, monkeypatch, rag_index_path):
+    import subprocess
+
+    monkeypatch.setenv("WATCHGATE_VT_API_KEY", "fake-key")
+    monkeypatch.setattr("httpx.get", lambda *a, **k: (_ for _ in ()).throw(AssertionError))
+
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repo_path, check=True)
+    subprocess.run(["git", "config", "user.email", "a@b.com"], cwd=repo_path, check=True)
+    subprocess.run(["git", "config", "user.name", "T"], cwd=repo_path, check=True)
+    (repo_path / "PKGBUILD").write_text("pkgname=demo\n")
+    subprocess.run(["git", "add", "PKGBUILD"], cwd=repo_path, check=True)
+    subprocess.run(["git", "commit", "-q", "-m", "init"], cwd=repo_path, check=True)
+
+    diff = NormalizedDiff(
+        base_sha="a" * 40,
+        head_sha="b" * 40,
+        repo_path=str(repo_path),
+        files=[
+            FileChange(
+                path="PKGBUILD",
+                status=FileStatus.MODIFIED,
+                diff_hunk="+x",
+                additions=1,
+                deletions=0,
+            )
+        ],
+        commit_messages=["m"],
+        authors=[],
+    )
+
+    class _ToolCallingLLMClient(LLMClient):
+        def __init__(self) -> None:
+            self.observed_result: object = None
+
+        def complete_structured(
+            self, system_prompt, user_prompt, tools, tool_executor, max_tool_calls
+        ):
+            # ref inexistente a propósito: prueba que layer.py enruta de
+            # verdad a check_file_reputation (no solo que la función en
+            # tools.py funcione aislada, ya cubierto en test_tools.py).
+            self.observed_result = tool_executor(
+                "check_file_reputation", {"path": "no_existe.bin", "ref": "HEAD"}
+            )
+            return SemanticOutput(
+                risk_score=1,
+                category=RiskCategory.NINGUNA,
+                justification="x",
+                confidence=Confidence.BAJA,
+            )
+
+    llm = _ToolCallingLLMClient()
+    layer = SemanticLayer(llm, _FakeCostController(), rag_index_path=rag_index_path)
+    result = layer.analyze(diff, {"repo": "owner/repo"})
+
+    assert llm.observed_result == {"error": "fichero no encontrado en esa revisión"}
+    assert result.tool_calls_made == 1
+
+
 class _ToolProbeLLMClient(LLMClient):
     """Fake LLM que se limita a invocar el tool_executor una vez con
     (tool_name, tool_input) y devuelve un SemanticOutput fijo, para poder
