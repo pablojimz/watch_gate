@@ -5,9 +5,11 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
 
+from watchgate.core.layers._semantic.client import SemanticOutput
 from watchgate.core.models import FileChange, LayerResult, NormalizedDiff
 
 _SCHEMA = """
@@ -41,9 +43,18 @@ class CostController:
         self.max_diff_tokens = max_diff_tokens
         self.monthly_budget_tokens = monthly_budget_tokens
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(db_path)
-        self._conn.executescript(_SCHEMA)
-        self._conn.commit()
+        # check_same_thread=False + Lock: orchestrator.py ejecuta las capas en
+        # un ThreadPoolExecutor, así que esta instancia se usa desde un hilo
+        # distinto al que la construyó -- sin esto, sqlite3 lanza
+        # "SQLite objects created in a thread can only be used in that same
+        # thread" (reproducido en la revisión). El flag por sí solo permite
+        # el acceso entre hilos, pero sqlite3 sigue sin garantizar seguridad
+        # ante uso concurrente real sobre una misma conexión, de ahí el Lock.
+        self._conn = sqlite3.connect(db_path, check_same_thread=False)
+        self._lock = threading.Lock()
+        with self._lock:
+            self._conn.executescript(_SCHEMA)
+            self._conn.commit()
 
     def close(self) -> None:
         self._conn.close()
@@ -104,22 +115,28 @@ class CostController:
 
     # -- Caché -------------------------------------------------------------
 
-    def get_cached(self, diff_hash_value: str) -> dict[str, object] | None:
-        row = self._conn.execute(
-            "SELECT output_json FROM semantic_cache WHERE diff_hash = ?", (diff_hash_value,)
-        ).fetchone()
+    def get_cached(self, diff_hash_value: str) -> SemanticOutput | None:
+        """Tipado con `SemanticOutput` (no `dict` plano): es el mismo tipo
+        que `SemanticLayer` produce y espera de vuelta (`CostControllerLike`
+        en `_semantic/layer.py`) -- guardar/leer un `dict` suelto rompía esa
+        integración (`store_cached` no podía serializar un `SemanticOutput`
+        con `json.dumps` directo; reproducido en la revisión)."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT output_json FROM semantic_cache WHERE diff_hash = ?", (diff_hash_value,)
+            ).fetchone()
         if row is None:
             return None
-        result: dict[str, object] = json.loads(row[0])
-        return result
+        return SemanticOutput.model_validate(json.loads(row[0]))
 
-    def store_cached(self, diff_hash_value: str, output: dict[str, object]) -> None:
-        self._conn.execute(
-            "INSERT OR REPLACE INTO semantic_cache (diff_hash, output_json, created_at) "
-            "VALUES (?, ?, ?)",
-            (diff_hash_value, json.dumps(output), datetime.now(UTC).isoformat()),
-        )
-        self._conn.commit()
+    def store_cached(self, diff_hash_value: str, output: SemanticOutput) -> None:
+        with self._lock:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO semantic_cache (diff_hash, output_json, created_at) "
+                "VALUES (?, ?, ?)",
+                (diff_hash_value, output.model_dump_json(), datetime.now(UTC).isoformat()),
+            )
+            self._conn.commit()
 
     # -- Presupuesto mensual ------------------------------------------------
 
@@ -128,20 +145,23 @@ class CostController:
 
     def record_usage(self, repo: str, tokens_used: int) -> None:
         month = self._current_month()
-        self._conn.execute(
-            """
-            INSERT INTO token_usage (repo, month, tokens_used) VALUES (?, ?, ?)
-            ON CONFLICT(repo, month) DO UPDATE SET tokens_used = tokens_used + excluded.tokens_used
-            """,
-            (repo, month, tokens_used),
-        )
-        self._conn.commit()
+        with self._lock:
+            self._conn.execute(
+                """
+                INSERT INTO token_usage (repo, month, tokens_used) VALUES (?, ?, ?)
+                ON CONFLICT(repo, month) DO UPDATE SET
+                    tokens_used = tokens_used + excluded.tokens_used
+                """,
+                (repo, month, tokens_used),
+            )
+            self._conn.commit()
 
     def budget_remaining(self, repo: str) -> int:
         month = self._current_month()
-        row = self._conn.execute(
-            "SELECT tokens_used FROM token_usage WHERE repo = ? AND month = ?", (repo, month)
-        ).fetchone()
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT tokens_used FROM token_usage WHERE repo = ? AND month = ?", (repo, month)
+            ).fetchone()
         used = row[0] if row else 0
         return self.monthly_budget_tokens - used
 

@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from watchgate.core.cost_control import CostController, build_skipped_budget_result, diff_hash
+from watchgate.core.layers._semantic.client import SemanticOutput
 from watchgate.core.models import FileChange, FileStatus, LayerResult, NormalizedDiff
 
 
@@ -47,13 +48,37 @@ def test_estimate_tokens_proportional_to_length():
 
 
 def test_cache_roundtrip(controller):
+    """get_cached/store_cached trabajan con SemanticOutput (no un dict
+    suelto): es el mismo tipo que produce/consume SemanticLayer vía el
+    Protocol CostControllerLike -- un dict plano no se podía serializar de
+    vuelta con json.dumps directo (reproducido en la revisión de Línea 2)."""
     h = "abc123"
     assert controller.get_cached(h) is None
 
-    output = {"risk_score": 42, "category": "backdoor", "justification": "x", "confidence": "alta"}
+    output = SemanticOutput(
+        risk_score=42, category="backdoor", justification="x", confidence="alta"
+    )
     controller.store_cached(h, output)
 
     assert controller.get_cached(h) == output
+
+
+def test_cache_roundtrip_survives_concurrent_access_from_multiple_threads(controller):
+    """orchestrator.py ejecuta las capas en un ThreadPoolExecutor: la
+    conexión sqlite3 de CostController se usa desde un hilo distinto al que
+    la creó. Sin check_same_thread=False + Lock, esto lanzaba
+    sqlite3.ProgrammingError (reproducido en la revisión)."""
+    import concurrent.futures
+
+    def worker(i: int) -> int:
+        controller.record_usage("org/repo", 1)
+        return controller.budget_remaining("org/repo")
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+        results = list(pool.map(worker, range(20)))
+
+    assert len(results) == 20
+    assert controller.budget_remaining("org/repo") == 1000 - 20
 
 
 def test_diff_hash_is_deterministic():

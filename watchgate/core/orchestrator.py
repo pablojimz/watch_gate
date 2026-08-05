@@ -9,11 +9,14 @@ A.3.4) vive en `shortcircuit.py` y se invoca *antes* de `run_analysis`.
 from __future__ import annotations
 
 import concurrent.futures
+from collections.abc import Callable
 from typing import Protocol, runtime_checkable
 
 from watchgate.core.aggregator import aggregate
 from watchgate.core.layers.base import LAYER_REGISTRY, AnalysisLayer, safe_analyze
 from watchgate.core.models import AggregatedResult, NormalizedDiff
+
+LayerFactory = Callable[[], AnalysisLayer]
 
 
 @runtime_checkable
@@ -30,12 +33,28 @@ class WatchGateConfig(Protocol):
 
 
 def run_analysis(
-    diff: NormalizedDiff, metadata: dict[str, object], config: WatchGateConfig
+    diff: NormalizedDiff,
+    metadata: dict[str, object],
+    config: WatchGateConfig,
+    layer_factories: dict[str, LayerFactory] | None = None,
 ) -> AggregatedResult:
     """Instancia las capas activas (peso > 0 y registradas), las ejecuta en
-    paralelo con `safe_analyze` y agrega el resultado final."""
+    paralelo con `safe_analyze` y agrega el resultado final.
+
+    `layer_factories` es opcional y no rompe la regla de arriba: sigue sin
+    haber ningún `if` que decida *qué* capa ejecutar por nombre, solo *cómo*
+    construir la instancia de una que ya se decidió ejecutar. Hace falta
+    porque no todas las capas admiten `LAYER_REGISTRY[name]()` sin más --
+    `SemanticLayer` exige `llm_client`/`cost_control` en el constructor (sin
+    esto, instanciarla revienta con TypeError; reproducido en la revisión).
+    Quien invoque `run_analysis` (el adaptador de plataforma) pasa aquí cómo
+    construir esas capas; si no se pasa nada para una capa, se usa
+    `LAYER_REGISTRY[name]()` como hasta ahora (compatible con capas sin
+    dependencias, como `ReputationLayer`).
+    """
+    factories = layer_factories or {}
     active_layers: list[AnalysisLayer] = [
-        LAYER_REGISTRY[name]()
+        factories[name]() if name in factories else LAYER_REGISTRY[name]()
         for name, weight in config.weights.items()
         if weight > 0 and name in LAYER_REGISTRY
     ]

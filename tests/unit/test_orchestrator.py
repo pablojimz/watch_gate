@@ -100,3 +100,50 @@ def test_layer_that_raises_is_isolated_via_safe_analyze():
     layer_result = result.layer_results["fake_broken"]
     assert layer_result.skipped is True
     assert "fallo simulado" in layer_result.skip_reason
+
+
+def test_semantic_layer_runs_end_to_end_via_layer_factories(tmp_path):
+    """Integración real (no capas fake): LAYER_REGISTRY[name]() a secas no
+    puede construir SemanticLayer (exige llm_client/cost_control en el
+    constructor; reproducido en la revisión). `layer_factories` es la vía
+    para que quien invoque run_analysis decida cómo construirla, sin que
+    orchestrator.py necesite saber nada de "semantic" en particular."""
+    import watchgate.core.layers._semantic.layer  # noqa: F401 - registra "semantic"
+    import watchgate.core.layers.reputation_layer  # noqa: F401 - registra "reputation"
+    from watchgate.core.cost_control import CostController
+    from watchgate.core.layers._semantic.client import LLMClient, SemanticOutput
+    from watchgate.core.layers._semantic.layer import SemanticLayer
+    from watchgate.core.models import Confidence, RiskCategory
+
+    class _FakeLLMClient(LLMClient):
+        def complete_structured(
+            self, system_prompt, user_prompt, tools, tool_executor, max_tool_calls
+        ):
+            return SemanticOutput(
+                risk_score=77,
+                category=RiskCategory.BACKDOOR,
+                justification="fake",
+                confidence=Confidence.ALTA,
+            )
+
+    cost_control = CostController(
+        db_path=str(tmp_path / "cost.db"), max_diff_tokens=6000, monthly_budget_tokens=100_000
+    )
+    try:
+        config = FakeConfig(weights={"reputation": 0.15, "semantic": 0.40})
+        factories = {
+            "semantic": lambda: SemanticLayer(_FakeLLMClient(), cost_control),
+        }
+
+        result = run_analysis(
+            _empty_diff(),
+            metadata={"pr_id": "1", "repo": "org/repo"},
+            config=config,
+            layer_factories=factories,
+        )
+    finally:
+        cost_control.close()
+
+    assert set(result.layer_results.keys()) == {"reputation", "semantic"}
+    assert result.layer_results["semantic"].risk_score == 77
+    assert result.layer_results["semantic"].category == RiskCategory.BACKDOOR
