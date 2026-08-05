@@ -34,6 +34,27 @@ inocua; el compilador ve una condición real activa fuera del comentario. En
 un diff de GitHub/GitLab renderizado en el navegador, el efecto es el mismo:
 el highlighting de sintaxis y el orden visual no reflejan la semántica real.
 
+## Comprobación imprescindible antes de puntuar: ¿el payload está de verdad fuera del comentario?
+
+La sola presencia de caracteres de control bidireccional es señal suficiente
+para investigar con cuidado, pero **no basta por sí sola para confirmar que
+el ataque funciona en un diff concreto**. En lenguajes con comentarios de
+una sola línea que terminan en el salto de línea físico (`#` en Python,
+`//` en C/C++/JS/Go), **todo el contenido posterior al marcador de
+comentario dentro de esa misma línea física es inerte**, con total
+independencia de qué caracteres Unicode contenga — ningún carácter bidi
+puede hacer que el tokenizer trate texto como código activo si sigue
+estando, en el flujo de bytes real (no en el orden visual), dentro de la
+misma línea comentada. El ataque real de Trojan Source requiere que el
+código activo esté genuinamente en un token o línea *distinta* del
+comentario en el flujo de bytes, con los caracteres bidi solo alterando
+cómo se **renderiza** esa separación real, no creándola de la nada.
+
+Antes de asignar una puntuación alta solo por reconocer esta técnica,
+comprueba: ¿el texto "oculto" está en la misma línea física que el
+marcador de comentario (`#`, `//`), o en una línea/token distinto? Solo en
+el segundo caso el payload puede ejecutarse de verdad.
+
 ## Por qué es relevante para WatchGate
 
 - Es el ejemplo más claro de por qué **la capa estática no puede confiar

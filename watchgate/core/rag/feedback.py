@@ -4,9 +4,15 @@ El corpus estático en `core/rag/corpus/` está versionado y se rehace entero
 con `build_index()`. Este módulo es el otro lado del bucle de feedback descrito
 en la arquitectura: cuando el dashboard confirma el veredicto de un análisis
 (verdadero positivo o falso positivo), ese caso se trocea, se embebe y se
-upsertea directamente en la colección existente, sin rehacer el resto del
-índice. Los casos de feedback son estado de la instancia (viven bajo
+upsertea en su propia colección (`FEEDBACK_COLLECTION_NAME`), separada del
+corpus público. Los casos de feedback son estado de la instancia (viven bajo
 `.watchgate/`, igual que el propio índice) y no se comitean.
+
+Colección separada a propósito: el corpus público crece con investigación
+general y puede llegar a tener muchas entradas; un caso confirmado del propio
+historial de revisión es la señal más directa que existe y no debería competir
+por hueco en el top-k contra el corpus general. retriever.py consulta ambas
+colecciones y garantiza hueco para el feedback en vez de dejar que compita.
 """
 
 from __future__ import annotations
@@ -19,9 +25,9 @@ from typing import Literal
 import chromadb
 
 from watchgate.core.rag.indexer import (
-    COLLECTION_NAME,
     DEFAULT_INDEX_PATH,
     EMBEDDING_MODEL_NAME,
+    FEEDBACK_COLLECTION_NAME,
     chunk_document,
 )
 
@@ -94,9 +100,9 @@ def add_confirmed_case(
 
     client = chromadb.PersistentClient(path=index_path)
     try:
-        collection = client.get_collection(COLLECTION_NAME)
-    except Exception:  # noqa: BLE001 - todavía no existe el índice base
-        collection = client.create_collection(COLLECTION_NAME)
+        collection = client.get_collection(FEEDBACK_COLLECTION_NAME)
+    except Exception:  # noqa: BLE001 - todavía no existe esta colección
+        collection = client.create_collection(FEEDBACK_COLLECTION_NAME)
 
     # Si el caso ya existía (se está corrigiendo o ampliando el veredicto) y
     # ahora tiene menos fragmentos, los sobrantes de la versión anterior no
