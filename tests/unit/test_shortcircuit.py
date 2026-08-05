@@ -1,0 +1,173 @@
+"""Tests de shortcircuit.py (spec §11, A.3.4)."""
+
+from __future__ import annotations
+
+from watchgate.core.models import FileChange, FileStatus, LayerResult, NormalizedDiff, Semaforo
+from watchgate.core.shortcircuit import (
+    _has_new_dependencies,
+    _has_new_network_calls,
+    _matches_forcing_pattern,
+    evaluate_shortcircuit,
+)
+
+_WEIGHTS = {"static": 0.25, "deps": 0.20, "reputation": 0.15, "semantic": 0.40}
+_THRESHOLDS = {"yellow": 40, "red": 70}
+
+
+def _lr(name: str, score: int, skipped: bool = False) -> LayerResult:
+    return LayerResult(layer_name=name, risk_score=score, justification="x", skipped=skipped)
+
+
+def _diff_with_paths(*paths_and_hunks: tuple[str, str]) -> NormalizedDiff:
+    files = [
+        FileChange(path=p, status=FileStatus.MODIFIED, diff_hunk=h, additions=1, deletions=0)
+        for p, h in paths_and_hunks
+    ]
+    return NormalizedDiff(
+        base_sha="a", head_sha="b", repo_path=".", files=files, commit_messages=[], authors=[]
+    )
+
+
+def test_high_partial_score_shortcircuits_to_rojo_without_calling_llm():
+    """partial_score >= thresholds['red'] -> ROJO directo, sin importar
+    forcing patterns ni el sorteo de auditoría."""
+    partial = {
+        "static": _lr("static", 90),
+        "deps": _lr("deps", 90),
+        "reputation": _lr("reputation", 90),
+    }
+    diff = _diff_with_paths(("a.py", "+ x = 1"))
+
+    result = evaluate_shortcircuit(
+        partial,
+        _WEIGHTS,
+        diff,
+        _THRESHOLDS,
+        rng=lambda: 0.99,  # nunca cae en el sorteo
+    )
+
+    assert result == Semaforo.ROJO
+
+
+def test_low_partial_score_and_no_forcing_shortcircuits_to_verde():
+    partial = {
+        "static": _lr("static", 5),
+        "deps": _lr("deps", 5),
+        "reputation": _lr("reputation", 5),
+    }
+    diff = _diff_with_paths(("normal_file.py", "+ print(1)"))
+
+    # rng() >= 1/20 -> no cae en el muestreo de auditoría.
+    result = evaluate_shortcircuit(partial, _WEIGHTS, diff, _THRESHOLDS, rng=lambda: 0.5)
+
+    assert result == Semaforo.VERDE
+
+
+def test_low_partial_score_but_audit_sample_forces_semantic():
+    partial = {
+        "static": _lr("static", 5),
+        "deps": _lr("deps", 5),
+        "reputation": _lr("reputation", 5),
+    }
+    diff = _diff_with_paths(("normal_file.py", "+ print(1)"))
+    audit_calls: list[None] = []
+
+    result = evaluate_shortcircuit(
+        partial,
+        _WEIGHTS,
+        diff,
+        _THRESHOLDS,
+        rng=lambda: 0.01,  # < 1/20 -> cae en el muestreo
+        on_audit_sample=lambda: audit_calls.append(None),
+    )
+
+    assert result is None  # fuerza semántica igualmente
+    assert len(audit_calls) == 1
+
+
+def test_forcing_pattern_prevents_verde_shortcircuit_even_with_low_score():
+    partial = {
+        "static": _lr("static", 5),
+        "deps": _lr("deps", 5),
+        "reputation": _lr("reputation", 5),
+    }
+    diff = _diff_with_paths(("PKGBUILD", "+ source=https://example.com"))
+
+    result = evaluate_shortcircuit(partial, _WEIGHTS, diff, _THRESHOLDS, rng=lambda: 0.99)
+
+    assert result is None  # no se cortocircuita, hay que llamar a semántica
+
+
+def test_medium_partial_score_never_shortcircuits():
+    """Ni >= red ni < yellow*0.5: siempre None (zona intermedia, se ejecuta
+    la capa semántica sin excepción)."""
+    partial = {
+        "static": _lr("static", 45),
+        "deps": _lr("deps", 45),
+        "reputation": _lr("reputation", 45),
+    }
+    diff = _diff_with_paths(("a.py", "+ x = 1"))
+
+    result = evaluate_shortcircuit(partial, _WEIGHTS, diff, _THRESHOLDS, rng=lambda: 0.99)
+
+    assert result is None
+
+
+def test_semantic_layer_excluded_from_partial_score_even_if_present():
+    """Si por lo que sea partial_results ya trajera una entrada 'semantic'
+    (no debería, pero por robustez), no debe contar en el score parcial."""
+    partial = {
+        "static": _lr("static", 90),
+        "deps": _lr("deps", 90),
+        "reputation": _lr("reputation", 90),
+        "semantic": _lr("semantic", 0),  # no debería influir
+    }
+    diff = _diff_with_paths(("a.py", "+ x = 1"))
+
+    result = evaluate_shortcircuit(partial, _WEIGHTS, diff, _THRESHOLDS, rng=lambda: 0.99)
+
+    assert result == Semaforo.ROJO
+
+
+def test_matches_forcing_pattern_detects_dockerfile_and_workflow():
+    diff = _diff_with_paths((".github/workflows/ci.yml", "+ run: echo hi"))
+    assert _matches_forcing_pattern(diff) is True
+
+    diff2 = _diff_with_paths(("src/app.py", "+ print(1)"))
+    assert _matches_forcing_pattern(diff2) is False
+
+
+def test_has_new_network_calls_detects_requests_get():
+    diff = _diff_with_paths(("script.py", "+ requests.get('http://evil.com')"))
+    assert _has_new_network_calls(diff) is True
+
+    diff2 = _diff_with_paths(("script.py", "+ x = 1"))
+    assert _has_new_network_calls(diff2) is False
+
+
+def test_has_new_network_calls_ignores_binary_files():
+    binary_file = FileChange(
+        path="image.png",
+        status=FileStatus.MODIFIED,
+        diff_hunk="requests.get(",  # aunque "contenga" el patrón, es binario
+        additions=0,
+        deletions=0,
+        is_binary=True,
+    )
+    diff = NormalizedDiff(
+        base_sha="a",
+        head_sha="b",
+        repo_path=".",
+        files=[binary_file],
+        commit_messages=[],
+        authors=[],
+    )
+    assert _has_new_network_calls(diff) is False
+
+
+def test_has_new_dependencies_detects_package_json():
+    diff = _diff_with_paths(("package.json", '+ "lodash": "1.0.0"'))
+    assert _has_new_dependencies(diff) is True
+
+    diff2 = _diff_with_paths(("src/index.js", "+ console.log(1)"))
+    assert _has_new_dependencies(diff2) is False

@@ -14,6 +14,7 @@ from watchgate.core.models import CommitAuthor, FileChange, FileStatus, Normaliz
 
 if TYPE_CHECKING:
     from git import Repo
+    from git.diff import Diff
 
 
 # Mapeo extensión -> lenguaje. Deliberadamente acotado a lo que las capas
@@ -67,7 +68,7 @@ def _infer_language(path: str) -> str | None:
     return _EXTENSION_TO_LANGUAGE.get(ext)
 
 
-def _status_from_diff_item(diff_item: git.diff.Diff) -> FileStatus:
+def _status_from_diff_item(diff_item: Diff) -> FileStatus:
     """Determina el FileStatus a partir de las banderas booleanas del objeto
     Diff de GitPython (`new_file`/`deleted_file`/`renamed_file`), que son más
     fiables que `change_type` (este último llega a `None` en varios casos,
@@ -115,7 +116,14 @@ def _extract_file_changes(repo: Repo, base_sha: str, head_sha: str) -> list[File
             else None
         )
 
-        raw = diff_item.diff or b""
+        raw_diff = diff_item.diff
+        raw: bytes
+        if raw_diff is None:
+            raw = b""
+        elif isinstance(raw_diff, bytes):
+            raw = raw_diff
+        else:
+            raw = raw_diff.encode("utf-8")
         is_binary = False
         patch_text = ""
         if raw:
@@ -148,11 +156,19 @@ def _extract_file_changes(repo: Repo, base_sha: str, head_sha: str) -> list[File
     return changes
 
 
+def _decode_message(message: str | bytes) -> str:
+    """`Commit.message` de GitPython es `str | bytes` según su firma de tipos
+    (bytes si el mensaje no es UTF-8 válido); lo normalizamos siempre a str."""
+    if isinstance(message, bytes):
+        return message.decode("utf-8", errors="replace")
+    return message
+
+
 def _extract_commit_messages(repo: Repo, base_sha: str, head_sha: str) -> list[str]:
     if base_sha == head_sha:
         return []
     commits = list(repo.iter_commits(f"{base_sha}..{head_sha}", first_parent=True))
-    return [c.message.strip() for c in commits]
+    return [_decode_message(c.message).strip() for c in commits]
 
 
 def _extract_authors(repo: Repo, base_sha: str, head_sha: str) -> list[CommitAuthor]:
@@ -162,11 +178,11 @@ def _extract_authors(repo: Repo, base_sha: str, head_sha: str) -> list[CommitAut
     seen_emails: set[str] = set()
     authors: list[CommitAuthor] = []
     for c in commits:
-        email = c.author.email
+        email = c.author.email or ""
         if email in seen_emails:
             continue
         seen_emails.add(email)
-        authors.append(CommitAuthor(name=c.author.name, email=email))
+        authors.append(CommitAuthor(name=c.author.name or "", email=email))
     return authors
 
 
