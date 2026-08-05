@@ -17,6 +17,13 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 CORPUS_DIR = Path(__file__).resolve().parent / "corpus"
 DEFAULT_INDEX_PATH = ".watchgate/rag_index"
 COLLECTION_NAME = "attack_patterns"
+# Colección separada para casos confirmados por revisión humana (rag/feedback.py).
+# Vive en el mismo cliente/ruta persistida que COLLECTION_NAME -- ChromaDB permite
+# varias colecciones nombradas dentro de un mismo PersistentClient -- pero aparte,
+# para que el corpus público (grande, en crecimiento) nunca desplace a un caso
+# confirmado del propio historial de revisión, que es la señal más directa que
+# existe. retriever.py consulta las dos y las combina.
+FEEDBACK_COLLECTION_NAME = "feedback_cases"
 EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
 
 # ~200-300 tokens de referencia en la spec; sin tokenizer a mano, se aproxima
