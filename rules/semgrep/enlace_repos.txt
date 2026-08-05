@@ -1,0 +1,6 @@
+https://github.com/elttam/semgrep-rules/tree/main/rules/go/lang/security/audit
+https://github.com/trailofbits/semgrep-rules
+https://github.com/0xdea/semgrep-rules/tree/main
+https://github.com/opengrep/opengrep-rules
+
+

@@ -1,0 +1,25 @@
+rules:
+  - id: php-sql-injection-mysqli-query
+    languages: [php]
+    severity: ERROR
+    message: >-
+      Found mysqli_query()/$mysqli->query() (or PDO::query()) called with a
+      SQL string built via interpolation/concatenation instead of a
+      parameterized query. If any interpolated value comes from user input,
+      this allows SQL injection. Use prepared statements instead
+      (mysqli::prepare / PDO::prepare with bound parameters).
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: "CWE-89: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')"
+      owasp: ["A03:2021 - Injection"]
+      references:
+        - https://cwe.mitre.org/data/definitions/89.html
+        - https://www.php.net/manual/en/mysqli.quickstart.prepared-statements.php
+        - https://owasp.org/www-community/attacks/SQL_Injection
+    patterns:
+      - pattern-either:
+          - pattern: mysqli_query($CONN, $QUERY)
+          - pattern: $CONN->query($QUERY)
+      - pattern-not: mysqli_query($CONN, "...")
+      - pattern-not: $CONN->query("...")

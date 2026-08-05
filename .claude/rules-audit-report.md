@@ -263,5 +263,51 @@ No se lista fila por fila (553 reglas, inviable a mano); el fichero completo con
 
 **Total del proyecto tras esta tanda: 112 (trailofbits) + 49 (propias: 5+11+15+18) + 553 (bulk oficial) = 714 reglas.**
 
+## Quinta tanda: hallazgo de licencia + reglas de frameworks (decision del usuario, 2026-08-04)
+
+**Hallazgo critico**: la licencia real de `semgrep/semgrep-rules` (registro oficial, 553 reglas) es la **Semgrep Rules License v1.0**, no LGPL como indicaba la herramienta `iosifache` consultada en la tanda anterior. Esta licencia **prohibe expresamente la redistribucion** ("no puedes distribuir las reglas, ni ponerlas a disposicion de otros") y solo permite uso interno. El proyecto describe el repo destino como "privado mbut permite descarga de solo lectura a terceros" -- eso constituye distribucion segun la licencia, incluso siendo un repo privado. Ademas, GitHub no soporta permisos de lectura a nivel de subcarpeta dentro de un mismo repo (son a nivel de repo completo), asi que "restringir el acceso a esa carpeta concreta" no es tecnicamente posible sin un repositorio separado.
+
+**Decision tomada**: en vez de excluir las 553 reglas o montar un segundo repositorio privado, se opto por **reescribir desde cero un subconjunto de alto impacto** (15 reglas) como obra independiente -- basadas en conocimiento general de CWE/CVE, no en el codigo de las reglas originales -- lo que las libera de la restriccion de licencia. Se descarto explicitamente la opcion de "modificar levemente" las reglas originales para evitar la licencia: la propia licencia cubre expresamente las "copias modificadas", por lo que ese atajo no es legal.
+
+15 reglas nuevas centradas en vulnerabilidades con CVE real conocido, en 5 frameworks (Django, Flask, Express/Node, Spring, Rails). Todas verificadas con `semgrep --test` (63/63 checks passed tras corregir 2 bugs de patron). Mapeo detallado regla-CVE en [`vulnerability-mapping.md`](vulnerability-mapping.md).
+
+| Fichero | ID | Framework | CWE / CVE | Nota de validacion |
+|---|---|---|---|---|
+| custom/framework-python/django-mark-safe-xss.yaml | django-mark-safe-xss | Django | CWE-79 | Test propio pasa sin cambios. |
+| custom/framework-python/django-extra-raw-sql-injection.yaml | django-extra-raw-sql-injection | Django | CWE-89 | Dos bugs corregidos: (1) combinar `metavariable-pattern` para dos metavariables de ramas distintas de un `pattern-either` en el mismo nivel causa `Internal matching error` -- hay que anidar cada `metavariable-pattern` dentro de su propia rama; (2) `pattern-not: "..."` trata los f-strings de Python como "string literal" tambien, no distingue interpolacion -- se cambio a `pattern-not-regex` sobre el texto capturado. |
+| custom/framework-python/django-debug-true-production.yaml | django-debug-true-production | Django | CWE-215 | Test propio pasa sin cambios. |
+| custom/framework-python/flask-render-template-string-ssti.yaml | flask-render-template-string-ssti | Flask | CWE-1336 | Test propio pasa sin cambios. |
+| custom/framework-python/flask-pickle-session-deserialization.yaml | flask-pickle-session-deserialization | Flask | CWE-502 | Test propio pasa sin cambios. |
+| custom/framework-js/express-child-process-exec-injection.yaml | express-child-process-exec-injection | Express/Node | CWE-78 | Test propio pasa sin cambios. |
+| custom/framework-js/express-eval-dynamic-code.yaml | express-eval-dynamic-code | Express/Node | CWE-95 | Test propio pasa sin cambios. |
+| custom/framework-js/express-cors-wildcard-credentials.yaml | express-cors-wildcard-credentials | Express | CWE-942 | Test propio pasa sin cambios. |
+| custom/framework-java/spring-spel-injection.yaml | spring-spel-injection | Spring | CWE-917 / CVE-2022-22963 | Test propio pasa sin cambios. |
+| custom/framework-java/spring-jpa-query-injection.yaml | spring-jpa-query-injection | Spring/JPA | CWE-89 | Test propio pasa sin cambios. |
+| custom/framework-java/spring-actuator-exposed-endpoints.yaml | spring-actuator-exposed-endpoints | Spring Boot | CWE-200 | languages:[yaml] + pattern-regex; convencion de test `.test.yaml` (no `.yaml.test.yml`) igual que las reglas yaml de trailofbits. |
+| custom/framework-ruby/rails-render-inline-ssti.yaml | rails-render-inline-ssti | Rails | CWE-1336 | Se corrigio comilla YAML faltante (patron con `inline:` sin comillas rompia el parseo, mismo tipo de bug que ya vimos con Swift). |
+| custom/framework-ruby/rails-mass-assignment-permit-bang.yaml | rails-mass-assignment-permit-bang | Rails | CWE-915 | Test propio pasa sin cambios. |
+| custom/framework-java/java-log4j-unsanitized-input.yaml | java-log4j-unsanitized-input | Java/Log4j | CWE-117 / CVE-2021-44228 (Log4Shell) | confidence:LOW. Test propio pasa sin cambios. |
+| custom/framework-java/spring-file-upload-no-validation.yaml | spring-file-upload-no-validation | Spring | CWE-434 | Test propio pasa sin cambios. |
+
+**Total del proyecto tras esta tanda: 112 (trailofbits) + 64 (propias: 5+11+15+18+15) + 0 (bulk oficial, EXCLUIDO por licencia -- ver README.md) = 176 reglas redistribuibles sin restriccion.**
+
+Nota: las 553 reglas del bulk oficial siguen documentadas en este informe y en `bulk_approved.json` (scratchpad) como referencia de que existen y pasan test, pero **no se copian** por el problema de licencia. Ver `README.md` para el detalle.
+
+## Sexta tanda: `opengrep`, `elttam`, `0xdea` -- reemplazo del hueco de licencia + instalacion permanente (decision del usuario, 2026-08-05)
+
+Se localizaron 3 fuentes adicionales apuntadas por el usuario (`rules/semgrep/enlace_repos.txt`), evaluadas con la misma metodologia (pre-validacion YAML + test carpeta por carpeta, profundizando en las carpetas grandes que fallaban):
+
+| Fuente | Licencia | Reglas totales | Pasan test | Aprobadas (test + security + confidence!=LOW) |
+|---|---|---|---|---|
+| `opengrep/opengrep-rules` | LGPL-2.1 + Commons Clause (prohibe *vender*, no prohibe redistribuir/usar) | 1938 | ~1715 | **556** |
+| `elttam/semgrep-rules` (clon directo, no la copia vendorizada de j3ssie) | MIT | 82 | 11 (go+yaml; generic/java/php fallan) | 6 |
+| `0xdea/semgrep-rules` (clon directo) | MIT | 50 | 50/50 (limpio) | 40 |
+
+**Hallazgo clave**: `opengrep/opengrep-rules` es un fork abierto (snapshot Dic-2024) del registro oficial de Semgrep, con licencia mucho menos restrictiva (solo prohibe vender, no redistribuir). Recupera gran parte del contenido que se tuvo que descartar por la Semgrep Rules License v1.0, incluyendo dos categorias que fallaban por completo en el clon actual del registro oficial: **terraform (360/362 pasan aqui, vs. solo 19 salvados del oficial)** y **solidity (50/50 aqui, vs. 15 del oficial)**, ademas de **175 reglas de deteccion de secretos** (`generic/secrets/gitleaks`, la categoria mas valiosa que se habia perdido).
+
+Todo el conjunto aprobado hasta ahora (112 trailofbits + 64 propias + 556 opengrep + 6 elttam + 40 0xdea = **778 reglas**) se instalo de forma permanente en `rules/semgrep/` de este mismo repositorio (decision del usuario: guardar aqui, no en el repo externo `Repo-reglas-SEMGREP-y-YARA`), con `NOTICE.md` (licencias por fuente) y `registry.json` (indice completo). Se aplicaron las 4 correcciones pendientes de trailofbits (wget-unencrypted-url, 2 referencias de Go, 1 de Swift) a la copia instalada. Verificado con `semgrep --test` tras la instalacion (175/175 en la primera verificacion completa, mas verificacion adicional carpeta-por-carpeta tras podar opengrep a solo las 556 aprobadas).
+
+**Total final: 778 reglas, todas redistribuibles sin restriccion de licencia incompatible con el proyecto.**
+
 
 

@@ -1,0 +1,28 @@
+rules:
+  - id: java-insecure-deserialization-readobject
+    languages: [java]
+    severity: ERROR
+    message: >-
+      Found deserialization of Java objects via `ObjectInputStream.readObject()`.
+      Native Java deserialization can lead to remote code execution (RCE) if the
+      input stream contains attacker-controlled bytes and a "gadget chain" class
+      (e.g. from Commons Collections, Spring, Groovy, Hibernate) is present on the
+      classpath. Avoid deserializing untrusted data this way. Prefer safe formats
+      (JSON, Protobuf) or add a validating `ObjectInputFilter`
+      (`ObjectInputStream#setObjectInputFilter`, Java 9+) that allow-lists expected
+      classes before calling `readObject()`.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      owasp:
+        - "A08:2021 - Software and Data Integrity Failures"
+      references:
+        - https://cwe.mitre.org/data/definitions/502.html
+        - https://docs.oracle.com/en/java/javase/17/core/serialization-filtering1.html
+        - https://owasp.org/www-community/vulnerabilities/Deserialization_of_untrusted_data
+    patterns:
+      - pattern: $OIS.readObject()
+      - pattern-not-inside: |
+          $OIS.setObjectInputFilter(...);
+          ...

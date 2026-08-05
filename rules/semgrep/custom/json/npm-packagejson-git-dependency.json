@@ -1,0 +1,11 @@
+{
+  "name": "example-app",
+  "dependencies": {
+    // ok: npm-packagejson-git-dependency
+    "express": "4.18.2",
+    // ruleid: npm-packagejson-git-dependency
+    "some-lib": "git+https://github.com/someuser/some-lib.git#master",
+    // ruleid: npm-packagejson-git-dependency
+    "other-lib": "github:someuser/other-lib"
+  }
+}

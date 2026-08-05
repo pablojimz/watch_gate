@@ -1,0 +1,29 @@
+rules:
+  - id: rust-command-injection-shell
+    languages: [rust]
+    severity: ERROR
+    message: >-
+      Found Command::new() invoking a shell (sh -c / cmd /C) with an argument
+      that is not a fixed literal. Rust's std::process::Command normally does
+      not invoke a shell and is safe against shell metacharacter injection,
+      but explicitly launching "sh -c" or "cmd /C" reintroduces that risk: if
+      the executed string is influenced by user input, an attacker can inject
+      shell metacharacters (;, &&, |, $()) to run arbitrary commands. Avoid
+      invoking a shell explicitly; call the target program directly with
+      Command::new(program).arg(...) for each argument instead.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: "CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"
+      owasp: ["A03:2021 - Injection"]
+      references:
+        - https://cwe.mitre.org/data/definitions/78.html
+        - https://doc.rust-lang.org/std/process/struct.Command.html
+    patterns:
+      - pattern-either:
+          - pattern: Command::new("sh").arg("-c").arg($CMD)
+          - pattern: Command::new("bash").arg("-c").arg($CMD)
+          - pattern: Command::new("cmd").arg("/C").arg($CMD)
+      - pattern-not: Command::new("sh").arg("-c").arg("...")
+      - pattern-not: Command::new("bash").arg("-c").arg("...")
+      - pattern-not: Command::new("cmd").arg("/C").arg("...")

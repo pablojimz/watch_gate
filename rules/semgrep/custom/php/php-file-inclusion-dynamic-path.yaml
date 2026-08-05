@@ -1,0 +1,30 @@
+rules:
+  - id: php-file-inclusion-dynamic-path
+    languages: [php]
+    severity: ERROR
+    message: >-
+      Found include()/require() (or their _once variants) with a path that is
+      not a fixed literal. If the path is influenced by user input, an
+      attacker can achieve Local File Inclusion (reading/executing arbitrary
+      local files, e.g. log poisoning) or, if allow_url_include is enabled,
+      Remote File Inclusion (executing PHP code from an attacker-controlled
+      URL) - both lead to remote code execution. Never build include paths
+      from user input; use a strict allow-list of fixed filenames instead.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: "CWE-98: Improper Control of Filename for Include/Require Statement in PHP Program ('PHP Remote File Inclusion')"
+      owasp: ["A03:2021 - Injection"]
+      references:
+        - https://cwe.mitre.org/data/definitions/98.html
+        - https://owasp.org/www-community/vulnerabilities/PHP_File_Inclusion
+    patterns:
+      - pattern-either:
+          - pattern: include $PATH;
+          - pattern: include_once $PATH;
+          - pattern: require $PATH;
+          - pattern: require_once $PATH;
+      - pattern-not: include "...";
+      - pattern-not: include_once "...";
+      - pattern-not: require "...";
+      - pattern-not: require_once "...";

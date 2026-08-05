@@ -1,0 +1,29 @@
+rules:
+  - id: dockerfile-missing-user
+    languages: [dockerfile]
+    severity: WARNING
+    message: >-
+      This Dockerfile never switches away from the default root user with a
+      USER instruction. Containers that run as root give an attacker who
+      breaks out of the application (e.g. via a code execution
+      vulnerability) root privileges inside the container, which
+      significantly widens the blast radius of a container-escape
+      vulnerability. Add a non-root USER instruction after installing
+      dependencies and before running the application.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: "CWE-250: Execution with Unnecessary Privileges"
+      owasp: ["A05:2021 - Security Misconfiguration"]
+      references:
+        - https://cwe.mitre.org/data/definitions/250.html
+        - https://docs.docker.com/engine/reference/builder/#user
+    patterns:
+      - pattern: |
+          FROM $IMAGE
+          ...
+      - pattern-not: |
+          FROM $IMAGE
+          ...
+          USER ...
+          ...
