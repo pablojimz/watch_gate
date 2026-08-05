@@ -1,0 +1,24 @@
+rules:
+  - id: sqlserver-insecure-connection-encryption
+    languages: [regex]
+    severity: WARNING
+    message: >-
+      Found a SQL Server connection string with encryption disabled
+      (Encrypt=false) or certificate validation disabled
+      (TrustServerCertificate=true). Either setting allows a
+      man-in-the-middle attacker on the network path to intercept or tamper
+      with database traffic, including credentials and query results. Set
+      Encrypt=true and TrustServerCertificate=false (the modern default),
+      pointing at a properly issued certificate for the server.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: "CWE-295: Improper Certificate Validation"
+      owasp: ["A02:2021 - Cryptographic Failures"]
+      references:
+        - https://cwe.mitre.org/data/definitions/295.html
+        - https://learn.microsoft.com/en-us/sql/connect/ado-net/sql/connection-string-syntax
+    patterns:
+      - pattern-either:
+          - pattern-regex: (?i)Encrypt\s*=\s*false
+          - pattern-regex: (?i)TrustServerCertificate\s*=\s*true

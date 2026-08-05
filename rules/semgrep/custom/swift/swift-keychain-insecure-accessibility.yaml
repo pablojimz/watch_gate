@@ -1,0 +1,25 @@
+rules:
+  - id: swift-keychain-insecure-accessibility
+    languages: [swift]
+    severity: WARNING
+    message: >-
+      Found a Keychain item stored with kSecAttrAccessibleAlways (or the
+      deprecated kSecAttrAccessibleAlwaysThisDeviceOnly). These
+      accessibility levels let the item be read even while the device is
+      locked and, for the non-"ThisDeviceOnly" variant, allow the item to be
+      included in unencrypted device backups. For sensitive data (tokens,
+      passwords, keys), use kSecAttrAccessibleWhenUnlockedThisDeviceOnly (or
+      an equivalent *ThisDeviceOnly level that also requires the device to
+      be unlocked) instead.
+    metadata:
+      category: security
+      confidence: HIGH
+      cwe: "CWE-522: Insufficiently Protected Credentials"
+      owasp: ["A02:2021 - Cryptographic Failures"]
+      references:
+        - https://cwe.mitre.org/data/definitions/522.html
+        - https://developer.apple.com/documentation/security/ksecattraccessiblealways
+    patterns:
+      - pattern-either:
+          - pattern: kSecAttrAccessibleAlways
+          - pattern: kSecAttrAccessibleAlwaysThisDeviceOnly

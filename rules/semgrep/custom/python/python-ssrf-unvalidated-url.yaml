@@ -1,0 +1,26 @@
+rules:
+  - id: python-ssrf-unvalidated-url
+    languages: [python]
+    severity: WARNING
+    message: >-
+      Found an outbound HTTP request (`requests`/`urllib`) whose URL is not a
+      fixed literal. If the URL (or its host) is influenced by user input, an
+      attacker can make the server issue requests to internal services or cloud
+      metadata endpoints (e.g. `http://169.254.169.254/latest/meta-data/`),
+      potentially exfiltrating credentials (Server-Side Request Forgery, SSRF).
+      Validate/allow-list the destination host before making the request.
+    metadata:
+      category: security
+      confidence: LOW
+      cwe: "CWE-918: Server-Side Request Forgery (SSRF)"
+      owasp:
+        - "A10:2021 - Server-Side Request Forgery"
+      references:
+        - https://cwe.mitre.org/data/definitions/918.html
+        - https://owasp.org/www-community/attacks/Server_Side_Request_Forgery
+    patterns:
+      - pattern-either:
+          - pattern: requests.$METHOD($URL, ...)
+          - pattern: urllib.request.urlopen($URL, ...)
+      - pattern-not: requests.$METHOD("...", ...)
+      - pattern-not: urllib.request.urlopen("...", ...)

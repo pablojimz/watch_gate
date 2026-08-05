@@ -1,0 +1,25 @@
+rules:
+  - id: django-mark-safe-xss
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Found mark_safe() (or format_html with an already-escaped/raw fragment)
+      applied to a string built from interpolation/concatenation instead of
+      a fixed literal. mark_safe() tells Django's template engine to skip
+      auto-escaping entirely; if any interpolated value comes from user
+      input, this is a direct stored/reflected XSS. Never call mark_safe()
+      on dynamic content - use format_html() with proper placeholders (which
+      escapes each argument) instead of pre-building the HTML string
+      yourself.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: "CWE-79: Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')"
+      owasp: ["A03:2021 - Injection"]
+      references:
+        - https://cwe.mitre.org/data/definitions/79.html
+        - https://docs.djangoproject.com/en/5.0/ref/utils/#django.utils.safestring.mark_safe
+        - https://owasp.org/www-community/attacks/xss/
+    patterns:
+      - pattern: mark_safe($HTML)
+      - pattern-not: mark_safe("...")

@@ -1,0 +1,27 @@
+rules:
+  - id: c-toctou-access-open
+    languages: [c, cpp]
+    severity: WARNING
+    message: >-
+      Found access() used to check a file's permissions/existence
+      immediately before open()ing the same path. Between the check and the
+      open, an attacker with local access can swap the file/symlink at that
+      path (a Time-Of-Check-Time-Of-Use race), causing the program to open a
+      different, attacker-controlled file than the one it validated -
+      commonly used to escalate privileges via a setuid binary. Do not use
+      access() to gate a later open(); open the file first and then check
+      its properties using fstat() on the returned file descriptor, or drop
+      privileges before opening.
+    metadata:
+      category: security
+      confidence: LOW
+      cwe: "CWE-367: Time-of-check Time-of-use (TOCTOU) Race Condition"
+      owasp: ["A04:2021 - Insecure Design"]
+      references:
+        - https://cwe.mitre.org/data/definitions/367.html
+        - https://owasp.org/www-community/vulnerabilities/Time_of_check_to_time_of_use_race_condition
+    patterns:
+      - pattern: |
+          access($PATH, ...);
+          ...
+          open($PATH, ...);

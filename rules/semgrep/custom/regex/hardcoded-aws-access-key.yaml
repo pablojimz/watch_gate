@@ -1,0 +1,24 @@
+rules:
+  - id: hardcoded-aws-access-key
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Found what looks like a hardcoded AWS access key ID (matches the
+      AKIA/ABIA/ACCA/ASIA + 16 alphanumeric characters format). If this is a
+      real, active key committed to source control, it is immediately
+      compromised - AWS's own credential scanners and public GitHub scanning
+      typically detect and quarantine such keys within minutes, but any
+      earlier clone/fork/CI log retains the exposure. Revoke this key
+      immediately if real, and load credentials from environment
+      variables, an instance role, or a secrets manager instead of hardcoding
+      them.
+    metadata:
+      category: security
+      confidence: HIGH
+      cwe: "CWE-798: Use of Hard-coded Credentials"
+      owasp: ["A07:2021 - Identification and Authentication Failures"]
+      references:
+        - https://cwe.mitre.org/data/definitions/798.html
+        - https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_access-keys.html
+    patterns:
+      - pattern-regex: \b(AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16}\b

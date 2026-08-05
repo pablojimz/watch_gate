@@ -1,0 +1,32 @@
+rules:
+  - id: csharp-path-traversal-pathcombine
+    languages: [csharp]
+    severity: WARNING
+    message: >-
+      Found Path.Combine() with a non-literal segment used directly in a file
+      operation, without validating that the resulting path stays inside the
+      intended base directory. Path.Combine does NOT sanitize ".." segments or
+      absolute-path overrides: if the user-controlled segment is
+      "../../etc/passwd" or an absolute path, the combined path escapes the
+      base directory entirely (path traversal). After combining, resolve the
+      full path (Path.GetFullPath) and verify it still starts with the
+      intended base directory before using it.
+    metadata:
+      category: security
+      confidence: LOW
+      cwe: "CWE-22: Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal')"
+      owasp: ["A01:2021 - Broken Access Control"]
+      references:
+        - https://cwe.mitre.org/data/definitions/22.html
+        - https://learn.microsoft.com/en-us/dotnet/api/system.io.path.combine
+        - https://owasp.org/www-community/attacks/Path_Traversal
+    patterns:
+      - pattern-either:
+          - pattern: File.ReadAllText(Path.Combine($BASE, $SEGMENT))
+          - pattern: File.ReadAllBytes(Path.Combine($BASE, $SEGMENT))
+          - pattern: File.OpenRead(Path.Combine($BASE, $SEGMENT))
+          - pattern: File.WriteAllText(Path.Combine($BASE, $SEGMENT), ...)
+      - pattern-not: File.ReadAllText(Path.Combine($BASE, "..."))
+      - pattern-not: File.ReadAllBytes(Path.Combine($BASE, "..."))
+      - pattern-not: File.OpenRead(Path.Combine($BASE, "..."))
+      - pattern-not: File.WriteAllText(Path.Combine($BASE, "..."), ...)

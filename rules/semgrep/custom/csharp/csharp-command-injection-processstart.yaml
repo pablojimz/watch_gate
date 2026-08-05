@@ -1,0 +1,25 @@
+rules:
+  - id: csharp-command-injection-processstart
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      Found Process.Start() with UseShellExecute enabled (the default when
+      not explicitly set to false) and arguments that are not a fixed
+      literal. When UseShellExecute is true, the OS shell parses the command
+      line, so an attacker-influenced argument containing shell
+      metacharacters can run arbitrary commands. Set UseShellExecute = false
+      and pass arguments via the ArgumentList collection (one array element
+      per argument) instead of a single concatenated string.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: "CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"
+      owasp: ["A03:2021 - Injection"]
+      references:
+        - https://cwe.mitre.org/data/definitions/78.html
+        - https://learn.microsoft.com/en-us/dotnet/api/system.diagnostics.processstartinfo.useshellexecute
+    patterns:
+      - pattern-either:
+          - pattern: Process.Start($FILE, $ARGS)
+          - pattern: Process.Start(new ProcessStartInfo($FILE, $ARGS))
+      - pattern-not: Process.Start($FILE2, "...")

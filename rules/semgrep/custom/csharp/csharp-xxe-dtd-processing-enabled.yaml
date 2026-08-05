@@ -1,0 +1,23 @@
+rules:
+  - id: csharp-xxe-dtd-processing-enabled
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      Found XmlReaderSettings explicitly configured to allow DTD processing
+      (DtdProcessing.Parse). This re-enables XML External Entity (XXE)
+      resolution, which an attacker can abuse to read arbitrary local files,
+      perform SSRF against internal services, or cause denial of service
+      (billion laughs). Leave DtdProcessing at its safe default
+      (Prohibit/Ignore) unless you have a specific, trusted need for DTDs, and
+      if so, also set XmlResolver = null.
+    metadata:
+      category: security
+      confidence: HIGH
+      cwe: "CWE-611: Improper Restriction of XML External Entity Reference"
+      owasp: ["A05:2021 - Security Misconfiguration"]
+      references:
+        - https://cwe.mitre.org/data/definitions/611.html
+        - https://learn.microsoft.com/en-us/dotnet/standard/data/xml/xml-denial-of-service
+        - https://owasp.org/www-community/vulnerabilities/XML_External_Entity_(XXE)_Processing
+    patterns:
+      - pattern: $X.DtdProcessing = DtdProcessing.Parse;

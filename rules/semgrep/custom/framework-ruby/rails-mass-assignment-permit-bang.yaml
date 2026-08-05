@@ -1,0 +1,26 @@
+rules:
+  - id: rails-mass-assignment-permit-bang
+    languages: [ruby]
+    severity: ERROR
+    message: >-
+      Found params.permit!() - the "permit everything" escape hatch of
+      Rails Strong Parameters. This disables mass-assignment protection
+      entirely for this parameters hash: an attacker can add unexpected
+      fields to the request body (e.g. admin: true, role: "admin",
+      user_id: <someone else's id>) and have them written directly to the
+      model, regardless of what the form/API was actually supposed to
+      accept. This was the exact bug class responsible for the 2012 GitHub
+      public-key mass-assignment vulnerability that led Rails to introduce
+      Strong Parameters. Always list allowed attributes explicitly with
+      permit(:field1, :field2, ...).
+    metadata:
+      category: security
+      confidence: HIGH
+      cwe: "CWE-915: Improperly Controlled Modification of Dynamically-Determined Object Attributes"
+      owasp: ["A08:2021 - Software and Data Integrity Failures"]
+      references:
+        - https://cwe.mitre.org/data/definitions/915.html
+        - https://guides.rubyonrails.org/action_controller_overview.html#strong-parameters
+        - https://github.blog/2012-03-04-public-key-security-vulnerability-and-mitigation/
+    patterns:
+      - pattern: $PARAMS.permit!
