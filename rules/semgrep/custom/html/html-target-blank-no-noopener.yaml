@@ -1,0 +1,26 @@
+rules:
+  - id: html-target-blank-no-noopener
+    languages: [html]
+    severity: WARNING
+    message: >-
+      Found a link with target="_blank" but no rel="noopener" (or
+      "noreferrer"). Without noopener, the page opened in the new tab gets a
+      window.opener reference back to your page and can navigate it to an
+      attacker-controlled URL (e.g. a phishing page that looks like your
+      login) - this is "reverse tabnabbing" (CWE-1022). Add
+      rel="noopener noreferrer" to every target="_blank" link, especially
+      ones pointing to user-supplied or third-party URLs.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: "CWE-1022: Use of Web Link to Untrusted Target with window.opener Access"
+      owasp: ["A05:2021 - Security Misconfiguration"]
+      references:
+        - https://cwe.mitre.org/data/definitions/1022.html
+        - https://developer.mozilla.org/en-US/docs/Web/HTML/Attributes/rel/noopener
+    patterns:
+      - pattern: <a ... target="_blank" ... ></a>
+      - pattern-not: <a ... rel="noopener noreferrer" ... ></a>
+      - pattern-not: <a ... rel="noreferrer noopener" ... ></a>
+      - pattern-not: <a ... rel="noopener" ... ></a>
+      - pattern-not: <a ... rel="noreferrer" ... ></a>

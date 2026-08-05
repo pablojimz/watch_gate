@@ -1,0 +1,28 @@
+rules:
+  - id: bash-curl-pipe-to-shell
+    languages: [generic]
+    severity: ERROR
+    message: >-
+      Found the "curl | sh" (or wget | sh) pattern: downloading a remote
+      script and piping it straight into a shell interpreter. This executes
+      whatever the remote server returns with no integrity check and no way
+      to review what actually ran; if the URL is ever served over plain
+      HTTP, or the remote host is compromised or DNS-hijacked, this is
+      arbitrary code execution. Download to a file, verify its
+      checksum/signature, review it, and only then execute it explicitly.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: "CWE-494: Download of Code Without Integrity Check"
+      owasp: ["A08:2021 - Software and Data Integrity Failures"]
+      references:
+        - https://cwe.mitre.org/data/definitions/494.html
+        - https://attack.mitre.org/techniques/T1059/004/
+    options:
+      generic_ellipsis_max_span: 0
+    patterns:
+      - pattern-either:
+          - pattern: curl ... | sh
+          - pattern: curl ... | bash
+          - pattern: wget ... | sh
+          - pattern: wget ... | bash

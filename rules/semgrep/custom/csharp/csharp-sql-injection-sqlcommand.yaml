@@ -1,0 +1,24 @@
+rules:
+  - id: csharp-sql-injection-sqlcommand
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      Found a SqlCommand constructed with a query string built via
+      concatenation or interpolation instead of parameters. If any part of the
+      query comes from user input, this allows SQL injection. Use
+      parameterized queries instead (SqlCommand.Parameters.Add /
+      AddWithValue with @param placeholders).
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: "CWE-89: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')"
+      owasp: ["A03:2021 - Injection"]
+      references:
+        - https://cwe.mitre.org/data/definitions/89.html
+        - https://learn.microsoft.com/en-us/sql/relational-databases/security/sql-injection
+    patterns:
+      - pattern-either:
+          - pattern: new SqlCommand($QUERY, ...)
+          - pattern: $CMD.CommandText = $QUERY;
+      - pattern-not: new SqlCommand("...", ...)
+      - pattern-not: $CMD.CommandText = "...";

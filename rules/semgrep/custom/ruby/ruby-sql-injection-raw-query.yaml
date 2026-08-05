@@ -1,0 +1,26 @@
+rules:
+  - id: ruby-sql-injection-raw-query
+    languages: [ruby]
+    severity: ERROR
+    message: >-
+      Found a SQL query built with Ruby string interpolation passed to
+      ActiveRecord's raw query methods (`where`, `find_by_sql`, `order`,
+      `connection.execute`...). If any interpolated value comes from user
+      input, this allows SQL injection. Use parameterized queries instead
+      (e.g. `where("id = ?", id)` or `where(id: id)`).
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: "CWE-89: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')"
+      owasp:
+        - "A03:2021 - Injection"
+      references:
+        - https://cwe.mitre.org/data/definitions/89.html
+        - https://guides.rubyonrails.org/security.html#sql-injection
+        - https://rails-sqli.org/
+    patterns:
+      - pattern-either:
+          - pattern: $MODEL.where("...#{$X}...")
+          - pattern: $MODEL.find_by_sql("...#{$X}...")
+          - pattern: $MODEL.order("...#{$X}...")
+          - pattern: $CONN.execute("...#{$X}...")

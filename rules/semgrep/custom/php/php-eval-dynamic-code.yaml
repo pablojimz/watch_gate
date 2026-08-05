@@ -1,0 +1,20 @@
+rules:
+  - id: php-eval-dynamic-code
+    languages: [php]
+    severity: ERROR
+    message: >-
+      Found a call to eval() where the code string is not a fixed literal. If
+      the evaluated string is influenced by user input, this allows arbitrary
+      PHP code execution. Avoid eval() entirely for anything derived from user
+      input; there is almost always a safer, purpose-built alternative.
+    metadata:
+      category: security
+      confidence: HIGH
+      cwe: "CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code ('Eval Injection')"
+      owasp: ["A03:2021 - Injection"]
+      references:
+        - https://cwe.mitre.org/data/definitions/95.html
+        - https://owasp.org/www-community/attacks/Direct_Dynamic_Code_Evaluation_Eval_Injection
+    patterns:
+      - pattern: eval($CODE)
+      - pattern-not: eval("...")

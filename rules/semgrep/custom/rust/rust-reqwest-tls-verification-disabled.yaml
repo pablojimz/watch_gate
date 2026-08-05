@@ -1,0 +1,24 @@
+rules:
+  - id: rust-reqwest-tls-verification-disabled
+    languages: [rust]
+    severity: ERROR
+    message: >-
+      Found a reqwest ClientBuilder with certificate/hostname verification
+      disabled (danger_accept_invalid_certs(true) or
+      danger_accept_invalid_hostnames(true)). This allows a
+      man-in-the-middle attacker with any certificate (or a certificate for a
+      different hostname) to intercept and modify all HTTPS traffic made with
+      this client. Remove these options and use a proper trusted CA bundle
+      instead.
+    metadata:
+      category: security
+      confidence: HIGH
+      cwe: "CWE-295: Improper Certificate Validation"
+      owasp: ["A02:2021 - Cryptographic Failures"]
+      references:
+        - https://cwe.mitre.org/data/definitions/295.html
+        - https://docs.rs/reqwest/latest/reqwest/struct.ClientBuilder.html#method.danger_accept_invalid_certs
+    patterns:
+      - pattern-either:
+          - pattern: $BUILDER.danger_accept_invalid_certs(true)
+          - pattern: $BUILDER.danger_accept_invalid_hostnames(true)

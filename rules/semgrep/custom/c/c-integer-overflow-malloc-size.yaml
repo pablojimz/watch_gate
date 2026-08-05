@@ -1,0 +1,24 @@
+rules:
+  - id: c-integer-overflow-malloc-size
+    languages: [c, cpp]
+    severity: WARNING
+    message: >-
+      Found malloc()/calloc() with a size computed by multiplying two
+      non-literal values. If the multiplication overflows (e.g. a large
+      attacker-controlled count times an element size), the result wraps
+      around to a small number, malloc() succeeds with a buffer far smaller
+      than the code assumes, and the subsequent writes overflow the heap
+      buffer - a classic path to heap corruption and remote code execution.
+      Use calloc(count, size) instead of malloc(count * size) (calloc checks
+      for overflow internally), or explicitly validate that the multiplication
+      does not overflow before calling malloc().
+    metadata:
+      category: security
+      confidence: LOW
+      cwe: "CWE-190: Integer Overflow or Wraparound"
+      owasp: ["A06:2021 - Vulnerable and Outdated Components"]
+      references:
+        - https://cwe.mitre.org/data/definitions/190.html
+        - https://owasp.org/www-community/vulnerabilities/Integer_overflow
+    patterns:
+      - pattern: malloc($A * $B)

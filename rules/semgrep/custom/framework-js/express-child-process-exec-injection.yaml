@@ -1,0 +1,31 @@
+rules:
+  - id: express-child-process-exec-injection
+    languages: [js, ts]
+    severity: ERROR
+    message: >-
+      Found child_process.exec() (or execSync) called with a command string
+      built via template literal/concatenation instead of a fixed literal.
+      Unlike execFile/spawn (which do not invoke a shell by default), exec()
+      always passes its argument to /bin/sh -c (or cmd.exe on Windows); if
+      any part of the command is influenced by user input (e.g. an Express
+      request parameter), an attacker can inject shell metacharacters to run
+      arbitrary commands. Use execFile()/spawn() with an explicit argument
+      array instead.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: "CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"
+      owasp: ["A03:2021 - Injection"]
+      references:
+        - https://cwe.mitre.org/data/definitions/78.html
+        - https://nodejs.org/api/child_process.html#child_processexeccommand-options-callback
+    patterns:
+      - pattern-either:
+          - pattern: child_process.exec($CMD, ...)
+          - pattern: child_process.execSync($CMD, ...)
+          - pattern: exec($CMD, ...)
+          - pattern: execSync($CMD, ...)
+      - pattern-not: child_process.exec("...", ...)
+      - pattern-not: child_process.execSync("...", ...)
+      - pattern-not: exec("...", ...)
+      - pattern-not: execSync("...", ...)

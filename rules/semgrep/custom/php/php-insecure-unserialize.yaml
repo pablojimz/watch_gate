@@ -1,0 +1,26 @@
+rules:
+  - id: php-insecure-unserialize
+    languages: [php]
+    severity: ERROR
+    message: >-
+      Found a call to unserialize() on data that is not a fixed literal. PHP's
+      unserialize() can instantiate arbitrary objects and invoke their magic
+      methods (__wakeup, __destruct, __toString...); if a class with a
+      dangerous magic method is autoloadable in the application (a "POP chain"
+      / PHP Object Injection gadget), an attacker who controls the serialized
+      input can achieve remote code execution, arbitrary file write/delete, or
+      SQL injection. Avoid unserialize() on untrusted input; use json_decode()
+      instead, or pass the allowed_classes option to restrict which classes
+      can be instantiated.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      owasp: ["A08:2021 - Software and Data Integrity Failures"]
+      references:
+        - https://cwe.mitre.org/data/definitions/502.html
+        - https://owasp.org/www-community/vulnerabilities/PHP_Object_Injection
+        - https://www.php.net/manual/en/function.unserialize.php
+    patterns:
+      - pattern: unserialize($DATA)
+      - pattern-not: unserialize("...")

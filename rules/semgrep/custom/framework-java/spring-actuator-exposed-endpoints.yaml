@@ -1,0 +1,24 @@
+rules:
+  - id: spring-actuator-exposed-endpoints
+    languages: [yaml]
+    severity: ERROR
+    message: >-
+      Found Spring Boot Actuator configured with
+      management.endpoints.web.exposure.include set to "*" (all endpoints).
+      This exposes sensitive endpoints like /env (environment variables,
+      often including database passwords/API keys), /heapdump (a full JVM
+      memory dump, frequently mined for secrets), and /shutdown over HTTP.
+      Actuator endpoint over-exposure is one of the most common real-world
+      Spring Boot misconfigurations found in breach reports and bug bounty
+      submissions. Explicitly list only the endpoints you need (e.g.
+      health,info) instead of exposing everything.
+    metadata:
+      category: security
+      confidence: HIGH
+      cwe: "CWE-200: Exposure of Sensitive Information to an Unauthorized Actor"
+      owasp: ["A05:2021 - Security Misconfiguration"]
+      references:
+        - https://cwe.mitre.org/data/definitions/200.html
+        - https://docs.spring.io/spring-boot/docs/current/reference/html/actuator.html#actuator.endpoints.exposing
+    patterns:
+      - pattern-regex: (?i)include:\s*["']?\*["']?\s*$
