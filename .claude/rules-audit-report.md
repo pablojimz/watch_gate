@@ -1,3 +1,4 @@
+
 # Informe de auditoria - trailofbits/semgrep-rules
 
 Total de reglas auditadas: **120** (definidas en 118 ficheros .yaml; 2 ficheros contienen 2 reglas cada uno)
@@ -132,3 +133,135 @@ Metodologia: se clono trailofbits/semgrep-rules, se ejecuto `semgrep --test` sob
 | yaml/github-actions/pypi-publish-password.yaml | pypi-publish-password | yaml | Acotado, sin indicios de sobre-generalizacion | Si, pasa `semgrep --test` | Si (WARNING/HIGH, CWE coherente con el mensaje) | Ninguna detectada | **APROBAR** | Patron acotado, severity/confidence coherentes con el CWE, referencias validas (HTTP 200), pasa `semgrep --test`. |
 | yaml/github-actions/rubygems-publish-key.yaml | rubygems-publish-key | yaml | Acotado, sin indicios de sobre-generalizacion | Si, pasa `semgrep --test` | Si (WARNING/HIGH, CWE coherente con el mensaje) | Ninguna detectada | **APROBAR** | Patron acotado, severity/confidence coherentes con el CWE, referencias validas (HTTP 200), pasa `semgrep --test`. |
 | yaml/github-actions/vault-token.yaml | vault-token | yaml | Acotado, sin indicios de sobre-generalizacion | Si, pasa `semgrep --test` | Si (WARNING/HIGH, CWE coherente con el mensaje) | Ninguna detectada | **APROBAR** | Patron acotado, severity/confidence coherentes con el CWE, referencias validas (HTTP 200), pasa `semgrep --test`. |
+
+## Reglas propias nuevas (no provienen de trailofbits/semgrep-rules)
+
+Propuestas por decision del usuario (2026-08-04) para cubrir huecos de alto impacto no cubiertos por el set importado. Cada una escrita con YAML + fixture de test propios, verificadas con `semgrep --test` (5/5 passed) antes de aprobar.
+
+| Fichero | ID | Lenguaje | CWE | Veredicto | Justificacion |
+|---|---|---|---|---|---|
+| custom/jvm/java-insecure-deserialization-readobject.yaml | java-insecure-deserialization-readobject | java | CWE-502 (RCE via deserializacion) | **APROBAR** | Ningun hueco cubierto por trailofbits para RCE por deserializacion Java (gadget chains). Test propio pasa. |
+| custom/python/python-command-injection-shell-true.yaml | python-command-injection-shell-true | python | CWE-78 (inyeccion de comandos OS, RCE) | **APROBAR** | El set importado no tenia ninguna regla de inyeccion de comandos. Test propio pasa. |
+| custom/javascript/javascript-jwt-verify-disabled.yaml | javascript-jwt-verify-disabled | js, ts | CWE-347 (bypass de autenticacion) | **APROBAR** | Cubre el bypass clasico de JWT (jwt.decode sin verificar / algoritmo none). Test propio pasa. |
+| custom/ruby/ruby-sql-injection-raw-query.yaml | ruby-sql-injection-raw-query | ruby | CWE-89 (inyeccion SQL) | **APROBAR** | El set importado tiene muchas reglas de Rails pero ninguna de inyeccion SQL. Test propio pasa. |
+| custom/python/python-ssrf-unvalidated-url.yaml | python-ssrf-unvalidated-url | python | CWE-918 (SSRF) | **APROBAR** | confidence:LOW declarado a proposito (patron amplio por diseno, igual que port-all-interfaces). Test propio pasa. |
+
+Segunda tanda (decision del usuario, 2026-08-04): 3 reglas C/C++, 3 PHP, 3 C#/.NET, 2 PowerShell. Todas verificadas con `semgrep --test` (15/15 checks passed tras corregir bugs de patron encontrados durante la validacion).
+
+| Fichero | ID | Lenguaje | CWE | Veredicto | Nota de validacion |
+|---|---|---|---|---|---|
+| custom/c/c-buffer-overflow-unbounded-copy.yaml | c-buffer-overflow-unbounded-copy | c, cpp | CWE-120/CWE-787 (buffer overflow, RCE) | **APROBAR** | Test propio pasa sin cambios. |
+| custom/c/c-format-string-vulnerability.yaml | c-format-string-vulnerability | c, cpp | CWE-134 (format string) | **APROBAR** | Test propio pasa sin cambios. |
+| custom/c/c-use-after-free.yaml | c-use-after-free | c, cpp | CWE-416 (use-after-free) | **APROBAR** | confidence:LOW (sin dataflow real). Se corrigio la posicion de la anotacion del test: Semgrep reporta el hallazgo en la linea del `free()`, no en la linea de uso posterior. |
+| custom/php/php-insecure-unserialize.yaml | php-insecure-unserialize | php | CWE-502 (PHP Object Injection, RCE) | **APROBAR** | Test propio pasa sin cambios. |
+| custom/php/php-file-inclusion-dynamic-path.yaml | php-file-inclusion-dynamic-path | php | CWE-98 (LFI/RFI, RCE) | **APROBAR** | Test propio pasa sin cambios. |
+| custom/php/php-eval-dynamic-code.yaml | php-eval-dynamic-code | php | CWE-95 (eval injection, RCE) | **APROBAR** | Test propio pasa sin cambios. |
+| custom/csharp/csharp-insecure-binaryformatter-deserialize.yaml | csharp-insecure-binaryformatter-deserialize | csharp | CWE-502 (RCE, equivalente a Java readObject) | **APROBAR** | Se corrigio el patron: faltaba la variante `var $BF = new BinaryFormatter(...)` (declaracion con `var`), solo cubria reasignacion simple. |
+| custom/csharp/csharp-sql-injection-sqlcommand.yaml | csharp-sql-injection-sqlcommand | csharp | CWE-89 (inyeccion SQL) | **APROBAR** | Test propio pasa sin cambios. |
+| custom/csharp/csharp-xxe-dtd-processing-enabled.yaml | csharp-xxe-dtd-processing-enabled | csharp | CWE-611 (XXE) | **APROBAR** | Test propio pasa sin cambios. |
+| custom/powershell/powershell-invoke-expression-dynamic.yaml | powershell-invoke-expression-dynamic | generic (PowerShell no soportado en Semgrep OSS sin plugin de pago) | CWE-95 (eval injection, RCE) | **APROBAR** | `languages: [powershell]` requiere `semgrep install-semgrep-pro` + `semgrep login` (cuenta), no disponible en este entorno. Reescrita en modo `generic` (mismo enfoque que usa trailofbits para curl/wget/ssh). Se simplifico para marcar TODO uso de Invoke-Expression/iex sin excepcion por literal, igual que la regla oficial de Microsoft PSScriptAnalyzer (AvoidUsingInvokeExpression). Se anadio `generic_ellipsis_max_span: 0` (bug encontrado: el `...` sin este limite se "tragaba" varias lineas de golpe). |
+| custom/powershell/powershell-download-and-execute.yaml | powershell-download-and-execute | generic (mismo motivo que la anterior) | CWE-494 (descarga y ejecucion sin verificar integridad) | **APROBAR** | Mismos ajustes que la regla anterior (modo generic + `generic_ellipsis_max_span: 0`). |
+
+Tercera tanda (decision del usuario, 2026-08-04): cobertura para Swift, Rust, Java, Regex/connection-strings, C#/.NET, PHP y C/C++. 15 reglas, todas verificadas con `semgrep --test` (30/30 checks passed tras corregir 4 bugs de patron/test encontrados durante la validacion).
+
+| Fichero | ID | Lenguaje | CWE | Veredicto | Nota de validacion |
+|---|---|---|---|---|---|
+| custom/swift/swift-urlsession-certificate-pinning-bypass.yaml | swift-urlsession-certificate-pinning-bypass | swift | CWE-295 (MITM) | **APROBAR** | Se corrigio comilla YAML faltante (patron con `trust:` sin comillas rompia el parseo). |
+| custom/swift/swift-wkwebview-evaluatejavascript-injection.yaml | swift-wkwebview-evaluatejavascript-injection | swift | CWE-79 (XSS en WKWebView) | **APROBAR** | Test propio pasa sin cambios. |
+| custom/rust/rust-command-injection-shell.yaml | rust-command-injection-shell | rust | CWE-78 (RCE) | **APROBAR** | Test propio pasa sin cambios. |
+| custom/rust/rust-reqwest-tls-verification-disabled.yaml | rust-reqwest-tls-verification-disabled | rust | CWE-295 (MITM) | **APROBAR** | Se corrigio la posicion de la anotacion del test (Semgrep reporta el hallazgo donde empieza la cadena de llamadas `.builder()`, no en la linea del metodo especifico). |
+| custom/jvm/java-sql-injection-statement.yaml | java-sql-injection-statement | java | CWE-89 (inyeccion SQL) | **APROBAR** | Test propio pasa sin cambios. |
+| custom/jvm/java-xxe-documentbuilderfactory.yaml | java-xxe-documentbuilderfactory | java | CWE-611 (XXE) | **APROBAR** | confidence:LOW (sin dataflow real, similar a c-use-after-free). |
+| custom/jvm/java-weak-hash-algorithm.yaml | java-weak-hash-algorithm | java | CWE-327 (criptografia debil) | **APROBAR** | Test propio pasa sin cambios. |
+| custom/regex/sqlserver-insecure-connection-encryption.yaml | sqlserver-insecure-connection-encryption | regex | CWE-295 (MITM) | **APROBAR** | Llena el hueco de SQL Server (mysql/postgres ya cubiertos por trailofbits, SQL Server no). |
+| custom/regex/connection-string-hardcoded-password.yaml | connection-string-hardcoded-password | regex | CWE-798 (credenciales hardcodeadas) | **APROBAR** | confidence:LOW. Se ajusto el regex para no marcar como "hardcodeada" una contrasena que en realidad es una variable de entorno interpolada (`${VAR}`). |
+| custom/csharp/csharp-command-injection-processstart.yaml | csharp-command-injection-processstart | csharp | CWE-78 (RCE) | **APROBAR** | Se corrigio un pattern-not que excluia por error el caso peligroso real (excluia si el ejecutable era literal, sin mirar si los argumentos eran dinamicos, que es lo que importa). |
+| custom/csharp/csharp-path-traversal-pathcombine.yaml | csharp-path-traversal-pathcombine | csharp | CWE-22 (path traversal) | **APROBAR** | confidence:LOW (Path.Combine no sanea ".." por diseno). Test propio pasa sin cambios. |
+| custom/php/php-sql-injection-mysqli-query.yaml | php-sql-injection-mysqli-query | php | CWE-89 (inyeccion SQL) | **APROBAR** | Se corrigio sintaxis: llamada a metodo en PHP es `->`, no `.` (error de mezclar convenciones de otros lenguajes). |
+| custom/php/php-command-injection-exec.yaml | php-command-injection-exec | php | CWE-78 (RCE) | **APROBAR** | Test propio pasa sin cambios. |
+| custom/c/c-command-injection-system.yaml | c-command-injection-system | c, cpp | CWE-78 (RCE) | **APROBAR** | Test propio pasa sin cambios. |
+| custom/c/c-integer-overflow-malloc-size.yaml | c-integer-overflow-malloc-size | c, cpp | CWE-190 (integer overflow, RCE) | **APROBAR** | confidence:LOW (no hay forma de saber estaticamente si la multiplicacion esta ya validada). |
+
+## Importacion masiva de repositorios de terceros (decision del usuario, 2026-08-04)
+
+Peticion original: importar todas las reglas de `semgrep/semgrep-rules`, `tuannq2299/semgrep-rules`, `iosifache/semgrep-rules-manager` y `j3ssie/curated-semgrep-rules` (~2.988 reglas totales, `iosifache/semgrep-rules-manage` -- sin la r final -- no existe, se corrigio a `semgrep-rules-manager`).
+
+**Criterio aplicado** (decidido con el usuario tras comprobar que la revision manual fila-por-fila no es viable a esta escala): se aprueba una regla solo si (1) pasa `semgrep --test`, (2) `metadata.category == security`, y (3) `metadata.confidence` no es `LOW`. Sin lectura manual de patrones individual (inviable en ~3.000 reglas); esto es un proxy automatico, no una revision humana como la de la Fase 1.
+
+### Hallazgo clave: `iosifache/semgrep-rules-manager` no es un repositorio de reglas
+
+Es una herramienta Python que descarga reglas de **14 fuentes de terceros bajo demanda**. Se inspecciono su `sources.yaml`: de esas 14 fuentes, `community` (=registro oficial) y `trailofbits` ya estaban cubiertas, y otras 8 (`gitlab`, `0xdea`, `elttam`, `kondukto`, `dgryski`, `dotta`, `hashicorp`, `decurity`, `mindedsecurity`) ya estaban agregadas dentro de `j3ssie/curated-semgrep-rules`. Solo 3 fuentes eran nuevas: `akabe1`, `atlassian-labs`, `apiiro`.
+
+Aviso de licencia (no llego a importarse): `decurity/semgrep-smart-contracts` (una de las 14 fuentes) usa licencia **CC BY-NC-SA 4.0 (No Comercial)**, mas restrictiva que la AGPL de trailofbits. Si en el futuro se importa, requiere exclusion o marcado aparte.
+
+### Resultado por fuente
+
+| Fuente | Reglas totales | Resultado tras aplicar el criterio |
+|---|---|---|
+| `semgrep/semgrep-rules` (oficial) | ~2.080 | **553 aprobadas** (ver desglose abajo) |
+| `j3ssie/curated-semgrep-rules` | 821 | 0 nuevas (su unica carpeta que pasa test es una copia desactualizada de trailofbits, ya cubierta; el resto -- 0xdea, android-security, dgryski, elttam, federicodotta, gitlab, hashicorp, kondukto, ligurio, semgrep-smart-contracts -- falla `semgrep --test` a nivel de carpeta) |
+| `tuannq2299/semgrep-rules` | 87 | 0 (sus 2 carpetas, Java y csharp, fallan; ademas 2 ficheros YAML rotos que ni parsean) |
+| `iosifache` -> `akabe1` | 47 | 0 (sin ningun fichero de test, no se puede verificar) |
+| `iosifache` -> `atlassian-labs` | 11 | 0 (sin ningun fichero de test) |
+| `iosifache` -> `apiiro` | 101 (68 con test) | 0 (0/68 pasan su propio test) |
+
+### Metodologia para el registro oficial (por que no es un simple "semgrep --test .")
+
+Un solo fichero YAML roto, un fichero de test mal referenciado, o una regla que necesita el plugin de pago (Apex, Elixir, PowerShell) **hace fallar la ejecucion completa de `semgrep --test` para todo el arbol**, no solo esa regla. Para evitar perder miles de reglas buenas por culpa de una sola rota, se testeo carpeta por carpeta (por lenguaje), y para las carpetas grandes que fallaron (python, terraform, go, generic, csharp, solidity, typescript) se bajo un nivel mas (por framework/proveedor dentro de cada lenguaje).
+
+Carpetas/subcarpetas que NO se pudieron testear por este motivo y se descartaron en bloque (posible trabajo futuro si se quiere profundizar mas): `apex` y `elixir` completos (necesitan plugin Pro de pago, igual que PowerShell), `python/lang` (134 reglas), `terraform/aws+azure+gcp` (345 de 364 reglas), `go/lang` (62 reglas), `generic/secrets` (225 reglas -- la mas lamentable de perder, es deteccion de secretos hardcodeados), `csharp/dotnet+lang` (51 de 52 reglas), `solidity/security` (35 de 50), `typescript/react` (18 de 30).
+
+### Desglose de las 553 reglas aprobadas por lenguaje
+
+| Lenguaje | Reglas aprobadas |
+|---|---|
+| Python | 159 |
+| JavaScript/TypeScript | 100 |
+| Java/Kotlin | 84 |
+| Ruby | 53 |
+| Generic | 39 |
+| YAML | 28 |
+| Go | 27 |
+| PHP | 24 |
+| Scala | 11 |
+| Dockerfile | 5 |
+| Bash | 6 |
+| JSON | 4 |
+| HCL/Terraform | 4 |
+| Clojure | 3 |
+| C | 2 |
+| Swift | 2 |
+| HTML | 1 |
+| OCaml | 1 |
+
+No se lista fila por fila (553 reglas, inviable a mano); el fichero completo con id/fichero/lenguaje de cada una esta en `bulk_approved.json` (scratchpad de esta sesion). Estas reglas NO han pasado la revision manual de patron/breadth que si se aplico a las 143 reglas anteriores (trailofbits + propias) -- son aprobadas por el criterio automatico exclusivamente.
+
+## Cuarta tanda de reglas propias (decision del usuario, 2026-08-04)
+
+18 reglas nuevas para reforzar los lenguajes con poca cobertura: C/C++, Bash, C#/.NET, Swift, Dockerfile, Regex/connection-strings, JSON, Rust, Clojure, HTML, OCaml. Todas verificadas con `semgrep --test` (48/48 checks passed, incluyendo las tandas anteriores, tras corregir varios bugs de patron encontrados durante la validacion).
+
+| Fichero | ID | Lenguaje | CWE | Nota de validacion |
+|---|---|---|---|---|
+| custom/c/c-double-free.yaml | c-double-free | c, cpp | CWE-415 (double free, RCE) | Test propio pasa sin cambios. |
+| custom/c/c-toctou-access-open.yaml | c-toctou-access-open | c, cpp | CWE-367 (TOCTOU race) | confidence:LOW (no hay dataflow real). |
+| custom/bash/bash-eval-dynamic-code.yaml | bash-eval-dynamic-code | bash | CWE-95 (eval injection, RCE) | Bash no distingue AST "string con variable" de "string literal" -- se cambio pattern-not por metavariable-regex exigiendo un `$` en el contenido capturado. |
+| custom/bash/bash-curl-pipe-to-shell.yaml | bash-curl-pipe-to-shell | generic | CWE-494 (descarga y ejecucion) | Test propio pasa sin cambios. |
+| custom/csharp/csharp-insecure-random-token.yaml | csharp-insecure-random-token | csharp | CWE-330 (aleatoriedad insegura) | Dos bugs corregidos: (1) `$X = expr;` no coincide con una declaracion de variable en C# (`int x = expr;`), hace falta `$TYPE $X = expr;`; (2) la palabra clave `var` es un nodo especial de la gramatica que un metavariable de tipo no puede capturar, se dejo como literal. |
+| custom/csharp/csharp-ldap-injection.yaml | csharp-ldap-injection | csharp | CWE-90 (inyeccion LDAP) | Test propio pasa sin cambios. |
+| custom/swift/swift-keychain-insecure-accessibility.yaml | swift-keychain-insecure-accessibility | swift | CWE-522 (credenciales mal protegidas) | Test propio pasa sin cambios. |
+| custom/swift/swift-weak-hash-algorithm.yaml | swift-weak-hash-algorithm | swift | CWE-327 (criptografia debil) | Test propio pasa sin cambios. |
+| custom/dockerfile/dockerfile-missing-user.yaml | dockerfile-missing-user | dockerfile | CWE-250 (privilegios innecesarios) | El caso bueno y el malo interferian al estar en el mismo fichero de test (dos FROM en un archivo); se separaron en dos ficheros. |
+| custom/dockerfile/dockerfile-hardcoded-secret-env.yaml | dockerfile-hardcoded-secret-env | dockerfile | CWE-798 (credenciales hardcodeadas) | El parser de Dockerfile de Semgrep no descompone `ENV clave=valor` en AST igual que `ARG` (inconsistencia interna); se reescribio con `pattern-regex` sobre el texto en vez de depender del AST. |
+| custom/regex/mysql-jdbc-autodeserialize.yaml | mysql-jdbc-autodeserialize | regex | CWE-502 (deserializacion, RCE, CVE-2017-3523) | Test propio pasa sin cambios. |
+| custom/regex/hardcoded-aws-access-key.yaml | hardcoded-aws-access-key | regex | CWE-798 (credenciales hardcodeadas) | Test propio pasa sin cambios. |
+| custom/json/npm-packagejson-git-dependency.yaml | npm-packagejson-git-dependency | json | CWE-494 (supply chain) | confidence:LOW. Semgrep JSON si soporta comentarios `//` para las anotaciones de test aunque no sea JSON valido. |
+| custom/rust/rust-hardcoded-secret.yaml | rust-hardcoded-secret | rust | CWE-798 (credenciales hardcodeadas) | confidence:LOW. Test propio pasa sin cambios. |
+| custom/rust/rust-libc-system-command-injection.yaml | rust-libc-system-command-injection | rust | CWE-78 (RCE) | Se elimino una rama de patron demasiado amplia (`libc::system($CMD)` sola disparaba siempre porque el argumento real es `cstr.as_ptr()`, nunca un literal directo). |
+| custom/clojure/clojure-eval-dynamic-code.yaml | clojure-eval-dynamic-code | clojure | CWE-95 (eval injection, RCE) | El test-runner de Semgrep espera comentarios `//` para las anotaciones incluso en Clojure (no el `;` nativo del lenguaje). |
+| custom/html/html-target-blank-no-noopener.yaml | html-target-blank-no-noopener | html | CWE-1022 (reverse tabnabbing) | Test propio pasa sin cambios. |
+| custom/ocaml/ocaml-unix-system-command-injection.yaml | ocaml-unix-system-command-injection | ocaml | CWE-78 (RCE) | Test propio pasa sin cambios. |
+
+**Total del proyecto tras esta tanda: 112 (trailofbits) + 49 (propias: 5+11+15+18) + 553 (bulk oficial) = 714 reglas.**
+
+
+
