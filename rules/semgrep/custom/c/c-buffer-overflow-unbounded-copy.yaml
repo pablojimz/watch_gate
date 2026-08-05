@@ -1,0 +1,27 @@
+rules:
+  - id: c-buffer-overflow-unbounded-copy
+    languages: [c, cpp]
+    severity: ERROR
+    message: >-
+      Found a call to an unbounded string/memory copy function (strcpy, strcat,
+      sprintf, gets) that does not check the destination buffer size. If the
+      source data is longer than the destination buffer, this overflows
+      adjacent memory, which attackers can leverage to corrupt control-flow
+      data (return addresses, saved registers, function pointers) and achieve
+      arbitrary code execution. Use the bounded variants instead (strncpy,
+      strncat, snprintf, fgets) and always pass the destination buffer size.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: "CWE-120: Buffer Copy without Checking Size of Input ('Classic Buffer Overflow')"
+      owasp: ["A06:2021 - Vulnerable and Outdated Components"]
+      references:
+        - https://cwe.mitre.org/data/definitions/120.html
+        - https://cwe.mitre.org/data/definitions/787.html
+        - https://owasp.org/www-community/vulnerabilities/Buffer_Overflow
+    patterns:
+      - pattern-either:
+          - pattern: strcpy($DST, $SRC)
+          - pattern: strcat($DST, $SRC)
+          - pattern: sprintf($DST, $FMT, ...)
+          - pattern: gets($DST)

@@ -1,0 +1,27 @@
+rules:
+  - id: flask-render-template-string-ssti
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Found render_template_string() (or Jinja2's Template()/Environment().
+      from_string()) called with a template string that is not a fixed
+      literal. Unlike render_template() (which loads a trusted file from
+      disk), render_template_string() compiles its argument as a Jinja2
+      template at request time; if any part of the string is influenced by
+      user input, an attacker can inject Jinja2 syntax
+      ({{ self.__init__.__globals__... }}) to achieve Server-Side Template
+      Injection and, from there, typically full remote code execution. Never
+      build the template string from user input; pass user data as a
+      context variable to a fixed template instead.
+    metadata:
+      category: security
+      confidence: HIGH
+      cwe: "CWE-1336: Improper Neutralization of Special Elements Used in a Template Engine"
+      owasp: ["A03:2021 - Injection"]
+      references:
+        - https://cwe.mitre.org/data/definitions/1336.html
+        - https://flask.palletsprojects.com/en/latest/api/#flask.render_template_string
+        - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/18-Testing_for_Server_Side_Template_Injection
+    patterns:
+      - pattern: render_template_string($TEMPLATE, ...)
+      - pattern-not: render_template_string("...", ...)

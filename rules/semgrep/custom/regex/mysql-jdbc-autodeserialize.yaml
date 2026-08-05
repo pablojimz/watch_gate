@@ -1,0 +1,24 @@
+rules:
+  - id: mysql-jdbc-autodeserialize
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Found a MySQL JDBC connection string with autoDeserialize=true (or
+      the related queryInterceptors pointing at ServerStatusDiffInterceptor
+      combined with it). This option was the root cause of CVE-2017-3523/
+      CVE-2019-2426-style attacks: a malicious or compromised MySQL server
+      (or an attacker performing MITM on the connection) can return a
+      serialized Java object instead of expected row data, which the driver
+      then deserializes - leading to remote code execution via a gadget
+      chain on the classpath. Remove autoDeserialize entirely; it should
+      never be enabled.
+    metadata:
+      category: security
+      confidence: HIGH
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      owasp: ["A08:2021 - Software and Data Integrity Failures"]
+      references:
+        - https://cwe.mitre.org/data/definitions/502.html
+        - https://nvd.nist.gov/vuln/detail/CVE-2017-3523
+    patterns:
+      - pattern-regex: (?i)jdbc:mysql://.+[?&]autoDeserialize=true

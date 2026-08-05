@@ -1,0 +1,23 @@
+rules:
+  - id: csharp-ldap-injection
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      Found a DirectorySearcher/DirectoryEntry LDAP filter built via string
+      concatenation or interpolation instead of properly escaped input. If
+      any part of the filter comes from user input, an attacker can inject
+      LDAP filter syntax (e.g. "*)(uid=*))(|(uid=*") to bypass
+      authentication or extract arbitrary directory data. Escape special LDAP
+      characters in user input before building the filter, or use a
+      parameterized/allow-listed approach.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: "CWE-90: Improper Neutralization of Special Elements used in an LDAP Query ('LDAP Injection')"
+      owasp: ["A03:2021 - Injection"]
+      references:
+        - https://cwe.mitre.org/data/definitions/90.html
+        - https://owasp.org/www-community/attacks/LDAP_Injection
+    patterns:
+      - pattern: $SEARCHER.Filter = $FILTER;
+      - pattern-not: $SEARCHER.Filter = "...";

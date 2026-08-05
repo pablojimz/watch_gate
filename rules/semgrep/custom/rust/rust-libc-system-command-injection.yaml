@@ -1,0 +1,29 @@
+rules:
+  - id: rust-libc-system-command-injection
+    languages: [rust]
+    severity: ERROR
+    message: >-
+      Found libc::system() called with a non-literal argument. Unlike
+      std::process::Command (which by default does not invoke a shell),
+      libc::system() always passes its argument to `/bin/sh -c`,
+      reintroducing full shell metacharacter injection risk. If the string
+      is influenced by user input, an attacker can inject `;`, `&&`, `|`,
+      `$()` to run arbitrary commands. Use std::process::Command with
+      separate arguments instead.
+    metadata:
+      category: security
+      confidence: HIGH
+      cwe: "CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"
+      owasp: ["A03:2021 - Injection"]
+      references:
+        - https://cwe.mitre.org/data/definitions/78.html
+        - https://doc.rust-lang.org/std/process/struct.Command.html
+    patterns:
+      - pattern: |
+          let $CSTR = CString::new($ARG).unwrap();
+          ...
+          libc::system($CSTR.as_ptr());
+      - pattern-not: |
+          let $CSTR = CString::new("...").unwrap();
+          ...
+          libc::system($CSTR.as_ptr());

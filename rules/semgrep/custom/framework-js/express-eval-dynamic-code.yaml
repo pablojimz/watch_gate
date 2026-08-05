@@ -1,0 +1,27 @@
+rules:
+  - id: express-eval-dynamic-code
+    languages: [js, ts]
+    severity: ERROR
+    message: >-
+      Found eval() or new Function() called with a string that is not a
+      fixed literal. Both compile and run their argument as JavaScript; on a
+      Node.js server, if the string is influenced by client-controlled input
+      (a request body, query param, header), this is remote code execution
+      with the full privileges of the server process. Avoid eval()/Function()
+      entirely for anything derived from a request; use JSON.parse() for
+      data and a proper expression/rules engine for logic that must be
+      configurable.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: "CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code ('Eval Injection')"
+      owasp: ["A03:2021 - Injection"]
+      references:
+        - https://cwe.mitre.org/data/definitions/95.html
+        - https://owasp.org/www-community/attacks/Direct_Dynamic_Code_Evaluation_Eval_Injection
+    patterns:
+      - pattern-either:
+          - pattern: eval($CODE)
+          - pattern: new Function($CODE)
+      - pattern-not: eval("...")
+      - pattern-not: new Function("...")

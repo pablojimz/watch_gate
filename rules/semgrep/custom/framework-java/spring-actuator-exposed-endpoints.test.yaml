@@ -1,0 +1,14 @@
+management:
+  endpoints:
+    web:
+      exposure:
+        # ruleid: spring-actuator-exposed-endpoints
+        include: "*"
+
+---
+management:
+  endpoints:
+    web:
+      exposure:
+        # ok: spring-actuator-exposed-endpoints
+        include: "health,info"

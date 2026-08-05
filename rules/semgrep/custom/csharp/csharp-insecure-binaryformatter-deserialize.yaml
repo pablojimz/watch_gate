@@ -1,0 +1,33 @@
+rules:
+  - id: csharp-insecure-binaryformatter-deserialize
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      Found a call to BinaryFormatter.Deserialize(). BinaryFormatter is
+      documented by Microsoft as insecure and unsafe to use with untrusted
+      input: an attacker who controls the serialized payload can instantiate
+      arbitrary types on the classpath and chain their side effects ("gadget
+      chain") to achieve remote code execution, similar to Java's
+      ObjectInputStream. Microsoft has deprecated BinaryFormatter entirely
+      (removed by default starting in .NET 9). Use System.Text.Json or another
+      safe, schema-based serializer instead.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+      owasp: ["A08:2021 - Software and Data Integrity Failures"]
+      references:
+        - https://cwe.mitre.org/data/definitions/502.html
+        - https://learn.microsoft.com/en-us/dotnet/standard/serialization/binaryformatter-security-guide
+        - https://learn.microsoft.com/en-us/dotnet/fundamentals/runtime-libraries/system-runtime-serialization-formatters-binary-binaryformatter
+    patterns:
+      - pattern-either:
+          - pattern: new BinaryFormatter(...).Deserialize(...)
+          - pattern: |
+              var $BF = new BinaryFormatter(...);
+              ...
+              $BF.Deserialize(...)
+          - pattern: |
+              $BF = new BinaryFormatter(...);
+              ...
+              $BF.Deserialize(...)

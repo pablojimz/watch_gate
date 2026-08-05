@@ -1,0 +1,29 @@
+rules:
+  - id: c-use-after-free
+    languages: [c, cpp]
+    severity: ERROR
+    message: >-
+      Found a pointer that is used after being passed to free(). Accessing or
+      writing through a dangling pointer is undefined behavior that attackers
+      can exploit for information disclosure or, by reallocating the freed
+      memory with attacker-controlled content before the stale pointer is used
+      again, for arbitrary code execution. Set the pointer to NULL immediately
+      after free() and do not use it afterwards.
+    metadata:
+      category: security
+      confidence: LOW
+      cwe: "CWE-416: Use After Free"
+      owasp: ["A06:2021 - Vulnerable and Outdated Components"]
+      references:
+        - https://cwe.mitre.org/data/definitions/416.html
+        - https://owasp.org/www-community/vulnerabilities/Using_freed_memory
+    patterns:
+      - pattern: |
+          free($PTR);
+          ...
+          <... $PTR ...>;
+      - pattern-not-inside: |
+          free($PTR);
+          ...
+          $PTR = ...;
+          ...

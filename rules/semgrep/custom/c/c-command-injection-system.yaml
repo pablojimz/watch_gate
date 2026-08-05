@@ -1,0 +1,27 @@
+rules:
+  - id: c-command-injection-system
+    languages: [c, cpp]
+    severity: ERROR
+    message: >-
+      Found a call to system() or popen() with a command that is not a fixed
+      literal string. Both functions run their argument through the system
+      shell (/bin/sh or cmd.exe). If any part of the command is influenced by
+      user input, an attacker can inject shell metacharacters (;, &&, |,
+      backticks) to run arbitrary commands. Avoid system()/popen() with
+      dynamic input; use exec family functions with an explicit argument
+      array instead (which do not invoke a shell), or strictly
+      validate/allow-list the input.
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: "CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"
+      owasp: ["A03:2021 - Injection"]
+      references:
+        - https://cwe.mitre.org/data/definitions/78.html
+        - https://owasp.org/www-community/attacks/Command_Injection
+    patterns:
+      - pattern-either:
+          - pattern: system($CMD)
+          - pattern: popen($CMD, $MODE)
+      - pattern-not: system("...")
+      - pattern-not: popen("...", $MODE2)
