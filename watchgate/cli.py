@@ -9,6 +9,7 @@ import argparse
 import sys
 from pathlib import Path
 
+import watchgate.core.layers  # noqa: F401 - registrar capas en LAYER_REGISTRY
 from watchgate.config import WatchGateConfig, load_config
 from watchgate.core.aggregator import aggregate
 from watchgate.core.comment_template import render_comment
