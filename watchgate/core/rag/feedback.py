@@ -25,7 +25,7 @@ from typing import Literal
 try:
     import chromadb
 except ImportError:
-    chromadb = None
+    chromadb = None  # type: ignore[assignment]
 
 from watchgate.core.rag.indexer import (
     DEFAULT_INDEX_PATH,

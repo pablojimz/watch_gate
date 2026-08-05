@@ -7,7 +7,7 @@ Proyecto presentado a los **Premios de la Cátedra de Ciberseguridad a la Innova
 ## Equipo
 
 - Javier Martín Jurado — capa semántica y de reputación
-- Pablo Ayllón García — núcleo, orquestador y agregador
+- Pablo Ayllón García — núcleo, orquestador, agregador y CLI
 - Pablo Jiménez Castro — capa estática/dependencias y dashboard
 
 *(Reparto de líneas actualizado respecto a la memoria original — ver [`docs/plan_tareas_equipo.md`](docs/plan_tareas_equipo.md) para el detalle.)*
@@ -42,7 +42,7 @@ Justificación (capa semántica):
    declarado en la documentación del proyecto, activada durante
    el proceso de build."
 
--> Se recomienda revisión humana reforzada antes de fusionar.
+-> Se recomienda revisión humana recomendada antes de mergear.
 ```
 
 ## Arquitectura
@@ -53,70 +53,146 @@ Detalle completo de la arquitectura (A.0–A.4), formato de salida, fórmula de 
 
 ## Estructura del repositorio
 
-Sigue exactamente el árbol de la especificación de implementación (`docs/WatchGate_spec_implementacion_IA.md`, §0). Cada módulo de `watchgate/` es de momento un *stub* (docstring apuntando a la sección de la spec que lo rige); la lógica se implementa siguiendo el reparto de `docs/plan_tareas_equipo.md`.
-
 ```
 watch_gate/
 ├── pyproject.toml
 ├── Makefile
 ├── .watchgate.yml.example
-├── watchgate/                          # paquete Python instalable
-│   ├── cli.py
-│   ├── config.py
-│   ├── core/                           # A.0  Núcleo agnóstico de plataforma (sin red, sin adapters/dashboard)
-│   │   ├── diffparser.py
-│   │   ├── models.py                   # contratos de datos — base de todo lo demás
-│   │   ├── layers/                     # A.3  Capas de análisis
-│   │   │   ├── base.py                 #   Interfaz común + LAYER_REGISTRY (A.0.0)
+├── watchgate/                          # Paquete Python instalable
+│   ├── cli.py                          # Entrypoint CLI (`watchgate analyze` / `watchgate rag reindex`)
+│   ├── config.py                       # Carga de configuración .watchgate.yml + variables de entorno
+│   ├── core/                           # A.0 Núcleo agnóstico de plataforma (sin red, sin adapters/dashboard)
+│   │   ├── diffparser.py               # Extracción determinista de diffs con GitPython
+│   │   ├── models.py                   # Contratos Pydantic de datos
+│   │   ├── layers/                     # A.3 Capas de análisis
+│   │   │   ├── base.py                 #   Interfaz común + LAYER_REGISTRY
 │   │   │   ├── static_layer.py         #   3a Estática (Semgrep/YARA)
 │   │   │   ├── deps_layer.py           #   3b Dependencias (OSV, typosquatting)
 │   │   │   ├── reputation_layer.py     #   3c Reputación del autor
 │   │   │   └── _semantic/              #   3d Semántica (prompting, tools, client, layer)
-│   │   ├── rag/corpus/                 # Corpus local para la capa semántica
-│   │   ├── orchestrator.py             # A.1  Orquestador determinista
-│   │   ├── aggregator.py               # A.2  Agregador de scoring
-│   │   ├── cost_control.py             # A.3.3 Control de coste de tokens
-│   │   └── shortcircuit.py             # A.3.4 (objetivo ampliado)
-│   ├── adapters/github_action/         # A.0.1 Adaptador de referencia
-│   └── dashboard/                       # A.4  Dashboard de postura de seguridad
+│   │   ├── rag/                        # Sistema RAG local sobre ChromaDB (indexer, retriever, feedback)
+│   │   ├── orchestrator.py             # A.1 Orquestador determinista concurrente multihilo
+│   │   ├── aggregator.py               # A.2 Agregador de scoring y calculador de semáforo
+│   │   ├── comment_template.py         # Renderizado Jinja2 del comentario Markdown de PR
+│   │   ├── cost_control.py             # A.3.3 Control de coste de tokens y caché SQLite
+│   │   └── shortcircuit.py             # A.3.4 Cortocircuito determinista para optimizar LLM
+│   ├── adapters/github_action/         # A.0.1 Adaptador de referencia para GitHub Actions
+│   └── dashboard/                       # A.4 Dashboard de postura de seguridad
 │       ├── backend/
 │       └── frontend/
 ├── rules/{semgrep,yara}/                 # Reglas de la capa estática
 ├── datasets/{few_shot,typosquat_reference}/
-├── tests/{unit,integration,cases}/       # cases/ = 10 casos PR completos (§14)
+├── tests/                              # Pruebas unitarias e integradas
 ├── docs/                                  # Memoria, spec de implementación, plan de tareas
-├── scripts/                               # Utilidades de desarrollo
 └── .github/workflows/watchgate.yml       # Workflow de referencia (GitHub Action)
 ```
 
-## Configuración
+## Uso de la CLI (`watchgate`)
+
+### Instalación en desarrollo
+```bash
+pip install -e .
+# O usando el entorno local:
+.env/bin/pip install -e .
+```
+
+### Comandos disponibles
+
+#### 1. Analizar un diff (`watchgate analyze`)
+Realiza el análisis de riesgo entre dos commits o ramas Git:
+
+```bash
+# Salida en formato comentario Markdown
+watchgate analyze --base main --head mi-rama
+
+# Salida en formato JSON
+watchgate analyze --base HEAD~1 --head HEAD --format json
+
+# Guardar la salida en un archivo
+watchgate analyze --base HEAD~1 --head HEAD --output resultado.md
+```
+
+**Parámetros opcionales:**
+- `--base`: Commit o ref base (obligatorio).
+- `--head`: Commit o ref head (obligatorio).
+- `--repo-path`: Ruta al repo local (default: `.`).
+- `--config`: Ruta a `.watchgate.yml` (default: `.watchgate.yml`).
+- `--format`: Formato de salida (`comment` o `json`, default: `comment`).
+- `--pr-id`: Identificador del PR para metadatos.
+- `--repo`: Nombre del repositorio (`org/repo`).
+- `--author-login`: Usuario de GitHub/GitLab del autor.
+- `--output`: Archivo de destino para el informe.
+
+#### 2. Reindexar el corpus RAG (`watchgate rag reindex`)
+Reconstruye el índice vectorial ChromaDB con el corpus local de patrones de ataque:
+
+```bash
+watchgate rag reindex
+```
+
+### Configuración de Proveedores LLM
+
+La capa semántica soporta múltiples proveedores configurables mediante variables de entorno:
+
+* **Anthropic (por defecto):**
+  ```bash
+  export ANTHROPIC_API_KEY="sk-ant-..."
+  ```
+* **Google Gemini:**
+  ```bash
+  export WATCHGATE_LLM_PROVIDER="gemini"
+  export GEMINI_API_KEY="AIzaSy..."
+  ```
+* **LLM Local (Ollama / vLLM / llama.cpp):**
+  ```bash
+  export WATCHGATE_LLM_PROVIDER="local"
+  export WATCHGATE_LLM_BASE_URL="http://localhost:11434/v1"  # Servidor Ollama
+  export WATCHGATE_LLM_MODEL="llama3.1"
+  ```
+
+## Configuración del proyecto (`.watchgate.yml`)
 
 Pesos y umbrales de semáforo configurables por repositorio en `.watchgate.yml` (ver [`.watchgate.yml.example`](.watchgate.yml.example)):
 
 ```yaml
 weights:    { static: 0.25, dependencies: 0.20, reputation: 0.15, semantic: 0.40 }
-thresholds: { yellow: 31, red: 66 }
+thresholds: { yellow: 40, red: 70 }
 block_on_red: true
+shortcircuit_enabled: false
+```
+
+## Pruebas y Calidad de Código
+
+Para ejecutar la batería de pruebas y las herramientas de análisis estático:
+
+```bash
+# Ejecutar los tests unitarios
+pytest
+
+# Comprobar el formateo y linter
+ruff check .
+
+# Verificación de tipos estáticos
+mypy watchgate
 ```
 
 ## Estado del desarrollo
 
-Arquitectura y spec de implementación cerradas (memoria entregada + `docs/WatchGate_spec_implementacion_IA.md`). Reparto de trabajo en `docs/plan_tareas_equipo.md`:
+Arquitectura y spec de implementación cerradas (`docs/WatchGate_spec_implementacion_IA.md`). Estado de tareas (`docs/plan_tareas_equipo.md`):
 
 - [x] Fase 0 — contratos de datos (`core/models.py`) + interfaz común de capas y registro (`core/layers/base.py`, A.0.0)
-- [ ] `diffparser.py` (A.0)
-- [ ] Capa estática (Semgrep/YARA)
-- [ ] Capa de dependencias (OSV, typosquatting)
-- [x] Capa de reputación
-- [x] Capa semántica (LLM + RAG local) — pendiente de `cost_control.py` real para integrar del todo
-- [ ] Orquestador determinista + agregador de *scoring* (A.1, A.2)
-- [ ] Adaptador de GitHub Action de referencia (A.0.1)
-- [ ] Dashboard de postura de seguridad (2.1, A.4)
+- [x] Parser de diffs (`core/diffparser.py`, A.0)
+- [x] Capa de reputación (`reputation_layer.py`)
+- [x] Capa semántica (`_semantic/` + RAG local)
+- [x] Control de coste de tokens y caché (`cost_control.py`, A.3.3)
+- [x] Orquestador determinista + agregador de *scoring* (`orchestrator.py`, `aggregator.py`, `comment_template.py`)
+- [x] Cortocircuito de extremo (`shortcircuit.py`, A.3.4)
+- [x] Interfaz de Línea de Comandos CLI (`cli.py`)
+- [ ] Capa estática (Semgrep/YARA) — Pablo Jiménez Castro
+- [ ] Capa de dependencias (OSV, typosquatting) — Pablo Jiménez Castro
+- [ ] Adaptador de GitHub Action de referencia (`adapters/github_action/`)
+- [ ] Dashboard de postura de seguridad (`dashboard/`) — Pablo Jiménez Castro
 - [ ] Validación contra el conjunto de casos de prueba (≥10 casos)
-
-## Resultado mínimo esperado
-
-Núcleo de WatchGate como herramienta de línea de comandos, agnóstica de plataforma, con las cuatro capas de análisis operativas, dashboard de postura de seguridad completo (historial, *feedback* humano, SSO/OAuth con roles granulares), validado sobre al menos 10 casos representativos. Detalle en la memoria, sección 8.
 
 ## Referencias
 
