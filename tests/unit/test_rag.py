@@ -40,6 +40,25 @@ def test_retrieve_relevant_context_returns_empty_list_when_index_missing(tmp_pat
     assert fragments == []
 
 
+def test_retrieve_relevant_context_returns_empty_list_when_collection_exists_but_is_empty(
+    tmp_path,
+):
+    """Distinto del caso anterior: aquí la colección SÍ existe (con 0
+    fragmentos dentro, no ausente) -- _query_collection debe devolver []
+    igual que si no existiera, sin lanzar una división por cero ni un error
+    de ChromaDB al pedir min(k, count) con count=0."""
+    import chromadb
+
+    from watchgate.core.rag.indexer import COLLECTION_NAME
+
+    index_path = str(tmp_path / "rag_index")
+    client = chromadb.PersistentClient(path=index_path)
+    client.create_collection(COLLECTION_NAME)  # existe, pero sin ningún fragmento
+
+    fragments = retrieve_relevant_context("cualquier cosa", index_path=index_path)
+    assert fragments == []
+
+
 def test_reindexing_a_shrunk_document_does_not_leave_stale_fragments(tmp_path):
     """Si un documento pasa a tener menos fragmentos entre dos reindexados,
     los fragmentos sobrantes de la ejecución anterior no deben persistir."""

@@ -1,0 +1,9 @@
+{
+  "diff_summary": "PR real fusionado en el repositorio de Flask (pallets/flask #5829) que corrige erratas de texto en dos ficheros de documentación (docs/appcontext.rst, docs/design.rst): un título mal escrito ('Lifcycle of the Context' -> 'Lifecycle of the Context') y una referencia reStructuredText con el cierre de rol mal puesto (':data:`.current_app:' -> ':data:`.current_app`'). No toca código de la aplicación, dependencias, ni scripts de build o CI.",
+  "expected_output": {
+    "risk_score": 2,
+    "category": "ninguna",
+    "justification": "El cambio se limita a corregir erratas de texto en ficheros .rst de documentación, sin ninguna línea de código ejecutable, dependencia ni configuración de build afectada.",
+    "confidence": "alta"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "diff_summary": "package.json de un paquete npm añade un script \"preinstall\": \"bun run index.js\" y, junto a él, un nuevo fichero index.js de ~500KB en la raíz del paquete, con nombres de propiedad codificados en hexadecimal y un array de cadenas mezclado (patrón típico de un ofuscador automático tipo javascript-obfuscator), que importa 'crypto' (createHash, pbkdf2Sync, randomBytes). Además, se añade una entrada nueva en \"optionalDependencies\" que apunta a 'github:org/repo#<sha-de-commit>' en lugar de una versión del registro npm.",
+  "expected_output": {
+    "risk_score": 95,
+    "category": "ofuscacion",
+    "justification": "El hook 'preinstall' ejecuta un fichero JS de cientos de KB deliberadamente ofuscado (nombres hexadecimales, array de cadenas mezclado) que ningún revisor humano puede auditar en un diff, y la dependencia añadida se resuelve contra un commit de GitHub concreto en vez del registro, evitando cualquier revisión del propio registro npm.",
+    "confidence": "alta"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "diff_summary": "PR real de Dependabot fusionado en Flask (pallets/flask #5493) que actualiza 'actions/checkout' de v4.1.4 a v4.1.6 en tres workflows de GitHub Actions (.github/workflows/publish.yaml, tests.yaml). Cada referencia sigue pinneada por el SHA de commit completo de la nueva release (no un tag mutable como '@v4'), con la versión como comentario junto al SHA. No se añaden pasos nuevos, no se tocan permisos ni secretos, y el resto del workflow queda igual.",
+  "expected_output": {
+    "risk_score": 5,
+    "category": "ninguna",
+    "justification": "Es una actualización rutinaria de una action de terceros, pinneada por SHA de commit completo (no un tag mutable) en los tres workflows, sin pasos, permisos ni acceso a secrets añadidos -- el mismo patrón de pin seguro que ya usaba la versión anterior.",
+    "confidence": "alta"
+  }
+}
