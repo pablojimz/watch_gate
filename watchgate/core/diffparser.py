@@ -91,12 +91,16 @@ def _status_from_diff_item(diff_item: Diff) -> FileStatus:
 def _count_additions_deletions(patch_text: str) -> tuple[int, int]:
     additions = 0
     deletions = 0
+    in_hunk = False
     for line in patch_text.splitlines():
-        if line.startswith(("+++", "---")):
+        if line.startswith("@@"):
+            in_hunk = True
             continue
-        if line.startswith("+"):
+        if not in_hunk:
+            continue
+        if line.startswith("+") and not line.startswith("+++"):
             additions += 1
-        elif line.startswith("-"):
+        elif line.startswith("-") and not line.startswith("---"):
             deletions += 1
     return additions, deletions
 
