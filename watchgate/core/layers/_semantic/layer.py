@@ -20,8 +20,9 @@ from watchgate.core.layers._semantic.client import (
     SemanticParsingError,
     ToolExecutor,
 )
+from watchgate.core.layers._shared import find_prompt_injection_attempts
 from watchgate.core.layers.base import AnalysisLayer, register_layer
-from watchgate.core.models import LayerResult, NormalizedDiff
+from watchgate.core.models import LayerResult, NormalizedDiff, RiskCategory
 from watchgate.core.rag.indexer import DEFAULT_INDEX_PATH
 from watchgate.core.rag.retriever import retrieve_relevant_context
 
@@ -89,6 +90,37 @@ def _apply_unverified_content_floor(
     )
 
 
+# Suelo mecánico independiente del anterior: si el propio diff (o el
+# contenido de un fichero leído con fetch_referenced_file) contiene texto
+# que intenta manipular al LLM -- "ignora las instrucciones anteriores",
+# falsos mensajes de sistema, JSON de respuesta falsificado incrustado en un
+# comentario -- eso es evidencia de intención maliciosa por sí sola, la
+# haya seguido el modelo o no. Un PR legítimo nunca necesita decirle a un
+# revisor (humano o IA) que ignore sus instrucciones; el intento en sí es el
+# hallazgo. 100, no un umbral calculado: no queda margen de duda razonable
+# aquí como sí lo hay con "no se pudo revisar" -- no es una escala de
+# incertidumbre, es una prueba directa.
+_PROMPT_INJECTION_FLOOR_SCORE = 100
+
+
+def _apply_prompt_injection_floor(output: SemanticOutput, user_prompt: str) -> SemanticOutput:
+    findings = find_prompt_injection_attempts(user_prompt)
+    if not findings or output.risk_score >= _PROMPT_INJECTION_FLOOR_SCORE:
+        return output
+    return output.model_copy(
+        update={
+            "risk_score": _PROMPT_INJECTION_FLOOR_SCORE,
+            "category": RiskCategory.OFUSCACION,
+            "justification": (
+                f"{output.justification} [Ajustado a {_PROMPT_INJECTION_FLOOR_SCORE}: el diff "
+                f"contiene texto que intenta manipular al analizador ({', '.join(findings)}) -- "
+                "un PR legítimo nunca necesita instruir al revisor para que ignore su análisis; "
+                "el intento de inyección de prompt es en sí mismo evidencia de ataque.]"
+            ),
+        }
+    )
+
+
 class CostControllerLike(Protocol):
     """Subconjunto de watchgate/core/cost_control.py (§8) que necesita esta
     capa. Al ser un Protocol, la implementación real de esa pieza no
@@ -119,9 +151,12 @@ def _dispatch_tool(
     if name == "lookup_package_registry":
         return tools.lookup_package_registry(**tool_input)
     if name == "fetch_referenced_file":
-        return tools.fetch_referenced_file(
+        content = tools.fetch_referenced_file(
             path=tool_input["path"], ref=tool_input["ref"], repo_path=diff.repo_path
         )
+        # Mismo dato no confiable que el diff inicial, solo que llega por una
+        # tool en vez de en el prompt original -- mismos delimitadores.
+        return prompting.wrap_untrusted_content(content)
     if name == "check_file_reputation":
         return tools.check_file_reputation(
             path=tool_input["path"], ref=tool_input["ref"], repo_path=diff.repo_path
@@ -239,6 +274,7 @@ class SemanticLayer(AnalysisLayer):
                 if extra_output.risk_score > output.risk_score:
                     output, tool_calls_made = extra_output, extra_tool_calls
 
+        output = _apply_prompt_injection_floor(output, user_prompt)
         output = _apply_unverified_content_floor(output, user_prompt, tool_calls_made)
         self._cost_control.store_cached(diff_hash, output)
         # Nota: esto estima el coste de la petición inicial (system + user

