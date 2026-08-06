@@ -1,0 +1,9 @@
+{
+  "author_login": "mantenedor-original-pkg",
+  "author_account_age_days": 6,
+  "author_prior_contributions_to_repo": 0,
+  "commit_email_matches_verified_email": false,
+  "commit_is_signed": false,
+  "signing_key_seen_before_for_login": null,
+  "repo_has_history_of_signed_commits": true
+}

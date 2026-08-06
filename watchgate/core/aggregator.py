@@ -5,10 +5,52 @@ from __future__ import annotations
 from collections.abc import Iterable
 from datetime import UTC, datetime
 
-from watchgate.core.models import AggregatedResult, LayerResult, NormalizedDiff, Semaforo
+from watchgate.core.models import (
+    AggregatedResult,
+    Confidence,
+    LayerResult,
+    NormalizedDiff,
+    RiskCategory,
+    Semaforo,
+)
 
 # Umbrales por defecto (score >= red -> ROJO, score >= yellow -> AMARILLO).
 DEFAULT_THRESHOLDS: dict[str, int] = {"yellow": 40, "red": 70}
+
+# Categorías graves donde una detección semántica de alta confianza no debe
+# diluirse por debajo del umbral rojo solo porque otra capa (típicamente
+# reputación) no ve nada raro -- el caso simétrico al que ya resuelve
+# shortcircuit.py para "parcial alto, semántica baja": aquí es "semántica muy
+# alta y de confianza, resto de capas bajo".
+_SEVERE_CATEGORIES = frozenset(
+    {RiskCategory.BACKDOOR, RiskCategory.EXFILTRACION, RiskCategory.ESCALADA_PRIVILEGIOS}
+)
+# Calibrado contra un caso real: una campaña de compromiso de paquetes npm
+# (script "bun.sh/install | bash" inyectado) daba semantic=90,
+# confidence=alta, categoría backdoor -- pero la cuenta comprometida no tenía
+# ninguna señal de reputación sospechosa (ese es justo el objetivo del
+# ataque), así que el combinado se quedaba en 65, por debajo del umbral rojo
+# por muy poco. Verificado contra la suite de validación real (tests/cases/).
+_SEMANTIC_FLOOR_MIN_SCORE = 85
+
+
+def _apply_high_confidence_semantic_floor(
+    score: int, results: dict[str, LayerResult], thresholds: dict[str, int]
+) -> int:
+    """Si la capa semántica, por sí sola, es de alta confianza y categoría
+    grave con un score muy alto, el score combinado nunca baja del umbral
+    rojo -- una reputación limpia (o cualquier otra capa baja) es una señal
+    real, pero no debe poder anular una detección de contenido tan clara."""
+    semantic = results.get("semantic")
+    if (
+        semantic is None
+        or semantic.skipped
+        or semantic.confidence != Confidence.ALTA
+        or semantic.category not in _SEVERE_CATEGORIES
+        or semantic.risk_score < _SEMANTIC_FLOOR_MIN_SCORE
+    ):
+        return score
+    return max(score, thresholds["red"])
 
 
 def weighted_average(
@@ -61,6 +103,7 @@ def aggregate(
     """
     thresholds = thresholds or DEFAULT_THRESHOLDS
     score = round(weighted_average(results, weights))
+    score = _apply_high_confidence_semantic_floor(score, results, thresholds)
     semaforo = _semaforo(score, thresholds)
     return AggregatedResult(
         score=score,

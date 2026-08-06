@@ -1,0 +1,4 @@
+pkgname=example-tool
+pkgver=1.2.3
+pkgrel=1
+source=("https://example.org/example-tool-$pkgver.tar.gz")

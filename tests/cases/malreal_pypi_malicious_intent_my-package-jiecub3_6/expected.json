@@ -1,0 +1,7 @@
+{
+  "semaforo": ["amarillo", "rojo"],
+  "min_score": 40,
+  "difficulty": "hard",
+  "class": "malicious",
+  "note": "reverse shell comentado (inerte a dia de hoy) en __init__.py -- juicio dificil a proposito, contraste con trojan-source"
+}

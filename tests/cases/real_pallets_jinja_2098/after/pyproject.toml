@@ -1,0 +1,12 @@
+[project]
+name = "Jinja2"
+version = "3.2.0.dev"
+description = "A very fast and expressive template engine."
+readme = "README.md"
+license = "BSD-3-Clause"
+]
+requires-python = ">=3.10"
+dependencies = ["MarkupSafe>=3.0"]
+
+[project.urls]
+Donate = "https://palletsprojects.com/donate"

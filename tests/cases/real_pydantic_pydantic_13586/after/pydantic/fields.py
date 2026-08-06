@@ -1,0 +1,7 @@
+        'min_length': annotated_types.MinLen,
+        'max_length': annotated_types.MaxLen,
+        'pattern': None,
+        'allow_inf_nan': types.AllowInfNan,
+        'max_digits': None,
+        'decimal_places': None,
+        'union_mode': None,

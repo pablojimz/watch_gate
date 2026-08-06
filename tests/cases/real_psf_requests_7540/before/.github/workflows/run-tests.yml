@@ -1,0 +1,21 @@
+        - { python-version: "pypy-3.11", os: "windows-latest" }
+
+    steps:
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      with:
+        persist-credentials: false
+    - name: Set up Python ${{ matrix.python-version }}
+      fail-fast: true
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - name: 'Set up Python 3.10'
+      fail-fast: true
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - name: 'Set up Python 3.10'
