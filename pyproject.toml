@@ -32,6 +32,7 @@ dependencies = [
   # Persistencia unificada de BD (SQLModel/SQLAlchemy) y parseo seguro de diffs HTTP (unidiff)
   "sqlmodel>=0.0.19,<1",
   "unidiff>=0.7,<1",
+  "psycopg[binary] (>=3.1,<4.0)",
 ]
 
 [project.scripts]

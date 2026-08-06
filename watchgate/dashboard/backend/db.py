@@ -1,7 +1,11 @@
-"""db.py — esquema y acceso a la base de datos histórica (SQLite).
+"""db.py — esquema y acceso a la base de datos histórica.
 
-Migración a Postgres: sustituir ``sqlite3`` por un driver Postgres (p. ej. ``psycopg``)
-manteniendo las mismas tablas; el SQL de esquema es portable salvo AUTOINCREMENT → SERIAL.
+SQLite por defecto (fichero local, cero configuración). Si
+``WATCHGATE_DASHBOARD_DATABASE_URL`` apunta a una URL ``postgres(ql)://``,
+``connect()`` usa Postgres en su lugar (ver `db_postgres.py`): las ~40
+funciones de este módulo no saben contra qué motor hablan, solo `connect()`,
+`init_db()` e `insert_aggregated()` (el único sitio que usa `lastrowid`,
+sin equivalente directo en Postgres) ramifican por motor.
 """
 
 from __future__ import annotations
@@ -15,9 +19,11 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal, cast
 
 from watchgate.core.models import AggregatedResult, LayerResult, RiskCategory, Semaforo
+from watchgate.dashboard.backend import db_postgres
+from watchgate.dashboard.backend.db_postgres import PostgresConnection
 from watchgate.dashboard.backend.schemas import (
     FeedbackValue,
     LlmSettingsIn,
@@ -30,6 +36,12 @@ from watchgate.dashboard.backend.schemas import (
     TrendPoint,
     UiSettings,
 )
+
+DBConnection = sqlite3.Connection | PostgresConnection
+# Fila devuelta por `conn.execute(...).fetchone()/.fetchall()`: sqlite3.Row
+# en SQLite, dict en Postgres (ver PostgresCursor en db_postgres.py) -- ambas
+# soportan `row["columna"]` y `.keys()`, que es todo lo que este módulo usa.
+Row = sqlite3.Row | dict[str, Any]
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS pr_scores (
@@ -131,7 +143,11 @@ def default_db_path() -> Path:
     return Path(".watchgate") / "dashboard.db"
 
 
-def connect(db_path: Path | None = None) -> sqlite3.Connection:
+def connect(db_path: Path | None = None) -> DBConnection:
+    database_url = os.environ.get("WATCHGATE_DASHBOARD_DATABASE_URL")
+    if database_url and database_url.startswith(("postgres://", "postgresql://")):
+        return db_postgres.connect(database_url)
+
     path = db_path or default_db_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(path), check_same_thread=False)
@@ -140,7 +156,41 @@ def connect(db_path: Path | None = None) -> sqlite3.Connection:
     return conn
 
 
-def init_db(conn: sqlite3.Connection) -> None:
+def _init_db_postgres(conn: PostgresConnection) -> None:
+    conn.executescript(db_postgres.POSTGRES_SCHEMA)
+    # A diferencia de SQLite, Postgres soporta IF NOT EXISTS en ADD COLUMN de
+    # forma nativa -- no hace falta el sondeo vía PRAGMA table_info de abajo.
+    conn.execute("ALTER TABLE pr_scores ADD COLUMN IF NOT EXISTS author_login TEXT")
+    conn.execute(
+        "ALTER TABLE repo_settings ADD COLUMN IF NOT EXISTS "
+        "layers_enabled_json TEXT NOT NULL DEFAULT '{}'"
+    )
+    conn.execute(
+        "ALTER TABLE repo_settings ADD COLUMN IF NOT EXISTS "
+        "block_on_high INTEGER NOT NULL DEFAULT 1"
+    )
+    conn.execute(
+        "ALTER TABLE repo_settings ADD COLUMN IF NOT EXISTS "
+        "require_feedback_on_high INTEGER NOT NULL DEFAULT 0"
+    )
+    conn.execute(
+        "ALTER TABLE repo_settings ADD COLUMN IF NOT EXISTS "
+        "risk_colors_json TEXT NOT NULL DEFAULT '{}'"
+    )
+    conn.execute(
+        "ALTER TABLE org_settings ADD COLUMN IF NOT EXISTS "
+        "risk_colors_json TEXT NOT NULL DEFAULT '{}'"
+    )
+    conn.commit()
+    ensure_org_settings(conn)
+    ensure_llm_settings(conn)
+    ensure_ui_settings(conn)
+
+
+def init_db(conn: DBConnection) -> None:
+    if isinstance(conn, PostgresConnection):
+        _init_db_postgres(conn)
+        return
     conn.executescript(SCHEMA)
     cols = {row[1] for row in conn.execute("PRAGMA table_info(pr_scores)").fetchall()}
     if "author_login" not in cols:
@@ -174,7 +224,7 @@ def init_db(conn: sqlite3.Connection) -> None:
     ensure_ui_settings(conn)
 
 @contextmanager
-def db_session(db_path: Path | None = None) -> Iterator[sqlite3.Connection]:
+def db_session(db_path: Path | None = None) -> Iterator[DBConnection]:
     conn = connect(db_path)
     try:
         init_db(conn)
@@ -193,7 +243,7 @@ def _pr_number_from_pr_id(pr_id: str) -> int:
 
 
 def insert_aggregated(
-    conn: sqlite3.Connection,
+    conn: DBConnection,
     result: AggregatedResult,
     *,
     author_login: str | None = None,
@@ -211,8 +261,7 @@ def insert_aggregated(
     semantic = layers.get("semantic")
     justification = semantic.justification if semantic is not None else None
 
-    cur = conn.execute(
-        """
+    insert_sql = """
         INSERT INTO pr_scores (
           repo, pr_number, timestamp, score, semaforo,
           static_score, static_skipped,
@@ -221,31 +270,40 @@ def insert_aggregated(
           semantic_score, semantic_skipped, semantic_justification,
           weights_json, author_login, human_feedback
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
-        """,
-        (
-            result.repo,
-            _pr_number_from_pr_id(result.pr_id),
-            result.timestamp,
-            result.score,
-            result.semaforo.value,
-            score_of("static"),
-            skipped_of("static"),
-            score_of("deps"),
-            skipped_of("deps"),
-            score_of("reputation"),
-            skipped_of("reputation"),
-            score_of("semantic"),
-            skipped_of("semantic"),
-            justification,
-            json.dumps(result.weights_used),
-            author_login,
-        ),
+        """
+    params = (
+        result.repo,
+        _pr_number_from_pr_id(result.pr_id),
+        result.timestamp,
+        result.score,
+        result.semaforo.value,
+        score_of("static"),
+        skipped_of("static"),
+        score_of("deps"),
+        skipped_of("deps"),
+        score_of("reputation"),
+        skipped_of("reputation"),
+        score_of("semantic"),
+        skipped_of("semantic"),
+        justification,
+        json.dumps(result.weights_used),
+        author_login,
     )
+
+    if isinstance(conn, PostgresConnection):
+        # sqlite3.Cursor.lastrowid no tiene equivalente en psycopg -- pedimos
+        # el id insertado explícitamente en la misma sentencia.
+        row = conn.execute(insert_sql + " RETURNING id", params).fetchone()
+        assert row is not None
+        new_id = int(row["id"])
+    else:
+        cur = conn.execute(insert_sql, params)
+        new_id = int(cur.lastrowid)
     conn.commit()
-    return int(cur.lastrowid)
+    return new_id
 
 
-def _row_to_score_out(row: sqlite3.Row) -> ScoreOut:
+def _row_to_score_out(row: Row) -> ScoreOut:
     layer_results: dict[str, LayerResult] = {}
     for name, score_col, skip_col in _LAYER_COLS:
         skipped = bool(row[skip_col]) if row[skip_col] is not None else True
@@ -285,7 +343,7 @@ def _row_to_score_out(row: sqlite3.Row) -> ScoreOut:
     )
 
 
-def list_scores(conn: sqlite3.Connection, repo: str) -> list[ScoreOut]:
+def list_scores(conn: DBConnection, repo: str) -> list[ScoreOut]:
     rows = conn.execute(
         "SELECT * FROM pr_scores WHERE repo = ? ORDER BY timestamp DESC",
         (repo,),
@@ -293,13 +351,13 @@ def list_scores(conn: sqlite3.Connection, repo: str) -> list[ScoreOut]:
     return [_row_to_score_out(row) for row in rows]
 
 
-def get_score(conn: sqlite3.Connection, score_id: int) -> ScoreOut | None:
+def get_score(conn: DBConnection, score_id: int) -> ScoreOut | None:
     row = conn.execute("SELECT * FROM pr_scores WHERE id = ?", (score_id,)).fetchone()
     return None if row is None else _row_to_score_out(row)
 
 
 def set_feedback(
-    conn: sqlite3.Connection, score_id: int, feedback: FeedbackValue
+    conn: DBConnection, score_id: int, feedback: FeedbackValue
 ) -> ScoreOut | None:
     cur = conn.execute(
         "UPDATE pr_scores SET human_feedback = ? WHERE id = ?",
@@ -311,7 +369,7 @@ def set_feedback(
     return get_score(conn, score_id)
 
 
-def get_role(conn: sqlite3.Connection, user_login: str, repo: str) -> RoleName | None:
+def get_role(conn: DBConnection, user_login: str, repo: str) -> RoleName | None:
     row = conn.execute(
         "SELECT role FROM repo_roles WHERE user_login = ? AND repo = ?",
         (user_login, repo),
@@ -319,7 +377,7 @@ def get_role(conn: sqlite3.Connection, user_login: str, repo: str) -> RoleName |
     return None if row is None else row["role"]  # type: ignore[return-value]
 
 
-def upsert_role(conn: sqlite3.Connection, user_login: str, repo: str, role: RoleName) -> None:
+def upsert_role(conn: DBConnection, user_login: str, repo: str, role: RoleName) -> None:
     conn.execute(
         """
         INSERT INTO repo_roles (user_login, repo, role) VALUES (?, ?, ?)
@@ -330,7 +388,7 @@ def upsert_role(conn: sqlite3.Connection, user_login: str, repo: str, role: Role
     conn.commit()
 
 
-def delete_role(conn: sqlite3.Connection, user_login: str, repo: str) -> bool:
+def delete_role(conn: DBConnection, user_login: str, repo: str) -> bool:
     cur = conn.execute(
         "DELETE FROM repo_roles WHERE user_login = ? AND repo = ?",
         (user_login, repo),
@@ -339,18 +397,23 @@ def delete_role(conn: sqlite3.Connection, user_login: str, repo: str) -> bool:
     return cur.rowcount > 0
 
 
-def list_roles(conn: sqlite3.Connection, repo: str | None = None) -> list[sqlite3.Row]:
+def list_roles(conn: DBConnection, repo: str | None = None) -> list[Row]:
+    # sqlite3.Cursor.fetchall() está tipado como list[Any] en sus stubs (no
+    # conoce row_factory=sqlite3.Row en tiempo de tipado) -- cast explícito a
+    # la interfaz real que devuelve en ejecución.
     if repo is None:
-        return conn.execute(
+        rows = conn.execute(
             "SELECT user_login, repo, role FROM repo_roles ORDER BY repo, user_login"
         ).fetchall()
-    return conn.execute(
-        "SELECT user_login, repo, role FROM repo_roles WHERE repo = ? ORDER BY user_login",
-        (repo,),
-    ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT user_login, repo, role FROM repo_roles WHERE repo = ? ORDER BY user_login",
+            (repo,),
+        ).fetchall()
+    return cast("list[Row]", rows)
 
 
-def list_repos_for_user(conn: sqlite3.Connection, user_login: str, is_admin: bool) -> list[str]:
+def list_repos_for_user(conn: DBConnection, user_login: str, is_admin: bool) -> list[str]:
     if is_admin:
         from_scores = {
             r["repo"] for r in conn.execute("SELECT DISTINCT repo FROM pr_scores").fetchall()
@@ -370,7 +433,7 @@ def list_repos_for_user(conn: sqlite3.Connection, user_login: str, is_admin: boo
     return [r["repo"] for r in rows]
 
 
-def user_is_org_admin(conn: sqlite3.Connection, user_login: str) -> bool:
+def user_is_org_admin(conn: DBConnection, user_login: str) -> bool:
     row = conn.execute(
         """
         SELECT 1 FROM repo_roles
@@ -382,7 +445,7 @@ def user_is_org_admin(conn: sqlite3.Connection, user_login: str) -> bool:
     return row is not None
 
 
-def ensure_org_settings(conn: sqlite3.Connection) -> None:
+def ensure_org_settings(conn: DBConnection) -> None:
     row = conn.execute("SELECT 1 FROM org_settings WHERE id = 1").fetchone()
     if row is not None:
         return
@@ -404,7 +467,7 @@ def ensure_org_settings(conn: sqlite3.Connection) -> None:
 
 
 def _settings_from_row(
-    row: sqlite3.Row | None, *, source: Literal["default", "repo"]
+    row: Row | None, *, source: Literal["default", "repo"]
 ) -> RepoSettings:
     if row is None:
         return RepoSettings(
@@ -437,13 +500,13 @@ def _settings_from_row(
     )
 
 
-def get_org_settings(conn: sqlite3.Connection) -> RepoSettings:
+def get_org_settings(conn: DBConnection) -> RepoSettings:
     ensure_org_settings(conn)
     row = conn.execute("SELECT * FROM org_settings WHERE id = 1").fetchone()
     return _settings_from_row(row, source="default")
 
 
-def set_org_settings(conn: sqlite3.Connection, settings: RepoSettings) -> RepoSettings:
+def set_org_settings(conn: DBConnection, settings: RepoSettings) -> RepoSettings:
     ensure_org_settings(conn)
     conn.execute(
         """
@@ -469,7 +532,7 @@ def set_org_settings(conn: sqlite3.Connection, settings: RepoSettings) -> RepoSe
     return get_org_settings(conn)
 
 
-def get_settings(conn: sqlite3.Connection, repo: str) -> RepoSettings:
+def get_settings(conn: DBConnection, repo: str) -> RepoSettings:
     row = conn.execute("SELECT * FROM repo_settings WHERE repo = ?", (repo,)).fetchone()
     if row is None:
         defaults = get_org_settings(conn)
@@ -477,7 +540,7 @@ def get_settings(conn: sqlite3.Connection, repo: str) -> RepoSettings:
     return _settings_from_row(row, source="repo")
 
 
-def set_settings(conn: sqlite3.Connection, repo: str, settings: RepoSettings) -> RepoSettings:
+def set_settings(conn: DBConnection, repo: str, settings: RepoSettings) -> RepoSettings:
     conn.execute(
         """
         INSERT INTO repo_settings (
@@ -506,7 +569,7 @@ def set_settings(conn: sqlite3.Connection, repo: str, settings: RepoSettings) ->
     return get_settings(conn, repo)
 
 
-def clear_repo_settings(conn: sqlite3.Connection, repo: str) -> RepoSettings:
+def clear_repo_settings(conn: DBConnection, repo: str) -> RepoSettings:
     conn.execute("DELETE FROM repo_settings WHERE repo = ?", (repo,))
     conn.commit()
     return get_settings(conn, repo)
@@ -520,7 +583,7 @@ def _mask_api_key(api_key: str | None) -> str | None:
     return f"{api_key[:4]}…{api_key[-4:]}"
 
 
-def ensure_llm_settings(conn: sqlite3.Connection) -> None:
+def ensure_llm_settings(conn: DBConnection) -> None:
     row = conn.execute("SELECT 1 FROM llm_settings WHERE id = 1").fetchone()
     if row is not None:
         return
@@ -541,7 +604,7 @@ def ensure_llm_settings(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-def get_llm_settings(conn: sqlite3.Connection) -> LlmSettingsOut:
+def get_llm_settings(conn: DBConnection) -> LlmSettingsOut:
     ensure_llm_settings(conn)
     row = conn.execute("SELECT * FROM llm_settings WHERE id = 1").fetchone()
     assert row is not None
@@ -557,7 +620,7 @@ def get_llm_settings(conn: sqlite3.Connection) -> LlmSettingsOut:
     )
 
 
-def set_llm_settings(conn: sqlite3.Connection, body: LlmSettingsIn) -> LlmSettingsOut:
+def set_llm_settings(conn: DBConnection, body: LlmSettingsIn) -> LlmSettingsOut:
     ensure_llm_settings(conn)
     current = conn.execute("SELECT api_key FROM llm_settings WHERE id = 1").fetchone()
     current_key = current["api_key"] if current is not None else None
@@ -591,7 +654,7 @@ def set_llm_settings(conn: sqlite3.Connection, body: LlmSettingsIn) -> LlmSettin
     return get_llm_settings(conn)
 
 
-def ensure_ui_settings(conn: sqlite3.Connection) -> None:
+def ensure_ui_settings(conn: DBConnection) -> None:
     row = conn.execute("SELECT 1 FROM ui_settings WHERE id = 1").fetchone()
     if row is not None:
         return
@@ -614,7 +677,7 @@ def ensure_ui_settings(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-def get_ui_settings(conn: sqlite3.Connection) -> UiSettings:
+def get_ui_settings(conn: DBConnection) -> UiSettings:
     ensure_ui_settings(conn)
     row = conn.execute("SELECT * FROM ui_settings WHERE id = 1").fetchone()
     assert row is not None
@@ -628,7 +691,7 @@ def get_ui_settings(conn: sqlite3.Connection) -> UiSettings:
     )
 
 
-def set_ui_settings(conn: sqlite3.Connection, settings: UiSettings) -> UiSettings:
+def set_ui_settings(conn: DBConnection, settings: UiSettings) -> UiSettings:
     ensure_ui_settings(conn)
     conn.execute(
         """
@@ -654,7 +717,7 @@ def set_ui_settings(conn: sqlite3.Connection, settings: UiSettings) -> UiSetting
     return get_ui_settings(conn)
 
 
-def compute_org_metrics(conn: sqlite3.Connection, repos: list[str]) -> OrgMetrics:
+def compute_org_metrics(conn: DBConnection, repos: list[str]) -> OrgMetrics:
     if not repos:
         return OrgMetrics(
             total_prs=0,
@@ -791,7 +854,7 @@ def verify_password(password: str, stored: str) -> bool:
 
 
 def upsert_user(
-    conn: sqlite3.Connection, login: str, password: str, display_name: str
+    conn: DBConnection, login: str, password: str, display_name: str
 ) -> None:
     conn.execute(
         """
@@ -806,7 +869,7 @@ def upsert_user(
     conn.commit()
 
 
-def authenticate_user(conn: sqlite3.Connection, login: str, password: str) -> bool:
+def authenticate_user(conn: DBConnection, login: str, password: str) -> bool:
     row = conn.execute(
         "SELECT password_hash FROM dashboard_users WHERE login = ?",
         (login,),
@@ -817,7 +880,7 @@ def authenticate_user(conn: sqlite3.Connection, login: str, password: str) -> bo
 
 
 def _insert_sample(
-    conn: sqlite3.Connection,
+    conn: DBConnection,
     *,
     repo: str,
     pr: int,
@@ -859,7 +922,7 @@ def _insert_sample(
         set_feedback(conn, score_id, feedback)
 
 
-def seed_demo(conn: sqlite3.Connection) -> None:
+def seed_demo(conn: DBConnection) -> None:
     """Usuarios locales + histórico falso para probar el dashboard sin CI."""
     # Cuentas locales (usuario / contraseña) — independientes de GitHub/GitLab.
     upsert_user(conn, "admin", "admin123", "Admin demo")
