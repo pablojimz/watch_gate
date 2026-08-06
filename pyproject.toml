@@ -29,6 +29,9 @@ dependencies = [
   "python-jose[cryptography]>=3.3,<4",
   "authlib>=1.3,<2",
   "itsdangerous>=2.2,<3",
+  # Persistencia unificada de BD (SQLModel/SQLAlchemy) y parseo seguro de diffs HTTP (unidiff)
+  "sqlmodel>=0.0.19,<1",
+  "unidiff>=0.7,<1",
 ]
 
 [project.scripts]
