@@ -188,11 +188,13 @@ Arquitectura y spec de implementación cerradas (`docs/WatchGate_spec_implementa
 - [x] Orquestador determinista + agregador de *scoring* (`orchestrator.py`, `aggregator.py`, `comment_template.py`)
 - [x] Cortocircuito de extremo (`shortcircuit.py`, A.3.4)
 - [x] Interfaz de Línea de Comandos CLI (`cli.py`)
-- [ ] Capa estática (Semgrep/YARA) — Pablo Jiménez Castro
-- [ ] Capa de dependencias (OSV, typosquatting) — Pablo Jiménez Castro
-- [ ] Adaptador de GitHub Action de referencia (`adapters/github_action/`)
-- [ ] Dashboard de postura de seguridad (`dashboard/`) — Pablo Jiménez Castro
-- [ ] Validación contra el conjunto de casos de prueba (≥10 casos)
+- [x] Capa estática (Semgrep/YARA) — Pablo Jiménez Castro
+- [x] Capa de dependencias (OSV, typosquatting) — Pablo Jiménez Castro
+- [x] Adaptador de GitHub Action de referencia (`adapters/github_action/`), incluida la persistencia opcional en el dashboard (paso 8 de la spec §12)
+- [x] Dashboard de postura de seguridad (`dashboard/`) — Pablo Jiménez Castro
+- [x] Validación contra el conjunto de casos de prueba (191 casos, 95% dentro de lo esperado — `docs/validation_report.md`)
+
+Pendiente antes de un despliegue real: publicar el paquete en PyPI (`pip install watchgate` hoy solo funciona instalando desde el propio checkout, ver `.github/workflows/watchgate.yml`).
 
 ## Referencias
 
