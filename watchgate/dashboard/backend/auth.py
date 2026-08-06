@@ -20,11 +20,17 @@ ROLE_RANK: dict[RoleName, int] = {
     "admin_organizacion": 3,
 }
 
+# Único hardcodeado en todo el proyecto -- cualquiera que lea este fichero
+# (o el repo público) conoce este valor, así que firmar tokens de sesión con
+# él fuera de desarrollo local equivale a no tener autenticación. Ver
+# `ensure_safe_startup_config`.
+INSECURE_DEFAULT_SECRET = "dev-insecure-secret-change-me"
+
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 def _secret() -> str:
-    return os.environ.get("WATCHGATE_DASHBOARD_SECRET", "dev-insecure-secret-change-me")
+    return os.environ.get("WATCHGATE_DASHBOARD_SECRET", INSECURE_DEFAULT_SECRET)
 
 
 def _frontend_origin() -> str:
@@ -41,6 +47,28 @@ def _github_client_secret() -> str | None:
 
 def _dev_mode() -> bool:
     return os.environ.get("WATCHGATE_DASHBOARD_DEV_MODE", "1") == "1"
+
+
+def ensure_safe_startup_config() -> None:
+    """Se niega a arrancar con una configuración insegura para producción.
+
+    `WATCHGATE_DASHBOARD_DEV_MODE` vale "1" por defecto (comodidad en local:
+    no hace falta configurar nada para levantar el dashboard). Pero eso
+    significa que un despliegue real que se olvide de fijar las variables de
+    entorno arrancaría en silencio con el login de desarrollo abierto y
+    firmando cookies de sesión con `INSECURE_DEFAULT_SECRET`, un valor
+    público en este repo -- cualquiera podría forjar una sesión de
+    admin_organizacion. En cuanto alguien apaga dev mode explícitamente
+    (la señal de "esto es un despliegue real"), exigimos que también haya
+    fijado su propio secreto; si no, mejor que el proceso no arranque a que
+    arranque con autenticación falsificable.
+    """
+    if not _dev_mode() and _secret() == INSECURE_DEFAULT_SECRET:
+        raise RuntimeError(
+            "WATCHGATE_DASHBOARD_SECRET no está configurado (sigue en el valor "
+            "por defecto inseguro) mientras WATCHGATE_DASHBOARD_DEV_MODE=0. "
+            "Define un secreto propio antes de desplegar en producción."
+        )
 
 
 def create_session_token(login: str, github_token: str | None = None) -> str:
