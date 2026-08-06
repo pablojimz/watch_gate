@@ -1,0 +1,7 @@
+include = [
+    "docs/",
+    "tests/",
+    "CHANGES.rst",
+    "uv.lock"
+]
+exclude = [

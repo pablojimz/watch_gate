@@ -1,0 +1,9 @@
+{
+  "author_login": "colaborador-real",
+  "author_account_age_days": 1200,
+  "author_prior_contributions_to_repo": 60,
+  "commit_email_matches_verified_email": true,
+  "commit_is_signed": true,
+  "signing_key_seen_before_for_login": true,
+  "repo_has_history_of_signed_commits": true
+}

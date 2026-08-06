@@ -22,8 +22,18 @@ from watchgate.core.rag.indexer import build_index
 
 
 class _FakeLLMClient(LLMClient):
-    def __init__(self, output: SemanticOutput | None = None, error: Exception | None = None):
+    def __init__(
+        self,
+        output: SemanticOutput | None = None,
+        error: Exception | None = None,
+        outputs: list[SemanticOutput] | None = None,
+    ):
+        """`outputs`, si se da, es una secuencia de respuestas distintas, una
+        por llamada (para probar auto-consistencia: llamadas sucesivas con
+        scores distintos); si se agota, repite la última. `output` sigue
+        siendo la forma simple de fijar siempre la misma respuesta."""
         self._output = output
+        self._outputs = outputs
         self._error = error
         self.calls: list[dict] = []
 
@@ -38,6 +48,9 @@ class _FakeLLMClient(LLMClient):
         )
         if self._error is not None:
             raise self._error
+        if self._outputs is not None:
+            idx = min(len(self.calls) - 1, len(self._outputs) - 1)
+            return self._outputs[idx]
         assert self._output is not None
         return self._output
 
@@ -119,8 +132,12 @@ def test_full_flow_rag_prompt_parse_cache(rag_index_path):
 
 
 def test_second_call_with_same_diff_hits_cache_and_skips_the_llm(rag_index_path):
+    # risk_score lejos de los umbrales límite (40/70 ± 10) a propósito: este
+    # test solo quiere probar la caché, no la auto-consistencia (ver los
+    # tests dedicados más abajo) -- con un score límite el propio primer
+    # `analyze()` ya haría varias llamadas por diseño.
     output = SemanticOutput(
-        risk_score=50, category=RiskCategory.NINGUNA, justification="x", confidence=Confidence.MEDIA
+        risk_score=15, category=RiskCategory.NINGUNA, justification="x", confidence=Confidence.MEDIA
     )
     fake_llm = _FakeLLMClient(output=output)
     cost_control = _FakeCostController()
@@ -131,8 +148,157 @@ def test_second_call_with_same_diff_hits_cache_and_skips_the_llm(rag_index_path)
     second = layer.analyze(diff, {"repo": "owner/repo"})
 
     assert len(fake_llm.calls) == 1  # el LLM solo se llamó la primera vez
-    assert first.risk_score == second.risk_score == 50
+    assert first.risk_score == second.risk_score == 15
     assert second.tool_calls_made == 0
+
+
+def test_borderline_score_triggers_resampling_and_keeps_the_highest(rag_index_path):
+    """Hallazgo real de la suite de validación (tests/cases/): el mismo diff
+    puede dar semáforos distintos entre dos llamadas reales a Gemini cuando
+    el score cae cerca de un umbral. Cerca de un umbral (40/70 ± 10), se
+    piden hasta 2 muestras más y se usa la de mayor risk_score -- conservador
+    a propósito, mismo criterio que "nunca promediar, siempre max" ya usado
+    en deps_layer.py/static_layer.py."""
+    outputs = [
+        SemanticOutput(
+            risk_score=65,
+            category=RiskCategory.NINGUNA,
+            justification="a",
+            confidence=Confidence.MEDIA,
+        ),
+        SemanticOutput(
+            risk_score=78,
+            category=RiskCategory.BACKDOOR,
+            justification="b",
+            confidence=Confidence.ALTA,
+        ),
+        SemanticOutput(
+            risk_score=60,
+            category=RiskCategory.NINGUNA,
+            justification="c",
+            confidence=Confidence.MEDIA,
+        ),
+    ]
+    fake_llm = _FakeLLMClient(outputs=outputs)
+    cost_control = _FakeCostController()
+    layer = SemanticLayer(fake_llm, cost_control, rag_index_path=rag_index_path)
+
+    result = layer.analyze(_sample_diff(), {"repo": "owner/repo"})
+
+    assert len(fake_llm.calls) == 3  # 1 inicial + 2 de auto-consistencia
+    assert result.risk_score == 78  # la más alta de las 3, no la primera ni un promedio
+    assert result.category == RiskCategory.BACKDOOR
+    # se cachea la muestra elegida (la de mayor score), no la primera
+    diff_hash = compute_diff_hash(_sample_diff())
+    assert cost_control.get_cached(diff_hash).risk_score == 78
+
+
+def test_clearly_non_borderline_score_does_not_trigger_resampling(rag_index_path):
+    output = SemanticOutput(
+        risk_score=95, category=RiskCategory.BACKDOOR, justification="x", confidence=Confidence.ALTA
+    )
+    fake_llm = _FakeLLMClient(output=output)
+    cost_control = _FakeCostController()
+    layer = SemanticLayer(fake_llm, cost_control, rag_index_path=rag_index_path)
+
+    layer.analyze(_sample_diff(), {"repo": "owner/repo"})
+
+    assert len(fake_llm.calls) == 1
+
+
+def _diff_with_one_huge_unflagged_file() -> NormalizedDiff:
+    """Un único fichero, sin patrones sospechosos reconocibles y demasiado
+    grande para caber en el presupuesto -- fuerza la rama de
+    UNVERIFIED_CONTENT_MARKER en build_user_prompt."""
+    padding = "\n".join(f"+línea inofensiva de relleno número {i} sin nada raro" for i in range(80))
+    return NormalizedDiff(
+        base_sha="a" * 40,
+        head_sha="b" * 40,
+        repo_path="/tmp/repo",
+        files=[
+            FileChange(
+                path="vendor/big_dump.py",
+                status=FileStatus.ADDED,
+                diff_hunk=padding,
+                additions=80,
+                deletions=0,
+            )
+        ],
+        commit_messages=["vendor a big generated file"],
+        authors=[],
+    )
+
+
+def test_unverified_content_floors_a_low_score_when_the_llm_never_checked(rag_index_path):
+    """Petición explícita: para los casos difíciles, que salte la alarma en
+    vez de colarse -- si hay contenido sin verificar (truncado, sin patrón
+    encontrado) y el LLM ni siquiera llamó a fetch_referenced_file para
+    comprobarlo, un veredicto de riesgo bajo no se queda tal cual."""
+    output = SemanticOutput(
+        risk_score=10,
+        category=RiskCategory.NINGUNA,
+        justification="parece limpio",
+        confidence=Confidence.MEDIA,
+    )
+    fake_llm = _FakeLLMClient(output=output)
+    cost_control = _FakeCostController()
+    layer = SemanticLayer(
+        fake_llm, cost_control, rag_index_path=rag_index_path, max_diff_tokens=20
+    )
+
+    result = layer.analyze(_diff_with_one_huge_unflagged_file(), {"repo": "owner/repo"})
+
+    assert result.risk_score == 60
+    assert "Ajustado a 60" in result.justification
+    assert "parece limpio" in result.justification  # no se pierde el razonamiento original
+
+
+def test_unverified_content_floor_does_not_apply_if_the_llm_used_the_fetch_tool(rag_index_path):
+    """Si el LLM sí llamó a fetch_referenced_file (tool_calls_made > 0), ya
+    tuvo la oportunidad real de comprobar el contenido -- el suelo mecánico
+    no debe pisar un veredicto informado."""
+
+    class _LLMThatCallsFetchTool(LLMClient):
+        def complete_structured(
+            self, system_prompt, user_prompt, tools, tool_executor, max_tool_calls
+        ):
+            tool_executor(
+                "fetch_referenced_file", {"path": "vendor/big_dump.py", "ref": "b" * 40}
+            )
+            return SemanticOutput(
+                risk_score=10,
+                category=RiskCategory.NINGUNA,
+                justification="lo revisé entero, está limpio",
+                confidence=Confidence.ALTA,
+            )
+
+    cost_control = _FakeCostController()
+    layer = SemanticLayer(
+        _LLMThatCallsFetchTool(), cost_control, rag_index_path=rag_index_path, max_diff_tokens=20
+    )
+
+    result = layer.analyze(_diff_with_one_huge_unflagged_file(), {"repo": "owner/repo"})
+
+    assert result.risk_score == 10
+    assert result.tool_calls_made == 1
+
+
+def test_unverified_content_floor_does_not_lower_an_already_higher_score(rag_index_path):
+    output = SemanticOutput(
+        risk_score=85,
+        category=RiskCategory.NINGUNA,
+        justification="dudoso",
+        confidence=Confidence.MEDIA,
+    )
+    fake_llm = _FakeLLMClient(output=output)
+    cost_control = _FakeCostController()
+    layer = SemanticLayer(
+        fake_llm, cost_control, rag_index_path=rag_index_path, max_diff_tokens=20
+    )
+
+    result = layer.analyze(_diff_with_one_huge_unflagged_file(), {"repo": "owner/repo"})
+
+    assert result.risk_score == 85  # ya estaba por encima del suelo, no se toca
 
 
 def test_skips_without_calling_llm_when_budget_is_exhausted(rag_index_path):

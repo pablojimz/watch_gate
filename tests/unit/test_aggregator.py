@@ -4,11 +4,16 @@ from __future__ import annotations
 
 from watchgate.core.aggregator import aggregate
 from watchgate.core.comment_template import render_comment
-from watchgate.core.models import LayerResult, Semaforo
+from watchgate.core.models import Confidence, LayerResult, RiskCategory, Semaforo
 
 
 def _result(
-    name: str, score: int, skipped: bool = False, skip_reason: str | None = None
+    name: str,
+    score: int,
+    skipped: bool = False,
+    skip_reason: str | None = None,
+    category: RiskCategory | None = None,
+    confidence: Confidence | None = None,
 ) -> LayerResult:
     return LayerResult(
         layer_name=name,
@@ -16,6 +21,8 @@ def _result(
         justification=f"justificación de {name}",
         skipped=skipped,
         skip_reason=skip_reason,
+        category=category,
+        confidence=confidence,
     )
 
 
@@ -103,3 +110,87 @@ def test_render_comment_shows_skip_reason_for_skipped_layer():
 
     assert "omitida: presupuesto agotado" in comment
     assert "Justificación (capa semántica):" not in comment
+
+
+def test_high_confidence_severe_semantic_floors_score_to_red_despite_clean_reputation():
+    """Caso real (tests/cases/malreal_npm_compromised_lib_posthog-node_2 y
+    equivalentes): reputación intachable (cuenta comprometida sin señales
+    propias) + semántica muy alta, de confianza y categoría backdoor. Sin
+    este suelo, el combinado se queda en 65 (amarillo); con él, no debe
+    poder bajar de rojo."""
+    results = {
+        "reputation": _result("reputation", 0),
+        "semantic": _result(
+            "semantic", 90, category=RiskCategory.BACKDOOR, confidence=Confidence.ALTA
+        ),
+    }
+    weights = {"reputation": 0.15, "semantic": 0.40}
+
+    out = aggregate(results, weights, diff=None, pr_id="1", repo="org/repo")
+
+    assert out.score == 70
+    assert out.semaforo == Semaforo.ROJO
+
+
+def test_semantic_floor_does_not_trigger_below_confidence_or_score_threshold():
+    weights = {"reputation": 0.15, "semantic": 0.40}
+
+    baja_confianza = aggregate(
+        {
+            "reputation": _result("reputation", 0),
+            "semantic": _result(
+                "semantic", 90, category=RiskCategory.BACKDOOR, confidence=Confidence.MEDIA
+            ),
+        },
+        weights,
+        None,
+        "1",
+        "r",
+    )
+    score_insuficiente = aggregate(
+        {
+            "reputation": _result("reputation", 0),
+            "semantic": _result(
+                "semantic", 80, category=RiskCategory.BACKDOOR, confidence=Confidence.ALTA
+            ),
+        },
+        weights,
+        None,
+        "1",
+        "r",
+    )
+    categoria_no_grave = aggregate(
+        {
+            "reputation": _result("reputation", 0),
+            "semantic": _result(
+                "semantic", 95, category=RiskCategory.OFUSCACION, confidence=Confidence.ALTA
+            ),
+        },
+        weights,
+        None,
+        "1",
+        "r",
+    )
+
+    # Ninguno de los tres cumple las tres condiciones a la vez -- el suelo no
+    # aplica, y el combinado real (bajo, por la reputación limpia) es el que manda.
+    assert baja_confianza.semaforo != Semaforo.ROJO
+    assert score_insuficiente.semaforo != Semaforo.ROJO
+    assert categoria_no_grave.semaforo != Semaforo.ROJO
+
+
+def test_semantic_floor_never_lowers_a_score_that_was_already_higher():
+    """El suelo es un `max()`, no una sustitución -- si el combinado ya era
+    más alto que el umbral rojo por sí mismo, no debe tocarlo."""
+    results = {
+        "reputation": _result("reputation", 95),
+        "semantic": _result(
+            "semantic", 90, category=RiskCategory.BACKDOOR, confidence=Confidence.ALTA
+        ),
+    }
+    weights = {"reputation": 0.5, "semantic": 0.5}
+
+    out = aggregate(results, weights, diff=None, pr_id="1", repo="org/repo")
+
+    assert out.score == 92  # media ponderada real, sin que el suelo la baje
+    assert out.semaforo == Semaforo.ROJO

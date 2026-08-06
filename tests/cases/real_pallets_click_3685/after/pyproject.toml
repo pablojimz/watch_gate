@@ -1,0 +1,7 @@
+include = [
+    "docs/",
+    "tests/",
+    "CHANGES.md",
+    "uv.lock"
+]
+exclude = [

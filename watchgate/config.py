@@ -51,7 +51,10 @@ class WatchGateConfig(BaseSettings):
 
     # Usados por cost_control.py (§8).
     max_diff_tokens: int = 8000
-    monthly_budget_tokens: int = 2_000_000
+    monthly_budget_tokens: int | None = 2_000_000
+
+    # Usado por deps_layer.py (§5).
+    max_dependency_checks: int = 20
 
     # Usado por el adaptador de GitHub Action (§12).
     block_on_red: bool = True

