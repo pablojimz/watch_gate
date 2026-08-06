@@ -14,7 +14,7 @@ import os
 import re
 import sqlite3
 import threading
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -112,7 +112,7 @@ class OSVCache:
                     return None
                 resp_json, fetched_at_str = str(row[0]), str(row[1])
                 fetched_at = datetime.fromisoformat(fetched_at_str)
-                if datetime.now(UTC) - fetched_at > timedelta(hours=_CACHE_TTL_HOURS):
+                if datetime.now(timezone.utc) - fetched_at > timedelta(hours=_CACHE_TTL_HOURS):
                     return None
                 data: dict[str, Any] = json.loads(resp_json)
                 return data
@@ -129,7 +129,7 @@ class OSVCache:
         if self._conn is None:
             return
         v_key = version or ""
-        now_str = datetime.now(UTC).isoformat()
+        now_str = datetime.now(timezone.utc).isoformat()
         resp_json = json.dumps(response_data)
         with self._lock:
             try:
@@ -199,7 +199,7 @@ class TyposquatChecker:
                 if line.strip()
             ]
             self._reference_sets[ecosystem_key] = set(lines)
-            self._reference_lists[ecosystem_key] = lines
+            self._reference_lists[ecosystem_key] = list(lines)
         except Exception:  # noqa: BLE001
             self._reference_sets[ecosystem_key] = set()
             self._reference_lists[ecosystem_key] = []
@@ -272,7 +272,6 @@ _REQ_LINE_REGEX = re.compile(
     r"^\+\s*([A-Za-z0-9][A-Za-z0-9._-]*)(?:==|>=|<=|~=|>|<)?([A-Za-z0-9._-]*)?"
 )
 
-
 def parse_requirements_txt(diff_hunk: str) -> list[DependencyChange]:
     changes: list[DependencyChange] = []
     for line in diff_hunk.splitlines():
@@ -297,7 +296,6 @@ def parse_requirements_txt(diff_hunk: str) -> list[DependencyChange]:
 
 
 _PKGBUILD_DEP_REGEX = re.compile(r"^\+\s*(?:depends|makedepends)=\((.*?)\)", re.DOTALL)
-
 
 def parse_pkgbuild(diff_hunk: str) -> list[DependencyChange]:
     changes: list[DependencyChange] = []
@@ -329,7 +327,6 @@ def parse_pkgbuild(diff_hunk: str) -> list[DependencyChange]:
 _CARGO_DEP_REGEX = re.compile(
     r'^\+\s*([A-Za-z0-9._-]+)\s*=\s*(?:"([^"]+)"|\{\s*version\s*=\s*"([^"]+)")'
 )
-
 
 def parse_cargo_toml(diff_hunk: str) -> list[DependencyChange]:
     changes: list[DependencyChange] = []
