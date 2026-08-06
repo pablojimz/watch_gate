@@ -13,7 +13,7 @@ from pathlib import Path
 import git
 import pytest
 
-from watchgate.core.diffparser import parse_diff
+from watchgate.core.diffparser import parse_diff, parse_diff_from_text
 from watchgate.core.models import FileStatus
 
 
@@ -193,3 +193,38 @@ def test_language_inferred_from_extension(tmp_repo):
     assert by_path["script.py"].language == "python"
     assert by_path["Dockerfile"].language == "dockerfile"
     assert by_path["data.unknownext"].language is None
+
+
+def test_parse_diff_from_text_basic() -> None:
+    raw_patch = (
+        "diff --git a/src/app.py b/src/app.py\n"
+        "--- a/src/app.py\n"
+        "+++ b/src/app.py\n"
+        "@@ -1,2 +1,3 @@\n"
+        " def main():\n"
+        "-    print('hello')\n"
+        "+    print('hello world')\n"
+        "+    x = 42\n"
+    )
+
+    diff = parse_diff_from_text(raw_patch, base_sha="a1b2c3d", head_sha="e5f6g7h", repo_path="org/app")
+
+    assert diff.base_sha == "a1b2c3d"
+    assert diff.head_sha == "e5f6g7h"
+    assert len(diff.files) == 1
+
+    file_change = diff.files[0]
+    assert file_change.path == "src/app.py"
+    assert file_change.status == FileStatus.MODIFIED
+    assert file_change.language == "python"
+    assert file_change.additions == 2
+    assert file_change.deletions == 1
+
+
+def test_parse_diff_from_text_empty_and_invalid() -> None:
+    diff_empty = parse_diff_from_text("")
+    assert diff_empty.files == []
+
+    diff_invalid = parse_diff_from_text("not a valid git diff text")
+    assert diff_invalid.files == []
+
