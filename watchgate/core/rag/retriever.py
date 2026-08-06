@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any
+import threading
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 
@@ -12,6 +13,29 @@ from watchgate.core.rag.indexer import (
     EMBEDDING_MODEL_NAME,
     FEEDBACK_COLLECTION_NAME,
 )
+
+if TYPE_CHECKING:
+    from sentence_transformers import SentenceTransformer
+
+# Cachea el modelo de embeddings en vez de instanciarlo en cada llamada: cargarlo
+# de cero en cada análisis es un coste real evitable, y bajo llamadas concurrentes
+# (p. ej. la suite de validación de tests/integration/) instanciar SentenceTransformer
+# varias veces a la vez provoca una race condition real de PyTorch al mover el
+# modelo a un dispositivo ("Cannot copy out of meta tensor..."), reproducida en la
+# práctica. Doble-checked locking: el candado solo se toma en la primera carga.
+_embedding_model: SentenceTransformer | None = None
+_embedding_model_lock = threading.Lock()
+
+
+def _get_embedding_model() -> SentenceTransformer:
+    global _embedding_model
+    if _embedding_model is None:
+        with _embedding_model_lock:
+            if _embedding_model is None:
+                from sentence_transformers import SentenceTransformer
+
+                _embedding_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
+    return _embedding_model
 
 
 class RetrievedFragment(BaseModel):
@@ -65,10 +89,9 @@ def retrieve_relevant_context(
     Devuelve lista vacía si no existe ningún índice todavía (no se ha
     ejecutado `watchgate rag reindex` ni hay ningún caso de feedback)."""
     import chromadb
-    from sentence_transformers import SentenceTransformer
 
     client = chromadb.PersistentClient(path=index_path)
-    model = SentenceTransformer(EMBEDDING_MODEL_NAME)
+    model = _get_embedding_model()
     query_embedding = model.encode([diff_summary]).tolist()
 
     feedback_docs, feedback_metas = _query_collection(

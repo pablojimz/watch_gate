@@ -20,10 +20,17 @@ _SUSPICIOUS_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"wget\s+[^|\n]+\|\s*(sh|bash)", re.IGNORECASE), "wget_pipe_shell"),
     (re.compile(r"eval\s*\(", re.IGNORECASE), "eval_dynamic"),
     (re.compile(r"exec\s*\(", re.IGNORECASE), "exec_dynamic"),
-    (re.compile(r"base64\s+(-d|--decode)", re.IGNORECASE), "base64_decode"),
+    (re.compile(r"base64\s+(-d|--decode)", re.IGNORECASE), "base64_decode_shell"),
     (re.compile(r"chmod\s+(\+x|777)", re.IGNORECASE), "permission_escalation"),
     (re.compile(r"nc\s+-[eE]\s+", re.IGNORECASE), "netcat_reverse_shell"),
     (re.compile(r"/dev/tcp/\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}", re.IGNORECASE), "dev_tcp_shell"),
+    # Equivalentes en código (no solo shell/instalación) -- añadidos tras la
+    # suite de validación real (tests/cases/): varios ficheros con payload
+    # confirmado usaban estos y el escaneo de shell no los veía.
+    (re.compile(r"base64\.b64decode\s*\(", re.IGNORECASE), "base64_decode_python"),
+    (re.compile(r"literal_eval\s*\(", re.IGNORECASE), "literal_eval_dynamic"),
+    (re.compile(r"pickle\.loads?\s*\(", re.IGNORECASE), "pickle_deserialize"),
+    (re.compile(r"marshal\.loads?\s*\(", re.IGNORECASE), "marshal_deserialize"),
 ]
 
 
@@ -40,4 +47,18 @@ def analyze_install_script_text(text: str) -> list[str]:
             findings.append(label)
 
     return findings
+
+
+def find_suspicious_lines(text: str) -> list[int]:
+    """Índices (0-based) de las líneas de `text` que coinciden con algún
+    patrón de `_SUSPICIOUS_PATTERNS`. Pensado para acotar qué extracto
+    mostrar de un fichero demasiado grande para incluir entero en el
+    prompt, sin tener que decidir primero si el fichero completo es
+    sospechoso (`_semantic/prompting.py`, truncado de diffs grandes)."""
+    if not text:
+        return []
+    lines = text.splitlines()
+    return [
+        i for i, line in enumerate(lines) if any(p.search(line) for p, _ in _SUSPICIOUS_PATTERNS)
+    ]
 

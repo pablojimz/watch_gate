@@ -1,0 +1,7 @@
+        uses: browser-actions/setup-firefox@fcf821c621167805dd63a29662bd7cb5676c81a8 # v1.7.1
+        if: ${{ matrix.nox-session == 'emscripten(firefox)' }}
+      - name: "Install node.js"
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        if: ${{ matrix.nox-session == 'emscripten(node)' }}
+        with:
+          node-version: 22

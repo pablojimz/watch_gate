@@ -1,0 +1,7 @@
+            use_coverage: true
+
+          - name: "ubuntu-pypy3-xdist"
+            python: "pypy-3.10"
+            os: ubuntu-latest
+            tox_env: "pypy3-xdist"
+

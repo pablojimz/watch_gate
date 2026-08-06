@@ -1,0 +1,10 @@
+{
+  "semaforo": [
+    "amarillo",
+    "rojo"
+  ],
+  "min_score": 35,
+  "difficulty": "hard",
+  "class": "malicious",
+  "note": "dificil a proposito: alarma (amarillo) cuenta como deteccion valida, no hace falta rojo puro"
+}
