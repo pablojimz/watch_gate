@@ -1,0 +1,7 @@
+[tool.setuptools_scm]
+
+[tool.setuptools.packages.find]
+exclude = ["benchmarks", "examples", "tests", "wiki", "docs", "feedstock"]
+
+[project.urls]
+homepage = "https://tqdm.github.io"

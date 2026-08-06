@@ -1,0 +1,9 @@
+{
+  "semaforo": [
+    "verde",
+    "amarillo"
+  ],
+  "min_score": 0,
+  "difficulty": "easy",
+  "class": "benign"
+}

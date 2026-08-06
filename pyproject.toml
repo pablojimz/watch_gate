@@ -49,7 +49,10 @@ line-length = 100
 target-version = "py311"
 # docs/ contiene la memoria y la spec de implementación (markdown de referencia
 # externa, con bloques de código pedagógicos) -- nunca se lintea ni se reformatea.
-extend-exclude = ["docs"]
+# tests/cases/ contiene fixtures reales bajados tal cual de otros proyectos
+# (click, jinja, requests...) para la suite de aceptación §14 -- no es código
+# propio, no se lintea.
+extend-exclude = ["docs", "tests/cases"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
@@ -82,6 +85,16 @@ filterwarnings = [
     "ignore::pydantic.warnings.PydanticDeprecatedSince211",
     "ignore::pydantic.warnings.ArbitraryTypeWarning",
 ]
+markers = [
+    "integration: suite de aceptación end-to-end (spec §14) -- llama a la API real de Gemini, no corre con `pytest -q` por defecto.",
+]
+# La suite de integración cuesta dinero y tiempo real (llamadas a Gemini); se
+# deselecciona por defecto y se invoca explícitamente con `-m integration`.
+# --ignore=tests/cases: los fixtures de la suite de aceptación incluyen ficheros
+# reales `test_*.py` de otros proyectos (click, jinja...) tal cual se bajaron de
+# GitHub -- sin el --ignore, pytest intenta coleccionarlos como si fueran tests
+# propios y falla al importarlos (dependen de entornos que no son el nuestro).
+addopts = "-m 'not integration' --ignore=tests/cases"
 
 [tool.coverage.run]
 source = ["watchgate/core"]

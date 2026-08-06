@@ -1,0 +1,7 @@
+    "DecodingError",
+    "delete",
+    "DigestAuth",
+    "FunctionAuth",
+    "get",
+    "head",
+    "Headers",

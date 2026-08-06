@@ -1,0 +1,7 @@
+          package_json_file: server/emails/package.json
+
+      - name: 📬 Setup Node.js environment for server/emails
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: server/emails/.node-version
+          cache: 'pnpm'

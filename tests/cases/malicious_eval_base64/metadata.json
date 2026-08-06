@@ -1,0 +1,9 @@
+{
+  "author_login": "nuevo-colaborador123",
+  "author_account_age_days": 4,
+  "author_prior_contributions_to_repo": 0,
+  "commit_email_matches_verified_email": false,
+  "commit_is_signed": false,
+  "signing_key_seen_before_for_login": null,
+  "repo_has_history_of_signed_commits": false
+}
