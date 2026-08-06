@@ -83,7 +83,7 @@ Corpus añadido para dar soporte a estos casos: `shai_hulud_npm_worm_2025.md` (n
 
 No es un razonamiento absurdo -- es una postura de seguridad más estricta de la que se anticipó al diseñar el caso (un *checksum* hardcodeado sin verificación independiente de la fuente es, en efecto, una cadena de confianza con un eslabón débil). Es un hallazgo honesto, no un fallo del sistema: o bien el modelo es más cauto de lo esperado, o bien el caso de prueba no era tan inequívocamente benigno como se pensaba.
 
-**El caso `trojan-source` ilustra el efecto ya documentado en `docs/rag_ablation_benchmark.md`:** el RAG puede inflar la severidad al reconocer el *nombre* de una técnica conocida. Tras el ajuste aplicado al propio documento del corpus (explicar la regla técnica exacta -- en Python, todo lo posterior a `#` en la misma línea es inerte --, no solo un recordatorio genérico en el prompt), la diferencia (con RAG menos sin RAG) se redujo de 53 puntos (98 frente a 45, antes del ajuste) a 35 puntos (80 frente a 45, después): mejor, pero no elimina la diferencia por completo.
+**El caso `trojan-source` ilustra el efecto ya documentado en `docs/evaluacion_ia/rag_ablation_benchmark.md`:** el RAG puede inflar la severidad al reconocer el *nombre* de una técnica conocida. Tras el ajuste aplicado al propio documento del corpus (explicar la regla técnica exacta -- en Python, todo lo posterior a `#` en la misma línea es inerte --, no solo un recordatorio genérico en el prompt), la diferencia (con RAG menos sin RAG) se redujo de 53 puntos (98 frente a 45, antes del ajuste) a 35 puntos (80 frente a 45, después): mejor, pero no elimina la diferencia por completo.
 
 ## 2.2 Casos difíciles: con RAG vs. sin RAG
 
@@ -149,7 +149,7 @@ Precio oficial verificado en <https://ai.google.dev/gemini-api/docs/pricing> (ti
 
 # 4. Sobre el catálogo de modelos
 
-Se recibió un catálogo (`docs/GEMINI_MODELS_CATALOG.md`) con 58 modelos. Se verificó contra `GET /v1beta/models` real: **coincide exactamente**, 58 de 58 -- no contenía entradas inventadas. Sin embargo, **aparecer en el catálogo no garantiza que el modelo responda**: `gemini-2.0-flash` y `gemini-2.5-flash-lite` están listados pero devuelven `404 NOT_FOUND` al invocarlos (el primero, confirmado por la propia documentación de Google, fue retirado el 1 de junio de 2026). Cualquier elección de modelo debe verificarse con una llamada real, no solo con el listado.
+Se recibió un catálogo (`docs/evaluacion_ia/GEMINI_MODELS_CATALOG.md`) con 58 modelos. Se verificó contra `GET /v1beta/models` real: **coincide exactamente**, 58 de 58 -- no contenía entradas inventadas. Sin embargo, **aparecer en el catálogo no garantiza que el modelo responda**: `gemini-2.0-flash` y `gemini-2.5-flash-lite` están listados pero devuelven `404 NOT_FOUND` al invocarlos (el primero, confirmado por la propia documentación de Google, fue retirado el 1 de junio de 2026). Cualquier elección de modelo debe verificarse con una llamada real, no solo con el listado.
 
 # 5. Conclusiones y recomendación
 
