@@ -1,4 +1,4 @@
-.PHONY: install lint test run-demo
+.PHONY: install lint test run-demo dashboard-backend dashboard-frontend dashboard-install
 
 install:
 	poetry install
@@ -17,3 +17,13 @@ test:
 
 run-demo:
 	poetry run python -m watchgate.cli analyze --base HEAD~1 --head HEAD
+
+dashboard-install:
+	cd watchgate/dashboard/frontend && npm install
+
+dashboard-backend:
+	WATCHGATE_DASHBOARD_DEV_MODE=1 WATCHGATE_DASHBOARD_SEED=1 \
+		poetry run uvicorn watchgate.dashboard.backend.main:app --reload --reload-dir watchgate --port 8000
+
+dashboard-frontend:
+	cd watchgate/dashboard/frontend && npm run dev
