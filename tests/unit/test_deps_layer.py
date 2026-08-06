@@ -67,7 +67,7 @@ def test_typosquatting_detection() -> None:
             )
         ]
     )
-    with patch.object(layer, "_query_osv", return_value=({}, None)):
+    with patch.object(layer, "_query_osv_batch", return_value={0: ({}, None)}):
         res = layer.analyze(diff, {})
     assert res.risk_score >= 75
     assert "1odash" in res.justification
@@ -96,7 +96,7 @@ def test_osv_vulnerability_high() -> None:
         ]
     }
 
-    with patch.object(layer, "_query_osv", return_value=(osv_response, None)):
+    with patch.object(layer, "_query_osv_batch", return_value={0: (osv_response, None)}):
         res = layer.analyze(diff, {})
 
     assert res.risk_score == 90
@@ -171,7 +171,7 @@ def test_dangerous_install_script() -> None:
             )
         ]
     )
-    with patch.object(layer, "_query_osv", return_value=({}, None)):
+    with patch.object(layer, "_query_osv_batch", return_value={0: ({}, None)}):
         res = layer.analyze(diff, {})
     assert res.risk_score >= 80
     assert "Script de instalación sospechoso" in res.justification

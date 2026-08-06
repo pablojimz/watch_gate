@@ -499,7 +499,7 @@ def _is_high_or_critical_vuln(vuln: dict[str, Any]) -> bool:
     cvss_obj = database_specific.get("cvss")
     if isinstance(cvss_obj, dict):
         score = cvss_obj.get("score")
-        if isinstance(score, (int, float)) and score >= 7.0:
+        if isinstance(score, int | float) and score >= 7.0:
             return True
         if isinstance(score, str):
             try:
@@ -543,20 +543,7 @@ class DepsLayer(AnalysisLayer):
     def _query_osv_batch(
         self, changes: list[DependencyChange]
     ) -> dict[int, tuple[dict[str, Any] | None, str | None]]:
-        mocked = False
-        try:
-            mocked = hasattr(self._query_osv, "mock_calls") or (
-                getattr(self._query_osv, "__func__", None) is not DepsLayer._query_osv
-            )
-        except AttributeError:
-            mocked = True
-
         results: dict[int, tuple[dict[str, Any] | None, str | None]] = {}
-
-        if mocked:
-            for idx, change in enumerate(changes):
-                results[idx] = self._query_osv(change)
-            return results
 
         uncached_indices: list[int] = []
         for idx, change in enumerate(changes):

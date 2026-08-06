@@ -188,8 +188,15 @@ class CostController:
             conn.commit()
 
     def budget_remaining(self, repo: str) -> int:
-        if self.monthly_budget_tokens is None or self.monthly_budget_tokens <= 0:
+        # None = sin tope configurado (ilimitado a propósito). <= 0 es lo
+        # contrario: un operador que fija presupuesto cero quiere decir "no
+        # gastes nada", no "sin límite" -- tratarlos igual invertía la
+        # intención (bug real, encontrado con should_skip() devolviendo
+        # False para monthly_budget_tokens=0, reproducido en la revisión).
+        if self.monthly_budget_tokens is None:
             return 999_999_999
+        if self.monthly_budget_tokens <= 0:
+            return 0
         month = self._current_month()
         conn = self._get_conn()
         with self._lock:
