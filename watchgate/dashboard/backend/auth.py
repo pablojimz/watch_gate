@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
@@ -49,25 +50,63 @@ def _dev_mode() -> bool:
     return os.environ.get("WATCHGATE_DASHBOARD_DEV_MODE", "1") == "1"
 
 
+def _ingest_token() -> str | None:
+    return os.environ.get("WATCHGATE_DASHBOARD_INGEST_TOKEN")
+
+
 def ensure_safe_startup_config() -> None:
     """Se niega a arrancar con una configuración insegura para producción.
 
     `WATCHGATE_DASHBOARD_DEV_MODE` vale "1" por defecto (comodidad en local:
     no hace falta configurar nada para levantar el dashboard). Pero eso
     significa que un despliegue real que se olvide de fijar las variables de
-    entorno arrancaría en silencio con el login de desarrollo abierto y
-    firmando cookies de sesión con `INSECURE_DEFAULT_SECRET`, un valor
-    público en este repo -- cualquiera podría forjar una sesión de
-    admin_organizacion. En cuanto alguien apaga dev mode explícitamente
-    (la señal de "esto es un despliegue real"), exigimos que también haya
-    fijado su propio secreto; si no, mejor que el proceso no arranque a que
-    arranque con autenticación falsificable.
+    entorno arrancaría en silencio con el login de desarrollo abierto,
+    firmando cookies de sesión con `INSECURE_DEFAULT_SECRET` (público en este
+    repo -- cualquiera podría forjar una sesión de admin_organizacion), y con
+    `POST /api/scores` (la ingesta desde la Action, sin cookie de usuario)
+    aceptando cualquier llamada sin autenticar. En cuanto alguien apaga dev
+    mode explícitamente (la señal de "esto es un despliegue real"), exigimos
+    que también se haya resuelto cada uno de esos puntos; si no, mejor que el
+    proceso no arranque a que arranque con un agujero de autenticación.
     """
-    if not _dev_mode() and _secret() == INSECURE_DEFAULT_SECRET:
-        raise RuntimeError(
+    if _dev_mode():
+        return
+    problems = []
+    if _secret() == INSECURE_DEFAULT_SECRET:
+        problems.append(
             "WATCHGATE_DASHBOARD_SECRET no está configurado (sigue en el valor "
-            "por defecto inseguro) mientras WATCHGATE_DASHBOARD_DEV_MODE=0. "
-            "Define un secreto propio antes de desplegar en producción."
+            "por defecto inseguro)"
+        )
+    if _ingest_token() is None:
+        problems.append(
+            "WATCHGATE_DASHBOARD_INGEST_TOKEN no está configurado "
+            "(POST /api/scores quedaría sin autenticar)"
+        )
+    if problems:
+        raise RuntimeError(
+            "Configuración insegura para producción con "
+            "WATCHGATE_DASHBOARD_DEV_MODE=0: " + "; ".join(problems) + "."
+        )
+
+
+def require_ingest_token(request: Request) -> None:
+    """Autenticación de `POST /api/scores` (ingesta desde la Action).
+
+    Ese endpoint lo llama un proceso de CI, no un usuario con cookie de
+    sesión -- usa un bearer token compartido en vez del flujo de login
+    humano. Si `WATCHGATE_DASHBOARD_INGEST_TOKEN` no está configurado el
+    endpoint queda abierto (mismo criterio que dev mode: comodidad en local),
+    pero `ensure_safe_startup_config` ya exige que esté fijado en cuanto se
+    apaga dev mode, así que en producción esta rama siempre exige el token.
+    """
+    expected = _ingest_token()
+    if expected is None:
+        return
+    provided = request.headers.get("Authorization", "")
+    scheme, _, token = provided.partition(" ")
+    if scheme.lower() != "bearer" or not secrets.compare_digest(token, expected):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Token de ingesta inválido"
         )
 
 

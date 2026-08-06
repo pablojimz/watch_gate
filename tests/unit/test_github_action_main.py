@@ -137,6 +137,30 @@ def test_run_returns_failure_exit_code_when_red_and_block_on_red(tmp_path):
     assert exit_code == 1
 
 
+def test_run_persists_result_to_dashboard(tmp_path):
+    event_path = _write_event(tmp_path)
+    fake_client = MagicMock()
+    fake_client.get_pr_diff_shas.return_value = ("base" * 10, "head" * 10)
+    result = _fake_result(Semaforo.VERDE, 5)
+
+    with (
+        patch(
+            "watchgate.adapters.github_action.main.GitHubClient", return_value=fake_client
+        ),
+        patch("watchgate.adapters.github_action.main.parse_diff", return_value=_fake_diff()),
+        patch(
+            "watchgate.adapters.github_action.main.run_full_analysis",
+            return_value=result,
+        ),
+        patch(
+            "watchgate.adapters.github_action.main.dashboard_client.post_score"
+        ) as mock_post_score,
+    ):
+        gha_main.run(event_path, github_token="fake-token")
+
+    mock_post_score.assert_called_once_with(result, "author-login")
+
+
 def test_main_exits_early_without_github_token(monkeypatch, tmp_path):
     monkeypatch.setenv("GITHUB_EVENT_PATH", _write_event(tmp_path))
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)

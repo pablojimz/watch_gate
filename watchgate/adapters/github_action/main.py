@@ -21,6 +21,7 @@ import sys
 from typing import Any
 
 import watchgate.core.layers  # noqa: F401 - registrar capas en LAYER_REGISTRY
+from watchgate.adapters.github_action import dashboard_client
 from watchgate.adapters.github_action.github_client import GitHubClient
 from watchgate.config import load_config
 from watchgate.core.comment_template import render_comment
@@ -80,6 +81,8 @@ def run(
     is_blocking = result.semaforo == Semaforo.ROJO and config.block_on_red
     conclusion = "failure" if is_blocking else "neutral"
     github_client.post_check_run(owner, repo, head_sha, conclusion, comment_body)
+
+    dashboard_client.post_score(result, author_login)
 
     print(f"WatchGate: {result.semaforo.value} ({result.score}/100) -- conclusion={conclusion}")
 

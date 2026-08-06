@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from watchgate.dashboard.backend import db as database
-from watchgate.dashboard.backend.auth import CurrentUser, require_role
+from watchgate.dashboard.backend.auth import CurrentUser, require_ingest_token, require_role
 from watchgate.dashboard.backend.schemas import IngestScoreIn, RepoSettings, ScoreOut
 
 router = APIRouter(tags=["scores"])
@@ -68,7 +68,12 @@ def my_role(repo: str, request: Request, user: CurrentUser) -> dict[str, str]:
     return {"repo": repo, "role": role}
 
 
-@router.post("/scores", response_model=ScoreOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/scores",
+    response_model=ScoreOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_ingest_token)],
+)
 def ingest_score(body: IngestScoreIn) -> ScoreOut:
     """Persistencia desde el adaptador CI (sin cookie de usuario)."""
     with database.db_session() as conn:
