@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -11,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from watchgate.dashboard.backend import db as database
+from watchgate.dashboard.backend.auth import _dev_mode, _secret, ensure_safe_startup_config
 from watchgate.dashboard.backend.auth import router as auth_router
 from watchgate.dashboard.backend.auth_oidc import router as oidc_router
 from watchgate.dashboard.backend.auth_oidc import setup_oidc
@@ -19,6 +21,8 @@ from watchgate.dashboard.backend.routers.llm_settings import router as llm_route
 from watchgate.dashboard.backend.routers.metrics import router as metrics_router
 from watchgate.dashboard.backend.routers.scores import router as scores_router
 from watchgate.dashboard.backend.routers.ui_settings import router as ui_router
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -32,6 +36,15 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app() -> FastAPI:
+    ensure_safe_startup_config()
+    if _dev_mode():
+        logger.warning(
+            "WATCHGATE_DASHBOARD_DEV_MODE=1: login de desarrollo habilitado y "
+            "secreto de sesión por defecto permitido si no se fija uno propio. "
+            "No usar esta configuración en un despliegue real "
+            "(WATCHGATE_DASHBOARD_DEV_MODE=0 + WATCHGATE_DASHBOARD_SECRET propio)."
+        )
+
     app = FastAPI(title="WatchGate Dashboard", version="0.1.0", lifespan=lifespan)
 
     origins = [
@@ -49,11 +62,11 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    # Necesario para el flujo OIDC (state en sesión de Authlib).
-    app.add_middleware(
-        SessionMiddleware,
-        secret_key=os.environ.get("WATCHGATE_DASHBOARD_SECRET", "dev-insecure-secret-change-me"),
-    )
+    # Necesario para el flujo OIDC (state en sesión de Authlib). Mismo
+    # secreto que las cookies de sesión propias (auth._secret) -- un único
+    # sitio que puede fallar el arranque si es inseguro, ver
+    # ensure_safe_startup_config().
+    app.add_middleware(SessionMiddleware, secret_key=_secret())
 
     app.include_router(auth_router, prefix="/api")
     app.include_router(oidc_router, prefix="/api")
