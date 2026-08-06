@@ -195,3 +195,26 @@ def test_unlimited_budget_tokens_none():
     assert ctrl.budget_remaining("org/repo") > 0
     assert ctrl.should_skip("org/repo") is False
     ctrl.close()
+
+
+def test_zero_budget_tokens_means_no_budget_not_unlimited():
+    """Bug real encontrado en revisión: monthly_budget_tokens=0 se trataba
+    igual que None (sin tope) y devolvía presupuesto prácticamente
+    ilimitado -- lo contrario de lo que un operador que fija presupuesto
+    cero quiere decir. None y 0 no son lo mismo: None es "sin tope
+    configurado", 0 es "no gastes nada"."""
+    tmp_dir = tempfile.mkdtemp()
+    db_path = str(Path(tmp_dir) / "cost.db")
+    ctrl = CostController(db_path=db_path, max_diff_tokens=50, monthly_budget_tokens=0)
+    assert ctrl.budget_remaining("org/repo") == 0
+    assert ctrl.should_skip("org/repo") is True
+    ctrl.close()
+
+
+def test_negative_budget_tokens_also_means_no_budget():
+    tmp_dir = tempfile.mkdtemp()
+    db_path = str(Path(tmp_dir) / "cost.db")
+    ctrl = CostController(db_path=db_path, max_diff_tokens=50, monthly_budget_tokens=-1)
+    assert ctrl.budget_remaining("org/repo") == 0
+    assert ctrl.should_skip("org/repo") is True
+    ctrl.close()
