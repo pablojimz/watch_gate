@@ -28,6 +28,66 @@ from watchgate.core.rag.retriever import retrieve_relevant_context
 _MAX_TOOL_CALLS = 3
 _NO_BUDGET_SKIP_REASON = "Presupuesto de tokens agotado para este repositorio este mes"
 
+# Auto-consistencia: solo para respuestas "límite" (cerca de un umbral de
+# semáforo -- los mismos 40/70 por defecto de aggregator.DEFAULT_THRESHOLDS,
+# repetidos aquí en vez de importar el módulo de agregación para no acoplar
+# capas entre sí), se piden hasta _MAX_RESAMPLES llamadas adicionales y se
+# usa la de mayor risk_score. Hallazgo real de la suite de validación
+# (tests/cases/): el mismo diff exacto puede dar amarillo o rojo entre dos
+# llamadas distintas a la API -- no es un bug, es varianza real del modelo,
+# pero cerca de un umbral decide el semáforo final. Lejos de cualquier
+# umbral (verde claro o rojo claro) no merece la pena el coste extra: ahí la
+# varianza no cambia el veredicto.
+_BORDERLINE_THRESHOLDS = (40, 70)
+_BORDERLINE_MARGIN = 10
+_MAX_RESAMPLES = 2
+
+
+def _is_borderline_score(risk_score: int) -> bool:
+    return any(abs(risk_score - t) <= _BORDERLINE_MARGIN for t in _BORDERLINE_THRESHOLDS)
+
+
+# Suelo mecánico, no una sugerencia en el prompt: si el prompt de verdad
+# contiene contenido sin verificar (UNVERIFIED_CONTENT_MARKER -- un fichero
+# truncado sin extracto, o directamente sin presupuesto), el LLM no llamó a
+# `fetch_referenced_file` para comprobarlo por su cuenta, Y aun así concluye
+# un riesgo bajo, el score no se queda tal cual. Objetivo explícito: que
+# "no he podido revisarlo" nunca se traduzca en verde -- como mínimo debe
+# saltar la alarma de AMARILLO.
+#
+# 40 no basta: este suelo actúa sobre el risk_score de ESTA capa, no sobre
+# el score combinado final. Con los pesos por defecto (reputation=0.15,
+# semantic=0.40) y reputación en 0 (peor caso real -- una cuenta comprometida
+# no deja ninguna señal de reputación sospechosa), el combinado es
+# 0.40*S/0.55; para que ese combinado llegue de verdad a los 40 de
+# aggregator.DEFAULT_THRESHOLDS["yellow"] hace falta S >= 55. Se deja margen
+# hasta 60 -- verificado en la práctica contra la suite de validación real
+# (tests/cases/): con 40 el combinado se quedaba en 29, por debajo de la
+# propia alarma que se pretendía forzar.
+_MIN_SCORE_WHEN_UNVERIFIED = 60
+
+
+def _apply_unverified_content_floor(
+    output: SemanticOutput, user_prompt: str, tool_calls_made: int
+) -> SemanticOutput:
+    if (
+        prompting.UNVERIFIED_CONTENT_MARKER not in user_prompt
+        or tool_calls_made > 0
+        or output.risk_score >= _MIN_SCORE_WHEN_UNVERIFIED
+    ):
+        return output
+    return output.model_copy(
+        update={
+            "risk_score": _MIN_SCORE_WHEN_UNVERIFIED,
+            "justification": (
+                f"{output.justification} [Ajustado a {_MIN_SCORE_WHEN_UNVERIFIED}: "
+                "hay contenido del diff que no se pudo revisar (truncado por tamaño) y "
+                "no se consultó con fetch_referenced_file -- incertidumbre real, no "
+                "verificada como segura, no se deja en verde sin comprobar.]"
+            ),
+        }
+    )
+
 
 class CostControllerLike(Protocol):
     """Subconjunto de watchgate/core/cost_control.py (§8) que necesita esta
@@ -151,16 +211,9 @@ class SemanticLayer(AnalysisLayer):
             diff, static_findings_paths, self._cost_control.estimate_tokens, self._max_diff_tokens
         )
 
-        counter = _ToolCallCounter()
-        tool_executor = _build_tool_executor(diff, metadata, counter)
-
         try:
-            output = self._llm_client.complete_structured(
-                system_prompt,
-                user_prompt,
-                tools=tools.build_tool_schemas(),
-                tool_executor=tool_executor,
-                max_tool_calls=_MAX_TOOL_CALLS,
+            output, tool_calls_made = self._call_llm_once(
+                system_prompt, user_prompt, diff, metadata
             )
         except SemanticParsingError as exc:
             return LayerResult(
@@ -171,18 +224,55 @@ class SemanticLayer(AnalysisLayer):
                 skip_reason=str(exc),
             )
 
+        n_calls = 1
+        if _is_borderline_score(output.risk_score):
+            for _ in range(_MAX_RESAMPLES):
+                try:
+                    extra_output, extra_tool_calls = self._call_llm_once(
+                        system_prompt, user_prompt, diff, metadata
+                    )
+                except SemanticParsingError:
+                    # Una muestra que no parsea no invalida las demás -- ya
+                    # tenemos al menos la primera, válida.
+                    continue
+                n_calls += 1
+                if extra_output.risk_score > output.risk_score:
+                    output, tool_calls_made = extra_output, extra_tool_calls
+
+        output = _apply_unverified_content_floor(output, user_prompt, tool_calls_made)
         self._cost_control.store_cached(diff_hash, output)
         # Nota: esto estima el coste de la petición inicial (system + user
-        # prompt), pero no puede contabilizar las idas y vueltas de tool-calls
-        # ni los tokens de salida del modelo, porque LLMClient.complete_structured
-        # no expone el consumo real de la conversación (§7.3/§8 no lo definen).
-        # Subestima el uso real cuando hay tool calls; documentado para quien
-        # integre cost_control.py de verdad.
-        estimated_tokens = self._cost_control.estimate_tokens(
-            system_prompt
-        ) + self._cost_control.estimate_tokens(user_prompt)
+        # prompt) multiplicado por el número real de llamadas hechas (1, o
+        # más si hubo auto-consistencia), pero no puede contabilizar las idas
+        # y vueltas de tool-calls ni los tokens de salida del modelo, porque
+        # LLMClient.complete_structured no expone el consumo real de la
+        # conversación (§7.3/§8 no lo definen). Subestima el uso real cuando
+        # hay tool calls; documentado para quien integre cost_control.py de
+        # verdad.
+        estimated_tokens = n_calls * (
+            self._cost_control.estimate_tokens(system_prompt)
+            + self._cost_control.estimate_tokens(user_prompt)
+        )
         self._cost_control.record_usage(repo, estimated_tokens)
-        return self._to_layer_result(output, tool_calls_made=counter.count)
+        return self._to_layer_result(output, tool_calls_made=tool_calls_made)
+
+    def _call_llm_once(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        diff: NormalizedDiff,
+        metadata: dict[str, Any],
+    ) -> tuple[SemanticOutput, int]:
+        counter = _ToolCallCounter()
+        tool_executor = _build_tool_executor(diff, metadata, counter)
+        output = self._llm_client.complete_structured(
+            system_prompt,
+            user_prompt,
+            tools=tools.build_tool_schemas(),
+            tool_executor=tool_executor,
+            max_tool_calls=_MAX_TOOL_CALLS,
+        )
+        return output, counter.count
 
     def _to_layer_result(self, output: SemanticOutput, tool_calls_made: int) -> LayerResult:
         return LayerResult(

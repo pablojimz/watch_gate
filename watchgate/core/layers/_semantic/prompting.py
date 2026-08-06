@@ -7,7 +7,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from watchgate.core.models import FileChange, NormalizedDiff
+from watchgate.core.layers._shared import find_suspicious_lines
+from watchgate.core.models import FileChange, FileStatus, NormalizedDiff
 from watchgate.core.rag.retriever import RetrievedFragment
 
 FEW_SHOT_DIR = Path(__file__).resolve().parents[4] / "datasets" / "few_shot"
@@ -18,6 +19,13 @@ intención maliciosa, con independencia de quién parezca haberlo firmado: los
 atacantes pueden falsificar nombre y correo de autor para simular continuidad
 con el historial del proyecto. Evalúa el CONTENIDO del cambio, no la reputación
 aparente del autor (esa señal la evalúa otro componente del sistema).
+
+Fecha real de hoy: {current_date}. Es la fecha real, no un límite de tu
+entrenamiento -- no asumas que una fecha posterior a lo que recuerdes de tu
+entrenamiento es "del futuro" ni una señal de manipulación (timestamps de
+paquetes, releases, certificados...) solo por parecerte reciente o
+desconocida; compárala contra esta fecha real, no contra tu propio corte de
+conocimiento.
 
 Contexto del proyecto:
 - Tipo de proyecto: {project_type}
@@ -174,12 +182,29 @@ def build_system_prompt(
     rag_context: list[RetrievedFragment],
     few_shot_examples: list[dict[str, Any]] | None = None,
     dependency_findings: list[dict[str, Any]] | None = None,
+    current_date: str | None = None,
 ) -> str:
+    """`current_date` por defecto es la fecha real de hoy (UTC); se puede
+    fijar explícitamente para que los tests sean deterministas (mismo
+    criterio que `rng` en `evaluate_shortcircuit`).
+
+    Hallazgo real de la suite de validación (tests/cases/): sin esto, el
+    modelo compara fechas de paquetes/releases contra su propio corte de
+    entrenamiento en vez de contra la fecha real, y marca como "manipulación
+    de la cadena de suministro" timestamps que simplemente son posteriores a
+    lo último que recuerda -- un falso positivo real, reproducido contra un
+    PR benigno de verdad (bump de dependencias con timestamps de 2026)."""
+    if current_date is None:
+        from datetime import UTC, datetime
+
+        current_date = datetime.now(UTC).date().isoformat()
+
     base_prompt = SYSTEM_PROMPT.format(
         project_type=project_type,
         languages=languages,
         recent_activity_summary=recent_activity_summary,
         rag_context=_render_rag_context(rag_context),
+        current_date=current_date,
     )
     examples = FEW_SHOT_EXAMPLES if few_shot_examples is None else few_shot_examples
     return (
@@ -194,6 +219,108 @@ def _render_file_change(file_change: FileChange) -> str:
     return f"--- {file_change.path} ({file_change.status.value}) ---\n{file_change.diff_hunk}"
 
 
+# Ventana de contexto (líneas antes/después) alrededor de cada línea sospechosa
+# al recortar un fichero truncado, y tope de líneas totales del extracto -- no
+# es un análisis completo del fichero, solo evita que un patrón de riesgo real
+# quede enterrado sin más en miles de líneas irrelevantes.
+_EXCERPT_CONTEXT_LINES = 3
+_MAX_EXCERPT_LINES = 60
+
+
+def _excerpt_around_matches(diff_hunk: str, match_lines: list[int]) -> str:
+    lines = diff_hunk.splitlines()
+    windows: list[list[int]] = []
+    for ln in match_lines:
+        start = max(0, ln - _EXCERPT_CONTEXT_LINES)
+        end = min(len(lines), ln + _EXCERPT_CONTEXT_LINES + 1)
+        if windows and start <= windows[-1][1]:
+            windows[-1][1] = max(windows[-1][1], end)
+        else:
+            windows.append([start, end])
+
+    parts: list[str] = []
+    total_lines = 0
+    for start, end in windows:
+        if total_lines >= _MAX_EXCERPT_LINES:
+            break
+        parts.append("\n".join(lines[start:end]))
+        total_lines += end - start
+    return "\n[...]\n".join(parts)
+
+
+def _fetch_tool_hint(file_change: FileChange, head_sha: str) -> str:
+    return (
+        f'fetch_referenced_file(path="{file_change.path}", ref="{head_sha}") '
+        "para leerlo entero"
+    )
+
+
+# Marca literal que aparece en TODO mensaje de "no se ha podido revisar este
+# fichero" (las dos variantes: sin patrón sospechoso encontrado, y sin
+# presupuesto ni para mirar). `layer.py` busca esta marca en el prompt ya
+# construido para aplicar un suelo mecánico de score cuando el LLM concluye
+# un riesgo bajo sin haber verificado nada -- no depende de que el modelo
+# *decida* seguir la instrucción de tratar la incertidumbre como riesgo,
+# lo fuerza. Ver `_MIN_SCORE_WHEN_UNVERIFIED` en layer.py.
+UNVERIFIED_CONTENT_MARKER = "[CONTENIDO-NO-VERIFICADO]"
+
+
+def _render_truncated_file_change(file_change: FileChange, head_sha: str) -> str:
+    n_lines = file_change.diff_hunk.count("\n") + 1 if file_change.diff_hunk else 0
+    match_lines = find_suspicious_lines(file_change.diff_hunk)
+    if match_lines:
+        excerpt = _excerpt_around_matches(file_change.diff_hunk, match_lines)
+        return (
+            f"--- {file_change.path} ({file_change.status.value}) ---\n"
+            f"[fichero de {n_lines} líneas, demasiado grande para incluir entero; extracto "
+            f"alrededor de {len(match_lines)} línea(s) con patrones de riesgo conocidos -- "
+            "esto NO es el fichero completo, hay más contenido sin revisar. Si el extracto "
+            f"no basta para decidir con confianza, llama a {_fetch_tool_hint(file_change, head_sha)} "
+            "antes de puntuar.]\n"
+            f"{excerpt}"
+        )
+
+    return (
+        f"--- {file_change.path}: {n_lines} líneas no incluidas por tamaño. {UNVERIFIED_CONTENT_MARKER} "
+        "Un escaneo superficial no encontró patrones de riesgo conocidos, pero esto NO "
+        "equivale a haber revisado el fichero -- es contenido que no se ha podido leer de "
+        "verdad. No lo trates como una señal de que está limpio; si el resto del PR ya es "
+        "sospechoso, súmalo como incertidumbre adicional, no como algo a favor. Si crees "
+        f"que este fichero concreto puede ser el que importa, llama a "
+        f"{_fetch_tool_hint(file_change, head_sha)} en vez de asumir que está limpio. ---"
+    )
+
+
+# Prioridad al recortar: primero los ficheros ya marcados por la capa
+# estática/dependencias (static_findings_paths) -- esos nunca deben perder
+# su hueco por presupuesto, alguien ya los señaló como sospechosos. Entre el
+# resto, los ficheros NUEVOS van antes que los modificados: un fichero
+# modificado tiene un diff ya acotado por git (solo las líneas cambiadas +
+# contexto, nunca el fichero entero) -- casi nunca hace falta recortarlo. Un
+# fichero nuevo no tiene "antes" con que compararse: su diff ES el fichero
+# entero, y en la práctica es donde ha vivido el payload en todos los casos
+# reales confirmados de esta suite (tests/cases/: kubehook, aiogram-sever-
+# patch, telnyx, litellm...). Si hay que repartir un presupuesto de tokens
+# limitado, se gasta ahí primero, no a partes iguales con modificaciones
+# triviales a ficheros ya existentes.
+_STATUS_PRIORITY: dict[FileStatus, int] = {
+    FileStatus.ADDED: 0,
+    FileStatus.MODIFIED: 1,
+    FileStatus.RENAMED: 1,
+    FileStatus.DELETED: 2,
+}
+
+
+def _by_truncation_priority(
+    files: list[FileChange], static_findings_paths: set[str]
+) -> list[FileChange]:
+    def priority(fc: FileChange) -> tuple[int, int]:
+        flagged = 0 if fc.path in static_findings_paths else 1
+        return (flagged, _STATUS_PRIORITY.get(fc.status, 1))
+
+    return sorted(files, key=priority)
+
+
 def build_user_prompt(
     diff: NormalizedDiff,
     static_findings_paths: set[str],
@@ -201,9 +328,19 @@ def build_user_prompt(
     max_diff_tokens: int,
 ) -> str:
     """Regla de construcción del prompt de usuario (§7.1): incluir el diff
-    completo si cabe en `max_diff_tokens`; si no, incluir solo los hunks ya
-    marcados como sospechosos por la capa estática/dependencias, más un
-    resumen textual del resto."""
+    completo si cabe en `max_diff_tokens`; si no, procesar los ficheros por
+    prioridad (nuevos primero, ver `_STATUS_PRIORITY`) llevando la cuenta
+    real de tokens gastados: mientras quede presupuesto, cada fichero recibe
+    su hunk entero (si la capa estática/dependencias lo marcó) o un extracto
+    acotado alrededor de patrones de riesgo conocidos (`static_layer.py`
+    real, Línea 3, sigue sin existir -- mismo heurístico de texto que ya usa
+    `deps_layer.py` para scripts de instalación, reutilizado aquí como red
+    de seguridad mientras tanto); en cuanto se agota, el resto se queda en
+    un resumen honesto (no una falsa garantía de limpieza). En todos los
+    casos, recordatorio de que `fetch_referenced_file` (ya ofrecida siempre
+    como tool, §7.2) puede leer cualquiera de estos ficheros entero bajo
+    demanda -- el heurístico de texto decide qué *mostrar sin que se pida*,
+    no reemplaza el juicio del LLM sobre cuándo merece la pena mirar más."""
     commits = "; ".join(diff.commit_messages) or "(sin mensajes)"
     header = f"Repositorio: {diff.repo_path}\nCommits: {commits}\n"
     full_body = "\n".join(_render_file_change(fc) for fc in diff.files)
@@ -213,13 +350,21 @@ def build_user_prompt(
         return full_prompt
 
     truncated_parts = [header]
-    for file_change in diff.files:
+    budget_used = count_tokens(header)
+    for file_change in _by_truncation_priority(diff.files, static_findings_paths):
         if file_change.path in static_findings_paths:
-            truncated_parts.append(_render_file_change(file_change))
-        else:
+            # Ya señalado por la capa estática/dependencias: nunca se corta
+            # por presupuesto, con independencia de cuánto se haya gastado ya.
+            rendered = _render_file_change(file_change)
+        elif budget_used >= max_diff_tokens:
             n_lines = file_change.diff_hunk.count("\n") + 1 if file_change.diff_hunk else 0
-            truncated_parts.append(
-                f"--- {file_change.path}: ... {n_lines} líneas adicionales sin patrones "
-                "detectados por análisis estático ..."
+            rendered = (
+                f"--- {file_change.path}: {n_lines} líneas, sin presupuesto de tokens "
+                f"restante en este análisis para revisarlas ni siquiera superficialmente. "
+                f"{UNVERIFIED_CONTENT_MARKER} Trátalo como incertidumbre real, no como limpio. ---"
             )
+        else:
+            rendered = _render_truncated_file_change(file_change, diff.head_sha)
+        truncated_parts.append(rendered)
+        budget_used += count_tokens(rendered)
     return "\n".join(truncated_parts)
