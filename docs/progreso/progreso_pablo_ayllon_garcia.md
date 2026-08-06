@@ -4,9 +4,9 @@
 
 - Responsable: Pablo Ayllón García
 - Última actualización: 2026-08-06
-- Estado general: Completado / Integrado
+- Estado general: Completado / Avances en Persistencia Unificada y Engine API SaaS
 - Última revisión realizada por: Pablo Ayllón García (Ingeniero Senior de Arquitectura) / Javier Martín Jurado
-- Componentes registrados: CLI (`watchgate/cli.py`), Pipeline compartido (`watchgate/core/pipeline.py`), shortcircuit (`watchgate/core/shortcircuit.py`), deps_layers (`watchgate/core/layers/deps_layer.py`), Núcleo y Contratos de Fase 0 (`watchgate/core/models.py`, `watchgate/core/layers/base.py`, `watchgate/core/diffparser.py`, `watchgate/core/orchestrator.py`, `watchgate/core/aggregator.py`, `watchgate/core/comment_template.py`, `watchgate/core/cost_control.py`, `watchgate/config.py`).
+- Componentes registrados: CLI (`watchgate/cli.py`), Pipeline compartido (`watchgate/core/pipeline.py`), shortcircuit (`watchgate/core/shortcircuit.py`), deps_layers (`watchgate/core/layers/deps_layer.py`), StaticLayer (`watchgate/core/layers/static_layer.py`), Persistencia DB (`watchgate/db/`), Núcleo y Contratos de Fase 0 (`watchgate/core/models.py`, `watchgate/core/layers/base.py`, `watchgate/core/diffparser.py`, `watchgate/core/orchestrator.py`, `watchgate/core/aggregator.py`, `watchgate/core/comment_template.py`, `watchgate/core/cost_control.py`, `watchgate/config.py`).
 
 ---
 
@@ -17,6 +17,12 @@ El estado del trabajo asociado a la Línea 1 (Núcleo, Orquestador, Agregador, C
 Tras las recientes revisiones de integración (realizadas en colaboración con Javier Martín Jurado), se ha llevado a cabo una importante mejora arquitectónica: la extracción de la lógica de orquestación y cableado completo en el nuevo módulo `watchgate/core/pipeline.py` (`run_full_analysis`). Esta refactorización permite que tanto la CLI de consola (`cli.py`) como el adaptador de GitHub Actions (`adapters/github_action/main.py`) compartan exactamente la misma secuencia de análisis (control de costes, cortocircuito, orquestación paralela multihilo y agregación), garantizando el principio DRY (*Don't Repeat Yourself*).
 
 Asimismo, el controlador de costes (`cost_control.py`) y el orquestador (`orchestrator.py`) se han fortalecido frente a concurrencia e instanciación compleja mediante la introducción de cerrojos `threading.Lock` para accesos SQLite multihilo, serialización directa de modelos Pydantic `SemanticOutput` en caché y soporte de fábricas de capas (`layer_factories`).
+
+En los avances recientes orientados a la arquitectura SaaS y desacoplamiento de servicios:
+1. **Paquete Unificado de Persistencia (`watchgate/db/`)**: Implementado utilizando `SQLModel` (`User`, `UserAPIKey`, `UserTokenUsage`, `SemanticCache`, `PRScore`), con conexiones híbridas (SQLite con `PRAGMA journal_mode=WAL` para desarrollo local/tests y PostgreSQL para despliegues SaaS) y boveda de claves API con almacenamiento exclusivo de hash SHA-256 (`key_hash`).
+2. **Refactorización de `StaticLayer` (`watchgate/core/layers/static_layer.py`)**: Implementado un sistema de gestión persistente de reglas en `.watchgate/rules_cache/` con TTL de 24h, comprobaciones ligeras via `git ls-remote` con timeout de 5s, fallback offline y ejecución aislada sobre parches temporales (`diff_hunk`).
+3. **Ingesta de Diffs HTTP (`watchgate/core/diffparser.py`)**: Añadida la función `parse_diff_from_text()` utilizando la librería `unidiff` para construir objetos `NormalizedDiff` directamente desde parches en texto plano sin requerir repositorios Git locales.
+4. **Verificación de Pruebas**: Suite de pruebas ampliada alcanzando **244 tests unitarios e integrados pasados al 100 %**.
 
 ---
 
@@ -359,6 +365,7 @@ El núcleo de WatchGate, el módulo de pipeline compartido, la CLI, el cortocirc
 
 - [x] Implementación y verificación de Fase 0 (`models.py` y `base.py`).
 - [x] Implementación y testeo de `diffparser.py`.
+- [x] Extensión de `diffparser.py` con `parse_diff_from_text()` utilizando `unidiff`.
 - [x] Implementación y testeo de `aggregator.py` y `comment_template.py`.
 - [x] Implementación y testeo de `orchestrator.py` (con `layer_factories`).
 - [x] Implementación y testeo de `cost_control.py` (con soporte multihilo `threading.Lock`).
@@ -366,5 +373,13 @@ El núcleo de WatchGate, el módulo de pipeline compartido, la CLI, el cortocirc
 - [x] Refactorización y testeo de `cli.py`.
 - [x] Implementación y testeo de `shortcircuit.py`.
 - [x] Implementación y testeo de `deps_layer.py`.
+- [x] Refactorización y testeo de `static_layer.py` (con gestión de reglas en `.watchgate/rules_cache/` y parches temporales).
+- [x] Creación del paquete unificado de persistencia `watchgate/db/` con modelos `SQLModel` y boveda SHA-256.
 - [x] Implementación del adaptador de GitHub Action (`adapters/github_action/`).
+- [ ] **Tarea 3.1 — Engine API Server (`watchgate/api/`)**: Crear `main.py` y `auth.py` para autenticación por API Key SHA-256 (`wg_live_...`).
+- [ ] **Tarea 3.2 — Endpoint REST de Análisis (`POST /api/v1/analyze`)**: Crear router `routers/analyze.py` con persistencia asíncrona mediante `BackgroundTasks` de FastAPI.
+- [ ] **Tarea 3.3 — Middleware de Sanitización y Límites HTTP**: Configurar límite de payload (10 MB) y filtro de logging criptográfico para enmascarar `wg_live_*` y claves de LLMs (`[REDACTED_SECRET]`).
+- [ ] **Tarea 4.1 — Soporte de RAG Distribuido en la Nube**: Añadir soporte de `WATCHGATE_CHROMA_URL` en `retriever.py` e `indexer.py` para utilizar `chromadb.HttpClient` en la VPC interna de producción.
+- [ ] **Tarea 5.1 — Gestión de API Keys en el Dashboard**: Crear router `dashboard/backend/routers/keys.py` (`POST /keys`, `GET /keys`, `DELETE /keys/{id}`).
+- [ ] **Tarea 5.2 — Webhooks de GitHub App**: Implementar router `/api/v1/webhooks/github` en `watchgate/api/` con verificación HMAC `X-Hub-Signature-256`.
 - [ ] Ejecutar y validar la batería de los 10 casos de prueba de integración (`tests/cases/`).
