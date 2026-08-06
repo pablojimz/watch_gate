@@ -112,11 +112,11 @@ watchgate/
 - Se adopta **SQLModel** (librería oficial que fusiona Pydantic v2 y SQLAlchemy 2.0) en `watchgate/db/models.py`.
 - Un solo modelo define la tabla de base de datos y la validación Pydantic del contrato de la API, eliminando la duplicación de código y el riesgo de desincronización.
 
-### Condición 4: Soporte de RAG Cliente/Servidor Distribuido (`WATCHGATE_CHROMA_URL`)
-- Se actualizan `watchgate/core/rag/retriever.py` e `indexer.py` para inspeccionar la variable `WATCHGATE_CHROMA_URL`:
-  - Si la variable está definida (ej. `http://chroma.internal:8000`), utiliza `chromadb.HttpClient`.
-  - Si no está definida, utiliza `chromadb.PersistentClient(path=index_path)` para ejecución local.
-- Esto permite escalar el Engine API a $N$ contenedores en Kubernetes compartiendo el mismo servidor de vector search RAG.
+### Condición 4: Soporte de Base de Datos Vectorial RAG Distribuida Interna (`WATCHGATE_CHROMA_URL`)
+- El sistema RAG es **100 % privado e interno de la infraestructura SaaS de WatchGate**; ningún cliente externo tiene acceso directo a ChromaDB ni a los vectores de embeddings.
+- Para permitir que los $N$ contenedores/pods de la Engine API SaaS compartan el mismo clúster de búsqueda vectorial RAG dentro de la red privada (VPC), se actualizan `watchgate/core/rag/retriever.py` e `indexer.py` para consultar la variable de entorno interna `WATCHGATE_CHROMA_URL`:
+  - Si la variable está definida (ej. `http://chroma.internal:8000`), el backend usa `chromadb.HttpClient` dentro de la red privada.
+  - Si no está definida, utiliza `chromadb.PersistentClient(path=index_path)` para ejecución local/offline.
 
 ### Condición 5: Protección de Logs y Límite de Payload (10 MB)
 - En `watchgate/api/main.py`:
@@ -262,8 +262,8 @@ Autenticados mediante Cookies de Sesión JWT (OAuth/OIDC):
   - Implementar `auth.py` con autenticación por API Key SHA-256.
   - Crear `routers/analyze.py` con ejecución asíncrona mediante `BackgroundTasks`.
 
-- [ ] **Fase 4: Soporte de RAG Distribuido (`WATCHGATE_CHROMA_URL`)**
-  - Actualizar `retriever.py` e `indexer.py` para soportar `chromadb.HttpClient` cuando exista la variable de entorno `WATCHGATE_CHROMA_URL`.
+- [ ] **Fase 4: Soporte de RAG Distribuido Interno (`WATCHGATE_CHROMA_URL`)**
+  - Actualizar `retriever.py` e `indexer.py` para soportar `chromadb.HttpClient` en la red privada cuando exista la variable de entorno interna `WATCHGATE_CHROMA_URL`. Los clientes externos no tienen acceso al RAG; la consulta es 100 % privada entre la Engine API y el clúster vectorial.
 
 - [ ] **Fase 5: Gestión de API Keys en el Dashboard y Webhooks**
   - Implementar `/keys` en `dashboard/backend/routers/keys.py`.
