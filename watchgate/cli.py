@@ -10,25 +10,12 @@ import sys
 from pathlib import Path
 
 import watchgate.core.layers  # noqa: F401 - registrar capas en LAYER_REGISTRY
-from watchgate.config import WatchGateConfig, load_config
-from watchgate.core.aggregator import aggregate
+from watchgate.config import load_config
 from watchgate.core.comment_template import render_comment
-from watchgate.core.cost_control import CostController
 from watchgate.core.diffparser import parse_diff
-from watchgate.core.layers._semantic.layer import SemanticLayer
-from watchgate.core.layers._semantic.llm_factory import build_llm_client
-from watchgate.core.models import LayerResult, Semaforo
-from watchgate.core.orchestrator import LayerFactory, run_analysis
+from watchgate.core.models import Semaforo
+from watchgate.core.pipeline import run_full_analysis
 from watchgate.core.rag.indexer import DEFAULT_INDEX_PATH, build_index
-from watchgate.core.shortcircuit import evaluate_shortcircuit
-
-
-class _ConfigWithoutSemantic:
-    """Wrapper helper para calcular el score parcial sin la capa semántica."""
-
-    def __init__(self, full_config: WatchGateConfig) -> None:
-        self.weights = {k: v for k, v in full_config.weights.items() if k != "semantic"}
-        self.thresholds = full_config.thresholds
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -92,56 +79,7 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
         "author_login": args.author_login,
     }
 
-    cost_control = None
-    layer_factories: dict[str, LayerFactory] = {}
-
-    if config.weights.get("semantic", 0) > 0:
-        cost_control = CostController(
-            db_path=".watchgate/cost.db",
-            max_diff_tokens=config.max_diff_tokens,
-            monthly_budget_tokens=config.monthly_budget_tokens,
-        )
-        try:
-            llm_client = build_llm_client()
-            layer_factories["semantic"] = lambda: SemanticLayer(llm_client, cost_control)
-        except Exception:
-            # Si falla el cliente LLM (ej. sin API key), safe_analyze lo aislará
-            pass
-
-    try:
-        if config.shortcircuit_enabled:
-            partial_cfg = _ConfigWithoutSemantic(config)
-            partial_res = run_analysis(diff, metadata, partial_cfg)
-            shortcircuit_verdict = evaluate_shortcircuit(
-                partial_results=partial_res.layer_results,
-                weights=config.weights,
-                diff=diff,
-                thresholds=config.thresholds,
-            )
-            if shortcircuit_verdict is not None:
-                final_results = dict(partial_res.layer_results)
-                final_results["semantic"] = LayerResult(
-                    layer_name="semantic",
-                    risk_score=0,
-                    justification="",
-                    skipped=True,
-                    skip_reason="Cortocircuito de extremo aplicado",
-                )
-                aggregated = aggregate(
-                    results=final_results,
-                    weights=config.weights,
-                    diff=diff,
-                    pr_id=str(metadata["pr_id"]),
-                    repo=str(metadata["repo"]),
-                    thresholds=config.thresholds,
-                )
-            else:
-                aggregated = run_analysis(diff, metadata, config, layer_factories=layer_factories)
-        else:
-            aggregated = run_analysis(diff, metadata, config, layer_factories=layer_factories)
-    finally:
-        if cost_control is not None:
-            cost_control.close()
+    aggregated = run_full_analysis(diff, metadata, config)
 
     if args.format == "json":
         output_text = aggregated.model_dump_json(indent=2)
