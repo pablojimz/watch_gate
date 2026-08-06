@@ -1,0 +1,16 @@
+    "Typing :: Typed",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "MarkupSafe>=2.0"
+]
+dynamic = ["version"]
+
+[project.urls]
+Chat = "https://discord.gg/pallets"
+
+[project.optional-dependencies]
+i18n = ["Babel>=2.7"]
+
+[dependency-groups]
+dev = [

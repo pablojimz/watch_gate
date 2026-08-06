@@ -1,0 +1,8 @@
+
+[package.metadata]
+requires-dist = [
+    { name = "babel", marker = "extra == 'i18n'", specifier = ">=2.17" },
+    { name = "markupsafe", specifier = ">=3.0" },
+]
+provides-extras = ["i18n"]
+
