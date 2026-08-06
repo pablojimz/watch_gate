@@ -1,0 +1,7 @@
+[tool.setuptools_scm]
+
+[tool.setuptools.packages.find]
+include = ["tqdm", "tqdm.*"]
+
+[project.urls]
+homepage = "https://tqdm.github.io"

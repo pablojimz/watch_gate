@@ -1,0 +1,10 @@
+    - uses: actions/checkout@v7
+    - uses: actions/setup-python@v6
+      with: {python-version: '3.x'}
+    - run: pip install 'tox>=4'
+    - run: tox
+      env:
+        TOXENV: ${{ matrix.TOXENV }}
+  asvfull:
+    if: (github.event_name == 'push' && startsWith(github.ref, 'refs/tags')) || github.event_name == 'schedule'
+    name: Benchmark (Full)
