@@ -273,3 +273,62 @@ def test_mantenedor_cannot_edit_llm(client: TestClient) -> None:
         ).status_code
         == 403
     )
+
+
+def _ingest_payload(repo: str = "acme/payments-api", pr_id: str = "99") -> dict:
+    return {
+        "result": {
+            "score": 12,
+            "semaforo": "verde",
+            "layer_results": {
+                "semantic": {
+                    "layer_name": "semantic",
+                    "risk_score": 12,
+                    "justification": "sin hallazgos",
+                    "skipped": False,
+                }
+            },
+            "weights_used": {"semantic": 1.0},
+            "pr_id": pr_id,
+            "repo": repo,
+            "timestamp": "2026-08-06T00:00:00+00:00",
+        },
+        "author_login": "ci-bot",
+    }
+
+
+def test_ingest_score_open_when_no_token_configured(client: TestClient) -> None:
+    """Config del fixture `client`: sin WATCHGATE_DASHBOARD_INGEST_TOKEN --
+    ingest_score debe aceptar la llamada sin ninguna cabecera Authorization,
+    igual que hará la Action cuando el operador no active el token (dev)."""
+    resp = client.post("/api/scores", json=_ingest_payload())
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["repo"] == "acme/payments-api"
+
+
+def test_ingest_score_requires_bearer_token_when_configured(
+    monkeypatch, tmp_path: Path
+) -> None:
+    db_path = tmp_path / "ingest.db"
+    monkeypatch.setenv("WATCHGATE_DASHBOARD_DB", str(db_path))
+    monkeypatch.setenv("WATCHGATE_DASHBOARD_SEED", "0")
+    monkeypatch.setenv("WATCHGATE_DASHBOARD_INGEST_TOKEN", "secreto-ci")
+
+    app = create_app()
+    with TestClient(app) as ingest_client:
+        no_auth = ingest_client.post("/api/scores", json=_ingest_payload())
+        assert no_auth.status_code == 401
+
+        wrong_auth = ingest_client.post(
+            "/api/scores",
+            json=_ingest_payload(),
+            headers={"Authorization": "Bearer token-incorrecto"},
+        )
+        assert wrong_auth.status_code == 401
+
+        ok = ingest_client.post(
+            "/api/scores",
+            json=_ingest_payload(),
+            headers={"Authorization": "Bearer secreto-ci"},
+        )
+        assert ok.status_code == 201, ok.text
