@@ -186,3 +186,12 @@ def test_cost_controller_context_manager_and_idempotent_close():
         assert ctrl.budget_remaining("repo") == 1000
     # Al salir del bloque con, se cierra automáticamente sin lanzar error
     ctrl.close()  # La segunda llamada debe ser no-op e idempotente
+
+
+def test_unlimited_budget_tokens_none():
+    tmp_dir = tempfile.mkdtemp()
+    db_path = str(Path(tmp_dir) / "cost.db")
+    ctrl = CostController(db_path=db_path, max_diff_tokens=50, monthly_budget_tokens=None)
+    assert ctrl.budget_remaining("org/repo") > 0
+    assert ctrl.should_skip("org/repo") is False
+    ctrl.close()
