@@ -1,0 +1,103 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+@theme inline {
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-warning: var(--warning);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-lg: var(--radius);
+}
+
+:root {
+  --radius: 0.625rem;
+  --font-scale: 1;
+  --page-gap: 1.5rem;
+  --background: #f7f8fb;
+  --foreground: #1c2430;
+  --card: #ffffff;
+  --card-foreground: #1c2430;
+  --primary: #3b6ea5;
+  --primary-foreground: #f8fafc;
+  --secondary: #eef2f6;
+  --secondary-foreground: #243041;
+  --muted: #eef2f6;
+  --muted-foreground: #667788;
+  --accent: #e8eef4;
+  --accent-foreground: #243041;
+  --destructive: #c23b3b;
+  --destructive-foreground: #f8fafc;
+  --warning: #d4a017;
+  --border: #d9e0e8;
+  --input: #d9e0e8;
+  --ring: #3b6ea5;
+  --semaforo-verde: #3d9b5f;
+  --semaforo-amarillo: #d4a017;
+  --semaforo-rojo: #c23b3b;
+}
+
+.dark {
+  --background: #10151c;
+  --foreground: #e8edf3;
+  --card: #171e27;
+  --card-foreground: #e8edf3;
+  --primary: #6a9fd4;
+  --primary-foreground: #0d1218;
+  --secondary: #1f2833;
+  --secondary-foreground: #d7dee7;
+  --muted: #1f2833;
+  --muted-foreground: #9aa8b8;
+  --accent: #243041;
+  --accent-foreground: #e8edf3;
+  --destructive: #e06a6a;
+  --destructive-foreground: #140c0c;
+  --warning: #e0b84a;
+  --border: #2a3442;
+  --input: #2a3442;
+  --ring: #6a9fd4;
+}
+
+html[data-density='compact'] {
+  --page-gap: 1rem;
+}
+
+html[data-font-scale='sm'] {
+  --font-scale: 0.92;
+}
+
+html[data-font-scale='lg'] {
+  --font-scale: 1.08;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-size: calc(1rem * var(--font-scale));
+  }
+}
