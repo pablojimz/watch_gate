@@ -42,23 +42,21 @@ def diff_hash(diff: NormalizedDiff) -> str:
 class CostController:
     db_path: str
     max_diff_tokens: int
-    monthly_budget_tokens: int
+    monthly_budget_tokens: int | None
     _conn: sqlite3.Connection | None
     _lock: threading.Lock
 
-    def __init__(self, db_path: str, max_diff_tokens: int, monthly_budget_tokens: int) -> None:
+    def __init__(
+        self, db_path: str, max_diff_tokens: int, monthly_budget_tokens: int | None
+    ) -> None:
         self.db_path = db_path
         self.max_diff_tokens = max_diff_tokens
         self.monthly_budget_tokens = monthly_budget_tokens
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         # check_same_thread=False + Lock: orchestrator.py ejecuta las capas en
         # un ThreadPoolExecutor, así que esta instancia se usa desde un hilo
-        # distinto al que la construyó -- sin esto, sqlite3 lanza
-        # "SQLite objects created in a thread can only be used in that same
-        # thread" (reproducido en la revisión). El flag por sí solo permite
-        # el acceso entre hilos, pero sqlite3 sigue sin garantizar seguridad
-        # ante uso concurrente real sobre una misma conexión, de ahí el Lock.
-        self._conn = sqlite3.connect(db_path, check_same_thread=False)
+        # distinto al que la construyó. El timeout=30.0 previene bloqueos de SQLite.
+        self._conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30.0)
         self._lock = threading.Lock()
         with self._lock:
             _ = self._conn.executescript(_SCHEMA)
@@ -190,6 +188,8 @@ class CostController:
             conn.commit()
 
     def budget_remaining(self, repo: str) -> int:
+        if self.monthly_budget_tokens is None or self.monthly_budget_tokens <= 0:
+            return 999_999_999
         month = self._current_month()
         conn = self._get_conn()
         with self._lock:
