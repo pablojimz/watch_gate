@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from watchgate.db.connection import get_session, init_db
 from watchgate.db.models import (
+    Organization,
     PRScore,
     SemanticCache,
     User,
@@ -17,6 +18,7 @@ from watchgate.db.models import (
 )
 
 __all__ = [
+    "Organization",
     "PRScore",
     "SemanticCache",
     "User",

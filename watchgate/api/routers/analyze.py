@@ -14,7 +14,7 @@ from watchgate.core.diffparser import parse_diff_from_text
 from watchgate.core.models import AggregatedResult, CommitAuthor
 from watchgate.core.pipeline import run_full_analysis
 from watchgate.db.connection import default_engine
-from watchgate.db.models import User, UserAPIKey
+from watchgate.db.models import Organization, User, UserAPIKey
 from watchgate.db.repository import record_token_usage, save_pr_score
 
 router = APIRouter(prefix="/api/v1", tags=["Analysis"])
@@ -41,30 +41,34 @@ class AnalyzeRequest(BaseModel):
     )
 
 
-def _persist_score_and_usage(result: AggregatedResult, user_id: str) -> None:
+def _persist_score_and_usage(
+    result: AggregatedResult, user_id: str, org_id: str | None = None
+) -> None:
     """Tarea en segundo plano para guardar el resultado en pr_scores e imputar tokens."""
     with Session(default_engine) as session:
-        save_pr_score(session, aggregated_result=result, user_id=user_id)
+        save_pr_score(session, aggregated_result=result, user_id=user_id, org_id=org_id)
 
         # Si la capa semántica fue ejecutada y no omitida, estimamos e imputamos el consumo
         sem_res = result.layer_results.get("semantic")
         if sem_res and not sem_res.skipped:
             # Estimación básica de tokens de inferencia (o uso mínimo base de ~1500 tokens)
             estimated_tokens = 1500 + (sem_res.tool_calls_made * 500)
-            record_token_usage(session, user_id=user_id, tokens_used=estimated_tokens)
+            record_token_usage(
+                session, user_id=user_id, tokens_used=estimated_tokens, org_id=org_id
+            )
 
 
 @router.post("/analyze", response_model=AggregatedResult)
 def analyze_pr(
     request: AnalyzeRequest,
     background_tasks: BackgroundTasks,
-    auth: tuple[UserAPIKey, User] = Depends(get_current_user_from_api_key),
+    auth: tuple[UserAPIKey, User, Organization] = Depends(get_current_user_from_api_key),
 ) -> AggregatedResult:
     """Ejecuta el análisis completo de la PR enviada en texto plano.
 
     Persiste los resultados de forma asíncrona mediante BackgroundTasks.
     """
-    _, user = auth
+    _, user, org = auth
 
     diff = parse_diff_from_text(
         diff_text=request.diff_text,
@@ -87,6 +91,8 @@ def analyze_pr(
     result = run_full_analysis(diff=diff, metadata=request.metadata, config=config)
 
     # Persistencia asíncrona en segundo plano para no demorar el tiempo de respuesta HTTP
-    background_tasks.add_task(_persist_score_and_usage, result=result, user_id=user.id)
+    background_tasks.add_task(
+        _persist_score_and_usage, result=result, user_id=user.id, org_id=org.id
+    )
 
     return result

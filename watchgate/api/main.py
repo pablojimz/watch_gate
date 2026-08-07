@@ -97,7 +97,8 @@ async def max_payload_size_middleware(
         except ValueError:
             pass
 
-    return await call_next(request)
+    response: Response = await call_next(request)
+    return response
 
 
 app.include_router(analyze.router)
