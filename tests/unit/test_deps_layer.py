@@ -1,22 +1,17 @@
-"""Pruebas unitarias para la capa de dependencias (deps_layer.py)."""
+"""Pruebas unitarias para la capa de dependencias (deps_layer.py) --
+señales de ataque a la cadena de suministro. Las CVEs conocidas (OSV) se
+prueban aparte en test_vulnerabilities_layer.py."""
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
-
-import httpx
-
-from watchgate.core.layers.base import LAYER_REGISTRY
-from watchgate.core.layers.deps_layer import (
-    DependencyChange,
-    DepsLayer,
-    OSVCache,
-    TyposquatChecker,
+from watchgate.core.layers._shared import (
     parse_cargo_toml,
     parse_package_json,
     parse_pkgbuild,
     parse_requirements_txt,
 )
+from watchgate.core.layers.base import LAYER_REGISTRY
+from watchgate.core.layers.deps_layer import DepsLayer, TyposquatChecker
 from watchgate.core.models import CommitAuthor, FileChange, FileStatus, NormalizedDiff
 
 
@@ -37,7 +32,7 @@ def test_deps_layer_registered() -> None:
 
 
 def test_no_manifests_changed() -> None:
-    layer = DepsLayer(cache_db_path=":memory:")
+    layer = DepsLayer()
     diff = _make_diff(
         [
             FileChange(
@@ -55,7 +50,7 @@ def test_no_manifests_changed() -> None:
 
 
 def test_typosquatting_detection() -> None:
-    layer = DepsLayer(cache_db_path=":memory:")
+    layer = DepsLayer()
     diff = _make_diff(
         [
             FileChange(
@@ -67,90 +62,14 @@ def test_typosquatting_detection() -> None:
             )
         ]
     )
-    with patch.object(layer, "_query_osv_batch", return_value={0: ({}, None)}):
-        res = layer.analyze(diff, {})
+    res = layer.analyze(diff, {})
     assert res.risk_score >= 75
     assert "1odash" in res.justification
     assert "lodash" in res.justification
 
 
-def test_osv_vulnerability_high() -> None:
-    layer = DepsLayer(cache_db_path=":memory:")
-    diff = _make_diff(
-        [
-            FileChange(
-                path="requirements.txt",
-                status=FileStatus.MODIFIED,
-                diff_hunk="@@ -1,0 +1,1 @@\n+vulnerable-pkg==1.0.0",
-                additions=1,
-                deletions=0,
-            )
-        ]
-    )
-    osv_response = {
-        "vulns": [
-            {
-                "id": "GHSA-1234-5678",
-                "database_specific": {"severity": "HIGH"},
-            }
-        ]
-    }
-
-    with patch.object(layer, "_query_osv_batch", return_value={0: (osv_response, None)}):
-        res = layer.analyze(diff, {})
-
-    assert res.risk_score == 90
-    assert "Vulnerabilidad crítica/alta" in res.justification
-
-
-def test_osv_network_error_graceful() -> None:
-    layer = DepsLayer(cache_db_path=":memory:")
-    diff = _make_diff(
-        [
-            FileChange(
-                path="requirements.txt",
-                status=FileStatus.MODIFIED,
-                diff_hunk="@@ -1,0 +1,1 @@\n+some-new-pkg==1.0.0",
-                additions=1,
-                deletions=0,
-            )
-        ]
-    )
-
-    with patch("httpx.post", side_effect=httpx.ConnectError("Connection refused")):
-        res = layer.analyze(diff, {})
-
-    assert res.risk_score == 10  # Score base de nueva dependencia, no elevado por error de red
-    assert "No verificable por fallo de red" in res.justification
-
-
-def test_osv_sqlite_cache() -> None:
-    cache = OSVCache(db_path=":memory:")
-    change = DependencyChange(ecosystem="npm", name="express", new_version="4.18.2")
-
-    mock_resp = MagicMock()
-    mock_resp.status_code = 200
-    mock_resp.json.return_value = {"vulns": []}
-
-    with patch("httpx.post", return_value=mock_resp) as mock_post:
-        layer = DepsLayer(cache_db_path=":memory:")
-        layer.cache = cache
-
-        # Primera consulta
-        res1, err1 = layer._query_osv(change)
-        assert err1 is None
-        assert res1 == {"vulns": []}
-        assert mock_post.call_count == 1
-
-        # Segunda consulta (debe usar la caché)
-        res2, err2 = layer._query_osv(change)
-        assert err2 is None
-        assert res2 == {"vulns": []}
-        assert mock_post.call_count == 1  # No volvió a llamar a la red
-
-
 def test_dangerous_install_script() -> None:
-    layer = DepsLayer(cache_db_path=":memory:")
+    layer = DepsLayer()
     diff_hunk = (
         '@@ -5,1 +5,3 @@\n'
         ' "scripts": {\n'
@@ -171,8 +90,7 @@ def test_dangerous_install_script() -> None:
             )
         ]
     )
-    with patch.object(layer, "_query_osv_batch", return_value={0: ({}, None)}):
-        res = layer.analyze(diff, {})
+    res = layer.analyze(diff, {})
     assert res.risk_score >= 80
     assert "Script de instalación sospechoso" in res.justification
 
@@ -232,9 +150,8 @@ def test_git_url_dependency_parsing() -> None:
             )
         ]
     )
-    layer = DepsLayer(cache_db_path=":memory:")
-    with patch.object(layer, "_query_osv_batch", return_value={}):
-        res = layer.analyze(diff, {})
+    layer = DepsLayer()
+    res = layer.analyze(diff, {})
     assert res.risk_score >= 75
     assert "Instalación directa desde URL/Git" in res.justification
 
@@ -246,69 +163,6 @@ def test_git_url_dependency_parsing() -> None:
     assert len(cargo) == 1
     assert cargo[0].name == "my-crate"
     assert cargo[0].is_direct_url is True
-
-
-def test_osv_batch_query_and_cache() -> None:
-    cache = OSVCache(db_path=":memory:")
-    c1 = DependencyChange(ecosystem="PyPI", name="pkg1", new_version="1.0")
-    c2 = DependencyChange(ecosystem="PyPI", name="pkg2", new_version="2.0")
-
-    mock_resp = MagicMock()
-    mock_resp.status_code = 200
-    mock_resp.json.return_value = {
-        "results": [
-            {"vulns": []},
-            {"vulns": [{"id": "CVE-2026-0001", "database_specific": {"severity": "HIGH"}}]},
-        ]
-    }
-
-    layer = DepsLayer(cache_db_path=":memory:")
-    layer.cache = cache
-
-    with patch("httpx.post", return_value=mock_resp) as mock_post:
-        res_batch = layer._query_osv_batch([c1, c2])
-        assert len(res_batch) == 2
-        assert mock_post.call_count == 1  # Exactamente 1 sola llamada HTTP batch POST
-        req_json = mock_post.call_args.kwargs["json"]
-        assert len(req_json["queries"]) == 2
-
-        # Comprobar que ambas fueron guardadas en la caché SQLite
-        cached_c1 = cache.get("pkg1", "PyPI", "1.0")
-        cached_c2 = cache.get("pkg2", "PyPI", "2.0")
-        assert cached_c1 == {"vulns": []}
-        assert cached_c2 is not None and len(cached_c2["vulns"]) == 1
-
-        # Segunda llamada con los mismos cambios debe usar la caché (0 peticiones HTTP nuevas)
-        res_batch_cached = layer._query_osv_batch([c1, c2])
-        assert len(res_batch_cached) == 2
-        assert mock_post.call_count == 1
-
-
-def test_osv_severity_precision_no_false_positives() -> None:
-    from watchgate.core.layers.deps_layer import _is_high_or_critical_vuln
-
-    # 1. Objeto con fecha "2023-09-10" sin severidad crítica/alta -> NO debe dar verdadero
-    vuln_low = {
-        "id": "GHSA-1111-2222",
-        "summary": "Fix released on 2023-09-10 v1.9.0",
-        "database_specific": {"severity": "MODERATE"},
-        "severity": [{"type": "CVSS_V3", "score": "5.3"}],
-    }
-    assert _is_high_or_critical_vuln(vuln_low) is False
-
-    # 2. Objeto con severidad alta explícita -> Debe dar verdadero
-    vuln_high = {
-        "id": "GHSA-3333-4444",
-        "database_specific": {"github_reviewed_severity": "HIGH"},
-    }
-    assert _is_high_or_critical_vuln(vuln_high) is True
-
-    # 3. Objeto con score CVSS 9.8 -> Debe dar verdadero
-    vuln_crit = {
-        "id": "GHSA-5555-6666",
-        "database_specific": {"cvss": {"score": 9.8}},
-    }
-    assert _is_high_or_critical_vuln(vuln_crit) is True
 
 
 def test_package_json_standalone_script() -> None:
@@ -330,9 +184,8 @@ def test_package_json_standalone_script() -> None:
         deletions=0,
     )
     diff = _make_diff([fc])
-    layer = DepsLayer(cache_db_path=":memory:")
-    with patch.object(layer, "_query_osv_batch", return_value={}):
-        res = layer.analyze(diff, {})
+    layer = DepsLayer()
+    res = layer.analyze(diff, {})
     assert res.risk_score >= 80
     assert "Script de instalación sospechoso" in res.justification
 
@@ -343,3 +196,25 @@ def test_typosquatting_underscore_normalization() -> None:
     is_ts, ref = checker.is_typosquatting("aio_graam", "PyPI")
     assert is_ts is True
     assert ref == "aiogram"
+
+
+def test_new_dependency_without_attack_signals_gets_baseline_score() -> None:
+    """Sin typosquatting/script/URL directa, una dependencia nueva sigue
+    dando un score bajo pero no cero -- y la justificación ya no debe
+    mencionar CVEs/OSV, eso lo comprueba ahora vulnerabilities_layer.py."""
+    layer = DepsLayer()
+    diff = _make_diff(
+        [
+            FileChange(
+                path="requirements.txt",
+                status=FileStatus.MODIFIED,
+                diff_hunk="@@ -1,0 +1,1 @@\n+some-new-pkg==1.0.0",
+                additions=1,
+                deletions=0,
+            )
+        ]
+    )
+    res = layer.analyze(diff, {})
+    assert res.risk_score == 10
+    assert "vulnerabilidades" not in res.justification.lower()
+    assert "sin señales de typosquatting" in res.justification.lower()

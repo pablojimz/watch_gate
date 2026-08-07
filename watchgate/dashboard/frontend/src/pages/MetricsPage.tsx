@@ -41,7 +41,7 @@ export default function MetricsPage() {
           feedback_correct: 0,
           feedback_false_positive: 0,
           feedback_pending: 0,
-          layer_avg: { static: 0, deps: 0, reputation: 0, semantic: 0 },
+          layer_avg: { static: 0, deps: 0, vulnerabilities: 0, reputation: 0, semantic: 0 },
           by_repo: [],
           trend: [],
         })

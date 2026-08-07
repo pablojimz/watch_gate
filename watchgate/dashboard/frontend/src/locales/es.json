@@ -180,6 +180,7 @@
   "layers": {
     "static": "Estática",
     "deps": "Dependencias",
+    "vulnerabilities": "Vulnerabilidades",
     "reputation": "Reputación",
     "semantic": "Semántica"
   },

@@ -220,6 +220,8 @@ def test_cli_analyze_overrides(tmp_git_repo, capsys):
             "--weight",
             "dependencies=0.00",
             "--weight",
+            "vulnerabilities=0.00",
+            "--weight",
             "reputation=0.00",
             "--threshold",
             "red=95",

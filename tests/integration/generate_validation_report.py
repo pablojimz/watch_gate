@@ -9,6 +9,11 @@ Llama de verdad a la API de Gemini para cada caso de `tests/cases/` (mismo
 coste que `pytest -m integration`); no se ejecuta en CI por defecto. Con
 cientos de casos, se ejecutan en paralelo (hilos, la propia llamada HTTP a
 Gemini libera el GIL) para que la tanda completa tarde minutos y no horas.
+
+Corre las 5 capas reales (`static`, `dependencies`, `vulnerabilities`,
+`reputation`, `semantic`) vía `pipeline_runner.run_full_pipeline` -- ver la
+nota histórica en `pipeline_runner.py` sobre por qué versiones anteriores de
+este informe solo reflejaban `reputation`+`semantic`.
 """
 
 from __future__ import annotations
@@ -123,9 +128,10 @@ def main() -> None:
         + (f", {n_error} con error de ejecución" if n_error else "")
         + ".**",
         "",
-        "> `static_layer.py`/`deps_layer.py` (Línea 3) siguen sin implementar: el score de "
-        "esta suite es la media ponderada renormalizada de `reputation` (0.15) + `semantic` "
-        "(0.40) únicamente, no las 4 capas de la memoria §8.",
+        "> Score calculado con las 5 capas reales (`static` 0.25, `dependencies` 0.10, "
+        "`vulnerabilities` 0.10, `reputation` 0.15, `semantic` 0.40) -- ver "
+        "`tests/integration/pipeline_runner.py` para la nota histórica sobre por qué "
+        "informes anteriores a este solo reflejaban `reputation`+`semantic`.",
         "",
         "## Resumen por clase y dificultad",
         "",

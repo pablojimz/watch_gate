@@ -17,7 +17,8 @@ def test_defaults_when_no_yaml_and_no_env(monkeypatch):
 
     expected_weights = {
         "static": 0.25,
-        "dependencies": 0.20,
+        "dependencies": 0.10,
+        "vulnerabilities": 0.10,
         "reputation": 0.15,
         "semantic": 0.40,
     }

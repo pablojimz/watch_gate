@@ -163,7 +163,7 @@ def test_semantic_floor_does_not_trigger_below_confidence_or_score_threshold():
         {
             "reputation": _result("reputation", 0),
             "semantic": _result(
-                "semantic", 95, category=RiskCategory.OFUSCACION, confidence=Confidence.ALTA
+                "semantic", 95, category=RiskCategory.NINGUNA, confidence=Confidence.ALTA
             ),
         },
         weights,
@@ -177,6 +177,38 @@ def test_semantic_floor_does_not_trigger_below_confidence_or_score_threshold():
     assert baja_confianza.semaforo != Semaforo.ROJO
     assert score_insuficiente.semaforo != Semaforo.ROJO
     assert categoria_no_grave.semaforo != Semaforo.ROJO
+
+
+def test_high_confidence_obfuscation_semantic_floors_score_to_red():
+    """Caso real (tests/cases/prompt_injection_fake_approval y
+    prompt_injection_hides_real_payload): `_apply_prompt_injection_floor`
+    (`_semantic/layer.py`) fuerza semantic=100/confidence=alta/categoría
+    ofuscación de forma determinista y sin margen de duda -- el intento de
+    manipular al revisor es la prueba en sí. Con las 5 capas reales,
+    static/dependencies/vulnerabilities no tienen nada que ver en un ataque
+    que vive en un comentario, así que sin este suelo el combinado se
+    quedaba en 51 (amarillo) pese al 100 semántico."""
+    results = {
+        "static": _result("static", 0),
+        "dependencies": _result("dependencies", 0),
+        "vulnerabilities": _result("vulnerabilities", 0),
+        "reputation": _result("reputation", 75),
+        "semantic": _result(
+            "semantic", 100, category=RiskCategory.OFUSCACION, confidence=Confidence.ALTA
+        ),
+    }
+    weights = {
+        "static": 0.25,
+        "dependencies": 0.10,
+        "vulnerabilities": 0.10,
+        "reputation": 0.15,
+        "semantic": 0.40,
+    }
+
+    out = aggregate(results, weights, diff=None, pr_id="1", repo="org/repo")
+
+    assert out.score == 70
+    assert out.semaforo == Semaforo.ROJO
 
 
 def test_semantic_floor_never_lowers_a_score_that_was_already_higher():
