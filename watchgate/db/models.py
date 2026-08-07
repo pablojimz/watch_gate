@@ -6,7 +6,6 @@ Combina validación Pydantic v2 y ORM SQLAlchemy 2.0 en un único esquema.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Optional
 
 from sqlmodel import Field, SQLModel
 
@@ -20,7 +19,7 @@ class User(SQLModel, table=True):
     email: str = Field(index=True, unique=True)
     name: str
     role: str = Field(default="revisor")  # "admin_organizacion" | "mantenedor" | "revisor"
-    custom_llm_api_key: Optional[str] = None  # Opcional: Clave cifrada para modalidad BYOK
+    custom_llm_api_key: str | None = None  # Opcional: Clave cifrada para modalidad BYOK
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
@@ -36,8 +35,8 @@ class UserAPIKey(SQLModel, table=True):
     key_hash: str = Field(unique=True, index=True)  # SHA-256(raw_token)
     scopes: str = Field(default="analysis:write,scores:read")
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    expires_at: Optional[datetime] = None
-    last_used_at: Optional[datetime] = None
+    expires_at: datetime | None = None
+    last_used_at: datetime | None = None
 
 
 class UserTokenUsage(SQLModel, table=True):
@@ -68,7 +67,7 @@ class PRScore(SQLModel, table=True):
     id: str = Field(primary_key=True)
     repo: str = Field(index=True)
     pr_id: str
-    user_id: Optional[str] = Field(foreign_key="users.id", default=None)
+    user_id: str | None = Field(foreign_key="users.id", default=None)
     score: int
     semaforo: str  # "verde" | "amarillo" | "rojo"
     layer_results_json: str

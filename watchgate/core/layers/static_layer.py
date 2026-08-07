@@ -20,7 +20,6 @@ import stat
 import subprocess
 import tempfile
 import time
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +27,7 @@ from watchgate.core.layers.base import AnalysisLayer, register_layer
 from watchgate.core.models import (
     Confidence,
     FileStatus,
+    Finding,
     LayerResult,
     NormalizedDiff,
     RiskCategory,
@@ -285,6 +285,8 @@ class StaticLayer(AnalysisLayer):
                     findings = self._run_semgrep_on_file(
                         temp_file.name, language, rules_dir=rules_dir
                     )
+                    for f in findings:
+                        f["file_path"] = file_change.path
                     all_findings.extend(findings)
                 finally:
                     if os.path.exists(temp_file.name):
@@ -319,10 +321,22 @@ class StaticLayer(AnalysisLayer):
         category = RiskCategory.OFUSCACION if max_risk_score >= 50 else RiskCategory.NINGUNA
         confidence = Confidence.MEDIA if max_risk_score > 0 else Confidence.BAJA
 
+        structured_findings = [
+            Finding(
+                file_path=f.get("file_path", "desconocido"),
+                line=f.get("line"),
+                rule_id=f.get("rule_id", "static-finding"),
+                message=f.get("message", "Hallazgo estático"),
+                severity="error" if f.get("risk_score", 0) >= 50 else "warning",
+            )
+            for f in all_findings
+        ]
+
         return LayerResult(
             layer_name=self.name,
             risk_score=max_risk_score,
             justification=justification,
+            findings=structured_findings,
             category=category,
             confidence=confidence,
         )

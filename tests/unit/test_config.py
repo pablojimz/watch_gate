@@ -15,7 +15,13 @@ def test_defaults_when_no_yaml_and_no_env(monkeypatch):
     monkeypatch.delenv("WATCHGATE_MAX_DIFF_TOKENS", raising=False)
     config = load_config(yaml_path="/nonexistent/.watchgate.yml")
 
-    assert config.weights == {"static": 0.25, "deps": 0.20, "reputation": 0.15, "semantic": 0.40}
+    expected_weights = {
+        "static": 0.25,
+        "dependencies": 0.20,
+        "reputation": 0.15,
+        "semantic": 0.40,
+    }
+    assert config.weights == expected_weights
     assert config.thresholds == {"yellow": 40, "red": 70}
     assert config.max_diff_tokens == 8000
     assert config.block_on_red is True
@@ -30,7 +36,7 @@ def test_yaml_overrides_defaults():
 
     config = load_config(yaml_path=str(yaml_path))
 
-    assert config.weights == {"static": 0.5, "deps": 0.5}
+    assert config.weights == {"static": 0.5, "dependencies": 0.5}
     assert config.max_diff_tokens == 1234
     # Lo no especificado en el YAML conserva el default.
     assert config.thresholds == {"yellow": 40, "red": 70}

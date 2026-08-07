@@ -255,12 +255,21 @@ def insert_aggregated(
 ) -> int:
     layers = result.layer_results
 
+    def _get_layer(name: str) -> Any:
+        if name in layers:
+            return layers[name]
+        if name == "deps" and "dependencies" in layers:
+            return layers["dependencies"]
+        if name == "dependencies" and "deps" in layers:
+            return layers["deps"]
+        return None
+
     def score_of(name: str) -> int | None:
-        layer = layers.get(name)
+        layer = _get_layer(name)
         return None if layer is None else layer.risk_score
 
     def skipped_of(name: str) -> bool:
-        layer = layers.get(name)
+        layer = _get_layer(name)
         return True if layer is None else layer.skipped
 
     semantic = layers.get("semantic")

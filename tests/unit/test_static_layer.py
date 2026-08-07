@@ -80,7 +80,12 @@ def test_static_layer_with_findings_takes_max_score() -> None:
     )
 
     mock_findings = [
-        {"tool": "semgrep", "rule_id": "rules.eval-exec-dynamic", "message": "eval()", "risk_score": 60},
+        {
+            "tool": "semgrep",
+            "rule_id": "rules.eval-exec-dynamic",
+            "message": "eval()",
+            "risk_score": 60,
+        },
         {"tool": "semgrep", "rule_id": "rules.network-call", "message": "curl", "risk_score": 30},
     ]
 

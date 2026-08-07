@@ -207,7 +207,9 @@ def test_parse_diff_from_text_basic() -> None:
         "+    x = 42\n"
     )
 
-    diff = parse_diff_from_text(raw_patch, base_sha="a1b2c3d", head_sha="e5f6g7h", repo_path="org/app")
+    diff = parse_diff_from_text(
+        raw_patch, base_sha="a1b2c3d", head_sha="e5f6g7h", repo_path="org/app"
+    )
 
     assert diff.base_sha == "a1b2c3d"
     assert diff.head_sha == "e5f6g7h"
