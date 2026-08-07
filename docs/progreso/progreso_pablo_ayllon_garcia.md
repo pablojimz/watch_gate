@@ -615,7 +615,9 @@ Adicionalmente, se han completado los siguientes hitos de infraestructura, API S
     - Hook POSIX `pre-receive` universal con soporte para repos Bare, Gitolite, GitLab, Bitbucket, Gerrit y SSH; manejo explícito de SHA nulo (`00*40`), timeout HTTP de 8s y bloqueo con exit code 1 y salida por `stderr`.
     - Receiver de Webhooks para **GitLab** (`POST /api/v1/webhooks/gitlab`) y **Bitbucket** (`POST /api/v1/webhooks/bitbucket`) con verificación de firma HMAC/Token de secreto.
   - Conexión de routers REST en `watchgate/api/main.py`.
-- **Funcionalidades pendientes**: Fase 5 (Servidor MCP Nativo en `stdio` `watchgate/mcp/`).
+- **Funcionalidades pendientes**:
+  - **Fase 5**: Servidor MCP Nativo en `stdio` (`watchgate/mcp/`) con las 5 herramientas de seguridad.
+  - **Fase 6**: Dashboard SaaS (métricas por organización y consumo por agente) y manuales de usuario (`docs/manual_mcp.md` y `docs/manual_git_hooks.md`).
 - **Partes completas**: Todos los modelos, servicios, esquemas, adaptadores y routers verificados mediante `tests/unit/test_db.py`, `tests/unit/test_db_multitenant.py`, `tests/unit/test_quota_degraded.py`, `tests/unit/test_agent_api.py`, `tests/unit/test_git_hook.py` y `tests/unit/test_webhooks_multiplatform.py`.
 
 #### Arquitectura e integración
@@ -638,7 +640,7 @@ Adicionalmente, se han completado los siguientes hitos de infraestructura, API S
 #### Problemas detectados: Ninguno.
 #### Posibles mejoras: Añadir migraciones con Alembic cuando el esquema evolucione.
 #### Estado para otros desarrolladores: Estable y verificado con tests.
-#### Próximos pasos: Conectar el middleware de autenticación de la API con `Repository.verify_api_key`.
+#### Próximos pasos: Implementar la Fase 5 del Plan Maestro (Servidor MCP Nativo en `stdio` `watchgate/mcp/`).
 
 ---
 
@@ -829,9 +831,12 @@ La suite de tests unitarios e integrados cuenta con **244 pruebas pasadas al 100
 
 ## Alta prioridad
 
-1. **Despliegue e Integración de la Engine API SaaS (`watchgate/api/`)**:
-   - Crear los routers `routers/analyze.py` conectándolos con `parse_diff_from_text` y `run_full_analysis`.
-   - Implementar el middleware de autenticación por API Key SHA-256 utilizando `watchgate/db/repository.py`.
+1. **Fase 5 — Servidor MCP Nativo (`watchgate/mcp/`)**:
+   - Implementar el servidor MCP en modo `stdio` con las 5 herramientas de seguridad para agentes de IDE (OpenCode, Cursor, VS Code, Claude Desktop).
+
+2. **Fase 6 — Métricas en Dashboard & Manuales de Usuario**:
+   - Vistas en el Dashboard backend/frontend para métricas de organizaciones y consumo de tokens por agente.
+   - Redacción de manuales de uso: `docs/manual_mcp.md` y `docs/manual_git_hooks.md`.
 
 ## Media prioridad
 
@@ -873,4 +878,6 @@ La suite de tests unitarios e integrados cuenta con **244 pruebas pasadas al 100
 - [x] **Fase 2 Plan SaaS Agentes — Capa de Servicios de Gobernanza y Cuotas (`watchgate/service/`)**: Implementar `QuotaService` (control de presupuesto + Modo Degradado B con HTTP 200 OK) y `PolicyService` (`policy_json`) con suite `tests/unit/test_quota_degraded.py`.
 - [x] **Fase 3 Plan SaaS Agentes — Adaptadores REST para Agentes de IA (`/api/v1/agent/*`)**: Implementar `/precheck`, `/analyze`, `/verify-fix` con matching sintáctico `compute_finding_signature()` y `AgentGuidance` con suite `tests/unit/test_agent_api.py`.
 - [x] **Fase 4 Plan SaaS Agentes — Adaptadores Git Multi-Plataforma & Webhooks**: Implementar Hook POSIX `pre-receive` universal (`watchgate/adapters/git_hook/pre_receive.py`) y Webhooks para GitLab y Bitbucket con suites `tests/unit/test_git_hook.py` y `tests/unit/test_webhooks_multiplatform.py`.
+- [ ] **Fase 5 Plan SaaS Agentes — Servidor MCP Nativo en stdio (`watchgate/mcp/`)**: Implementar módulo `watchgate/mcp/` con las 5 herramientas (`watchgate_analyze_diff`, `watchgate_precheck`, `watchgate_explain_risk`, `watchgate_verify_fix`, `watchgate_query_threat_kb`) y comando CLI `watchgate mcp serve --transport stdio`.
+- [ ] **Fase 6 Plan SaaS Agentes — Métricas en Dashboard & Manuales Multi-Git**: Implementar vistas de métricas por organización e historial de llamadas por agente en el Dashboard, y redactar `docs/manual_mcp.md` y `docs/manual_git_hooks.md`.
 - [x] Ejecutar y validar la batería de los 10 casos de prueba de integración (`tests/cases/`).
