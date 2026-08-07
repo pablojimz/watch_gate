@@ -12,6 +12,25 @@ RoleName = Literal["admin_organizacion", "mantenedor", "revisor"]
 FeedbackValue = Literal["correcto", "falso_positivo"]
 
 
+def normalize_login(value: str) -> str:
+    """Forma canónica de un login: sin espacios de sobra y en minúsculas.
+
+    Punto único de normalización para que "Alice", "alice" y " alice " sean
+    siempre el mismo usuario en todo el sistema (login local, dev-login,
+    OAuth GitHub/OIDC, y el campo de texto libre que un admin escribe en
+    Configuración → Accesos para asignar un rol) -- sin esto, la misma
+    persona podía acabar duplicada por una diferencia de mayúsculas o un
+    espacio, ya que `repo_roles`/`dashboard_users` comparan el string tal
+    cual. Se aplica tanto en los esquemas de entrada (ver validadores más
+    abajo) como en las funciones de `db.py` que reciben un login, para que
+    la garantía no dependa de que el caller pase siempre por un esquema.
+    """
+    normalized = value.strip().lower()
+    if not normalized:
+        raise ValueError("El nombre de usuario no puede estar vacío")
+    return normalized
+
+
 class User(BaseModel):
     login: str
 
@@ -61,6 +80,11 @@ class RepoRoleIn(BaseModel):
     repo: str
     role: RoleName
 
+    @field_validator("user_login")
+    @classmethod
+    def _normalize_user_login(cls, value: str) -> str:
+        return normalize_login(value)
+
 
 class RepoRoleOut(BaseModel):
     user_login: str
@@ -109,10 +133,20 @@ class DevLoginIn(BaseModel):
     login: str
     role: RoleName = "revisor"
 
+    @field_validator("login")
+    @classmethod
+    def _normalize_login(cls, value: str) -> str:
+        return normalize_login(value)
+
 
 class PasswordLoginIn(BaseModel):
     username: str
     password: str
+
+    @field_validator("username")
+    @classmethod
+    def _normalize_username(cls, value: str) -> str:
+        return normalize_login(value)
 
 
 class RepoMetricRow(BaseModel):

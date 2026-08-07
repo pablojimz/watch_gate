@@ -35,6 +35,7 @@ from watchgate.dashboard.backend.schemas import (
     ScoreOut,
     TrendPoint,
     UiSettings,
+    normalize_login,
 )
 
 DBConnection = sqlite3.Connection | PostgresConnection
@@ -376,7 +377,7 @@ def set_feedback(
 def get_role(conn: DBConnection, user_login: str, repo: str) -> RoleName | None:
     row = conn.execute(
         "SELECT role FROM repo_roles WHERE user_login = ? AND repo = ?",
-        (user_login, repo),
+        (normalize_login(user_login), repo),
     ).fetchone()
     return None if row is None else row["role"]  # type: ignore[return-value]
 
@@ -387,7 +388,7 @@ def upsert_role(conn: DBConnection, user_login: str, repo: str, role: RoleName) 
         INSERT INTO repo_roles (user_login, repo, role) VALUES (?, ?, ?)
         ON CONFLICT(user_login, repo) DO UPDATE SET role = excluded.role
         """,
-        (user_login, repo, role),
+        (normalize_login(user_login), repo, role),
     )
     conn.commit()
 
@@ -395,7 +396,7 @@ def upsert_role(conn: DBConnection, user_login: str, repo: str, role: RoleName) 
 def delete_role(conn: DBConnection, user_login: str, repo: str) -> bool:
     cur = conn.execute(
         "DELETE FROM repo_roles WHERE user_login = ? AND repo = ?",
-        (user_login, repo),
+        (normalize_login(user_login), repo),
     )
     conn.commit()
     return cur.rowcount > 0
@@ -432,7 +433,7 @@ def list_repos_for_user(conn: DBConnection, user_login: str, is_admin: bool) -> 
 
     rows = conn.execute(
         "SELECT DISTINCT repo FROM repo_roles WHERE user_login = ? ORDER BY repo",
-        (user_login,),
+        (normalize_login(user_login),),
     ).fetchall()
     return [r["repo"] for r in rows]
 
@@ -444,7 +445,7 @@ def user_is_org_admin(conn: DBConnection, user_login: str) -> bool:
         WHERE user_login = ? AND role = 'admin_organizacion'
         LIMIT 1
         """,
-        (user_login,),
+        (normalize_login(user_login),),
     ).fetchone()
     return row is not None
 
@@ -871,7 +872,7 @@ def upsert_user(
           password_hash = excluded.password_hash,
           display_name = excluded.display_name
         """,
-        (login, hash_password(password), display_name),
+        (normalize_login(login), hash_password(password), display_name),
     )
     conn.commit()
 
@@ -879,7 +880,7 @@ def upsert_user(
 def authenticate_user(conn: DBConnection, login: str, password: str) -> bool:
     row = conn.execute(
         "SELECT password_hash FROM dashboard_users WHERE login = ?",
-        (login,),
+        (normalize_login(login),),
     ).fetchone()
     if row is None:
         return False
