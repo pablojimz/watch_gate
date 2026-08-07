@@ -4,7 +4,7 @@
 
 - Responsable: Pablo Ayllón García
 - Última actualización: 2026-08-07
-- Estado general: Completado al 100% / Engine API Server SaaS, Autenticación API Keys SHA-256, Separación de Vulnerabilidades y Código Malicioso (Threat Nature), RAG Distribuido en Nube y Webhooks Implementados
+- Estado general: Completado al 100% / Engine API Server SaaS, Autenticación API Keys SHA-256, Capa de Datos Multi-Tenant & Identidad de Agente (Fase 1), Separación de Vulnerabilidades y Código Malicioso (Threat Nature), RAG Distribuido en Nube y Webhooks Implementados
 - Última revisión realizada por: Pablo Ayllón García (Ingeniero Senior de Arquitectura) / Javier Martín Jurado
 - Componentes registrados: CLI (`watchgate/cli.py`), Engine API Server (`watchgate/api/`), Dashboard API Keys Router (`watchgate/dashboard/backend/routers/keys.py`), RAG Cloud Support (`watchgate/core/rag/`), Cortocircuito (`watchgate/core/shortcircuit.py`), Capa de dependencias (`watchgate/core/layers/deps_layer.py`), Pipeline compartido (`watchgate/core/pipeline.py`), Control de coste (`watchgate/core/cost_control.py`), Orquestador (`watchgate/core/orchestrator.py`), Extractor de diffs (`watchgate/core/diffparser.py`), Persistencia SQLModel (`watchgate/db/`), Capa estática (`watchgate/core/layers/static_layer.py`), Modelos y Agregador (`watchgate/core/models.py`, `watchgate/core/layers/base.py`, `watchgate/core/aggregator.py`).
 
@@ -595,15 +595,21 @@ Adicionalmente, se han completado los siguientes hitos de infraestructura, API S
 | Fecha | Cambio realizado | Motivo | Responsable |
 |------|------------------|--------|-------------|
 | 2026-08-06 | Creación del paquete unificado de persistencia con `SQLModel` | Proveer el esquema ORM y repositorios de datos para la arquitectura Engine API SaaS | Pablo Ayllón García |
+| 2026-08-07 | Extensión Multi-Tenant e Identidad de Agente en SQLModel (`Organization`, `org_id`, `agent_id`, `SemanticCache` aislada) | Implementación de la Fase 1 del Plan SaaS para Agentes (`docs/planificacion/plan_adaptacion_saas_agentes.md`) | Pablo Ayllón García |
 
 #### Estado actual
 - **Funcionalidades implementadas**:
-  - Modelos ORM relacionales Pydantic + SQLAlchemy mediante `SQLModel`: `User`, `UserAPIKey`, `UserTokenUsage`, `SemanticCache`, `PRScore`.
+  - Modelos ORM relacionales Pydantic + SQLAlchemy mediante `SQLModel`: `Organization`, `User`, `UserAPIKey`, `UserTokenUsage`, `SemanticCache`, `PRScore`.
+  - Soporte Multi-Tenant: Modelo `Organization` con niveles de plan (`plan_tier`) y cuota mensual de tokens (`monthly_token_quota`).
+  - Vinculación de usuarios y claves API a organizaciones (`org_id`) y nombres descriptivos de agente (`default_agent_name`).
+  - Aislamiento estricto por organización en `SemanticCache` mediante clave primaria compuesta `(org_id, diff_hash)`.
+  - Trazabilidad de análisis por organización e identificador de agente en `PRScore` (`org_id`, `agent_id`).
+  - Imputación atómica por organización de consumo mensual de tokens en `UserTokenUsage`.
   - Conexión híbrida en `connection.py`: Soporte para SQLite (modo WAL, `check_same_thread=False`) en entornos locales/tests y PostgreSQL en producción mediante `WATCHGATE_DATABASE_URL`.
   - Vault de claves API (`UserAPIKey`): Generación y almacenamiento exclusivo por hash SHA-256 (`key_hash`) con prefijos públicos (`wg_live_...`).
-  - Repositorio relacional (`watchgate/db/repository.py`): Operaciones CRUD thread-safe y gestión de transacciones.
-- **Funcionalidades pendientes**: Integración completa en la Engine API de FastAPI.
-- **Partes completas**: Todos los modelos, conexión y repositorio verificados mediante `tests/unit/test_db.py`.
+  - Repositorio relacional (`watchgate/db/repository.py`): Operaciones CRUD thread-safe, resolución automática de organización en `verify_api_key` y gestión de transacciones.
+- **Funcionalidades pendientes**: Fase 2 (Servicio de Cuotas y Modo Degradado Inteligente en `watchgate/service/quota.py`).
+- **Partes completas**: Todos los modelos, conexión y repositorio verificados mediante `tests/unit/test_db.py` y `tests/unit/test_db_multitenant.py`.
 
 #### Arquitectura e integración
 - **Responsabilidad**: Gestionar la persistencia de datos de usuarios, claves API, presupuestos de tokens, caché semántica e histórico de puntuaciones de PRs.
@@ -856,4 +862,5 @@ La suite de tests unitarios e integrados cuenta con **244 pruebas pasadas al 100
 - [x] **Tarea 4.1 — Soporte de RAG Distribuido en la Nube**: Añadir soporte de `WATCHGATE_CHROMA_URL` en `retriever.py` e `indexer.py` para utilizar `chromadb.HttpClient` en la VPC interna de producción.
 - [x] **Tarea 5.1 — Gestión de API Keys en el Dashboard**: Crear router `dashboard/backend/routers/keys.py` (`POST /keys`, `GET /keys`, `DELETE /keys/{id}`).
 - [x] **Tarea 5.2 — Webhooks de GitHub App**: Implementar router `/api/v1/webhooks/github` en `watchgate/api/` con verificación HMAC `X-Hub-Signature-256`.
+- [x] **Fase 1 Plan SaaS Agentes — Capa de Datos Multi-Tenant & Identidad de Agente**: Implementar `Organization`, `org_id`, `agent_id`, aislamiento de `SemanticCache` e imputación de consumo en `watchgate/db/` con suite `tests/unit/test_db_multitenant.py`.
 - [x] Ejecutar y validar la batería de los 10 casos de prueba de integración (`tests/cases/`).
