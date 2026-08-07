@@ -59,10 +59,20 @@ class Confidence(str, Enum):
     BAJA = "baja"
 
 
+class Finding(BaseModel):
+    file_path: str
+    line: int | None = None
+    end_line: int | None = None
+    rule_id: str
+    message: str
+    severity: str = "warning"  # "error", "warning", "info"
+
+
 class LayerResult(BaseModel):
     layer_name: str
     risk_score: int = Field(ge=0, le=100)
     justification: str
+    findings: list[Finding] = Field(default_factory=list)
     category: RiskCategory | None = None  # solo la capa semántica lo rellena
     confidence: Confidence | None = None
     skipped: bool = False  # true si la capa se desactivó o se omitió por presupuesto

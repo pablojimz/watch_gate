@@ -6,7 +6,6 @@ import hashlib
 import secrets
 import uuid
 from datetime import UTC, datetime
-from typing import Any
 
 from sqlmodel import Session, select
 

@@ -89,6 +89,8 @@ watch_gate/
 
 ## Uso de la CLI (`watchgate`)
 
+Manual completo de la CLI disponible en [`docs/manual_cli.md`](docs/manual_cli.md).
+
 ### Instalación en desarrollo
 ```bash
 pip install -e .
@@ -96,32 +98,51 @@ pip install -e .
 .env/bin/pip install -e .
 ```
 
-### Comandos disponibles
+### Comandos y Modos de Uso
 
 #### 1. Analizar un diff (`watchgate analyze`)
-Realiza el análisis de riesgo entre dos commits o ramas Git:
+Realiza el análisis de riesgo entre dos commits, ramas o recibiendo el parche por la entrada estándar:
 
 ```bash
-# Salida en formato comentario Markdown
+# Salida en formato comentario Markdown / Rich TTY interactivo
 watchgate analyze --base main --head mi-rama
 
-# Salida en formato JSON
+# Ingesta por pipeline Unix (stdin)
+git diff main..HEAD | watchgate analyze --diff-stdin
+
+# Exportación en estándar SARIF v2.1.0 para GitHub Code Scanning
+watchgate analyze --base HEAD~1 --head HEAD --format sarif --output results.sarif
+
+# Exportación en formato JSON crudo
 watchgate analyze --base HEAD~1 --head HEAD --format json
 
-# Guardar la salida en un archivo
-watchgate analyze --base HEAD~1 --head HEAD --output resultado.md
+# Anotaciones de GitHub Actions (::error:: / ::warning::)
+watchgate analyze --base HEAD~1 --head HEAD --github-annotations
+
+# Overrides dinámicos de pesos y umbrales al vuelo
+watchgate analyze --base main --head dev --weight static=0.35 --weight semantic=0.35 --threshold red=80
 ```
 
 **Parámetros opcionales:**
-- `--base`: Commit o ref base (obligatorio).
-- `--head`: Commit o ref head (obligatorio).
+- `--base`: Commit o ref base (default: `main`, o `-` para `stdin`).
+- `--head`: Commit o ref head (default: `HEAD`).
+- `--diff-stdin`: Lee el parche unificado directamente desde `sys.stdin` (búfer máx 10 MB).
 - `--repo-path`: Ruta al repo local (default: `.`).
 - `--config`: Ruta a `.watchgate.yml` (default: `.watchgate.yml`).
-- `--format`: Formato de salida (`comment` o `json`, default: `comment`).
-- `--pr-id`: Identificador del PR para metadatos.
-- `--repo`: Nombre del repositorio (`org/repo`).
-- `--author-login`: Usuario de GitHub/GitLab del autor.
-- `--output`: Archivo de destino para el informe.
+- `--format`: Formato de salida (`comment`, `json`, `sarif`; default: `comment`).
+- `--github-annotations`: Emite comandos de flujo de trabajo de GitHub Actions (`::error::` / `::warning::`).
+- `--weight`: Override dinámico de peso de capa (ej: `--weight static=0.35`).
+- `--threshold`: Override dinámico de umbral (ej: `--threshold red=80`).
+- `--pr-id` / `--repo`: Identificador de PR y nombre de repositorio.
+- `--author-login` / `--author-email`: Identidad declarada del autor.
+- `-v` / `--verbose` / `--debug` / `-q` (`--quiet`): Niveles de diagnóstico y logs.
+- `--output`: Archivo de destino para guardar el informe.
+
+**Códigos de Salida (Exit Codes):**
+- `0`: Análisis completado sin bloqueos (VERDE / AMARILLO).
+- `1`: Bloqueo por política activa (Semáforo ROJO y `block_on_red: true`).
+- `2`: Error de configuración, banderas inválidas o sintaxis de diff corrupta.
+- `3`: Fallo de infraestructura o API externa.
 
 #### 2. Reindexar el corpus RAG (`watchgate rag reindex`)
 Reconstruye el índice vectorial ChromaDB con el corpus local de patrones de ataque:
