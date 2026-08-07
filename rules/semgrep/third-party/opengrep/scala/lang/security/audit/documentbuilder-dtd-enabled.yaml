@@ -84,3 +84,8 @@ rules:
     - vuln
     likelihood: LOW
     impact: MEDIUM
+    severity_score: 100
+    confidence_score: 80
+    exploitability_score: 40
+    risk_score: 79
+    risk_justification: DocumentBuilder sin deshabilitar entidades externas; exclusiones cubren combinaciones típicas de fix, requiere XML malicioso.

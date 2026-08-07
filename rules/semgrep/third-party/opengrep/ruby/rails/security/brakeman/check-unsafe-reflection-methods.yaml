@@ -22,20 +22,18 @@ rules:
       - pattern-inside: |
           $X. ... .to_proc
       - patterns:
-          - pattern-inside: |
-              $Y.method($Z)
-          - focus-metavariable: $Z
+        - pattern-inside: |
+            $Y.method($Z)
+        - focus-metavariable: $Z
       - patterns:
-          - pattern-inside: |
-              $Y.tap($Z)
-          - focus-metavariable: $Z
+        - pattern-inside: |
+            $Y.tap($Z)
+        - focus-metavariable: $Z
       - patterns:
-          - pattern-inside: |
-              $Y.tap{ |$ANY| $Z }
-          - focus-metavariable: $Z
-  message: Found user-controllable input to a reflection method. This may allow a user to alter program
-    behavior and potentially execute arbitrary instructions in the context of the process. Do not provide
-    arbitrary user input to `tap`, `method`, or `to_proc`
+        - pattern-inside: |
+            $Y.tap{ |$ANY| $Z }
+        - focus-metavariable: $Z
+  message: Found user-controllable input to a reflection method. This may allow a user to alter program behavior and potentially execute arbitrary instructions in the context of the process. Do not provide arbitrary user input to `tap`, `method`, or `to_proc`
   languages:
   - ruby
   severity: ERROR
@@ -57,3 +55,8 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 100
+    confidence_score: 80
+    exploitability_score: 80
+    risk_score: 89
+    risk_justification: Input a .method/.tap/.to_proc; invocación arbitraria de método, patrón estructural preciso.

@@ -25,6 +25,11 @@ rules:
     likelihood: MEDIUM
     impact: HIGH
     confidence: MEDIUM
+    severity_score: 100
+    confidence_score: 60
+    exploitability_score: 80
+    risk_score: 83
+    risk_justification: Taint flask.request->os.system; command injection directa, patrón amplio sin verificación de sanitización.
   pattern-either:
   - patterns:
     - pattern: os.system(...)

@@ -20,6 +20,11 @@ rules:
         - https://cwe.mitre.org/data/definitions/22.html
         - https://learn.microsoft.com/en-us/dotnet/api/system.io.path.combine
         - https://owasp.org/www-community/attacks/Path_Traversal
+      severity_score: 100
+      confidence_score: 30
+      exploitability_score: 80
+      risk_score: 74
+      risk_justification: "Path traversal permite lectura/escritura de archivos arbitrarios del sistema (roba dato); patron amplio sin verificar validacion posterior (LOW); ejecucion normal."
     patterns:
       - pattern-either:
           - pattern: File.ReadAllText(Path.Combine($BASE, $SEGMENT))

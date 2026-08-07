@@ -54,3 +54,8 @@ rules:
     - vuln
     likelihood: LOW
     impact: HIGH
+    severity_score: 100
+    confidence_score: 60
+    exploitability_score: 80
+    risk_score: 83
+    risk_justification: Template string construida con fmt.Sprintf e input de query/form, luego parseada; SSTI real, encadenamiento estructural no dataflow completo.

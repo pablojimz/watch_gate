@@ -21,6 +21,11 @@ rules:
     technology:
     - ruby
     vulnerability: Insecure Transport
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: Net::Telnet.new / Net::SSH::Telnet.new, constructor exclusivo de protocolo sin cifrar.
   languages:
   - ruby
   pattern-either:

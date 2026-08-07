@@ -13,6 +13,11 @@ rules:
       impact: LOW
       references:
         - https://docs.docker.com/compose/compose-file/compose-file-v3/#ports
+      severity_score: 25
+      confidence_score: 30
+      exploitability_score: 40
+      risk_score: 30
+      risk_justification: 'FALTA DATO: exposición real de red del host no verificable desde el archivo; conservador=40. Regla propia ya la marca LOW/LOW/LOW; bind 0.0.0.0 suele ser intencional.'
     patterns:
       - pattern-inside: |
           services:

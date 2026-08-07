@@ -21,9 +21,7 @@ rules:
         }
         ...
       }
-  message: The AWS configuration aggregator does not aggregate all AWS Config region.
-    This may result in unmonitored configuration in regions that are thought to be
-    unused. Configure the aggregator with all_regions for the source.
+  message: The AWS configuration aggregator does not aggregate all AWS Config region. This may result in unmonitored configuration in regions that are thought to be unused. Configure the aggregator with all_regions for the source.
   languages:
   - hcl
   severity: WARNING
@@ -43,3 +41,8 @@ rules:
     likelihood: LOW
     impact: MEDIUM
     confidence: HIGH
+    severity_score: 25
+    confidence_score: 80
+    exploitability_score: 100
+    risk_score: 60
+    risk_justification: Monitoreo/auditoria incompleta, no expone datos por si mismo.

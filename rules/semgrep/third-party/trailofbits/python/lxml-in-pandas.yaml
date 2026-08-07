@@ -16,6 +16,11 @@ rules:
       references:
         - https://lxml.de/FAQ.html
 
+      severity_score: 100
+      confidence_score: 60
+      exploitability_score: 40
+      risk_score: 73
+      risk_justification: read_html con flavor lxml puede permitir XXE; excluye solo flavors seguros, sin verificar si $IO es no confiable.
     pattern-either:
       - patterns:
           - pattern: pandas.read_html($IO)

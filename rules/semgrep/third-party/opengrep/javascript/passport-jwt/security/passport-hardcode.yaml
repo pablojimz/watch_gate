@@ -30,6 +30,11 @@ rules:
     likelihood: HIGH
     impact: MEDIUM
     confidence: HIGH
+    severity_score: 75
+    confidence_score: 100
+    exploitability_score: 100
+    risk_score: 89
+    risk_justification: Secreto literal en clientSecret/secretOrKey pasado a estrategia passport-*, expuesto en código.
   languages:
   - javascript
   - typescript

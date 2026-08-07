@@ -31,10 +31,10 @@ rules:
       metavariable: $RESOURCE
       patterns:
       - pattern-either:
-          - pattern: |
-              "aws_lb_listener"
-          - pattern: |
-              "aws_alb_listener"
+        - pattern: |
+            "aws_lb_listener"
+        - pattern: |
+            "aws_alb_listener"
   message: >-
     Detected an AWS load balancer with an insecure TLS version.
     TLS versions less than 1.2 are considered insecure because they
@@ -58,5 +58,10 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 50
+    confidence_score: 80
+    exploitability_score: 100
+    risk_score: 72
+    risk_justification: TLS/HTTP inseguro en ALB/ELB listener; regexes de exclusion bastante precisos.
   languages: [hcl]
   severity: WARNING

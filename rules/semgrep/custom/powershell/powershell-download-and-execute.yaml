@@ -22,6 +22,11 @@ rules:
         - https://attack.mitre.org/techniques/T1059/001/
     options:
       generic_ellipsis_max_span: 0
+      severity_score: 100
+      confidence_score: 100
+      exploitability_score: 80
+      risk_score: 95
+      risk_justification: "Descarga+iex es RCE directa, indicador clasico de malware droppers; 4 patrones especificos sin ambiguedad; se ejecuta al correr el script (no necesariamente en build)."
     patterns:
       - pattern-either:
           - pattern: Invoke-Expression (New-Object Net.WebClient).DownloadString(...)

@@ -21,6 +21,11 @@ rules:
     technology:
     - java
     vulnerability: Insecure Transport
+    severity_score: 50
+    confidence_score: 60
+    exploitability_score: 80
+    risk_score: 60
+    risk_justification: Excluye solo arrays literales TLSv1.2/1.3 y wrapper TlsConfig especifico; falso positivo si config es dinamica.
   languages: [java]
   patterns:
   - pattern: |

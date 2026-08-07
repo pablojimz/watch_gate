@@ -24,9 +24,7 @@ rules:
     - metavariable-regex:
         metavariable: $MODEL
         regex: '[A-Z]\S+'
-  message: Found an unscoped `find(...)` with user-controllable input. If the ActiveRecord model being
-    searched against is sensitive, this may lead to Insecure Direct Object Reference (IDOR) behavior and
-    allow users to read arbitrary records. Scope the find to the current user, e.g. `current_user.accounts.find(params[:id])`.
+  message: Found an unscoped `find(...)` with user-controllable input. If the ActiveRecord model being searched against is sensitive, this may lead to Insecure Direct Object Reference (IDOR) behavior and allow users to read arbitrary records. Scope the find to the current user, e.g. `current_user.accounts.find(params[:id])`.
   languages:
   - ruby
   severity: WARNING
@@ -49,3 +47,8 @@ rules:
     likelihood: MEDIUM
     impact: HIGH
     confidence: MEDIUM
+    severity_score: 75
+    confidence_score: 30
+    exploitability_score: 80
+    risk_score: 63
+    risk_justification: IDOR potencial; Model.find(params[:id]) es patrón extremadamente común y a menudo legítimo.

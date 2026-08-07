@@ -18,6 +18,11 @@ rules:
         - A10:2025 - Mishandling of Exceptional Conditions
       references:
         - https://linux.die.net/man/3/sprintf
+      severity_score: 75
+      confidence_score: 100
+      exploitability_score: 80
+      risk_score: 84
+      risk_justification: src==dst (mismo metavariable) en función no memmove-safe; comportamiento indefinido garantizado por estándar C.
     message: >-
       C standards specify that the results are undefined if a call to
       copy functions, with the exception of memmove(), would cause copying

@@ -1,10 +1,7 @@
 rules:
 - id: ruby-eval
   message: >-
-    Use of eval with user-controllable input detected. This can lead 
-    to attackers running arbitrary code. Ensure external data does not 
-    reach here, otherwise this is a security vulnerability. Consider 
-    other ways to do this without eval.
+    Use of eval with user-controllable input detected. This can lead  to attackers running arbitrary code. Ensure external data does not  reach here, otherwise this is a security vulnerability. Consider  other ways to do this without eval.
   severity: WARNING
   metadata:
     likelihood: HIGH
@@ -25,8 +22,13 @@ rules:
     technology:
     - ruby
     - rails
-  languages: 
-    - ruby
+    severity_score: 100
+    confidence_score: 80
+    exploitability_score: 80
+    risk_score: 89
+    risk_justification: params/cookies a eval/class_eval/instance_eval; $X.eval podría matchear método no-Kernel homónimo.
+  languages:
+  - ruby
   mode: taint
   pattern-sources:
   - pattern-either:

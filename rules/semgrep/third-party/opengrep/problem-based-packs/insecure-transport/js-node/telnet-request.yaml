@@ -20,6 +20,11 @@ rules:
     technology:
     - node.js
     vulnerability: Insecure Transport
+    severity_score: 50
+    confidence_score: 30
+    exploitability_score: 80
+    risk_score: 52
+    risk_justification: Incluye $SERVER.on(...) generico de EventEmitter, no confirma conexion telnet real establecida.
   languages:
   - javascript
   patterns:

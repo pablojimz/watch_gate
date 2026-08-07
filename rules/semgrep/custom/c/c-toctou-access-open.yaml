@@ -20,6 +20,11 @@ rules:
       references:
         - https://cwe.mitre.org/data/definitions/367.html
         - https://owasp.org/www-community/vulnerabilities/Time_of_check_to_time_of_use_race_condition
+      severity_score: 75
+      confidence_score: 30
+      exploitability_score: 40
+      risk_score: 53
+      risk_justification: "Carrera TOCTOU permite bypass de control de acceso via symlink swap; patron textual muy amplio (LOW); requiere condicion de carrera local real, no automatica."
     patterns:
       - pattern: |
           access($PATH, ...);

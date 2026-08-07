@@ -8,7 +8,7 @@ rules:
   severity: WARNING
   metadata:
     functional-categories:
-      - 'crypto::search::hash-algorithm::java.security'
+    - 'crypto::search::hash-algorithm::java.security'
     owasp:
     - A03:2017 - Sensitive Data Exposure
     - A02:2021 - Cryptographic Failures
@@ -25,12 +25,17 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: HIGH
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: Algoritmo MD5 por nombre exacto en MessageDigest.
   patterns:
-    - pattern: |
-       java.security.MessageDigest.getInstance($ALGO, ...);
-    - metavariable-regex:
-        metavariable: "$ALGO"
-        regex: (.MD5.)
-    - focus-metavariable: $ALGO
+  - pattern: |
+      java.security.MessageDigest.getInstance($ALGO, ...);
+  - metavariable-regex:
+      metavariable: "$ALGO"
+      regex: (.MD5.)
+  - focus-metavariable: $ALGO
   fix: |
     "SHA-512"

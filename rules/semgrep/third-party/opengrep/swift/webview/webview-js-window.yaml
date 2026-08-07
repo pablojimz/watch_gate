@@ -21,6 +21,11 @@ rules:
     technology:
     - ios
     - macos
+    severity_score: 25
+    confidence_score: 45
+    exploitability_score: 80
+    risk_score: 45
+    risk_justification: Higiene de configuración WebView; regex de exclusión frágil (comentarios nosemgrep del propio autor).
   languages:
   - swift
   patterns:

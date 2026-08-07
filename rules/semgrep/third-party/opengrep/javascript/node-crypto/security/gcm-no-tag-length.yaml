@@ -21,6 +21,11 @@ rules:
     - https://www.securesystems.de/blog/forging_ciphertexts_under_Galois_Counter_Mode_for_the_Node_js_crypto_module/
     - https://nodejs.org/api/crypto.html#cryptocreatedecipherivalgorithm-key-iv-options
     - https://owasp.org/Top10/A02_2021-Cryptographic_Failures/
+    severity_score: 50
+    confidence_score: 60
+    exploitability_score: 40
+    risk_score: 50
+    risk_justification: 'FALTA DATO: Node usa tag de 16 bytes por defecto salvo que la app trunque con datos externos; asumo escenario vulnerable (conservador).'
   languages:
   - javascript
   - typescript

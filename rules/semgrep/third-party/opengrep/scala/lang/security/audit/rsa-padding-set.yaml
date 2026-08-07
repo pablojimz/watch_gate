@@ -19,6 +19,11 @@ rules:
     - audit
     likelihood: MEDIUM
     impact: MEDIUM
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: RSA/NoPadding detectado por regex exacta; debilita cifrado, se ejecuta en cada uso del cipher.
   message: >-
     Usage of RSA without OAEP (Optimal Asymmetric Encryption Padding) may weaken encryption. This could
     lead to sensitive data

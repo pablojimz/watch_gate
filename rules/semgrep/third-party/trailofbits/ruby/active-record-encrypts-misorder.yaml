@@ -16,6 +16,11 @@ rules:
       technology: [rails, activerecord]
       references:
         - https://guides.rubyonrails.org/active_record_encryption.html#supported-types
+      severity_score: 50
+      confidence_score: 80
+      exploitability_score: 80
+      risk_score: 66
+      risk_justification: Orden encrypts/serialize incorrecto rompe cifrado esperado; patrón secuencial preciso, sin uso legítimo conocido.
     patterns:
       - pattern-inside: |
           class $CLS < ApplicationRecord

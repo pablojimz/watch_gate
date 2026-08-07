@@ -24,6 +24,11 @@ rules:
         - https://jvns.ca/blog/2015/11/27/why-rubys-timeout-is-dangerous-and-thread-dot-raise-is-terrifying/
         - https://www.mikeperham.com/2015/05/08/timeout-rubys-most-dangerous-api/
         - http://blog.headius.com/2008/02/rubys-threadraise-threadkill-timeoutrb.html
+      severity_score: 25
+      confidence_score: 30
+      exploitability_score: 80
+      risk_score: 40
+      risk_justification: Timeout.timeout es mecanismo estándar; regla marca prácticamente todo uso legítimo, sin distinción de riesgo real.
     pattern-either:
       - pattern: Timeout::timeout(...)
       - pattern: Timeout.timeout(...)

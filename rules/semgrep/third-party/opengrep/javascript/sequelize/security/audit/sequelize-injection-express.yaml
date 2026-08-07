@@ -15,8 +15,7 @@ rules:
       technology:
         - express
       cwe:
-        - "CWE-89: Improper Neutralization of Special Elements used in an SQL
-          Command ('SQL Injection')"
+        - "CWE-89: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')"
       owasp:
         - A01:2017 - Injection
         - A03:2021 - Injection
@@ -28,6 +27,11 @@ rules:
       impact: HIGH
       confidence: HIGH
       license: Commons Clause License Condition v1.0[LGPL-2.1-only]
+      severity_score: 75
+      confidence_score: 80
+      exploitability_score: 80
+      risk_score: 78
+      risk_justification: Taint req.*->sequelize.query, con sanitizadores parseInt/hash.
     languages:
       - javascript
       - typescript

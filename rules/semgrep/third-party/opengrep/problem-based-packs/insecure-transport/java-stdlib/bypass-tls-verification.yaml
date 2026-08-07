@@ -21,6 +21,11 @@ rules:
     technology:
     - java
     vulnerability: Insecure Transport
+    severity_score: 50
+    confidence_score: 60
+    exploitability_score: 80
+    risk_score: 60
+    risk_justification: Excluye solo si checkServerTrusted lanza 2 excepciones concretas; no valida logica real de verificacion segura.
   languages: [java]
   patterns:
   - pattern: |

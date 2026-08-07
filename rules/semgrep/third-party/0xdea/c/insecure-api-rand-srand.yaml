@@ -19,10 +19,13 @@ rules:
         - A04:2025 - Cryptographic Failures
       references:
         - https://www.sei.cmu.edu/downloads/sei-cert-c-coding-standard-2016-v01.pdf
+      severity_score: 50
+      confidence_score: 30
+      exploitability_score: 80
+      risk_score: 52
+      risk_justification: RNG débil; marca todo uso de rand/srand, mayoría no relacionada con tokens/claves de seguridad.
     message: >-
-      The rand() PRNG should not be used in applications intended to be 
-      portable when good randomness is needed. Instead, the use of random() 
-      is recommended.
+      The rand() PRNG should not be used in applications intended to be  portable when good randomness is needed. Instead, the use of random()  is recommended.
     severity: WARNING
     languages:
       - c

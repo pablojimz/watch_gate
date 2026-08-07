@@ -16,6 +16,11 @@ rules:
       references:
         - https://go.dev/blog/maps#concurrency
 
+      severity_score: 25
+      confidence_score: 60
+      exploitability_score: 80
+      risk_score: 49
+      risk_justification: Escritura concurrente en map provoca panic fatal (DoS) si se activa; bug de concurrencia.
     patterns:
       - pattern: |
           $MAP[$KEY] = $VALUE

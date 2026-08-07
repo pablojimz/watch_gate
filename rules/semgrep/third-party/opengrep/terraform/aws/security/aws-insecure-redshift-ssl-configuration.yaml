@@ -43,5 +43,10 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 50
+    confidence_score: 80
+    exploitability_score: 100
+    risk_score: 72
+    risk_justification: require_ssl no forzado en grupo de parametros Redshift; chequeo bastante preciso.
   languages: [hcl]
   severity: WARNING

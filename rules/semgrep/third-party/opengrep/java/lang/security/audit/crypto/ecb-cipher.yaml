@@ -2,7 +2,7 @@ rules:
 - id: ecb-cipher
   metadata:
     functional-categories:
-      - 'crypto::search::mode::javax.crypto'
+    - 'crypto::search::mode::javax.crypto'
     cwe:
     - 'CWE-327: Use of a Broken or Risky Cryptographic Algorithm'
     owasp:
@@ -19,6 +19,11 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: HIGH
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: Regex ECB sobre literal de modo cifrado, preciso.
   message: >-
     Cipher in ECB mode is detected. ECB mode produces the same output for the same
     input each time

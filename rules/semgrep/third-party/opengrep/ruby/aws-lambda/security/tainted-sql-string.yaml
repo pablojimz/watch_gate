@@ -27,6 +27,11 @@ rules:
     likelihood: MEDIUM
     impact: HIGH
     confidence: MEDIUM
+    severity_score: 75
+    confidence_score: 60
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: SQLi; incluye alternativa de regex muy amplia sobre operadores de comparación, ruidosa.
   mode: taint
   pattern-sources:
   - patterns:

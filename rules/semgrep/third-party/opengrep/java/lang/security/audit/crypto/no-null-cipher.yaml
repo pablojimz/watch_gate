@@ -1,9 +1,9 @@
 rules:
 - id: no-null-cipher
   patterns:
-   - pattern-either:
-      - pattern: new NullCipher(...);
-      - pattern: new javax.crypto.NullCipher(...);
+  - pattern-either:
+    - pattern: new NullCipher(...);
+    - pattern: new javax.crypto.NullCipher(...);
   metadata:
     cwe:
     - 'CWE-327: Use of a Broken or Risky Cryptographic Algorithm'
@@ -26,6 +26,11 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: HIGH
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: Constructor NullCipher exacto, sin cifrado real.
   message: >-
     NullCipher was detected. This will not encrypt anything;
     the cipher text will be the same as the plain text. Use

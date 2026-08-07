@@ -22,6 +22,11 @@ rules:
     - audit
     likelihood: LOW
     impact: MEDIUM
+    severity_score: 75
+    confidence_score: 60
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: template.HTML con string formateado/concatenado; posible XSS pero sin taint real hacia fuente no confiable.
   languages: [go]
   severity: WARNING
   patterns:

@@ -8,23 +8,28 @@ rules:
       This attribute is available in API version 55 or higher.
     metadata:
       cwe:
-      - "CWE-79: Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')"
+        - "CWE-79: Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')"
       owasp:
-      - A07:2017 - Cross-Site Scripting (XSS)
-      - A03:2021 - Injection
+        - A07:2017 - Cross-Site Scripting (XSS)
+        - A03:2021 - Injection
       references:
-      - https://help.salesforce.com/s/articleView?id=sf.csp_trusted_sites.htm&type=5
+        - https://help.salesforce.com/s/articleView?id=sf.csp_trusted_sites.htm&type=5
       category: security
       subcategory:
-      - vuln
+        - vuln
       technology:
-      - salesforce
-      - visualforce
+        - salesforce
+        - visualforce
       cwe2022-top25: true
       cwe2021-top25: true
       likelihood: HIGH
       impact: MEDIUM
       confidence: HIGH
+      severity_score: 50
+      confidence_score: 80
+      exploitability_score: 100
+      risk_score: 72
+      risk_justification: Falta cspHeader=true en apex:page; debilita mitigación XSS, config siempre activa.
     patterns:
       - pattern: <apex:page...>...</apex:page>
       - pattern-not: <apex:page...cspHeader="true"...>...</apex:page>

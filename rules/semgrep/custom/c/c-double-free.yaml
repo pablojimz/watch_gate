@@ -18,6 +18,11 @@ rules:
       references:
         - https://cwe.mitre.org/data/definitions/415.html
         - https://owasp.org/www-community/vulnerabilities/Doubly_freeing_memory
+      severity_score: 100
+      confidence_score: 60
+      exploitability_score: 80
+      risk_score: 83
+      risk_justification: "Doble free corrompe el heap y puede llevar a RCE; deteccion puramente textual sin dataflow real; ejecucion normal."
     patterns:
       - pattern: |
           free($PTR);

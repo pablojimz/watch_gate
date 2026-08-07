@@ -22,6 +22,11 @@ rules:
     likelihood: HIGH
     impact: MEDIUM
     confidence: HIGH
+    severity_score: 75
+    confidence_score: 100
+    exploitability_score: 100
+    risk_score: 89
+    risk_justification: jwt.encode con secreto literal exacto; credencial hardcodeada en el propio código fuente.
   patterns:
   - pattern: |
       jwt.encode($X, $SECRET, ...)

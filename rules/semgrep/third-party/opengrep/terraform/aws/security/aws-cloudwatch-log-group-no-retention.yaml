@@ -11,8 +11,7 @@ rules:
         retention_in_days = ...
         ...
       }
-  message: The AWS CloudWatch Log Group has no retention. Missing retention in log groups can cause losing
-    important event information.
+  message: The AWS CloudWatch Log Group has no retention. Missing retention in log groups can cause losing important event information.
   languages: [hcl]
   severity: WARNING
   metadata:
@@ -31,3 +30,8 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 25
+    confidence_score: 100
+    exploitability_score: 100
+    risk_score: 66
+    risk_justification: Falta retencion de logs; higiene/auditoria, sin via de explotacion directa.

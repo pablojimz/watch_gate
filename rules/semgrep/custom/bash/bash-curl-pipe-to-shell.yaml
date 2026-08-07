@@ -20,6 +20,11 @@ rules:
         - https://attack.mitre.org/techniques/T1059/004/
     options:
       generic_ellipsis_max_span: 0
+      severity_score: 100
+      confidence_score: 100
+      exploitability_score: 100
+      risk_score: 100
+      risk_justification: "Ejecucion de codigo no verificado descargado de red; patron inequivoco; tipico en scripts de build/instalacion que corren solos."
     patterns:
       - pattern-either:
           - pattern: curl ... | sh

@@ -39,5 +39,10 @@ rules:
     likelihood: LOW
     impact: LOW
     confidence: MEDIUM
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: Ausencia de httponly= en response.set_cookie; default inseguro documentado de Pyramid.
   languages: [python]
   severity: WARNING

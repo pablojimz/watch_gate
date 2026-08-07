@@ -40,5 +40,10 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 100
+    risk_score: 78
+    risk_justification: privileged:true a nivel contenedor o pod; equivalente a root en el host, aplica al desplegar.
   languages: [yaml]
   severity: WARNING

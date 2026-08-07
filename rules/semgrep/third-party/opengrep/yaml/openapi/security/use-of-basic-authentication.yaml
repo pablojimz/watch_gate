@@ -2,8 +2,7 @@ rules:
   - id: use-of-basic-authentication
     languages: [yaml]
     message: >-
-      Basic authentication is considered weak and should be avoided. 
-      Use a different authentication scheme, such of OAuth2, OpenID Connect, or mTLS.
+      Basic authentication is considered weak and should be avoided.  Use a different authentication scheme, such of OAuth2, OpenID Connect, or mTLS.
     severity: ERROR
     patterns:
       - pattern-inside: |
@@ -25,18 +24,22 @@ rules:
     metadata:
       category: security
       subcategory:
-      - vuln
-      technology: 
+        - vuln
+      technology:
         - openapi
       likelihood: MEDIUM
       impact: HIGH
       confidence: HIGH
       cwe: 'CWE-287: Improper Authentication'
-      owasp: 
+      owasp:
         - 'A04:2021 Insecure Design'
         - 'A07:2021 Identification and Authentication Failures'
       references:
         - https://cwe.mitre.org/data/definitions/287.html
         - https://owasp.org/Top10/A04_2021-Insecure_Design/
         - https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/
-        
+      severity_score: 50
+      confidence_score: 100
+      exploitability_score: 100
+      risk_score: 78
+      risk_justification: scheme:basic literal en securityScheme OpenAPI 3.x; autenticacion debil por diseno, activa mientras la API este publicada.

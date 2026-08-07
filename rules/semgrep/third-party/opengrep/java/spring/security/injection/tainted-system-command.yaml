@@ -53,7 +53,7 @@ rules:
           - pattern: |
               (Runtime $R).$EXEC(...);
           - pattern: |
-               Runtime.getRuntime(...).$EXEC(...);
+              Runtime.getRuntime(...).$EXEC(...);
         - metavariable-regex:
             metavariable: $EXEC
             regex: (exec|loadLibrary|load)
@@ -102,3 +102,8 @@ rules:
     - vuln
     likelihood: HIGH
     impact: HIGH
+    severity_score: 100
+    confidence_score: 80
+    exploitability_score: 80
+    risk_score: 89
+    risk_justification: Taint real anotaciones Spring hacia ProcessBuilder/Runtime.exec, command injection.

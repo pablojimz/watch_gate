@@ -3,11 +3,7 @@ rules:
   languages:
   - ruby
   severity: ERROR
-  message: Detected user input used to manually construct a SQL string. This is usually bad practice because
-    manual construction could accidentally result in a SQL injection. An attacker could use a SQL injection
-    to steal or modify contents of the database. Instead, use a parameterized query which is available
-    by default in most database engines. Alternatively, consider using an object-relational mapper (ORM)
-    such as ActiveRecord which will protect your queries.
+  message: Detected user input used to manually construct a SQL string. This is usually bad practice because manual construction could accidentally result in a SQL injection. An attacker could use a SQL injection to steal or modify contents of the database. Instead, use a parameterized query which is available by default in most database engines. Alternatively, consider using an object-relational mapper (ORM) such as ActiveRecord which will protect your queries.
   metadata:
     cwe:
     - "CWE-89: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')"
@@ -27,6 +23,11 @@ rules:
     likelihood: MEDIUM
     impact: HIGH
     confidence: MEDIUM
+    severity_score: 75
+    confidence_score: 60
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: SQLi; múltiples formas de sink con heurística de palabras clave SQL vía regex.
   mode: taint
   pattern-sources:
   - patterns:

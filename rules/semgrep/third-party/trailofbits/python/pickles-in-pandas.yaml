@@ -17,6 +17,11 @@ rules:
       references:
         - https://blog.trailofbits.com/2021/03/15/never-a-dill-moment-exploiting-machine-learning-pickle-files/
 
+      severity_score: 100
+      confidence_score: 45
+      exploitability_score: 40
+      risk_score: 68
+      risk_justification: Incluye to_pickle (escritura), que no es en sí deserialización insegura; mezcla operaciones de distinto riesgo.
     patterns:
       - pattern-either:
           - pattern: pandas.read_pickle(...)

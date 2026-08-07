@@ -56,5 +56,10 @@ rules:
         - A05:2021 - Security Misconfiguration
         - A06:2017 - Security Misconfiguration
         - K01:2022 - Insecure Workload Configurations
+      severity_score: 75
+      confidence_score: 100
+      exploitability_score: 100
+      risk_score: 89
+      risk_justification: Falta allowPrivilegeEscalation:false (valor por defecto inseguro); habilita escalada vía binarios setuid/setgid dentro del contenedor.
     languages: [yaml]
     severity: WARNING

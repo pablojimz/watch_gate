@@ -27,5 +27,10 @@ rules:
     likelihood: HIGH
     impact: HIGH
     confidence: MEDIUM
+    severity_score: 100
+    confidence_score: 60
+    exploitability_score: 100
+    risk_score: 88
+    risk_justification: AssumeRole con Principal AWS:*, control total del rol por cualquier cuenta; no verifica Condition/ExternalId mitigante.
   languages: [json]
   severity: ERROR

@@ -37,3 +37,8 @@ rules:
     - audit
     likelihood: LOW
     impact: LOW
+    severity_score: 75
+    confidence_score: 30
+    exploitability_score: 40
+    risk_score: 53
+    risk_justification: Falta CheckOrigin explicito, pero el default de gorilla/websocket ya valida origen==host; alto FP.

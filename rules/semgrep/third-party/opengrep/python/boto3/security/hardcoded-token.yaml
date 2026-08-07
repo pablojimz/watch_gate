@@ -26,6 +26,11 @@ rules:
     likelihood: HIGH
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 75
+    confidence_score: 100
+    exploitability_score: 100
+    risk_score: 89
+    risk_justification: Literal asignado a kwarg AWS conocido (access key/secret/session token) + análisis de entropía; secreto hardcodeado en fuente.
   languages: [python]
   severity: WARNING
   mode: taint

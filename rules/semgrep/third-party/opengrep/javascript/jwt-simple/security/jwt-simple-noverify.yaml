@@ -28,6 +28,11 @@ rules:
     - https://cwe.mitre.org/data/definitions/287
     - https://cwe.mitre.org/data/definitions/345
     - https://cwe.mitre.org/data/definitions/347
+    severity_score: 100
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 95
+    risk_justification: decode() con noVerify true/string, acepta tokens sin verificar firma.
   languages:
   - javascript
   - typescript

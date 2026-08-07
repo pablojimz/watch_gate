@@ -4,10 +4,10 @@ rules:
     languages: [yaml]
     metadata:
       category: security
-      cwe: 
+      cwe:
         - "CWE-78: Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')"
         - "CWE-94: Improper Control of Generation of Code ('Code Injection')"
-      owasp: 
+      owasp:
         - A03:2021 – Injection
       confidence: MEDIUM
       likelihood: MEDIUM
@@ -20,6 +20,11 @@ rules:
       technology:
         - ci
         - argo
+      severity_score: 100
+      confidence_score: 80
+      exploitability_score: 40
+      risk_score: 79
+      risk_justification: Parametro Argo interpolado en script here-doc ejecutado por sh/python; command injection, requiere que el parametro sea controlado por atacante.
     severity: ERROR
     patterns:
       - pattern-inside: |
@@ -30,63 +35,63 @@ rules:
           regex: (argoproj.io.*)
       - pattern-either:
           - patterns:
-            - pattern-inside: |
-                command:
+              - pattern-inside: |
+                  command:
+                    ...
+                    - python
+                    ...
                   ...
-                  - python
-                  ...
-                ...
-                source: 
-                  $SCRIPT
-            - focus-metavariable: $SCRIPT
-            - metavariable-pattern:
-                metavariable: $SCRIPT
-                language: python
-                patterns: 
-                  - pattern: |
-                      $FUNC(..., $PARAM, ...)
-                  - metavariable-pattern:
-                      metavariable: $PARAM
-                      pattern-either: 
-                        - pattern-regex: (.*{{.*inputs.parameters.*}}.*)
-                        - pattern-regex: (.*{{.*workflow.parameters.*}}.*)
+                  source: 
+                    $SCRIPT
+              - focus-metavariable: $SCRIPT
+              - metavariable-pattern:
+                  metavariable: $SCRIPT
+                  language: python
+                  patterns:
+                    - pattern: |
+                        $FUNC(..., $PARAM, ...)
+                    - metavariable-pattern:
+                        metavariable: $PARAM
+                        pattern-either:
+                          - pattern-regex: (.*{{.*inputs.parameters.*}}.*)
+                          - pattern-regex: (.*{{.*workflow.parameters.*}}.*)
           - patterns:
-            - pattern-inside: |
-                command:
+              - pattern-inside: |
+                  command:
+                    ...
+                    - $LANG
+                    ...
                   ...
-                  - $LANG
-                  ...
-                ...
-                source: 
-                  $SCRIPT
-            - metavariable-regex:
-                metavariable: $LANG
-                regex: (bash|sh)
-            - focus-metavariable: $SCRIPT
-            - metavariable-pattern:
-                metavariable: $SCRIPT
-                language: bash
-                patterns: 
-                  - pattern: |
-                      $CMD ... $PARAM  ...
-                  - metavariable-pattern:
-                      metavariable: $PARAM
-                      pattern-either: 
-                        - pattern-regex: (.*{{.*inputs.parameters.*}}.*)
-                        - pattern-regex: (.*{{.*workflow.parameters.*}}.*)
+                  source: 
+                    $SCRIPT
+              - metavariable-regex:
+                  metavariable: $LANG
+                  regex: (bash|sh)
+              - focus-metavariable: $SCRIPT
+              - metavariable-pattern:
+                  metavariable: $SCRIPT
+                  language: bash
+                  patterns:
+                    - pattern: |
+                        $CMD ... $PARAM  ...
+                    - metavariable-pattern:
+                        metavariable: $PARAM
+                        pattern-either:
+                          - pattern-regex: (.*{{.*inputs.parameters.*}}.*)
+                          - pattern-regex: (.*{{.*workflow.parameters.*}}.*)
           - patterns:
-            - pattern-inside: |
-                container:
-                  ...
-                  command: $LANG
-                  ...
-                  args: $PARAM
-            - metavariable-regex:
-                metavariable: $LANG
-                regex: .*(sh|bash|ksh|csh|tcsh|zsh).*
-            - metavariable-pattern:
-                metavariable: $PARAM
-                pattern-either: 
-                  - pattern-regex: (.*{{.*inputs.parameters.*}}.*)
-                  - pattern-regex: (.*{{.*workflow.parameters.*}}.*)
-            - focus-metavariable: $PARAM
+              - pattern-inside: |
+                  container:
+                    ...
+                    command: $LANG
+                    ...
+                    args: $PARAM
+              - metavariable-regex:
+                  metavariable: $LANG
+                  regex: .*(sh|bash|ksh|csh|tcsh|zsh).*
+              - metavariable-pattern:
+                  metavariable: $PARAM
+                  pattern-either:
+                    - pattern-regex: (.*{{.*inputs.parameters.*}}.*)
+                    - pattern-regex: (.*{{.*workflow.parameters.*}}.*)
+              - focus-metavariable: $PARAM

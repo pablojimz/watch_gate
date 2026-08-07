@@ -30,6 +30,11 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 75
+    confidence_score: 60
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: Taint request->HTML concatenado con tag; XSS, con sanitizadores (escape/render_template) definidos.
   mode: taint
   pattern-sanitizers:
   - pattern: jinja2.escape(...)

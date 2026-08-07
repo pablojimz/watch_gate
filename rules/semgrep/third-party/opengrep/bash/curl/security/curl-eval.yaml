@@ -3,10 +3,7 @@ rules:
   severity: WARNING
   languages:
   - bash
-  message: Data is being eval'd from a `curl` command. An attacker with control of the server in the `curl`
-    command could inject malicious code into the `eval`, resulting in a system comrpomise. Avoid eval'ing
-    untrusted data if you can. If you must do this, consider checking the SHA sum of the content returned
-    by the server to verify its integrity.
+  message: Data is being eval'd from a `curl` command. An attacker with control of the server in the `curl` command could inject malicious code into the `eval`, resulting in a system comrpomise. Avoid eval'ing untrusted data if you can. If you must do this, consider checking the SHA sum of the content returned by the server to verify its integrity.
   metadata:
     owasp:
     - A03:2021 - Injection
@@ -23,6 +20,11 @@ rules:
     - vuln
     likelihood: MEDIUM
     impact: MEDIUM
+    severity_score: 100
+    confidence_score: 80
+    exploitability_score: 40
+    risk_score: 79
+    risk_justification: Taint real curl->eval; requiere servidor curl comprometido/MITM.
   mode: taint
   pattern-sources:
   - pattern: |

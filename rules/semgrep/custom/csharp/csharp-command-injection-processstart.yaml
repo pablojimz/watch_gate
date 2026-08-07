@@ -18,6 +18,11 @@ rules:
       references:
         - https://cwe.mitre.org/data/definitions/78.html
         - https://learn.microsoft.com/en-us/dotnet/api/system.diagnostics.processstartinfo.useshellexecute
+      severity_score: 100
+      confidence_score: 60
+      exploitability_score: 80
+      risk_score: 83
+      risk_justification: "Process.Start con shell y args no literales permite inyeccion de comandos; sin taint tracking, solo excluye literal; ejecucion normal."
     patterns:
       - pattern-either:
           - pattern: Process.Start($FILE, $ARGS)

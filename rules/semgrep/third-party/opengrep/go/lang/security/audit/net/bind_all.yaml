@@ -23,6 +23,11 @@ rules:
     - audit
     likelihood: LOW
     impact: MEDIUM
+    severity_score: 25
+    confidence_score: 30
+    exploitability_score: 80
+    risk_score: 40
+    risk_justification: Bind a 0.0.0.0/puerto vacio; patron habitual y esperado en despliegues en contenedor, sin exploit demostrado.
   pattern-either:
   - pattern: tls.Listen($NETWORK, "=~/^0.0.0.0:.*$/", ...)
   - pattern: net.Listen($NETWORK, "=~/^0.0.0.0:.*$/", ...)

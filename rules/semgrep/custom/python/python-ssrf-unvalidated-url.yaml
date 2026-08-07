@@ -18,6 +18,11 @@ rules:
       references:
         - https://cwe.mitre.org/data/definitions/918.html
         - https://owasp.org/www-community/attacks/Server_Side_Request_Forgery
+      severity_score: 75
+      confidence_score: 30
+      exploitability_score: 80
+      risk_score: 63
+      risk_justification: "SSRF hacia metadatos de nube/servicios internos permite robo indirecto de credenciales (requiere cadena adicional); excluye solo literal completo, marca la mayoria del uso normal de requests/urllib (LOW, mucho ruido); ejecucion normal."
     patterns:
       - pattern-either:
           - pattern: requests.$METHOD($URL, ...)

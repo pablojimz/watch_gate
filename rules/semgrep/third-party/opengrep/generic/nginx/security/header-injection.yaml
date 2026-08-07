@@ -36,3 +36,8 @@ rules:
     - audit
     likelihood: LOW
     impact: MEDIUM
+    severity_score: 75
+    confidence_score: 60
+    exploitability_score: 40
+    risk_score: 62
+    risk_justification: Variable de path reflejada en add_header; requiere inyección CRLF real, nginx puede mitigar parcialmente.

@@ -19,11 +19,13 @@ rules:
       references:
         - https://g.co/kgs/PCHQjJ
         - https://labs.snyk.io/resources/leaky-vessels-container-vuln-deep-dive/
+      severity_score: 50
+      confidence_score: 30
+      exploitability_score: 40
+      risk_score: 42
+      risk_justification: TOCTOU; marca cualquier llamada a stat/access, uso mayormente legítimo, requiere ventana de carrera real.
     message: >-
-      The software checks the state of a resource before using it, but the 
-      resource's state can change between the check and the use in a way that 
-      invalidates the results of the check. This can cause the software to 
-      perform invalid actions when the resource is in an unexpected state.
+      The software checks the state of a resource before using it, but the  resource's state can change between the check and the use in a way that  invalidates the results of the check. This can cause the software to  perform invalid actions when the resource is in an unexpected state.
     severity: WARNING
     languages:
       - c

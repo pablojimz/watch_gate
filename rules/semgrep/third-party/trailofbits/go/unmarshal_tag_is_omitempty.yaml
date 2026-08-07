@@ -14,6 +14,11 @@ rules:
       technology: [--no-technology--]
       references:
         - https://pkg.go.dev/encoding/json#Marshal
+      severity_score: 25
+      confidence_score: 100
+      exploitability_score: 80
+      risk_score: 61
+      risk_justification: Typo de tag `omitempty`; solo afecta serialización, sin impacto de seguridad claro.
     patterns:
       - pattern: |
           type $T1 struct {

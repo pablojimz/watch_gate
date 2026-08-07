@@ -17,6 +17,11 @@ rules:
       references:
         - https://go101.org/article/concurrent-common-mistakes.html
 
+      severity_score: 25
+      confidence_score: 60
+      exploitability_score: 80
+      risk_score: 49
+      risk_justification: Race entre Add/Wait causa comportamiento incorrecto; bug de concurrencia, no exploit.
     patterns:
       - pattern-either:
           - pattern: |

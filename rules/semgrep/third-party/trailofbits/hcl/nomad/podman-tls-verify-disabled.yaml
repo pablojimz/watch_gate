@@ -14,6 +14,11 @@ rules:
       technology: [nomad, podman]
       references:
         - https://developer.hashicorp.com/nomad/plugins/drivers/podman#auth
+      severity_score: 50
+      confidence_score: 100
+      exploitability_score: 100
+      risk_score: 78
+      risk_justification: Verificación TLS de registry deshabilitada; literal exacto, config de infra siempre activa.
     patterns:
       - pattern-inside: |
           task "..." {

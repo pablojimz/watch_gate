@@ -29,6 +29,11 @@ rules:
     confidence: HIGH
     references:
     - https://owasp.org/Top10/A02_2021-Cryptographic_Failures
+    severity_score: 100
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 95
+    risk_justification: Uso explícito de JWK.None en verify, bypass total de firma.
   languages:
   - javascript
   - typescript

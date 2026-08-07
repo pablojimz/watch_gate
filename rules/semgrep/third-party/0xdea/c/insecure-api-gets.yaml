@@ -19,10 +19,13 @@ rules:
         - A10:2025 - Mishandling of Exceptional Conditions
       references:
         - https://g.co/kgs/PCHQjJ
+      severity_score: 100
+      confidence_score: 100
+      exploitability_score: 80
+      risk_score: 95
+      risk_justification: gets() siempre inseguro, sin caso de uso seguro conocido; overflow clásico.
     message: >-
-      The gets() function is always unsafe because it does not perform bounds 
-      checking on the size of its input. An attacker can easily send 
-      arbitrarily-sized input to gets() and overflow the destination buffer.
+      The gets() function is always unsafe because it does not perform bounds  checking on the size of its input. An attacker can easily send  arbitrarily-sized input to gets() and overflow the destination buffer.
     severity: ERROR
     languages:
       - c

@@ -14,8 +14,7 @@ rules:
   - patterns:
     - pattern: |
         DB::raw(...)
-  message: HTTP method [$METHOD] to Laravel route $ROUTE_NAME is vulnerable to SQL injection via string
-    concatenation or unsafe interpolation.
+  message: HTTP method [$METHOD] to Laravel route $ROUTE_NAME is vulnerable to SQL injection via string concatenation or unsafe interpolation.
   languages:
   - php
   severity: WARNING
@@ -38,3 +37,8 @@ rules:
     likelihood: HIGH
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 75
+    confidence_score: 80
+    exploitability_score: 80
+    risk_score: 78
+    risk_justification: Arg de closure de ruta a DB::raw(); sanitizador reconoce forma parametrizada segura.

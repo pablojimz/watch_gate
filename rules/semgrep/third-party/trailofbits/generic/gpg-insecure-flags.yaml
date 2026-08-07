@@ -13,6 +13,11 @@ rules:
       impact: HIGH
       references:
         - https://www.gnupg.org/gph/de/manual/r1023.html
+      severity_score: "62.5"
+      confidence_score: 100
+      exploitability_score: 80
+      risk_score: 78
+      risk_justification: 'FALTA DATO: idem ejecución, conservador=80. Bundle mezcla flags graves (skip-verify/ignore-*-error) con otras menores (allow-weak-digest); punto medio.'
     pattern-either:
       - pattern: gpg ... --allow-non-selfsigned-uid
       - pattern: gpg ... --allow-freeform-uid

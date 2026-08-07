@@ -19,6 +19,11 @@ rules:
     likelihood: LOW
     impact: LOW
     confidence: MEDIUM
+    severity_score: 100
+    confidence_score: 60
+    exploitability_score: 80
+    risk_score: 83
+    risk_justification: PathParam directo a new File; no valida si hay sanitizacion intermedia en el cuerpo.
   message: >-
     Detected a potential path traversal. A malicious actor
     could control the location of this file, to include going backwards

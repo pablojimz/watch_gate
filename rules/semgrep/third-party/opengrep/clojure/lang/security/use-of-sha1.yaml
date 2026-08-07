@@ -26,10 +26,15 @@ rules:
       confidence: HIGH
       likelihood: MEDIUM
       impact: HIGH
+      severity_score: 50
+      confidence_score: 100
+      exploitability_score: 80
+      risk_score: 72
+      risk_justification: SHA1 exacto vía regex sin ambigüedad, uso normal del código.
     patterns:
       - pattern-either:
-        - pattern: (MessageDigest/getInstance $ALGO)
-        - pattern: (java.security.MessageDigest/getInstance $ALGO)
+          - pattern: (MessageDigest/getInstance $ALGO)
+          - pattern: (java.security.MessageDigest/getInstance $ALGO)
       - metavariable-regex:
           metavariable: $ALGO
           regex: (((org\.apache\.commons\.codec\.digest\.)?MessageDigestAlgorithms/)?"?(SHA-1|SHA1)"?)

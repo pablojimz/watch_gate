@@ -23,36 +23,36 @@ rules:
         - pattern: |
             $COOKIE.getValue(...)
   pattern-sinks:
+  - patterns:
+    - pattern-either:
+      - pattern: |
+          (ProcessBuilder $PB) = ...;
       - patterns:
-          - pattern-either:
-              - pattern: |
-                  (ProcessBuilder $PB) = ...;
-              - patterns:
-                - pattern: |
-                    (Process $P) = ...;
-                - pattern-not: |
-                    (Process $P) = (java.lang.Runtime $R).exec(...);
-              - patterns:
-                  - pattern: (java.lang.Runtime $R).exec($CMD, ...);
-                  - focus-metavariable: $CMD
-              - patterns:
-                  - pattern-either:
-                      - pattern-inside: |
-                          (java.util.List<$TYPE> $ARGLIST) = ...;  
-                          ...
-                          (ProcessBuilder $PB) = ...;
-                          ...
-                          $PB.command($ARGLIST);
-                      - pattern-inside: |
-                          (java.util.List<$TYPE> $ARGLIST) = ...;  
-                          ...
-                          (ProcessBuilder $PB) = ...;
-                      - pattern-inside: |
-                          (java.util.List<$TYPE> $ARGLIST) = ...;  
-                          ...
-                          (Process $P) = ...;
-                  - pattern: |
-                      $ARGLIST.add(...);
+        - pattern: |
+            (Process $P) = ...;
+        - pattern-not: |
+            (Process $P) = (java.lang.Runtime $R).exec(...);
+      - patterns:
+        - pattern: (java.lang.Runtime $R).exec($CMD, ...);
+        - focus-metavariable: $CMD
+      - patterns:
+        - pattern-either:
+          - pattern-inside: |
+              (java.util.List<$TYPE> $ARGLIST) = ...;  
+              ...
+              (ProcessBuilder $PB) = ...;
+              ...
+              $PB.command($ARGLIST);
+          - pattern-inside: |
+              (java.util.List<$TYPE> $ARGLIST) = ...;  
+              ...
+              (ProcessBuilder $PB) = ...;
+          - pattern-inside: |
+              (java.util.List<$TYPE> $ARGLIST) = ...;  
+              ...
+              (Process $P) = ...;
+        - pattern: |
+            $ARGLIST.add(...);
   metadata:
     category: security
     technology:
@@ -71,3 +71,8 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 100
+    confidence_score: 80
+    exploitability_score: 80
+    risk_score: 89
+    risk_justification: Taint real HttpServletRequest -> ProcessBuilder/exec; command injection = RCE.

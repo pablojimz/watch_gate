@@ -1,13 +1,8 @@
 rules:
   - id: open-redirect
-    languages: [ go ]
+    languages: [go]
     severity: WARNING
-    message: An HTTP redirect was found to be crafted from user-input `$REQUEST`.
-      This can lead to open redirect vulnerabilities, potentially allowing attackers
-      to redirect users to malicious web sites. It is recommend where possible to
-      not allow user-input to craft the redirect URL. When user-input is necessary
-      to craft the request, it is recommended to follow OWASP best practices to
-      restrict the URL to domains in an allowlist.
+    message: An HTTP redirect was found to be crafted from user-input `$REQUEST`. This can lead to open redirect vulnerabilities, potentially allowing attackers to redirect users to malicious web sites. It is recommend where possible to not allow user-input to craft the redirect URL. When user-input is necessary to craft the request, it is recommended to follow OWASP best practices to restrict the URL to domains in an allowlist.
     options:
       interfile: true
     metadata:
@@ -25,6 +20,11 @@ rules:
       impact: MEDIUM
       likelihood: MEDIUM
       interfile: true
+      severity_score: 75
+      confidence_score: 80
+      exploitability_score: 80
+      risk_score: 78
+      risk_justification: Taint request hasta http.Redirect con URL sin validar contra dominio permitido; open redirect.
     mode: taint
     pattern-sources:
       - label: INPUT

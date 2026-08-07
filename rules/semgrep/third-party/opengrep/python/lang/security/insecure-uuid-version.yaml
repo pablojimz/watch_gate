@@ -7,10 +7,10 @@ rules:
     metadata:
       references:
         - https://www.landh.tech/blog/20230811-sandwich-attack/
-      cwe: 
-      - 'CWE-330: Use of Insufficiently Random Values'
-      owasp: 
-      - A02:2021 - Cryptographic Failures
+      cwe:
+        - 'CWE-330: Use of Insufficiently Random Values'
+      owasp:
+        - A02:2021 - Cryptographic Failures
       asvs:
         section: V6 Stored Cryptography Verification Requirements
         control_id: 6.3.2 Insecure UUID Generation
@@ -18,16 +18,21 @@ rules:
         version: '4'
       category: security
       technology:
-      - python
+        - python
       subcategory:
-      - audit
+        - audit
       likelihood: LOW
       impact: MEDIUM
       confidence: MEDIUM
+      severity_score: 50
+      confidence_score: 100
+      exploitability_score: 80
+      risk_score: 72
+      risk_justification: 'FALTA DATO: no se puede verificar si el uuid1 se usa como token de seguridad; asumo que sí (S y E altos). Detección exacta de uuid.uuid1().'
     languages:
       - python
     severity: WARNING
     fix-regex:
       regex: uuid1
       replacement: uuid4
-    
+

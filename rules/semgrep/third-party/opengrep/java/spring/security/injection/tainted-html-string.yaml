@@ -29,6 +29,11 @@ rules:
     likelihood: HIGH
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 75
+    confidence_score: 80
+    exploitability_score: 80
+    risk_score: 78
+    risk_justification: Taint real anotaciones Spring, sink ResponseEntity, sanitizadores HTML definidos.
   mode: taint
   pattern-sources:
   - label: INPUT

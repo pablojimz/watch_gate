@@ -14,6 +14,11 @@ rules:
       technology: [faraday]
       references:
         - https://lostisland.github.io/faraday/#/customization/ssl-options
+      severity_score: 50
+      confidence_score: 100
+      exploitability_score: 80
+      risk_score: 72
+      risk_justification: Verificación SSL deshabilitada en cliente Faraday; literales exactos, sin ambigüedad.
     pattern-either:
       - pattern: "Faraday.new(..., ssl: { ..., verify: false, ... }, ...)"
       - pattern: "Faraday.new(..., ssl: { ..., verify_hostname: false, ... }, ...)"

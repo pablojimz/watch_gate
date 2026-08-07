@@ -9,8 +9,7 @@ rules:
     - pattern: |
         <activity ... <intent-filter> ... />
   message: >-
-    The application exports an activity. Any application on the device can launch the exported activity which may compromise the integrity of your application or its data. 
-    Ensure that any exported activities do not have privileged access to your application's control plane.
+    The application exports an activity. Any application on the device can launch the exported activity which may compromise the integrity of your application or its data.  Ensure that any exported activities do not have privileged access to your application's control plane.
   languages:
   - generic
   severity: WARNING
@@ -36,3 +35,8 @@ rules:
     - Android
     references:
     - https://cwe.mitre.org/data/definitions/926.html
+    severity_score: 50
+    confidence_score: 30
+    exploitability_score: 100
+    risk_score: 56
+    risk_justification: Activity exportada; riesgo real depende de si maneja datos sensibles, no explota por sí sola.

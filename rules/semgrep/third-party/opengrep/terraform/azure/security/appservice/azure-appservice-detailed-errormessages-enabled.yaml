@@ -35,5 +35,10 @@ rules:
     likelihood: LOW
     impact: LOW
     confidence: MEDIUM
+    severity_score: 25
+    confidence_score: 30
+    exploitability_score: 100
+    risk_score: 45
+    risk_justification: Logging detallado de errores ausente; auditoria, heuristica amplia coincide con mayoria de apps.
   languages: [hcl]
   severity: WARNING

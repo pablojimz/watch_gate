@@ -32,5 +32,10 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: HIGH
+    severity_score: 75
+    confidence_score: 100
+    exploitability_score: 100
+    risk_score: 89
+    risk_justification: Password literal en http_basic_authenticate_with; patrón exacto, secreto expuesto en código.
   languages:
   - ruby

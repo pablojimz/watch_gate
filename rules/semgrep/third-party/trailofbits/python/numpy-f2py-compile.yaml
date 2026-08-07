@@ -15,6 +15,11 @@ rules:
       references:
         - https://numpy.org/doc/stable/f2py/usage.html
 
+      severity_score: 100
+      confidence_score: 60
+      exploitability_score: 40
+      risk_score: 73
+      risk_justification: Compilación de código dinámico (RCE potencial); solo excluye literal, sin taint tracking real, requiere fuente no confiable.
     patterns:
       - pattern: numpy.f2py.compile(...)
       - pattern-not: numpy.f2py.compile("...", ...)

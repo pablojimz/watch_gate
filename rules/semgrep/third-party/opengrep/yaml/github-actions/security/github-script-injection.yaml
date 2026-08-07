@@ -30,6 +30,11 @@ rules:
     likelihood: HIGH
     impact: HIGH
     confidence: HIGH
+    severity_score: 100
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 95
+    risk_justification: Campos de contexto github no confiables interpolados en script de github-script; code injection bien documentado y explotable por cualquier issue/PR externo.
   patterns:
   - pattern-inside: 'steps: [...]'
   - pattern-inside: |

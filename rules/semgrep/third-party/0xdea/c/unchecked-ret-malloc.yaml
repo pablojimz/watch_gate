@@ -21,6 +21,11 @@ rules:
         - https://g.co/kgs/PCHQjJ
         - https://github.com/struct/mms
         - https://www.sei.cmu.edu/downloads/sei-cert-c-coding-standard-2016-v01.pdf
+      severity_score: 50
+      confidence_score: 60
+      exploitability_score: 40
+      risk_score: 50
+      risk_justification: malloc/calloc/strdup sin comprobar NULL; requiere fallo real de asignación de memoria.
     message: >-
       The software does not check the return value from a method or
       function, which can prevent it from detecting unexpected states and

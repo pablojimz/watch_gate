@@ -31,6 +31,11 @@ rules:
     likelihood: HIGH
     impact: MEDIUM
     interfile: true
+    severity_score: 75
+    confidence_score: 80
+    exploitability_score: 80
+    risk_score: 78
+    risk_justification: Taint request hasta concatenacion/format de SQL con palabras clave; SQLi, alta confianza declarada por el autor.
   mode: taint
   severity: ERROR
   pattern-sources:

@@ -16,6 +16,11 @@ rules:
       technology: [nodejs]
       references:
         - https://nodejs.org/api/cli.html#node_tls_reject_unauthorizedvalue
+      severity_score: 50
+      confidence_score: 100
+      exploitability_score: 80
+      risk_score: 72
+      risk_justification: 'FALTA DATO: contexto script vs config no verificable, conservador=80. Valor exacto de env var, sin uso legítimo conocido.'
     pattern-either:
       - pattern: NODE_TLS_REJECT_UNAUTHORIZED=0
       - pattern: NODE_TLS_REJECT_UNAUTHORIZED='0'

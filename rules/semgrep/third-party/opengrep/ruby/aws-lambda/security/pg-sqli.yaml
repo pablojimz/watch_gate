@@ -30,6 +30,11 @@ rules:
     likelihood: MEDIUM
     impact: HIGH
     confidence: MEDIUM
+    severity_score: 75
+    confidence_score: 80
+    exploitability_score: 80
+    risk_score: 78
+    risk_justification: event hacia texto de consulta en exec/exec_params/exec_prepared de pg gem.
   pattern-sinks:
   - patterns:
     - pattern: $QUERY

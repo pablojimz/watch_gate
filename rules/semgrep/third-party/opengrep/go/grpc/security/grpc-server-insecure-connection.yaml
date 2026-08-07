@@ -15,6 +15,11 @@ rules:
     - audit
     likelihood: LOW
     impact: LOW
+    severity_score: 50
+    confidence_score: 60
+    exploitability_score: 40
+    risk_score: 50
+    risk_justification: Servidor gRPC sin Creds; podria dar FP si TLS se aplica a nivel de listener/net.Conn en vez de grpc.Creds; requiere MITM.
   message: >-
     Found an insecure gRPC server without 'grpc.Creds()' or options with credentials.
     This allows for a connection without
@@ -29,15 +34,15 @@ rules:
   severity: ERROR
   mode: taint
   pattern-sinks:
-    - requires: OPTIONS and not CREDS
-      pattern: grpc.NewServer($OPT, ...)
-    - requires: EMPTY_CONSTRUCTOR
-      pattern: grpc.NewServer()
+  - requires: OPTIONS and not CREDS
+    pattern: grpc.NewServer($OPT, ...)
+  - requires: EMPTY_CONSTRUCTOR
+    pattern: grpc.NewServer()
   pattern-sources:
-    - label: OPTIONS
-      pattern: grpc.ServerOption{ ... }
-    - label: CREDS 
-      pattern: grpc.Creds(...)
-    - label: EMPTY_CONSTRUCTOR
-      pattern: grpc.NewServer()
+  - label: OPTIONS
+    pattern: grpc.ServerOption{ ... }
+  - label: CREDS
+    pattern: grpc.Creds(...)
+  - label: EMPTY_CONSTRUCTOR
+    pattern: grpc.NewServer()
 

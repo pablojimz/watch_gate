@@ -47,5 +47,10 @@ rules:
       likelihood: MEDIUM
       impact: HIGH
       confidence: MEDIUM
+      severity_score: 75
+      confidence_score: 100
+      exploitability_score: 100
+      risk_score: 89
+      risk_justification: runAsNonRoot con valor false explícito; contenedor corre como root, agrava impacto de cualquier compromiso.
     languages: [yaml]
     severity: WARNING

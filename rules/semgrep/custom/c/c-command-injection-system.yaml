@@ -19,6 +19,11 @@ rules:
       references:
         - https://cwe.mitre.org/data/definitions/78.html
         - https://owasp.org/www-community/attacks/Command_Injection
+      severity_score: 100
+      confidence_score: 60
+      exploitability_score: 80
+      risk_score: 83
+      risk_justification: "system()/popen() con dato no literal permite inyeccion de comandos; sin verificacion de origen del dato; se activa en ejecucion normal."
     patterns:
       - pattern-either:
           - pattern: system($CMD)

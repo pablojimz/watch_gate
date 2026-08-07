@@ -7,42 +7,47 @@ rules:
       Twilio conversation could allow the injection of additional TwiML commands
     metadata:
       cwe:
-      - "CWE-91: XML Injection"
+        - "CWE-91: XML Injection"
       owasp:
-      - "A03:2021 - Injection"
+        - "A03:2021 - Injection"
       category: security
       technology:
-      - python
-      - twilio
-      - twiml
+        - python
+        - twilio
+        - twiml
       confidence: MEDIUM
       likelihood: HIGH
       impact: MEDIUM
       subcategory: vuln
       references:
-      - https://codeberg.org/fennix/funjection
+        - https://codeberg.org/fennix/funjection
+      severity_score: 75
+      confidence_score: 30
+      exploitability_score: 80
+      risk_score: 63
+      risk_justification: Fuente incluye cualquier parámetro de función ($ARG) como taint source, heurística muy amplia; sinks y sanitizers sí son específicos.
     mode: taint
     pattern-sources:
-    - pattern: |
-        f"..."
-    - pattern: |
-        "..." % ...
-    - pattern: |
-        "...".format(...)
+      - pattern: |
+          f"..."
+      - pattern: |
+          "..." % ...
+      - pattern: |
+          "...".format(...)
 
-    - patterns:
-        - pattern: $ARG
-        - pattern-inside: |
-            def $F(..., $ARG, ...):
-                ...
+      - patterns:
+          - pattern: $ARG
+          - pattern-inside: |
+              def $F(..., $ARG, ...):
+                  ...
 
     pattern-sanitizers:
-    - pattern: xml.sax.saxutils.escape(...)
-    - pattern: html.escape(...)
+      - pattern: xml.sax.saxutils.escape(...)
+      - pattern: html.escape(...)
 
     pattern-sinks:
-    - patterns:
-      - pattern: |
-          $CLIENT.calls.create(..., twiml=$SINK, ...)
+      - patterns:
+          - pattern: |
+              $CLIENT.calls.create(..., twiml=$SINK, ...)
 
-      - focus-metavariable: $SINK
+          - focus-metavariable: $SINK

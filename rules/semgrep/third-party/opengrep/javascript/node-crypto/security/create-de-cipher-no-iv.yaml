@@ -19,13 +19,18 @@ rules:
     references:
     - https://nodejs.org/api/crypto.html#cryptocreatecipheralgorithm-password-options
     - https://nodejs.org/api/crypto.html#cryptocreatedecipheralgorithm-password-options
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: createCipher/createDecipher deprecados, IV derivado débil, llamada exacta.
   languages:
   - javascript
   - typescript
   severity: ERROR
   patterns:
-    - pattern-either:
-      - pattern: |
-          $CRYPTO.createCipher(...)
-      - pattern: |
-          $CRYPTO.createDecipher(...)
+  - pattern-either:
+    - pattern: |
+        $CRYPTO.createCipher(...)
+    - pattern: |
+        $CRYPTO.createDecipher(...)

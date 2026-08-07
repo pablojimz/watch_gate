@@ -31,6 +31,11 @@ rules:
     - audit
     likelihood: LOW
     impact: LOW
+    severity_score: 50
+    confidence_score: 80
+    exploitability_score: 80
+    risk_score: 66
+    risk_justification: Falta flag Secure en cookie de sesion; expone la cookie en HTTP plano.
   fix-regex:
     regex: (Secure\s*:\s+)false
     replacement: \1true

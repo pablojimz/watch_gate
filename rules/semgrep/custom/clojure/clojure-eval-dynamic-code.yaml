@@ -17,6 +17,11 @@ rules:
       references:
         - https://cwe.mitre.org/data/definitions/95.html
         - https://clojure.org/reference/reader#_extensible_data_notation_edn
+      severity_score: 100
+      confidence_score: 60
+      exploitability_score: 80
+      risk_score: 83
+      risk_justification: "eval sobre forma no literal permite RCE en la JVM; excluye solo formas citadas literales, sin verificar origen; ejecucion normal."
     patterns:
       - pattern: (eval $FORM)
       - pattern-not: (eval '$LITERAL)

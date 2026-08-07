@@ -20,6 +20,11 @@ rules:
         - A10:2025 - Mishandling of Exceptional Conditions
       references:
         - https://lcamtuf.coredump.cx/signals.txt
+      severity_score: 50
+      confidence_score: 100
+      exploitability_score: 40
+      risk_score: 62
+      risk_justification: signal() obsoleta y no reentrante; requiere solapamiento real de señales para condición de carrera.
     message: >-
       The signal() API should be regarded as deprecated. When possible,
       sigaction() should be used instead, because it allows to precisely

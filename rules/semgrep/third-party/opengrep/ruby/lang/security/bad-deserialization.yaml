@@ -41,6 +41,11 @@ rules:
     likelihood: MEDIUM
     impact: HIGH
     confidence: MEDIUM
+    severity_score: 100
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 95
+    risk_justification: params/cookies a Marshal.load/CSV.load/Oj.load; RCE por deserialización, sinks exactos.
   languages:
   - ruby
   severity: ERROR

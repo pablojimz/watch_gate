@@ -35,3 +35,8 @@ rules:
     likelihood: LOW
     impact: LOW
     confidence: MEDIUM
+    severity_score: 25
+    confidence_score: 100
+    exploitability_score: 100
+    risk_score: 66
+    risk_justification: Auditoria de DocumentDB deshabilitada; informativo, sin explotacion directa.

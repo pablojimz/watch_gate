@@ -21,10 +21,13 @@ rules:
       references:
         - https://g.co/kgs/PCHQjJ
         - https://www.sei.cmu.edu/downloads/sei-cert-c-coding-standard-2016-v01.pdf
+      severity_score: 100
+      confidence_score: 60
+      exploitability_score: 40
+      risk_score: 73
+      risk_justification: system/popen/wordexp con arg no literal; excluye literal pero no rastrea origen no confiable.
     message: >-
-      The software constructs an OS command using externally-influenced input, 
-      but it does not neutralize or incorrectly neutralizes special elements 
-      that could modify the intended OS command.
+      The software constructs an OS command using externally-influenced input,  but it does not neutralize or incorrectly neutralizes special elements  that could modify the intended OS command.
     severity: ERROR
     languages:
       - c

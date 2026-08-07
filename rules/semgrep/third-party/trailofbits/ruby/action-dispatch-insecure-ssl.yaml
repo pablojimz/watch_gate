@@ -14,6 +14,11 @@ rules:
       technology: [rails]
       references:
         - https://api.rubyonrails.org/v7.1.3.4/classes/ActionDispatch/SSL.html
+      severity_score: 50
+      confidence_score: 100
+      exploitability_score: 80
+      risk_score: 72
+      risk_justification: 'FALTA DATO: no se puede confirmar si el bloque configure es de producción o desarrollo; se asume producción (conservador).'
     patterns:
       - pattern-inside: |
           Rails.application.configure do

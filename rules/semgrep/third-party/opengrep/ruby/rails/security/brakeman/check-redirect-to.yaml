@@ -55,8 +55,7 @@ rules:
     - pattern-inside: |
         redirect_to $X, ...
     - pattern-not-regex: params\.\w+(?<!permit)\(.*?\)
-  message: Found potentially unsafe handling of redirect behavior $X. Do not pass `params` to `redirect_to`
-    without the `:only_path => true` hash value.
+  message: Found potentially unsafe handling of redirect behavior $X. Do not pass `params` to `redirect_to` without the `:only_path => true` hash value.
   languages:
   - ruby
   severity: WARNING
@@ -77,3 +76,8 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 50
+    confidence_score: 60
+    exploitability_score: 80
+    risk_score: 60
+    risk_justification: Open redirect; lista de sanitizadores compleja con heurísticas de regex sobre nombre de método.

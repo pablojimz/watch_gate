@@ -67,6 +67,11 @@ rules:
     - vuln
     likelihood: LOW
     impact: MEDIUM
+    severity_score: 75
+    confidence_score: 45
+    exploitability_score: 80
+    risk_score: 67
+    risk_justification: Regla marcada WIP; query param fluye a fmt.Printf y luego a ResponseWriter, XSS reflejado, confianza reducida por inmadurez.
   severity: WARNING
   languages:
   - go

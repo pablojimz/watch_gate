@@ -36,3 +36,8 @@ rules:
     - audit
     likelihood: LOW
     impact: MEDIUM
+    severity_score: 100
+    confidence_score: 80
+    exploitability_score: 40
+    risk_score: 79
+    risk_justification: XMLInputFactory sin isSupportingExternalEntities=false; requiere XML malicioso real para explotar.

@@ -17,6 +17,11 @@ rules:
       technology: [rails, actionmailer]
       references:
         - https://guides.rubyonrails.org/action_mailer_basics.html#action-mailer-configuration
+      severity_score: 50
+      confidence_score: 100
+      exploitability_score: 80
+      risk_score: 72
+      risk_justification: SMTP con verify_mode NONE o starttls solo oportunista; literales exactos, sin conexión TLS garantizada.
     pattern-either:
       - pattern: "ActionMailer::Base.smtp_settings = { ..., openssl_verify_mode: OpenSSL::SSL::VERIFY_NONE, ... }"
       - pattern: "ActionMailer::Base.smtp_settings = { ..., openssl_verify_mode: 'none', ... }"

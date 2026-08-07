@@ -28,6 +28,11 @@ rules:
     - java
     - servlets
     - spring
+    severity_score: 75
+    confidence_score: 80
+    exploitability_score: 80
+    risk_score: 78
+    risk_justification: 'Taint real: getters especificos de HttpServletRequest hacia sinks SQL bien definidos.'
   languages: [java]
   mode: taint
   options:

@@ -24,6 +24,11 @@ rules:
     impact: MEDIUM
     likelihood: MEDIUM
     confidence: MEDIUM
+    severity_score: 75
+    confidence_score: 60
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: Clave de sesión desde input; lista de 'sanitizadores' incluye funciones de comparación dudosas.
   languages: [php]
   mode: taint
   pattern-sources:

@@ -26,6 +26,11 @@ rules:
     - vuln
     likelihood: LOW
     impact: LOW
+    severity_score: 25
+    confidence_score: 30
+    exploitability_score: 40
+    risk_score: 30
+    risk_justification: No encuentra definicion estatica de ClientTrace en el mismo archivo; muchos FP si esta definido en otro archivo.
   patterns:
   - pattern-not-inside: |
       package $PACKAGE

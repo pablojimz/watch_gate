@@ -18,6 +18,11 @@ rules:
       references:
         - https://cwe.mitre.org/data/definitions/78.html
         - https://doc.rust-lang.org/std/process/struct.Command.html
+      severity_score: 100
+      confidence_score: 100
+      exploitability_score: 80
+      risk_score: 95
+      risk_justification: "libc::system() reintroduce invocacion de shell pese a que Command::new no lo hace por defecto; patron multi-linea especifico con exclusion de literal (HIGH); ejecucion normal."
     patterns:
       - pattern: |
           let $CSTR = CString::new($ARG).unwrap();

@@ -1,8 +1,7 @@
 rules:
   - id: invalid-usage-of-modified-variable
     message: >-
-      Variable `$X` is likely modified and later used on error. In some cases this could result 
-      in panics due to a nil dereference
+      Variable `$X` is likely modified and later used on error. In some cases this could result  in panics due to a nil dereference
     languages: [go]
     severity: WARNING
     metadata:
@@ -17,6 +16,11 @@ rules:
       references:
         - https://blog.trailofbits.com/2019/11/07/attacking-go-vr-ttps/
 
+      severity_score: 25
+      confidence_score: 60
+      exploitability_score: 80
+      risk_score: 49
+      risk_justification: Posible nil-deref tras reasignación en manejo de error; bug de fiabilidad, sin vía de explotación clara.
     patterns:
       - pattern: |
           ..., $X, ..., $ERR = ...

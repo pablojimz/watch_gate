@@ -19,6 +19,11 @@ rules:
     references:
     - https://nodejs.org/api/crypto.html#deciphersetauthtagbuffer-encoding
     - https://owasp.org/Top10/A02_2021-Cryptographic_Failures/
+    severity_score: 50
+    confidence_score: 80
+    exploitability_score: 80
+    risk_score: 66
+    risk_justification: Falta de decipher.final() omite verificación de tag de autenticación.
   languages:
   - javascript
   - typescript
@@ -29,9 +34,9 @@ rules:
       ...
       $DECIPHER.update(...)
   - pattern-not-inside: |
-        $DECIPHER = $CRYPTO.createDecipheriv('$ALGO', ...)
-        ...
-        $DECIPHER.final(...)
+      $DECIPHER = $CRYPTO.createDecipheriv('$ALGO', ...)
+      ...
+      $DECIPHER.final(...)
   - metavariable-regex:
       metavariable: $ALGO
       regex: ".*(-gcm|-ccm|-ocb|chacha20-poly1305)$"

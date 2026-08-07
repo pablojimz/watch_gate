@@ -27,6 +27,11 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 75
+    confidence_score: 60
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: SQLi en QueryBuilder; fuente es solo sprintf/concat, no taint real desde $_GET.
   mode: taint
   pattern-sinks:
   - patterns:

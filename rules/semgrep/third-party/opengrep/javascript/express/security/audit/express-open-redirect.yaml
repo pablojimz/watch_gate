@@ -21,6 +21,11 @@ rules:
       impact: MEDIUM
       confidence: HIGH
       license: Commons Clause License Condition v1.0[LGPL-2.1-only]
+      severity_score: 75
+      confidence_score: 80
+      exploitability_score: 80
+      risk_score: 78
+      risk_justification: Taint req.*->res.redirect, varias variantes incl. sin prefijo http.
     languages:
       - javascript
       - typescript

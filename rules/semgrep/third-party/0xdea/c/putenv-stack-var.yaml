@@ -19,6 +19,11 @@ rules:
         - A06:2025 - Insecure Design
       references:
         - https://www.sei.cmu.edu/downloads/sei-cert-c-coding-standard-2016-v01.pdf
+      severity_score: 75
+      confidence_score: 60
+      exploitability_score: 40
+      risk_score: 62
+      risk_justification: putenv con variable de pila no estática; requiere que el entorno se lea tras el retorno de la función.
     message: >-
       The software calls putenv() with a variable that has a short lifetime,
       such as a pointer to an automatic variable allocated on the stack. The

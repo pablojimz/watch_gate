@@ -19,6 +19,11 @@ rules:
     likelihood: LOW
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: Constante literal 'none' con API exacta, sin ambiguedad.
   message: >-
     Detected anonymous LDAP bind.
     This permits anonymous users to execute LDAP statements. Consider enforcing

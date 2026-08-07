@@ -20,6 +20,11 @@ rules:
       references:
         - https://www.apollographql.com/docs/apollo-server/v3/security/cors#configuring-cors-options-for-apollo-server
 
+      severity_score: 75
+      confidence_score: 60
+      exploitability_score: 80
+      risk_score: 72
+      risk_justification: Falta config CORS, default wildcard; no descarta CORS aplicado por middleware externo no visible al patrón.
     patterns:
       - pattern-either:
           - pattern-inside: |
@@ -55,6 +60,11 @@ rules:
       description: "Bad CORS policy"
       references:
         - https://www.apollographql.com/docs/apollo-server/v3/security/cors#configuring-cors-options-for-apollo-server
+      severity_score: 75
+      confidence_score: 80
+      exploitability_score: 80
+      risk_score: 78
+      risk_justification: Taint mode con heurísticas precisas (origin true, regex sin escapar/ancla, 'null'); CORS mal configurado clásico.
     mode: taint
 
     pattern-sources:

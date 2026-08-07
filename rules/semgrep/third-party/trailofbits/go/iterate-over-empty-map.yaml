@@ -16,6 +16,11 @@ rules:
       references:
         - https://blog.trailofbits.com/2019/11/07/attacking-go-vr-ttps/
 
+      severity_score: 25
+      confidence_score: 45
+      exploitability_score: 40
+      risk_score: 35
+      risk_justification: Código redundante; no es vulnerabilidad, requiere que el mapa se llene por vía no cubierta por el patrón.
     patterns:
       - pattern: |
           $C = make(map[$T1] $T2)

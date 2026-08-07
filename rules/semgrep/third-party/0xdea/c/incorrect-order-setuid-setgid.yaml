@@ -20,11 +20,14 @@ rules:
         - https://www.usenix.org/legacy/events/sec02/full_papers/chen/chen.pdf
         - https://g.co/kgs/PCHQjJ
         - https://github.com/struct/mms
+      severity_score: 75
+      confidence_score: 60
+      exploitability_score: 40
+      risk_score: 62
+      risk_justification: Orden incorrecto de drop de privilegios; requiere que el proceso realmente esté bajando privilegios como root.
     message: >-
       A compromised process might be able to regain elevated group privileges
-      if set(e)gid() is called after set(e)uid(). A similar case is when 
-      privileges are temporarily dropped with seteuid() and then setuid() or 
-      seteuid() are called from while under unprivileged user.
+      if set(e)gid() is called after set(e)uid(). A similar case is when  privileges are temporarily dropped with seteuid() and then setuid() or  seteuid() are called from while under unprivileged user.
     severity: ERROR
     languages:
       - c

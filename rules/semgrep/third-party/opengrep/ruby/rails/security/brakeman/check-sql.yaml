@@ -61,8 +61,7 @@ rules:
     - metavariable-regex:
         metavariable: $M
         regex: (where|find|first|last|select|minimum|maximum|calculate|sum|average)
-  message: Found potential SQL injection due to unsafe SQL query construction via $X. Where possible,
-    prefer parameterized queries.
+  message: Found potential SQL injection due to unsafe SQL query construction via $X. Where possible, prefer parameterized queries.
   languages:
   - ruby
   severity: ERROR
@@ -87,3 +86,8 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 75
+    confidence_score: 80
+    exploitability_score: 80
+    risk_score: 78
+    risk_justification: SQLi con sanitizadores robustos (to_i/to_f, ternario) y exclusión de formas parametrizadas.

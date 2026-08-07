@@ -29,5 +29,10 @@ rules:
     likelihood: LOW
     impact: HIGH
     confidence: MEDIUM
+    severity_score: 100
+    confidence_score: 100
+    exploitability_score: 100
+    risk_score: 100
+    risk_justification: hostPath a /var/run/docker.sock literal; control root equivalente sobre el host, activo en cada despliegue del pod.
   languages: [yaml]
   severity: WARNING

@@ -17,6 +17,11 @@ rules:
         - https://pkg.go.dev/sync#RWMutex
         - https://blog.trailofbits.com/2020/06/09/how-to-check-if-a-mutex-is-locked-in-go/
 
+      severity_score: 25
+      confidence_score: 60
+      exploitability_score: 80
+      risk_score: 49
+      risk_justification: Deadlock potencial por RUnlock faltante; bug de fiabilidad/DoS interno, no explotación directa.
     patterns:
       - pattern-either:
           - pattern: panic(...)

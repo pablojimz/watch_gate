@@ -21,6 +21,11 @@ rules:
     likelihood: LOW
     impact: MEDIUM
     confidence: HIGH
+    severity_score: 50
+    confidence_score: 80
+    exploitability_score: 100
+    risk_score: 72
+    risk_justification: 'FALTA DATO: no se sabe si es config de entorno dev/test (uso legítimo común) o producción; asumo producción (conservador).'
   languages:
   - ruby
   severity: WARNING

@@ -13,6 +13,11 @@ rules:
       impact: HIGH
       references:
         - https://docs.ansible.com/ansible/latest/collections/community/general/zypper_module.html#parameter-name
+      severity_score: "87.5"
+      confidence_score: 100
+      exploitability_score: 100
+      risk_score: 94
+      risk_justification: Repositorio zypper sin cifrar; compromete la confianza de todos los paquetes futuros de ese repo.
     patterns:
       - pattern-inside: |
           $ZYPPER:

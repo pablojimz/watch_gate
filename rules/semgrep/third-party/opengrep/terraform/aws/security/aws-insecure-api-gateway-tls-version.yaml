@@ -29,8 +29,7 @@ rules:
                   ...
               }
           }
-  message: Detected AWS API Gateway to be using an insecure version of TLS. To fix this issue make sure
-    to set "security_policy" equal to "TLS_1_2".
+  message: Detected AWS API Gateway to be using an insecure version of TLS. To fix this issue make sure to set "security_policy" equal to "TLS_1_2".
   languages:
   - terraform
   severity: WARNING
@@ -51,3 +50,8 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 50
+    confidence_score: 60
+    exploitability_score: 100
+    risk_score: 66
+    risk_justification: TLS inseguro en API Gateway; rama v2 matchea cualquier bloque de config, algo amplia.

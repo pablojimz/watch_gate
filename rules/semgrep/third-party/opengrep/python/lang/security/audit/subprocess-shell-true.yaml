@@ -37,5 +37,10 @@ rules:
     likelihood: HIGH
     impact: LOW
     confidence: MEDIUM
+    severity_score: 100
+    confidence_score: 60
+    exploitability_score: 80
+    risk_score: 83
+    risk_justification: shell=True con comando no literal; excluye solo el caso de comando fijo, sin taint real hacia fuente no confiable.
   languages: [python]
   severity: ERROR

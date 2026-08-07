@@ -26,6 +26,11 @@ rules:
     confidence: MEDIUM
     references:
     - https://owasp.org/Top10/A03_2021-Injection
+    severity_score: 75
+    confidence_score: 60
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: Heurística regex sobre string con '<tag', concat/format detectado.
   languages:
   - javascript
   - typescript

@@ -28,6 +28,11 @@ rules:
     likelihood: LOW
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 75
+    confidence_score: 100
+    exploitability_score: 100
+    risk_score: 89
+    risk_justification: ACTIONS_ALLOW_UNSECURE_COMMANDS=true literal; habilita comandos set-env/add-path vulnerables en cada ejecucion del workflow.
   patterns:
   - pattern-either:
     - patterns:

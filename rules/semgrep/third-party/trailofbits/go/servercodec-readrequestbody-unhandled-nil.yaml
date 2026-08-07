@@ -17,6 +17,11 @@ rules:
       references:
         - https://github.com/golang/go/blob/go1.15.2/src/net/rpc/server.go#L643-L658
 
+      severity_score: 25
+      confidence_score: 60
+      exploitability_score: 40
+      risk_score: 39
+      risk_justification: Nil-deref en implementación custom de interfaz RPC; requiere que ARG llegue nil en runtime.
     patterns:
       - pattern: |
           func ($O *$CODEC) ReadRequestBody($ARG $TYPE) error {

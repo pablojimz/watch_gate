@@ -1,25 +1,25 @@
 rules:
 - id: unverified-jwt-decode
   patterns:
-    - pattern-either:
-        - patterns:
-          - pattern: |
-              jwt.decode(..., options={..., "verify_signature": $BOOL, ...}, ...)
-          - metavariable-pattern:
-              metavariable: $BOOL
-              pattern: |
-                False
-          - focus-metavariable: $BOOL
-        - patterns:
-            - pattern: |
-                $OPTS = {..., "verify_signature": $BOOL, ...}
-                ...
-                jwt.decode(..., options=$OPTS, ...)
-            - metavariable-pattern:
-                metavariable: $BOOL
-                pattern: |
-                  False
-            - focus-metavariable: $BOOL
+  - pattern-either:
+    - patterns:
+      - pattern: |
+          jwt.decode(..., options={..., "verify_signature": $BOOL, ...}, ...)
+      - metavariable-pattern:
+          metavariable: $BOOL
+          pattern: |
+            False
+      - focus-metavariable: $BOOL
+    - patterns:
+      - pattern: |
+          $OPTS = {..., "verify_signature": $BOOL, ...}
+          ...
+          jwt.decode(..., options=$OPTS, ...)
+      - metavariable-pattern:
+          metavariable: $BOOL
+          pattern: |
+            False
+      - focus-metavariable: $BOOL
   message: >-
     Detected JWT token decoded with 'verify=False'. This bypasses any integrity
     checks for the token which means the token could be tampered with by
@@ -42,6 +42,11 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 100
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 95
+    risk_justification: verify_signature=False literal exacto; bypass de verificación JWT equivalente a bypass de autenticación.
   fix: |
     True
   severity: ERROR

@@ -11,6 +11,11 @@ rules:
       confidence: MEDIUM
       technology:
         - golang
+      severity_score: 75
+      confidence_score: 60
+      exploitability_score: 40
+      risk_score: 62
+      risk_justification: Antipatrón conocido de Go (uintptr guardado en variable); riesgo depende del timing del GC, no siempre determinista.
     severity: WARNING
     languages: [go]
     pattern-either:

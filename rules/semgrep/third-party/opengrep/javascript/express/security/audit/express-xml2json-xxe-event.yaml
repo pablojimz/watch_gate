@@ -22,6 +22,11 @@ rules:
     likelihood: MEDIUM
     impact: HIGH
     confidence: MEDIUM
+    severity_score: 100
+    confidence_score: 60
+    exploitability_score: 80
+    risk_score: 83
+    risk_justification: 'FALTA DATO: depende de si expat/xml2json expande entidades externas por defecto; asumo vulnerable (conservador).'
   languages:
   - javascript
   - typescript

@@ -13,6 +13,11 @@ rules:
       confidence: MEDIUM
       technology:
         - golang
+      severity_score: 75
+      confidence_score: 80
+      exploitability_score: 40
+      risk_score: 68
+      risk_justification: Taint real Sprintf(%s)->path/log sink; requiere que el dato con caracteres de control sea controlado por atacante.
     severity: WARNING
     languages:
       - go

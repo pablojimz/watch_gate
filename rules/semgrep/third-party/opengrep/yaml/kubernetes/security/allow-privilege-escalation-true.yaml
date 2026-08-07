@@ -23,15 +23,7 @@ rules:
   fix: |
     false
   message: >-
-    In Kubernetes, each pod runs in its own isolated environment with its own 
-    set of security policies. However, certain container images may contain 
-    `setuid` or `setgid` binaries that could allow an attacker to perform 
-    privilege escalation and gain access to sensitive resources. To mitigate 
-    this risk, it's recommended to add a `securityContext` to the container in 
-    the pod, with the parameter `allowPrivilegeEscalation` set to `false`. 
-    This will prevent the container from running any privileged processes and 
-    limit the impact of any potential attacks. 
-    In the container `$CONTAINER` this parameter is set to `true` which makes
+    In Kubernetes, each pod runs in its own isolated environment with its own  set of security policies. However, certain container images may contain  `setuid` or `setgid` binaries that could allow an attacker to perform  privilege escalation and gain access to sensitive resources. To mitigate  this risk, it's recommended to add a `securityContext` to the container in  the pod, with the parameter `allowPrivilegeEscalation` set to `false`.  This will prevent the container from running any privileged processes and  limit the impact of any potential attacks.  In the container `$CONTAINER` this parameter is set to `true` which makes
     this container much more vulnerable to privelege escalation attacks.
   metadata:
     cwe:
@@ -53,5 +45,10 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 100
+    risk_score: 78
+    risk_justification: allowPrivilegeEscalation:true literal y exacto; aplica en cada despliegue del pod.
   languages: [yaml]
   severity: WARNING

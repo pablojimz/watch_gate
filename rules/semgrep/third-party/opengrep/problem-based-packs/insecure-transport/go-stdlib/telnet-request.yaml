@@ -18,6 +18,11 @@ rules:
     technology:
     - go-telnet
     vulnerability: Insecure Transport
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: Llamada exacta a telnet.DialToAndCall, protocolo sin cifrar por diseno.
   languages:
   - go
   pattern: |

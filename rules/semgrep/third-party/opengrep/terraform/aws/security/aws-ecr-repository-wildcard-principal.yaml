@@ -61,6 +61,11 @@ rules:
     impact: MEDIUM
     confidence: MEDIUM
     license: Commons Clause License Condition v1.0[LGPL-2.1-only]
+    severity_score: 75
+    confidence_score: 80
+    exploitability_score: 100
+    risk_score: 83
+    risk_justification: Principal wildcard en policy de ECR; acceso publico a push/pull, habilita ataque de cadena de suministro.
   languages:
   - hcl
   severity: WARNING

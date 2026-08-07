@@ -15,6 +15,11 @@ rules:
       references:
         - https://developer.hashicorp.com/nomad/docs/job-specification/task#user
         - https://developer.hashicorp.com/nomad/docs/configuration/client#user-denylist
+      severity_score: 50
+      confidence_score: 100
+      exploitability_score: 100
+      risk_score: 78
+      risk_justification: Task ejecutada como root/Administrator; debilita privilegio mínimo, activo en cada despliegue.
     patterns:
       - pattern-inside: task "..." { ... }
       - pattern-either:

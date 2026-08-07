@@ -11,8 +11,7 @@ rules:
       }
       ...
     }
-  message: Detected an AWS Elasticsearch domain using an insecure version of TLS. To fix this, set "tls_security_policy"
-    equal to "Policy-Min-TLS-1-2-2019-07".
+  message: Detected an AWS Elasticsearch domain using an insecure version of TLS. To fix this, set "tls_security_policy" equal to "Policy-Min-TLS-1-2-2019-07".
   languages:
   - terraform
   severity: WARNING
@@ -33,3 +32,8 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: HIGH
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 100
+    risk_score: 78
+    risk_justification: Policy TLS insegura explicita en dominio Elasticsearch; match literal exacto.

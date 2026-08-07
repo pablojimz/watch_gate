@@ -23,6 +23,11 @@ rules:
     - vuln
     likelihood: MEDIUM
     impact: MEDIUM
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: md5.New/Sum exacto tras import crypto/md5; hash criptografico debil.
   patterns:
   - pattern-inside: |
       import "crypto/md5"
@@ -56,15 +61,20 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: MEDIUM
-  patterns: 
-    - pattern-inside: |
-        import "crypto/sha1"
-        ...
-    - pattern-either:
-      - pattern: |
-          sha1.New()
-      - pattern: |
-          sha1.Sum(...)
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: sha1.New/Sum exacto tras import crypto/sha1; hash criptografico debil.
+  patterns:
+  - pattern-inside: |
+      import "crypto/sha1"
+      ...
+  - pattern-either:
+    - pattern: |
+        sha1.New()
+    - pattern: |
+        sha1.Sum(...)
 - id: use-of-DES
   message: >-
     Detected DES cipher algorithm which is insecure. The algorithm is
@@ -88,6 +98,11 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: des.NewCipher/NewTripleDESCipher exacto; cifrado obsoleto y debil.
   patterns:
   - pattern-inside: |
       import "crypto/des"
@@ -120,9 +135,14 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: rc4.NewCipher exacto; cifrado de flujo roto conocido.
   patterns:
-    - pattern-inside: |
-        import "crypto/rc4"
-        ...
-    - pattern: |-
-        rc4.NewCipher(...)
+  - pattern-inside: |
+      import "crypto/rc4"
+      ...
+  - pattern: |-
+      rc4.NewCipher(...)

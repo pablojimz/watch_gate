@@ -21,6 +21,11 @@ rules:
     likelihood: LOW
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 75
+    confidence_score: 30
+    exploitability_score: 40
+    risk_score: 53
+    risk_justification: Fuente $scope.$X muy amplia, no necesariamente input de usuario.
   languages:
   - javascript
   - typescript

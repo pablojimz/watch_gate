@@ -1,8 +1,8 @@
 rules:
 - id: insecure-hash-algorithm-md5
   patterns:
-    - pattern: hashlib.md5(...)
-    - pattern-not: hashlib.md5(..., usedforsecurity=False, ...)
+  - pattern: hashlib.md5(...)
+  - pattern-not: hashlib.md5(..., usedforsecurity=False, ...)
   message: >-
     Detected MD5 hash algorithm which is considered insecure. MD5 is not
     collision resistant and is therefore not suitable as a cryptographic
@@ -33,6 +33,11 @@ rules:
     likelihood: LOW
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 50
+    confidence_score: 60
+    exploitability_score: 80
+    risk_score: 60
+    risk_justification: hashlib.md5 excluyendo usedforsecurity=False; MD5 vía hashlib tiene usos legítimos no criptográficos frecuentes.
   severity: WARNING
   languages:
   - python

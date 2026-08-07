@@ -1,21 +1,25 @@
 rules:
- -
-    id: proxy-storage-collision
+  - id: proxy-storage-collision
     message: Proxy declares a state var that may override a storage slot of the implementation
     metadata:
-        category: security
-        technology:
-          - solidity
-        cwe: "CWE-787: Out-of-bounds Write"
-        confidence: HIGH
-        likelihood: MEDIUM
-        impact: HIGH
-        subcategory:
-            - vuln
-        references:
+      category: security
+      technology:
+        - solidity
+      cwe: "CWE-787: Out-of-bounds Write"
+      confidence: HIGH
+      likelihood: MEDIUM
+      impact: HIGH
+      subcategory:
+        - vuln
+      references:
         - https://blog.audius.co/article/audius-governance-takeover-post-mortem-7-23-22
+      severity_score: 100
+      confidence_score: 80
+      exploitability_score: 80
+      risk_score: 89
+      risk_justification: State var no immutable en contrato proxy; colisión de slot puede tomar control del contrato (incidente real Audius).
     patterns:
-        - pattern-either:
+      - pattern-either:
           - pattern: |
               contract $CONTRACT is ..., $PROXY, ... {
                   ...
@@ -36,40 +40,40 @@ rules:
                   }
                   ...
               }
-        - pattern-not: |
-            contract $CONTRACT is ..., $PROXY, ... {
-                $TYPE immutable $VAR;
-                ...
-                constructor(...) {
-                    ...
-                }
-                ...
-            }
-        - pattern-not: |
-            contract $CONTRACT is ..., $PROXY, ... {
-                $TYPE immutable $VAR = ...;
-                ...
-                constructor(...) {
-                    ...
-                }
-                ...
-            }
-        - pattern-not: |
-            contract $CONTRACT is ..., $PROXY, ... {
-                $TYPE constant $VAR = ...;
-                ...
-                constructor(...) {
-                    ...
-                }
-                ...
-            }
-        - metavariable-regex:
-            metavariable: $CONTRACT
-            regex: ^(?!AdminUpgradeabilityProxy|OwnedUpgrade*abilityProxy).*$
-        - metavariable-regex:
-            metavariable: $PROXY
-            regex: (UpgradeabilityProxy|AdminUpgradeabilityProxy|OwnedUpgrade*abilityProxy|TransparentUpgradeableProxy|ERC1967Proxy)
-        - focus-metavariable: $PROXY
-    languages: 
-    - solidity
+      - pattern-not: |
+          contract $CONTRACT is ..., $PROXY, ... {
+              $TYPE immutable $VAR;
+              ...
+              constructor(...) {
+                  ...
+              }
+              ...
+          }
+      - pattern-not: |
+          contract $CONTRACT is ..., $PROXY, ... {
+              $TYPE immutable $VAR = ...;
+              ...
+              constructor(...) {
+                  ...
+              }
+              ...
+          }
+      - pattern-not: |
+          contract $CONTRACT is ..., $PROXY, ... {
+              $TYPE constant $VAR = ...;
+              ...
+              constructor(...) {
+                  ...
+              }
+              ...
+          }
+      - metavariable-regex:
+          metavariable: $CONTRACT
+          regex: ^(?!AdminUpgradeabilityProxy|OwnedUpgrade*abilityProxy).*$
+      - metavariable-regex:
+          metavariable: $PROXY
+          regex: (UpgradeabilityProxy|AdminUpgradeabilityProxy|OwnedUpgrade*abilityProxy|TransparentUpgradeableProxy|ERC1967Proxy)
+      - focus-metavariable: $PROXY
+    languages:
+      - solidity
     severity: WARNING

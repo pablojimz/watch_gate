@@ -18,6 +18,11 @@ rules:
     technology:
     - gorequest
     vulnerability: Insecure Transport
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: Verbo HTTP a literal http:// exacto, sin taint tracking pero inequivoco.
   languages: [go]
   pattern-either:
   - patterns:

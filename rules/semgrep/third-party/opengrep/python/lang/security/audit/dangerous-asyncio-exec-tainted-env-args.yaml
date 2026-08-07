@@ -59,8 +59,7 @@ rules:
       - pattern-not: $LOOP.subprocess_exec($PROTOCOL, "=~/(sh|bash|ksh|csh|tcsh|zsh)/", "-c", "...", ...)
       - pattern: $LOOP.subprocess_exec($PROTOCOL, "=~/(sh|bash|ksh|csh|tcsh|zsh)/", "-c",...)
     - patterns:
-      - pattern-not: $LOOP.subprocess_exec($PROTOCOL, ["=~/(sh|bash|ksh|csh|tcsh|zsh)/", "-c", "...",
-          ...], ...)
+      - pattern-not: $LOOP.subprocess_exec($PROTOCOL, ["=~/(sh|bash|ksh|csh|tcsh|zsh)/", "-c", "...", ...], ...)
       - pattern: $LOOP.subprocess_exec($PROTOCOL, ["=~/(sh|bash|ksh|csh|tcsh|zsh)/", "-c", ...], ...)
   message: >-
     Detected subprocess function '$LOOP.subprocess_exec' with user controlled data.
@@ -90,5 +89,10 @@ rules:
     - vuln
     likelihood: MEDIUM
     impact: HIGH
+    severity_score: 100
+    confidence_score: 60
+    exploitability_score: 40
+    risk_score: 73
+    risk_justification: Taint os.environ/argv->loop.subprocess_exec; RCE si esos datos realmente vienen de atacante, no garantizado por el código.
   languages: [python]
   severity: ERROR

@@ -41,5 +41,10 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 75
+    confidence_score: 80
+    exploitability_score: 100
+    risk_score: 83
+    risk_justification: Policy IAM con Action=* Resource=*; concede privilegios de administrador si se asigna.
   languages: [hcl]
   severity: ERROR

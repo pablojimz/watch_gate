@@ -33,6 +33,11 @@ rules:
     likelihood: MEDIUM
     confidence: MEDIUM
     interfile: true
+    severity_score: 75
+    confidence_score: 80
+    exploitability_score: 80
+    risk_score: 78
+    risk_justification: SSRF via host construido con formato; taint real con anotaciones Spring.
   mode: taint
   pattern-sources:
   - patterns:
