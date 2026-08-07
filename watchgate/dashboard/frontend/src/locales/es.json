@@ -154,6 +154,8 @@
     "roleSaved": "Rol asignado",
     "roleRemoved": "Rol eliminado",
     "user": "Usuario",
+    "userHint": "Se guarda en minúsculas y sin espacios de sobra, para que la misma persona no quede duplicada por may/min.",
+    "userRequired": "Escribe un nombre de usuario",
     "repo": "Repositorio",
     "role": "Rol",
     "add": "Asignar",
