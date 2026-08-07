@@ -26,6 +26,15 @@ def _verify_github_signature(
     return hmac.compare_digest(computed_signature, expected_signature)
 
 
+def _verify_gitlab_token(
+    token_header: str | None, secret: str
+) -> bool:
+    """Verifica el token de secreto enviado en la cabecera X-Gitlab-Token."""
+    if not token_header or not secret:
+        return False
+    return hmac.compare_digest(token_header.strip(), secret.strip())
+
+
 @router.post("/github")
 async def handle_github_webhook(
     request: Request,
@@ -60,6 +69,7 @@ async def handle_github_webhook(
 
         return {
             "status": "accepted",
+            "provider": "github",
             "event": x_github_event,
             "action": action,
             "repo": repo_name,
@@ -68,7 +78,101 @@ async def handle_github_webhook(
 
     return {
         "status": "ignored",
+        "provider": "github",
         "event": x_github_event,
         "action": action,
+        "reason": "Evento no procesable por WatchGate Engine API",
+    }
+
+
+@router.post("/gitlab")
+async def handle_gitlab_webhook(
+    request: Request,
+    x_gitlab_event: str | None = Header(default=None, alias="X-Gitlab-Event"),
+    x_gitlab_token: str | None = Header(default=None, alias="X-Gitlab-Token"),
+) -> dict[str, Any]:
+    """Procesa un webhook entrante desde GitLab con verificación de token de secreto."""
+    webhook_secret = os.environ.get("GITLAB_WEBHOOK_SECRET") or os.environ.get(
+        "WATCHGATE_GITLAB_WEBHOOK_SECRET"
+    )
+
+    if webhook_secret:
+        if not _verify_gitlab_token(x_gitlab_token, webhook_secret):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token X-Gitlab-Token inválido o no coincidente.",
+            )
+
+    try:
+        payload = await request.json()
+    except Exception:  # noqa: BLE001
+        payload = {}
+
+    object_kind = payload.get("object_kind", "unknown")
+
+    if x_gitlab_event == "Merge Request Hook" or object_kind == "merge_request":
+        attrs = payload.get("object_attributes", {})
+        mr_id = str(attrs.get("iid", payload.get("id", "")))
+        repo_name = payload.get("project", {}).get("path_with_namespace", "")
+
+        return {
+            "status": "accepted",
+            "provider": "gitlab",
+            "event": x_gitlab_event or object_kind,
+            "action": attrs.get("action", "open"),
+            "repo": repo_name,
+            "pr_id": mr_id,
+        }
+
+    return {
+        "status": "ignored",
+        "provider": "gitlab",
+        "event": x_gitlab_event or object_kind,
+        "reason": "Evento no procesable por WatchGate Engine API",
+    }
+
+
+@router.post("/bitbucket")
+async def handle_bitbucket_webhook(
+    request: Request,
+    x_event_key: str | None = Header(default=None, alias="X-Event-Key"),
+    x_hub_signature: str | None = Header(default=None, alias="X-Hub-Signature"),
+) -> dict[str, Any]:
+    """Procesa un webhook entrante desde Bitbucket con verificación de firma HMAC-SHA256."""
+    webhook_secret = os.environ.get("BITBUCKET_WEBHOOK_SECRET") or os.environ.get(
+        "WATCHGATE_BITBUCKET_WEBHOOK_SECRET"
+    )
+
+    body = await request.body()
+
+    if webhook_secret:
+        if not _verify_github_signature(body, x_hub_signature, webhook_secret):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Firma HMAC X-Hub-Signature inválida o no coincidente.",
+            )
+
+    try:
+        payload = await request.json()
+    except Exception:  # noqa: BLE001
+        payload = {}
+
+    if x_event_key and x_event_key.startswith("pullrequest:"):
+        pr_data = payload.get("pullrequest", {})
+        pr_id = str(pr_data.get("id", ""))
+        repo_name = payload.get("repository", {}).get("full_name", "")
+
+        return {
+            "status": "accepted",
+            "provider": "bitbucket",
+            "event": x_event_key,
+            "repo": repo_name,
+            "pr_id": pr_id,
+        }
+
+    return {
+        "status": "ignored",
+        "provider": "bitbucket",
+        "event": x_event_key,
         "reason": "Evento no procesable por WatchGate Engine API",
     }
