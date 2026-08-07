@@ -15,6 +15,7 @@ from watchgate.core.aggregator import aggregate
 from watchgate.core.cost_control import CostController
 from watchgate.core.layers._semantic.layer import SemanticLayer
 from watchgate.core.layers._semantic.llm_factory import build_llm_client
+from watchgate.core.layers.deps_layer import DepsLayer
 from watchgate.core.models import AggregatedResult, LayerResult, NormalizedDiff
 from watchgate.core.orchestrator import LayerFactory, run_analysis
 from watchgate.core.shortcircuit import evaluate_shortcircuit
@@ -41,6 +42,11 @@ def run_full_analysis(
     no es un error aquí)."""
     cost_control = None
     layer_factories: dict[str, LayerFactory] = {}
+
+    if config.weights.get("dependencies", 0) > 0 or config.weights.get("deps", 0) > 0:
+        layer_factories["dependencies"] = lambda: DepsLayer(
+            max_osv_queries=config.max_dependency_checks
+        )
 
     if config.weights.get("semantic", 0) > 0:
         cost_control = CostController(

@@ -133,3 +133,45 @@ def test_cli_rag_reindex(tmp_path, capsys):
     mock_build.assert_called_once_with(index_path=index_path)
     captured = capsys.readouterr()
     assert "[WatchGate] Indexados 12 fragmentos" in captured.out
+
+
+def test_cli_analyze_invalid_config_returns_error_code(tmp_git_repo, tmp_path, capsys):
+    repo_dir, base_sha, head_sha = tmp_git_repo
+    bad_config = tmp_path / "bad.yml"
+    bad_config.write_text("weights: [broken yaml\n")
+
+    code = main(
+        [
+            "analyze",
+            "--base",
+            base_sha,
+            "--head",
+            head_sha,
+            "--repo-path",
+            repo_dir,
+            "--config",
+            str(bad_config),
+        ]
+    )
+
+    assert code == 2
+    captured = capsys.readouterr()
+    assert "[Error de Configuración]" in captured.err
+
+
+def test_cli_analyze_invalid_repo_returns_error_code(capsys):
+    code = main(
+        [
+            "analyze",
+            "--base",
+            "0000000",
+            "--head",
+            "1111111",
+            "--repo-path",
+            "/nonexistent/repo/path",
+        ]
+    )
+
+    assert code == 2
+    captured = capsys.readouterr()
+    assert "[Error de Git]" in captured.err

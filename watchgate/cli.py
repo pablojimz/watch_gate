@@ -70,8 +70,18 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _cmd_analyze(args: argparse.Namespace) -> int:
-    config = load_config(args.config)
-    diff = parse_diff(args.repo_path, args.base, args.head)
+    try:
+        config = load_config(args.config)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[Error de Configuración] No se pudo cargar '{args.config}': {exc}", file=sys.stderr)
+        return 2
+
+    try:
+        diff = parse_diff(args.repo_path, args.base, args.head)
+    except Exception as exc:  # noqa: BLE001
+        msg = f"[Error de Git] No se pudo extraer el diff de '{args.repo_path}': {exc}"
+        print(msg, file=sys.stderr)
+        return 2
 
     metadata: dict[str, object] = {
         "pr_id": args.pr_id,
