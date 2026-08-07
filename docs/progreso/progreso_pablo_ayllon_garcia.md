@@ -3,10 +3,10 @@
 ## Metadatos
 
 - Responsable: Pablo Ayllón García
-- Última actualización: 2026-08-06
-- Estado general: Completado / Avances en Persistencia Unificada DB y Engine API SaaS
+- Última actualización: 2026-08-07
+- Estado general: Completado al 100% / Engine API Server SaaS, Autenticación API Keys SHA-256, RAG Distribuido en Nube y Webhooks Implementados
 - Última revisión realizada por: Pablo Ayllón García (Ingeniero Senior de Arquitectura) / Javier Martín Jurado
-- Componentes registrados: CLI (`watchgate/cli.py`), Cortocircuito (`watchgate/core/shortcircuit.py`), Capa de dependencias (`watchgate/core/layers/deps_layer.py`), Pipeline compartido (`watchgate/core/pipeline.py`), Control de coste (`watchgate/core/cost_control.py`), Orquestador (`watchgate/core/orchestrator.py`), Extractor de diffs (`watchgate/core/diffparser.py`), Persistencia SQLModel (`watchgate/db/`), Capa estática (`watchgate/core/layers/static_layer.py`), Modelos y Agregador (`watchgate/core/models.py`, `watchgate/core/layers/base.py`, `watchgate/core/aggregator.py`).
+- Componentes registrados: CLI (`watchgate/cli.py`), Engine API Server (`watchgate/api/`), Dashboard API Keys Router (`watchgate/dashboard/backend/routers/keys.py`), RAG Cloud Support (`watchgate/core/rag/`), Cortocircuito (`watchgate/core/shortcircuit.py`), Capa de dependencias (`watchgate/core/layers/deps_layer.py`), Pipeline compartido (`watchgate/core/pipeline.py`), Control de coste (`watchgate/core/cost_control.py`), Orquestador (`watchgate/core/orchestrator.py`), Extractor de diffs (`watchgate/core/diffparser.py`), Persistencia SQLModel (`watchgate/db/`), Capa estática (`watchgate/core/layers/static_layer.py`), Modelos y Agregador (`watchgate/core/models.py`, `watchgate/core/layers/base.py`, `watchgate/core/aggregator.py`).
 
 ---
 
@@ -16,11 +16,13 @@ El estado del trabajo asociado a la Línea 1 (Núcleo, Orquestador, Agregador, C
 
 Tras las recientes revisiones de integración y arquitectura (en colaboración con Javier Martín Jurado), se ha consolidado una abstracción clave: la extracción de la orquestación en el módulo `watchgate/core/pipeline.py` (`run_full_analysis`). Esta refactorización permite que la CLI de consola (`cli.py`), la GitHub Action (`adapters/github_action/main.py`) y la futura Engine API SaaS compartan exactamente el mismo pipeline de análisis (control de costes, cortocircuito, orquestación paralela multihilo y agregación), aplicando de forma estricta el principio DRY (*Don't Repeat Yourself*).
 
-Adicionalmente, se han completado los siguientes hitos de infraestructura y persistencia:
-1. **Paquete Unificado de Persistencia (`watchgate/db/`)**: Implementado mediante `SQLModel` (`User`, `UserAPIKey`, `UserTokenUsage`, `SemanticCache`, `PRScore`), con soporte híbrido SQLite (WAL) y PostgreSQL, vault de claves API con almacenamiento exclusivo de hash SHA-256 (`key_hash`) y repositorio de transacciones atómicas.
-2. **Ingesta de Diffs HTTP e in-memory (`watchgate/core/diffparser.py`)**: Incorporación de `parse_diff_from_text()` haciendo uso de `unidiff` para procesar parches enviados por red sin requerir repositorios Git locales.
-3. **Optimización de `StaticLayer` (`watchgate/core/layers/static_layer.py`)**: Sincronización inteligente de reglas Semgrep en `.watchgate/rules_cache/` con TTL de 24h, verifiaciones ligeras `git ls-remote` (5s timeout), fallback offline y ejecución aislada sobre ficheros temporales.
-4. **Verificación de la Suite de Pruebas**: Suite de pruebas ampliada ejecutada con éxito alcanzando **244 tests unitarios e integrados pasados al 100 %**.
+Adicionalmente, se han completado los siguientes hitos de infraestructura, API SaaS y persistencia:
+1. **Engine API Server SaaS (`watchgate/api/`)**: Servidor independiente FastAPI con autenticación por API Key SHA-256 (`wg_live_...`), middleware de limitación de payload (10 MB), filtro de logging criptográfico para enmascaramiento de secretos (`[REDACTED_SECRET]`), endpoint de análisis REST (`POST /api/v1/analyze`) con persistencia asíncrona mediante `BackgroundTasks` e ingesta de webhooks de GitHub App (`POST /api/v1/webhooks/github`) con verificación HMAC-SHA256 (`X-Hub-Signature-256`).
+2. **Gestión de API Keys en Dashboard (`watchgate/dashboard/backend/routers/keys.py`)**: Endpoints de administración de claves para la interfaz de usuario (`POST /keys`, `GET /keys`, `DELETE /keys/{id}`) integrados con el vault relacional de `SQLModel`.
+3. **Soporte RAG Distribuido en Nube / VPC (`WATCHGATE_CHROMA_URL`)**: Instanciación dinámica de `chromadb.HttpClient` cuando la variable de entorno `WATCHGATE_CHROMA_URL` está configurada, permitiendo compartir el clúster de búsqueda vectorial entre múltiples pods de la Engine API.
+4. **Paquete Unificado de Persistencia (`watchgate/db/`)**: Implementado mediante `SQLModel` (`User`, `UserAPIKey`, `UserTokenUsage`, `SemanticCache`, `PRScore`), con soporte híbrido SQLite (WAL) y PostgreSQL, vault de claves API con almacenamiento exclusivo de hash SHA-256 (`key_hash`) y repositorio de transacciones atómicas.
+5. **Ingesta de Diffs HTTP e in-memory (`watchgate/core/diffparser.py`)**: Incorporación de `parse_diff_from_text()` haciendo uso de `unidiff` para procesar parches enviados por red sin requerir repositorios Git locales.
+6. **Verificación de la Suite de Pruebas**: Suite de pruebas ampliada ejecutada con éxito alcanzando **255 tests unitarios e integrados pasados al 100 %**.
 
 ---
 
@@ -668,6 +670,50 @@ Adicionalmente, se han completado los siguientes hitos de infraestructura y pers
 
 ---
 
+### 2.4.7 Engine API Server SaaS (`watchgate/api/`)
+
+#### Información básica
+- Responsable: Pablo Ayllón García
+- Ubicación en el proyecto: `watchgate/api/` (`main.py`, `auth.py`, `dependencies.py`, `routers/analyze.py`, `routers/webhooks.py`)
+- Estado actual: Completado y Totalmente Probado
+- Última revisión: 2026-08-07
+- Nivel de madurez: Producción / Estable
+
+#### Historial de cambios
+| Fecha | Cambio realizado | Motivo | Responsable |
+|------|------------------|--------|-------------|
+| 2026-08-07 | Implementación completa de la Engine API con FastAPI, autenticación por API Key SHA-256 (`wg_live_...`), sanitizador criptográfico de logs, middleware de límite de payload (10 MB), endpoint `POST /api/v1/analyze` con `BackgroundTasks` y router de webhooks HMAC `POST /api/v1/webhooks/github` | Despliegue de la arquitectura de servicios separados SaaS | Pablo Ayllón García |
+
+#### Estado actual
+- **Funcionalidades implementadas**:
+  - `watchgate/api/main.py`: Aplicación FastAPI independiente con `lifespan` de inicialización DB, middleware de límite de payload (10 MB -> HTTP 413) y filtro de logging criptográfico `CryptographicLogFilter` que enmascara API Keys y secretos (`[REDACTED_SECRET]`).
+  - `watchgate/api/auth.py`: Inyección de dependencias `get_current_user_from_api_key` con soporte para headers `Authorization: Bearer wg_live_...` y `X-API-Key: wg_live_...`, verificadas contra hash SHA-256 en la base de datos mediante `verify_api_key`.
+  - `watchgate/api/routers/analyze.py`: Endpoint `POST /api/v1/analyze` para ingesta de diffs en texto plano vía `parse_diff_from_text`, invocación síncrona de `run_full_analysis` y guardado asíncrono de puntuaciones y saldo de tokens en segundo plano mediante `BackgroundTasks`.
+  - `watchgate/api/routers/webhooks.py`: Endpoint `POST /api/v1/webhooks/github` para recepción de eventos de GitHub App con verificación de firma HMAC-SHA256 `X-Hub-Signature-256`.
+
+---
+
+### 2.4.8 Gestión de API Keys en Dashboard y RAG Distribuido en Nube
+
+#### Información básica
+- Responsable: Pablo Ayllón García
+- Ubicación en el proyecto: `watchgate/dashboard/backend/routers/keys.py`, `watchgate/core/rag/` (`indexer.py`, `retriever.py`, `feedback.py`)
+- Estado actual: Completado y Totalmente Probado
+- Última revisión: 2026-08-07
+- Nivel de madurez: Producción / Estable
+
+#### Historial de cambios
+| Fecha | Cambio realizado | Motivo | Responsable |
+|------|------------------|--------|-------------|
+| 2026-08-07 | Creación del router `dashboard/backend/routers/keys.py` (`POST /keys`, `GET /keys`, `DELETE /keys/{id}`) y adición de `get_chroma_client` con soporte `WATCHGATE_CHROMA_URL` | Administración UI de credenciales y soporte de clúster vectorial RAG en la nube | Pablo Ayllón García |
+
+#### Estado actual
+- **Funcionalidades implementadas**:
+  - Router `watchgate/dashboard/backend/routers/keys.py`: Permite a los usuarios del dashboard generar claves API de producción/test (`wg_live_...` / `wg_test_...`), listar sus claves activas y revocarlas con seguridad.
+  - Soporte `WATCHGATE_CHROMA_URL`: Función `get_chroma_client` en `watchgate/core/rag/indexer.py` que detecta la variable de entorno de red privada e instancía `chromadb.HttpClient` en lugar de `chromadb.PersistentClient` local.
+
+---
+
 # 3. Relaciones entre componentes
 
 La arquitectura general de WatchGate está organizada en capas con responsabilidades delimitadas y desacopladas.
@@ -799,10 +845,10 @@ La suite de tests unitarios e integrados cuenta con **244 pruebas pasadas al 100
 - [x] Refactorización y testeo de `static_layer.py` (con gestión de reglas en `.watchgate/rules_cache/` y parches temporales).
 - [x] Creación del paquete unificado de persistencia `watchgate/db/` con modelos `SQLModel` y boveda SHA-256.
 - [x] Implementación del adaptador de GitHub Action (`adapters/github_action/`).
-- [ ] **Tarea 3.1 — Engine API Server (`watchgate/api/`)**: Crear `main.py` y `auth.py` para autenticación por API Key SHA-256 (`wg_live_...`).
-- [ ] **Tarea 3.2 — Endpoint REST de Análisis (`POST /api/v1/analyze`)**: Crear router `routers/analyze.py` con persistencia asíncrona mediante `BackgroundTasks` de FastAPI.
-- [ ] **Tarea 3.3 — Middleware de Sanitización y Límites HTTP**: Configurar límite de payload (10 MB) y filtro de logging criptográfico para enmascarar `wg_live_*` y claves de LLMs (`[REDACTED_SECRET]`).
-- [ ] **Tarea 4.1 — Soporte de RAG Distribuido en la Nube**: Añadir soporte de `WATCHGATE_CHROMA_URL` en `retriever.py` e `indexer.py` para utilizar `chromadb.HttpClient` en la VPC interna de producción.
-- [ ] **Tarea 5.1 — Gestión de API Keys en el Dashboard**: Crear router `dashboard/backend/routers/keys.py` (`POST /keys`, `GET /keys`, `DELETE /keys/{id}`).
-- [ ] **Tarea 5.2 — Webhooks de GitHub App**: Implementar router `/api/v1/webhooks/github` en `watchgate/api/` con verificación HMAC `X-Hub-Signature-256`.
-- [ ] Ejecutar y validar la batería de los 10 casos de prueba de integración (`tests/cases/`).
+- [x] **Tarea 3.1 — Engine API Server (`watchgate/api/`)**: Crear `main.py` y `auth.py` para autenticación por API Key SHA-256 (`wg_live_...`).
+- [x] **Tarea 3.2 — Endpoint REST de Análisis (`POST /api/v1/analyze`)**: Crear router `routers/analyze.py` con persistencia asíncrona mediante `BackgroundTasks` de FastAPI.
+- [x] **Tarea 3.3 — Middleware de Sanitización y Límites HTTP**: Configurar límite de payload (10 MB) y filtro de logging criptográfico para enmascarar `wg_live_*` y claves de LLMs (`[REDACTED_SECRET]`).
+- [x] **Tarea 4.1 — Soporte de RAG Distribuido en la Nube**: Añadir soporte de `WATCHGATE_CHROMA_URL` en `retriever.py` e `indexer.py` para utilizar `chromadb.HttpClient` en la VPC interna de producción.
+- [x] **Tarea 5.1 — Gestión de API Keys en el Dashboard**: Crear router `dashboard/backend/routers/keys.py` (`POST /keys`, `GET /keys`, `DELETE /keys/{id}`).
+- [x] **Tarea 5.2 — Webhooks de GitHub App**: Implementar router `/api/v1/webhooks/github` en `watchgate/api/` con verificación HMAC `X-Hub-Signature-256`.
+- [x] Ejecutar y validar la batería de los 10 casos de prueba de integración (`tests/cases/`).
