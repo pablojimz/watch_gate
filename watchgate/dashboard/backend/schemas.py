@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from watchgate.core.models import AggregatedResult, Semaforo
 
@@ -166,6 +166,14 @@ class LlmSettingsIn(BaseModel):
     monthly_budget_tokens: int | None = 2_000_000
     max_diff_tokens: int | None = 80_000
 
+# Cap del logo como data: URL embebida directamente en ui_settings (nunca un
+# fichero en disco/objeto en la nube -- no hay almacenamiento de assets en
+# el dashboard todavía). ~400_000 caracteres de base64 son ~290 KB reales,
+# de sobra para un logo y lo bastante bajo para no inflar cada respuesta de
+# /api/settings/ui ni el propio favicon en cada carga del dashboard.
+_MAX_LOGO_DATA_URL_LENGTH = 400_000
+
+
 class UiSettings(BaseModel):
     primary_color: str = "#3b6ea5"
     accent_color: str = "#5b7c99"
@@ -173,3 +181,13 @@ class UiSettings(BaseModel):
     font_scale: Literal["sm", "md", "lg"] = "md"
     density: Literal["compact", "comfortable"] = "comfortable"
     default_theme: Literal["light", "dark", "system"] = "system"
+    logo_data_url: str | None = Field(default=None, max_length=_MAX_LOGO_DATA_URL_LENGTH)
+
+    @field_validator("logo_data_url")
+    @classmethod
+    def _validate_logo_data_url(cls, value: str | None) -> str | None:
+        if value is None or value == "":
+            return None
+        if not value.startswith("data:image/"):
+            raise ValueError("logo_data_url debe ser una data URL de imagen (data:image/...)")
+        return value

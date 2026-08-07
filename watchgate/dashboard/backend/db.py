@@ -181,6 +181,7 @@ def _init_db_postgres(conn: PostgresConnection) -> None:
         "ALTER TABLE org_settings ADD COLUMN IF NOT EXISTS "
         "risk_colors_json TEXT NOT NULL DEFAULT '{}'"
     )
+    conn.execute("ALTER TABLE ui_settings ADD COLUMN IF NOT EXISTS logo_data_url TEXT")
     conn.commit()
     ensure_org_settings(conn)
     ensure_llm_settings(conn)
@@ -218,6 +219,9 @@ def init_db(conn: DBConnection) -> None:
         conn.execute(
             "ALTER TABLE org_settings ADD COLUMN risk_colors_json TEXT NOT NULL DEFAULT '{}'"
         )
+    ui_cols = {row[1] for row in conn.execute("PRAGMA table_info(ui_settings)").fetchall()}
+    if ui_cols and "logo_data_url" not in ui_cols:
+        conn.execute("ALTER TABLE ui_settings ADD COLUMN logo_data_url TEXT")
     conn.commit()
     ensure_org_settings(conn)
     ensure_llm_settings(conn)
@@ -688,6 +692,7 @@ def get_ui_settings(conn: DBConnection) -> UiSettings:
         font_scale=row["font_scale"],
         density=row["density"],
         default_theme=row["default_theme"],
+        logo_data_url=row["logo_data_url"],
     )
 
 
@@ -701,7 +706,8 @@ def set_ui_settings(conn: DBConnection, settings: UiSettings) -> UiSettings:
           radius = ?,
           font_scale = ?,
           density = ?,
-          default_theme = ?
+          default_theme = ?,
+          logo_data_url = ?
         WHERE id = 1
         """,
         (
@@ -711,6 +717,7 @@ def set_ui_settings(conn: DBConnection, settings: UiSettings) -> UiSettings:
             settings.font_scale,
             settings.density,
             settings.default_theme,
+            settings.logo_data_url,
         ),
     )
     conn.commit()
