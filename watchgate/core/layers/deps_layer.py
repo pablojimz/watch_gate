@@ -28,7 +28,7 @@ from watchgate.core.layers._shared import (
     analyze_install_script_text,
 )
 from watchgate.core.layers.base import AnalysisLayer, register_layer
-from watchgate.core.models import LayerResult, NormalizedDiff
+from watchgate.core.models import Finding, LayerResult, NormalizedDiff
 
 logger = logging.getLogger("watchgate.deps")
 
@@ -46,6 +46,7 @@ class DependencyChange(BaseModel):
     is_new: bool = True
     install_script: str | None = None
     is_direct_url: bool = False
+    manifest_path: str = ""
 
 
 class OSVCache:
@@ -639,14 +640,18 @@ class DepsLayer(AnalysisLayer):
         for file_change in manifest_files:
             fname = Path(file_change.path).name
             hunk = file_change.diff_hunk
+            parsed: list[DependencyChange] = []
             if fname == "package.json":
-                all_changes.extend(parse_package_json(hunk))
+                parsed = parse_package_json(hunk)
             elif fname in ("requirements.txt", "Pipfile"):
-                all_changes.extend(parse_requirements_txt(hunk))
+                parsed = parse_requirements_txt(hunk)
             elif fname == "PKGBUILD":
-                all_changes.extend(parse_pkgbuild(hunk))
+                parsed = parse_pkgbuild(hunk)
             elif fname == "Cargo.toml":
-                all_changes.extend(parse_cargo_toml(hunk))
+                parsed = parse_cargo_toml(hunk)
+            for ch in parsed:
+                ch.manifest_path = file_change.path
+            all_changes.extend(parsed)
 
         if not all_changes:
             return LayerResult(
@@ -663,6 +668,7 @@ class DepsLayer(AnalysisLayer):
 
         scores: list[int] = []
         justifications: list[str] = []
+        structured_findings: list[Finding] = []
 
         # 3. Analizar cada cambio
         for idx, change in enumerate(all_changes):
@@ -724,6 +730,17 @@ class DepsLayer(AnalysisLayer):
             notes_str = "; ".join(pkg_notes) if pkg_notes else "OK"
             justifications.append(f"{change.name}{version_str} ({change.ecosystem}): {notes_str}")
 
+            if pkg_score > 0:
+                m_path = change.manifest_path if change.manifest_path else change.name
+                structured_findings.append(
+                    Finding(
+                        file_path=m_path,
+                        rule_id=f"dependency-{change.ecosystem.lower()}",
+                        message=f"{change.name}{version_str}: {notes_str}",
+                        severity="error" if pkg_score >= 60 else "warning",
+                    )
+                )
+
         final_score = max(scores, default=0)
         final_justification = " | ".join(justifications)
 
@@ -731,4 +748,5 @@ class DepsLayer(AnalysisLayer):
             layer_name=self.name,
             risk_score=final_score,
             justification=final_justification,
+            findings=structured_findings,
         )

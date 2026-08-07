@@ -17,7 +17,7 @@ from watchgate.core.layers._semantic.layer import SemanticLayer
 from watchgate.core.layers._semantic.llm_factory import build_llm_client
 from watchgate.core.layers.deps_layer import DepsLayer
 from watchgate.core.models import AggregatedResult, LayerResult, NormalizedDiff
-from watchgate.core.orchestrator import LayerFactory, run_analysis
+from watchgate.core.orchestrator import LayerFactory, ProgressCallback, run_analysis
 from watchgate.core.shortcircuit import evaluate_shortcircuit
 
 
@@ -30,7 +30,10 @@ class _ConfigWithoutSemantic:
 
 
 def run_full_analysis(
-    diff: NormalizedDiff, metadata: dict[str, object], config: WatchGateConfig
+    diff: NormalizedDiff,
+    metadata: dict[str, object],
+    config: WatchGateConfig,
+    on_progress: ProgressCallback | None = None,
 ) -> AggregatedResult:
     """Ejecuta el pipeline completo: cortocircuito opcional (§11), capas
     activas reales (§9) con `CostController`/`SemanticLayer` reales cuando
@@ -88,8 +91,12 @@ def run_full_analysis(
                     repo=str(metadata.get("repo", "")),
                     thresholds=config.thresholds,
                 )
-            return run_analysis(diff, metadata, config, layer_factories=layer_factories)
-        return run_analysis(diff, metadata, config, layer_factories=layer_factories)
+            return run_analysis(
+                diff, metadata, config, layer_factories=layer_factories, on_progress=on_progress
+            )
+        return run_analysis(
+            diff, metadata, config, layer_factories=layer_factories, on_progress=on_progress
+        )
     finally:
         if cost_control is not None:
             cost_control.close()
