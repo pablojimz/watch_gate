@@ -56,7 +56,7 @@ def test_verify_valid_api_key() -> None:
 
     verified = verify_api_key(session, raw_token)
     assert verified is not None
-    key_record, verified_user = verified
+    key_record, verified_user, _org = verified
     assert verified_user.id == user.id
     assert verified_user.email == "bob@example.com"
     assert key_record.last_used_at is not None
