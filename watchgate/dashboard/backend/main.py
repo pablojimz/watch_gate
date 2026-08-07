@@ -22,6 +22,7 @@ from watchgate.dashboard.backend.routers.llm_settings import router as llm_route
 from watchgate.dashboard.backend.routers.metrics import router as metrics_router
 from watchgate.dashboard.backend.routers.scores import router as scores_router
 from watchgate.dashboard.backend.routers.ui_settings import router as ui_router
+from watchgate.db.connection import init_db as init_api_keys_db
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,13 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         database.init_db(conn)
         if os.environ.get("WATCHGATE_DASHBOARD_SEED", "1") == "1":
             database.seed_demo(conn)
+    # Esquema aparte (SQLModel, watchgate/db/) que usa routers/keys.py --
+    # sin esto, el propio arranque del dashboard nunca crea las tablas
+    # users/user_api_keys y POST /api/keys falla con "no such table" en
+    # cuanto se despliega de verdad (los tests de keys.py no lo detectan
+    # porque sobreescriben get_db_session con un engine propio ya
+    # inicializado).
+    init_api_keys_db()
     setup_oidc()
     yield
 

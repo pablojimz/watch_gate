@@ -3,6 +3,7 @@
   "nav": {
     "repos": "Repositorios",
     "metrics": "Métricas",
+    "apiKeys": "API Keys",
     "admin": "Configuración",
     "feedback": "Feedback",
     "logout": "Salir"
@@ -185,6 +186,28 @@
     "feedbackRate": "{{rate}}% marcado como correcto (sobre resueltos)",
     "byRepo": "Desglose por repositorio",
     "empty": "Aún no hay datos de análisis."
+  },
+  "apiKeys": {
+    "title": "Tus API keys",
+    "subtitle": "Claves personales para llamar a la API de WatchGate (por ejemplo desde un runner de CI). Solo tú puedes ver y gestionar las tuyas.",
+    "newTitle": "Generar nueva clave",
+    "nameLabel": "Nombre",
+    "namePlaceholder": "p. ej. Runner CI producción",
+    "generate": "Generar clave",
+    "revealTitle": "Clave generada",
+    "revealWarning": "Cópiala ahora: por seguridad no se guarda en texto plano y no volverá a mostrarse completa.",
+    "copy": "Copiar",
+    "copiedToken": "Clave copiada al portapapeles",
+    "copiedPrefix": "Prefijo copiado al portapapeles",
+    "copyPrefixHint": "Copiar prefijo (la clave completa no se puede recuperar)",
+    "dismiss": "Ya la he copiado",
+    "keyColumn": "Clave",
+    "createdAt": "Creada",
+    "lastUsed": "Último uso",
+    "revoke": "Revocar",
+    "confirmDelete": "¿Revocar esta clave? Cualquier integración que la use dejará de funcionar.",
+    "deleted": "Clave revocada",
+    "empty": "Todavía no has generado ninguna clave."
   },
   "theme": {
     "light": "Tema claro",
