@@ -25,7 +25,13 @@ _RECOMENDACION: dict[Semaforo, str] = {
 }
 
 _TEMPLATE_SOURCE = (
-    "[{{ semaforo_emoji }}] WatchGate: Riesgo {{ semaforo_texto }} ({{ score }}/100)\n\n"
+    "[{{ semaforo_emoji }}] WatchGate: Riesgo {{ semaforo_texto }} ({{ score }}/100)\n"
+    "{% if threat_summary and (threat_summary.get('malicioso', 0) > 0 or "
+    "threat_summary.get('vulnerabilidad', 0) > 0 or threat_summary.get('incertidumbre', 0) > 0) %}"
+    "Amenazas: 🚨 {{ threat_summary.get('malicioso', 0) }} Maliciosa(s) | "
+    "⚠️ {{ threat_summary.get('vulnerabilidad', 0) }} Vulnerabilidad(es) | "
+    "❓ {{ threat_summary.get('incertidumbre', 0) }} Incertidumbre(s)\n"
+    "{% endif %}\n"
     "{% for name, result in layer_results.items() -%}\n"
     "{{ name | capitalize }}: {{ result.risk_score }}/100  "
     "(peso {{ weights_used.get(name, 0) }})"
@@ -51,4 +57,5 @@ def render_comment(result: AggregatedResult) -> str:
         layer_results=result.layer_results,
         weights_used=result.weights_used,
         recomendacion=_RECOMENDACION[result.semaforo],
+        threat_summary=result.threat_summary,
     )

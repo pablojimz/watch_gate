@@ -53,6 +53,7 @@ Debes responder ÚNICAMENTE con un objeto JSON que cumpla exactamente este esque
 sin texto adicional antes o después:
 {{
   "risk_score": <entero 0-100>,
+  "threat_nature": <uno de: "vulnerabilidad", "malicioso", "incertidumbre">,
   "category": <uno de: "exfiltracion", "backdoor", "ofuscacion", "escalada_privilegios", "ninguna">,
   "justification": "<una frase en español, concreta, citando la línea o construcción exacta del diff>",
   "confidence": <uno de: "alta", "media", "baja">

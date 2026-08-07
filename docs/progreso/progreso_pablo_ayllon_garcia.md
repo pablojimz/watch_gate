@@ -4,7 +4,7 @@
 
 - Responsable: Pablo Ayllón García
 - Última actualización: 2026-08-07
-- Estado general: Completado al 100% / Engine API Server SaaS, Autenticación API Keys SHA-256, RAG Distribuido en Nube y Webhooks Implementados
+- Estado general: Completado al 100% / Engine API Server SaaS, Autenticación API Keys SHA-256, Separación de Vulnerabilidades y Código Malicioso (Threat Nature), RAG Distribuido en Nube y Webhooks Implementados
 - Última revisión realizada por: Pablo Ayllón García (Ingeniero Senior de Arquitectura) / Javier Martín Jurado
 - Componentes registrados: CLI (`watchgate/cli.py`), Engine API Server (`watchgate/api/`), Dashboard API Keys Router (`watchgate/dashboard/backend/routers/keys.py`), RAG Cloud Support (`watchgate/core/rag/`), Cortocircuito (`watchgate/core/shortcircuit.py`), Capa de dependencias (`watchgate/core/layers/deps_layer.py`), Pipeline compartido (`watchgate/core/pipeline.py`), Control de coste (`watchgate/core/cost_control.py`), Orquestador (`watchgate/core/orchestrator.py`), Extractor de diffs (`watchgate/core/diffparser.py`), Persistencia SQLModel (`watchgate/db/`), Capa estática (`watchgate/core/layers/static_layer.py`), Modelos y Agregador (`watchgate/core/models.py`, `watchgate/core/layers/base.py`, `watchgate/core/aggregator.py`).
 
@@ -22,7 +22,8 @@ Adicionalmente, se han completado los siguientes hitos de infraestructura, API S
 3. **Soporte RAG Distribuido en Nube / VPC (`WATCHGATE_CHROMA_URL`)**: Instanciación dinámica de `chromadb.HttpClient` cuando la variable de entorno `WATCHGATE_CHROMA_URL` está configurada, permitiendo compartir el clúster de búsqueda vectorial entre múltiples pods de la Engine API.
 4. **Paquete Unificado de Persistencia (`watchgate/db/`)**: Implementado mediante `SQLModel` (`User`, `UserAPIKey`, `UserTokenUsage`, `SemanticCache`, `PRScore`), con soporte híbrido SQLite (WAL) y PostgreSQL, vault de claves API con almacenamiento exclusivo de hash SHA-256 (`key_hash`) y repositorio de transacciones atómicas.
 5. **Ingesta de Diffs HTTP e in-memory (`watchgate/core/diffparser.py`)**: Incorporación de `parse_diff_from_text()` haciendo uso de `unidiff` para procesar parches enviados por red sin requerir repositorios Git locales.
-6. **Verificación de la Suite de Pruebas**: Suite de pruebas ampliada ejecutada con éxito alcanzando **255 tests unitarios e integrados pasados al 100 %**.
+6. **Separación de Vulnerabilidades y Código Malicioso (`ThreatNature`)**: Incorporación de la enumeración `ThreatNature` (`VULNERABILITY`, `MALICIOUS`, `UNCERTAIN`), cálculo puro de naturaleza dominante por capa (`compute_dominant_threat_nature`), políticas de bloqueo estricto por malware en `aggregator.py` y `shortcircuit.py`, degradación por incertidumbre (>50% ficheros no verificados), normalización sintáctica en el LLM y exportación estandarizada en SARIF v2.1.0 (`properties.threatNature`, tags `malware`/`vulnerability`) y comentarios de PR.
+7. **Verificación de la Suite de Pruebas**: Suite de pruebas unitarias e integradas ejecutada con éxito alcanzando **305/305 tests pasados al 100 %**.
 
 ---
 

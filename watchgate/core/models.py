@@ -59,6 +59,12 @@ class Confidence(str, Enum):
     BAJA = "baja"
 
 
+class ThreatNature(str, Enum):
+    VULNERABILITY = "vulnerabilidad"
+    MALICIOUS = "malicioso"
+    UNCERTAIN = "incertidumbre"
+
+
 class Finding(BaseModel):
     file_path: str
     line: int | None = None
@@ -66,6 +72,25 @@ class Finding(BaseModel):
     rule_id: str
     message: str
     severity: str = "warning"  # "error", "warning", "info"
+    threat_nature: ThreatNature = ThreatNature.VULNERABILITY
+
+
+def compute_dominant_threat_nature(findings: list[Finding]) -> ThreatNature | None:
+    """Calcula la naturaleza de amenaza dominante a partir de una lista de hallazgos.
+
+    Jerarquía estricta: MALICIOUS > VULNERABILITY > UNCERTAIN.
+    Devuelve None si la lista está vacía.
+    """
+    if not findings:
+        return None
+    natures = {f.threat_nature for f in findings}
+    if ThreatNature.MALICIOUS in natures:
+        return ThreatNature.MALICIOUS
+    if ThreatNature.VULNERABILITY in natures:
+        return ThreatNature.VULNERABILITY
+    if ThreatNature.UNCERTAIN in natures:
+        return ThreatNature.UNCERTAIN
+    return None
 
 
 class LayerResult(BaseModel):
@@ -75,6 +100,7 @@ class LayerResult(BaseModel):
     findings: list[Finding] = Field(default_factory=list)
     category: RiskCategory | None = None  # solo la capa semántica lo rellena
     confidence: Confidence | None = None
+    threat_nature: ThreatNature | None = None  # naturaleza dominante
     skipped: bool = False  # true si la capa se desactivó o se omitió por presupuesto
     skip_reason: str | None = None
     tool_calls_made: int = 0  # solo semántica; para auditoría de A.3.1
@@ -94,6 +120,13 @@ class AggregatedResult(BaseModel):
     pr_id: str
     repo: str
     timestamp: str  # ISO 8601
+    threat_summary: dict[str, int] = Field(
+        default_factory=lambda: {
+            ThreatNature.MALICIOUS.value: 0,
+            ThreatNature.VULNERABILITY.value: 0,
+            ThreatNature.UNCERTAIN.value: 0,
+        }
+    )
 
 
 class ReputationMetadata(BaseModel):

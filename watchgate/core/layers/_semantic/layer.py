@@ -22,7 +22,7 @@ from watchgate.core.layers._semantic.client import (
 )
 from watchgate.core.layers._shared import find_prompt_injection_attempts
 from watchgate.core.layers.base import AnalysisLayer, register_layer
-from watchgate.core.models import LayerResult, NormalizedDiff, RiskCategory
+from watchgate.core.models import Finding, LayerResult, NormalizedDiff, RiskCategory, ThreatNature
 from watchgate.core.rag.indexer import DEFAULT_INDEX_PATH
 from watchgate.core.rag.retriever import retrieve_relevant_context
 
@@ -80,6 +80,7 @@ def _apply_unverified_content_floor(
     return output.model_copy(
         update={
             "risk_score": _MIN_SCORE_WHEN_UNVERIFIED,
+            "threat_nature": ThreatNature.UNCERTAIN,
             "justification": (
                 f"{output.justification} [Ajustado a {_MIN_SCORE_WHEN_UNVERIFIED}: "
                 "hay contenido del diff que no se pudo revisar (truncado por tamaño) y "
@@ -110,6 +111,7 @@ def _apply_prompt_injection_floor(output: SemanticOutput, user_prompt: str) -> S
     return output.model_copy(
         update={
             "risk_score": _PROMPT_INJECTION_FLOOR_SCORE,
+            "threat_nature": ThreatNature.MALICIOUS,
             "category": RiskCategory.OFUSCACION,
             "justification": (
                 f"{output.justification} [Ajustado a {_PROMPT_INJECTION_FLOOR_SCORE}: el diff "
@@ -311,11 +313,20 @@ class SemanticLayer(AnalysisLayer):
         return output, counter.count
 
     def _to_layer_result(self, output: SemanticOutput, tool_calls_made: int) -> LayerResult:
+        finding = Finding(
+            file_path="diferencial_pr",
+            rule_id="semantic-llm-analysis",
+            message=output.justification,
+            severity="error" if output.risk_score >= 70 else "warning",
+            threat_nature=output.threat_nature,
+        )
         return LayerResult(
             layer_name=self.name,
             risk_score=output.risk_score,
             justification=output.justification,
+            findings=[finding],
             category=output.category,
             confidence=output.confidence,
+            threat_nature=output.threat_nature,
             tool_calls_made=tool_calls_made,
         )
