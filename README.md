@@ -18,7 +18,10 @@ Los ataques a la cadena de suministro de software a través de *pull requests* (
 
 ## La solución
 
-WatchGate evalúa cada PR combinando cuatro señales independientes en una puntuación ponderada de 0 a 100, con desglose explicado por capa:
+WatchGate evalúa cada propuesta de código combinando cuatro señales independientes en una puntuación ponderada de 0 a 100, con desglose explicado por capa:
+
+> **Nota sobre el ciclo de vida de los cambios (`git push` vs. *Pull Request*):**
+> Cuando un desarrollador o colaborador envía cambios mediante `git push` a su rama o *fork*, los *commits* quedan subidos pero aislados. La amenaza a la cadena de suministro se concreta cuando se abre o actualiza un **Pull Request (PR)** o *Merge Request* para fusionar esos cambios en la rama principal (`main`). WatchGate intercepta la PR y evalúa el *diff* de ese *push* **antes de que sea aceptado y mergeado** en el servidor de producción. En entornos corporativos con Git interno, WatchGate también puede actuar directamente sobre el comando `git push` mediante un *hook* `pre-receive`.
 
 | Capa | Qué mide | Técnica |
 |---|---|---|
