@@ -28,7 +28,13 @@ from watchgate.core.layers._shared import (
     analyze_install_script_text,
 )
 from watchgate.core.layers.base import AnalysisLayer, register_layer
-from watchgate.core.models import Finding, LayerResult, NormalizedDiff
+from watchgate.core.models import (
+    Finding,
+    LayerResult,
+    NormalizedDiff,
+    ThreatNature,
+    compute_dominant_threat_nature,
+)
 
 logger = logging.getLogger("watchgate.deps")
 
@@ -674,6 +680,7 @@ class DepsLayer(AnalysisLayer):
         for idx, change in enumerate(all_changes):
             pkg_score = 0
             pkg_notes: list[str] = []
+            pkg_nature: ThreatNature = ThreatNature.VULNERABILITY
 
             # A. Typosquatting
             is_typosquat, ref_pkg = self.typosquat_checker.is_typosquatting(
@@ -684,6 +691,7 @@ class DepsLayer(AnalysisLayer):
                 pkg_notes.append(
                     f"Posible typosquatting: '{change.name}' imita a '{ref_pkg}'"
                 )
+                pkg_nature = ThreatNature.MALICIOUS
 
             # B. Script de instalación
             if change.install_script:
@@ -693,6 +701,7 @@ class DepsLayer(AnalysisLayer):
                     pkg_notes.append(
                         f"Script de instalación sospechoso ({', '.join(findings)})"
                     )
+                    pkg_nature = ThreatNature.MALICIOUS
 
             # C. Instalación directa por URL/Git
             if change.is_direct_url:
@@ -700,11 +709,14 @@ class DepsLayer(AnalysisLayer):
                 pkg_notes.append(
                     f"Instalación directa desde URL/Git ({change.new_version or change.name})"
                 )
+                pkg_nature = ThreatNature.MALICIOUS
 
             # D. Consulta OSV
             osv_res, osv_err = osv_batch_results.get(idx, (None, None))
             if osv_err:
                 pkg_notes.append(osv_err)
+                if pkg_score == 0:
+                    pkg_nature = ThreatNature.UNCERTAIN
             elif osv_res and osv_res.get("vulns"):
                 vulns = osv_res["vulns"]
                 has_high_crit = any(_is_high_or_critical_vuln(v) for v in vulns)
@@ -719,18 +731,21 @@ class DepsLayer(AnalysisLayer):
                     pkg_notes.append(
                         f"Vulnerabilidades encontradas en OSV ({len(vulns)} vulnerabilidades)"
                     )
+                if pkg_nature != ThreatNature.MALICIOUS:
+                    pkg_nature = ThreatNature.VULNERABILITY
 
             # E. Si es nueva dependencia y no tuvo alertas mayores
             if change.is_new and pkg_score == 0:
                 pkg_score = 10
                 pkg_notes.append("Nueva dependencia verificada sin vulnerabilidades conocidas")
+                pkg_nature = ThreatNature.VULNERABILITY
 
             scores.append(pkg_score)
             version_str = f"@{change.new_version}" if change.new_version else ""
             notes_str = "; ".join(pkg_notes) if pkg_notes else "OK"
             justifications.append(f"{change.name}{version_str} ({change.ecosystem}): {notes_str}")
 
-            if pkg_score > 0:
+            if pkg_score > 0 or osv_err:
                 m_path = change.manifest_path if change.manifest_path else change.name
                 structured_findings.append(
                     Finding(
@@ -738,15 +753,18 @@ class DepsLayer(AnalysisLayer):
                         rule_id=f"dependency-{change.ecosystem.lower()}",
                         message=f"{change.name}{version_str}: {notes_str}",
                         severity="error" if pkg_score >= 60 else "warning",
+                        threat_nature=pkg_nature,
                     )
                 )
 
         final_score = max(scores, default=0)
         final_justification = " | ".join(justifications)
+        dominant_threat = compute_dominant_threat_nature(structured_findings)
 
         return LayerResult(
             layer_name=self.name,
             risk_score=final_score,
             justification=final_justification,
             findings=structured_findings,
+            threat_nature=dominant_threat,
         )

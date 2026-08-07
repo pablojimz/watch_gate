@@ -31,6 +31,8 @@ from watchgate.core.models import (
     LayerResult,
     NormalizedDiff,
     RiskCategory,
+    ThreatNature,
+    compute_dominant_threat_nature,
 )
 
 logger = logging.getLogger("watchgate.static")
@@ -48,6 +50,41 @@ SEVERITY_SCORE: dict[str, int] = {
 # Tiempo TTL (24 horas) para verificación de actualización del repo de reglas
 _CACHE_TTL_SECONDS = 86400
 _GIT_TIMEOUT_SECONDS = 5.0
+
+
+def _infer_threat_nature_from_semgrep(finding_extra: dict[str, Any], rule_id: str) -> ThreatNature:
+    """Infiere la naturaleza de la amenaza a partir de la metadata de la regla Semgrep."""
+    metadata = finding_extra.get("metadata", {})
+    if not isinstance(metadata, dict):
+        metadata = {}
+
+    cat = str(metadata.get("category", "")).lower()
+    nature = str(metadata.get("threat_nature", "")).lower()
+    subcategory = str(metadata.get("subcategory", "")).lower()
+
+    malicious_keywords = {
+        "malware",
+        "backdoor",
+        "exfiltration",
+        "obfuscation",
+        "trojan",
+        "c2",
+        "persistence",
+        "supply-chain-attack",
+    }
+
+    if nature in ("malicioso", "malicious"):
+        return ThreatNature.MALICIOUS
+    if nature in ("vulnerabilidad", "vulnerability"):
+        return ThreatNature.VULNERABILITY
+
+    rule_lower = rule_id.lower()
+    if any(kw in cat or kw in subcategory for kw in malicious_keywords) or any(
+        kw in rule_lower for kw in malicious_keywords
+    ):
+        return ThreatNature.MALICIOUS
+
+    return ThreatNature.VULNERABILITY
 
 
 def _handle_remove_read_only(func: Any, path: str, exc_info: Any) -> None:
@@ -231,14 +268,17 @@ class StaticLayer(AnalysisLayer):
                 extra = finding.get("extra", {})
                 severity_str = str(extra.get("severity", "INFO")).upper()
                 risk_score = SEVERITY_SCORE.get(severity_str, 10)
+                rule_id = finding.get("check_id", "semgrep-finding")
+                threat_nature = _infer_threat_nature_from_semgrep(extra, rule_id)
 
                 results.append(
                     {
                         "tool": "semgrep",
-                        "rule_id": finding.get("check_id", "semgrep-finding"),
+                        "rule_id": rule_id,
                         "message": extra.get("message", "Hallazgo estático detectado"),
                         "line": finding.get("start", {}).get("line", 1),
                         "risk_score": risk_score,
+                        "threat_nature": threat_nature,
                     }
                 )
         except Exception as exc:  # noqa: BLE001
@@ -328,9 +368,12 @@ class StaticLayer(AnalysisLayer):
                 rule_id=f.get("rule_id", "static-finding"),
                 message=f.get("message", "Hallazgo estático"),
                 severity="error" if f.get("risk_score", 0) >= 50 else "warning",
+                threat_nature=f.get("threat_nature", ThreatNature.VULNERABILITY),
             )
             for f in all_findings
         ]
+
+        dominant_threat = compute_dominant_threat_nature(structured_findings)
 
         return LayerResult(
             layer_name=self.name,
@@ -339,4 +382,5 @@ class StaticLayer(AnalysisLayer):
             findings=structured_findings,
             category=category,
             confidence=confidence,
+            threat_nature=dominant_threat,
         )

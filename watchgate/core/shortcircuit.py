@@ -33,7 +33,7 @@ from collections.abc import Callable
 
 from watchgate.core.aggregator import weighted_average
 from watchgate.core.layers._shared import DEPENDENCY_MANIFEST_FILENAMES
-from watchgate.core.models import LayerResult, NormalizedDiff, Semaforo
+from watchgate.core.models import LayerResult, NormalizedDiff, Semaforo, ThreatNature
 
 FORCING_PATTERNS: list[str] = [r"PKGBUILD$", r"^\.github/workflows/", r"Makefile$", r"Dockerfile$"]
 
@@ -87,6 +87,16 @@ def evaluate_shortcircuit(
     pelo) para que el muestreo de auditoría 1/20 sea determinista en tests.
     """
     partial_score = weighted_average(partial_results, weights, layer_names=_PARTIAL_LAYER_NAMES)
+
+    # Si alguna capa determinista encontró un hallazgo MALICIOUS con alto riesgo (>= red threshold),
+    # cortocircuitar directamente a ROJO sin gastar tokens en el LLM.
+    for layer_res in partial_results.values():
+        if (
+            not layer_res.skipped
+            and layer_res.threat_nature == ThreatNature.MALICIOUS
+            and layer_res.risk_score >= thresholds["red"]
+        ):
+            return Semaforo.ROJO
 
     # El cortocircuito a ROJO solo es seguro si incluso con un score semántico de 0
     # (el mejor caso para el autor), la media ponderada global resultante sigue siendo
