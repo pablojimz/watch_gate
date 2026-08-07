@@ -14,9 +14,10 @@ from typing import Protocol, runtime_checkable
 
 from watchgate.core.aggregator import aggregate
 from watchgate.core.layers.base import LAYER_REGISTRY, AnalysisLayer, safe_analyze
-from watchgate.core.models import AggregatedResult, NormalizedDiff
+from watchgate.core.models import AggregatedResult, LayerResult, NormalizedDiff
 
 LayerFactory = Callable[[], AnalysisLayer]
+ProgressCallback = Callable[[str, str], None]  # (layer_name, status: "start" | "done" | "fail")
 
 
 @runtime_checkable
@@ -32,11 +33,33 @@ class WatchGateConfig(Protocol):
     thresholds: dict[str, int]
 
 
+def _analyze_with_progress(
+    layer: AnalysisLayer,
+    diff: NormalizedDiff,
+    metadata: dict[str, object],
+    on_progress: ProgressCallback | None = None,
+) -> LayerResult:
+    if on_progress:
+        try:
+            on_progress(layer.name, "start")
+        except Exception:  # noqa: BLE001
+            pass
+    res = safe_analyze(layer, diff, metadata)
+    if on_progress:
+        try:
+            status = "done" if not res.skipped else "skip"
+            on_progress(layer.name, status)
+        except Exception:  # noqa: BLE001
+            pass
+    return res
+
+
 def run_analysis(
     diff: NormalizedDiff,
     metadata: dict[str, object],
     config: WatchGateConfig,
     layer_factories: dict[str, LayerFactory] | None = None,
+    on_progress: ProgressCallback | None = None,
 ) -> AggregatedResult:
     """Instancia las capas activas (peso > 0 y registradas), las ejecuta en
     paralelo con `safe_analyze` y agrega el resultado final.
@@ -61,7 +84,7 @@ def run_analysis(
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(active_layers) or 1) as pool:
         futures = {
-            pool.submit(safe_analyze, layer, diff, metadata): layer.name
+            pool.submit(_analyze_with_progress, layer, diff, metadata, on_progress): layer.name
             for layer in active_layers
         }
         results = {futures[f]: f.result() for f in concurrent.futures.as_completed(futures)}

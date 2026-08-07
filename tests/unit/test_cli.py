@@ -175,3 +175,123 @@ def test_cli_analyze_invalid_repo_returns_error_code(capsys):
     assert code == 2
     captured = capsys.readouterr()
     assert "[Error de Git]" in captured.err
+
+
+def test_cli_analyze_sarif_format(tmp_git_repo, capsys):
+    repo_dir, base_sha, head_sha = tmp_git_repo
+
+    code = main(
+        [
+            "analyze",
+            "--base",
+            base_sha,
+            "--head",
+            head_sha,
+            "--repo-path",
+            repo_dir,
+            "--format",
+            "sarif",
+        ]
+    )
+
+    assert code == 0
+    captured = capsys.readouterr()
+    doc = json.loads(captured.out)
+    assert doc["version"] == "2.1.0"
+    assert "runs" in doc
+
+
+def test_cli_analyze_overrides(tmp_git_repo, capsys):
+    repo_dir, base_sha, head_sha = tmp_git_repo
+
+    code = main(
+        [
+            "analyze",
+            "--base",
+            base_sha,
+            "--head",
+            head_sha,
+            "--repo-path",
+            repo_dir,
+            "--weight",
+            "static=0.50",
+            "--weight",
+            "semantic=0.50",
+            "--weight",
+            "dependencies=0.00",
+            "--weight",
+            "reputation=0.00",
+            "--threshold",
+            "red=95",
+            "--format",
+            "json",
+        ]
+    )
+
+    assert code == 0
+    captured = capsys.readouterr()
+    data = json.loads(captured.out)
+    assert data["weights_used"]["static"] == 0.5
+
+
+def test_cli_analyze_stdin_interactive_fails(capsys):
+    with patch("sys.stdin.isatty", return_value=True):
+        code = main(["analyze", "--diff-stdin"])
+
+    assert code == 2
+    captured = capsys.readouterr()
+    assert "[Error Ingesta]" in captured.err
+
+
+def test_cli_analyze_stdin_valid_patch(capsys):
+    sample_patch = (
+        "diff --git a/main.py b/main.py\n"
+        "index 1234567..89abcde 100644\n"
+        "--- a/main.py\n"
+        "+++ b/main.py\n"
+        "@@ -1,1 +1,1 @@\n"
+        "-print('hello')\n"
+        "+print('hello world')\n"
+    )
+
+    with patch("sys.stdin.isatty", return_value=False), patch(
+        "sys.stdin.read", return_value=sample_patch
+    ):
+        code = main(["analyze", "--diff-stdin", "--format", "json"])
+
+    assert code == 0
+    captured = capsys.readouterr()
+    data = json.loads(captured.out)
+    assert "score" in data
+
+
+def test_cli_github_annotations_isolated_to_stderr(tmp_git_repo, capsys):
+    repo_dir, base_sha, head_sha = tmp_git_repo
+
+    code = main(
+        [
+            "analyze",
+            "--base",
+            base_sha,
+            "--head",
+            head_sha,
+            "--repo-path",
+            repo_dir,
+            "--format",
+            "json",
+            "--github-annotations",
+        ]
+    )
+
+    assert code == 0
+    captured = capsys.readouterr()
+    # stdout debe contener JSON puro
+    data = json.loads(captured.out)
+    assert "score" in data
+    # stderr debe contener la anotación de GitHub (Rule 1)
+    assert (
+        "::notice title=" in captured.err
+        or "::warning" in captured.err
+        or "::error" in captured.err
+    )
+
