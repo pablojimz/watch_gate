@@ -129,6 +129,28 @@ class IngestScoreIn(BaseModel):
     author_login: str | None = None
 
 
+class CiConfigOut(BaseModel):
+    """Configuración de un repo lista para que la Action la aplique.
+
+    Subconjunto de RepoSettings + LlmSettingsOut (org-wide) relevante para
+    `watchgate.config.WatchGateConfig` -- deliberadamente NO incluye
+    risk_colors/require_feedback_on_high (solo tienen sentido para la UI del
+    dashboard, la Action no hace nada con ellos) ni la API key del LLM (la
+    Action usa su propio secreto de CI, esto nunca viaja por HTTP). Las
+    claves de `weights`/`thresholds` siguen la convención propia del
+    dashboard ("deps"/"amarillo"/"rojo") -- traducirlas a la del motor
+    ("dependencies"/"yellow"/"red") es responsabilidad de quien consuma este
+    endpoint, no de este esquema.
+    """
+
+    weights: dict[str, float]
+    thresholds: dict[str, int]
+    layers_enabled: dict[str, bool]
+    block_on_high: bool
+    monthly_budget_tokens: int | None
+    max_diff_tokens: int | None
+
+
 class DevLoginIn(BaseModel):
     login: str
     role: RoleName = "revisor"
