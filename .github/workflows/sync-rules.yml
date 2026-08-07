@@ -1,0 +1,100 @@
+# Sincronización consumidora de reglas Semgrep/YARA (repository_dispatch).
+#
+# Contexto (justificación de diseño para la memoria del proyecto):
+# El repo privado pablojimz/Repo-reglas-SEMGREP-y-YARA publica sus reglas
+# versionadas (releases v0.0.1, v0.0.2, ...) y, cuando termina, dispara un
+# evento `repository_dispatch` de tipo "rules-updated" contra ESTE repo. El
+# payload de ese evento es el propio manifest.json de la release: versión,
+# hash SHA-256 por clave (idioma custom / vendor+carpeta third-party /
+# categoría YARA) y qué claves cambiaron respecto a la release anterior.
+#
+# Este workflow es la parte CONSUMIDORA de ese flujo: descarga solo lo que
+# cambió, verifica su integridad clave a clave contra el hash publicado, y
+# solo si TODO verifica, lo activa (lo comitea) en este repo. Nunca confía
+# ciegamente en el contenido descargado.
+name: Sincronizar reglas (repository_dispatch)
+
+on:
+  repository_dispatch:
+    types: [rules-updated]
+
+# contents: write -- necesario para comitear las reglas verificadas y el
+# fichero de estado activo (.rules-state.json) de vuelta a este repo.
+# El checkout del repo de reglas usa un secret aparte (RULES_REPO_TOKEN,
+# solo lectura sobre ese repo privado); nunca se reutiliza GITHUB_TOKEN
+# para eso ni al revés.
+permissions:
+  contents: write
+
+# Evita que dos eventos "rules-updated" que llegasen muy seguidos (o un
+# sync-rules solapado con una reconciliación) hagan `git push` a la vez
+# sobre la misma rama y se pisen entre sí.
+concurrency:
+  group: rules-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout de watch_gate (este repo)
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependencias mínimas del script de sincronización
+        run: pip install httpx
+
+      # Un único script (scripts/sync_rules.py) hace TODO lo delicado:
+      #   1. Checkout disperso (sparse-checkout) del repo de reglas, fijado
+      #      EXACTAMENTE al tag `client_payload.version` recibido -- nunca a
+      #      `main` -- con Git LFS habilitado (rules/semgrep/**/*.yaml está
+      #      en LFS; sin esto se hashearían punteros de 3 líneas, no las
+      #      reglas reales).
+      #   2. Trae solo: los lenguajes en `languages_changed`, las entradas
+      #      "<vendor>/<carpeta>" de `third_party_changed`, TODAS las
+      #      categorías YARA publicadas (el análisis YARA usa siempre el
+      #      catálogo completo, no una selección parcial) y manifest.json.
+      #   3. Verifica el hash de cada clave descargada de forma
+      #      INDEPENDIENTE contra manifest.json (leído del propio checkout
+      #      fijado al tag, no del payload del evento, para que la
+      #      verificación esté atada al commit exacto que se descarga).
+      #   4. Si TODAS las claves coinciden: copia el contenido verificado
+      #      al árbol de este repo y actualiza rules/.rules-state.json
+      #      (versión activa + hash verificado por clave).
+      #   5. Si CUALQUIER clave falla: no activa nada (ni siquiera las que
+      #      sí verificaron) y termina con código != 0, listando
+      #      explícitamente qué clave(s) fallaron.
+      - name: Sincronizar y verificar reglas por clave (integridad SHA-256)
+        id: sync
+        env:
+          RULES_REPO_TOKEN: ${{ secrets.RULES_REPO_TOKEN }}
+        run: |
+          python scripts/sync_rules.py sync \
+            --rules-repo pablojimz/Repo-reglas-SEMGREP-y-YARA \
+            --ref "${{ github.event.client_payload.version }}" \
+            --scope changed \
+            --languages-changed '${{ toJson(github.event.client_payload.languages_changed) }}' \
+            --third-party-changed '${{ toJson(github.event.client_payload.third_party_changed) }}' \
+            --target-root "${{ github.workspace }}" \
+            --state-file rules/.rules-state.json \
+            --triggered-by sync-rules.yml
+
+      # Si el step anterior falla (cualquier hash no coincide), Actions
+      # marca el job en rojo automáticamente y este step no se ejecuta
+      # (`if: success()`) -- así nunca se comitea una versión sin verificar
+      # y el workflow nunca falla en silencio.
+      - name: Comitear reglas verificadas como versión activa
+        if: success()
+        run: |
+          git config user.name "watchgate-rules-bot"
+          git config user.email "actions@github.com"
+          git add rules/
+          if git diff --cached --quiet; then
+            echo "No hay cambios de contenido (los hashes ya coincidían con la versión activa); nada que comitear."
+          else
+            git commit -m "sync(rules): activar reglas verificadas ${{ github.event.client_payload.version }}"
+            git push
+          fi
