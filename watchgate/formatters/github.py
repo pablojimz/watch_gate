@@ -57,7 +57,10 @@ def render_github_annotations(
                     props.append(f"endLine={finding.end_line}")
 
                 props_str = ",".join(props)
-                lines.append(f"::{level} {props_str}::{_escape_data(finding.message)}")
+                nat = finding.threat_nature.value.upper() if finding.threat_nature else ""
+                nat_prefix = f"[{nat}] " if nat else ""
+                full_msg = _escape_data(nat_prefix + finding.message)
+                lines.append(f"::{level} {props_str}::{full_msg}")
         elif layer_res.risk_score >= 40:
             level = "error" if layer_res.risk_score >= 70 else "warning"
             props_str = f"title={_escape_property(f'WatchGate [{layer_name}]')}"

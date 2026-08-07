@@ -80,7 +80,7 @@ def test_render_github_annotations_stream() -> None:
     assert "::error title=WatchGate Score::" in output
     expected_line = (
         "::error title=WatchGate [static],file=src/auth.py,line=42"
-        "::Detección de eval() peligroso"
+        "::[VULNERABILIDAD] Detección de eval() peligroso"
     )
     assert expected_line in output
     assert stream.getvalue() == output + "\n"
