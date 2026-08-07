@@ -31,7 +31,13 @@ from watchgate.core.layers._shared import (
     parse_requirements_txt,
 )
 from watchgate.core.layers.base import AnalysisLayer, register_layer
-from watchgate.core.models import Finding, LayerResult, NormalizedDiff
+from watchgate.core.models import (
+    Finding,
+    LayerResult,
+    NormalizedDiff,
+    ThreatNature,
+    compute_dominant_threat_nature,
+)
 
 logger = logging.getLogger("watchgate.deps")
 
@@ -189,6 +195,7 @@ class DepsLayer(AnalysisLayer):
         for change in all_changes:
             pkg_score = 0
             pkg_notes: list[str] = []
+            pkg_nature: ThreatNature = ThreatNature.VULNERABILITY
 
             # A. Typosquatting
             is_typosquat, ref_pkg = self.typosquat_checker.is_typosquatting(
@@ -199,6 +206,7 @@ class DepsLayer(AnalysisLayer):
                 pkg_notes.append(
                     f"Posible typosquatting: '{change.name}' imita a '{ref_pkg}'"
                 )
+                pkg_nature = ThreatNature.MALICIOUS
 
             # B. Script de instalación
             if change.install_script:
@@ -208,6 +216,7 @@ class DepsLayer(AnalysisLayer):
                     pkg_notes.append(
                         f"Script de instalación sospechoso ({', '.join(findings)})"
                     )
+                    pkg_nature = ThreatNature.MALICIOUS
 
             # C. Instalación directa por URL/Git
             if change.is_direct_url:
@@ -215,6 +224,7 @@ class DepsLayer(AnalysisLayer):
                 pkg_notes.append(
                     f"Instalación directa desde URL/Git ({change.new_version or change.name})"
                 )
+                pkg_nature = ThreatNature.MALICIOUS
 
             # D. Si es nueva dependencia y no tuvo alertas
             if change.is_new and pkg_score == 0:
@@ -237,15 +247,18 @@ class DepsLayer(AnalysisLayer):
                         rule_id=f"dependency-{change.ecosystem.lower()}",
                         message=f"{change.name}{version_str}: {notes_str}",
                         severity="error" if pkg_score >= 60 else "warning",
+                        threat_nature=pkg_nature,
                     )
                 )
 
         final_score = max(scores, default=0)
         final_justification = " | ".join(justifications)
+        dominant_threat = compute_dominant_threat_nature(structured_findings)
 
         return LayerResult(
             layer_name=self.name,
             risk_score=final_score,
             justification=final_justification,
             findings=structured_findings,
+            threat_nature=dominant_threat,
         )

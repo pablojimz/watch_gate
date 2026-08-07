@@ -47,6 +47,8 @@ def render_sarif(aggregated: AggregatedResult) -> str:
         if layer_res.findings:
             for finding in layer_res.findings:
                 rule_id = f"watchgate-{layer_name}-{finding.rule_id}"
+                threat_nat_val = finding.threat_nature.value
+                tags = ["malware"] if threat_nat_val == "malicioso" else ["vulnerability"]
                 if rule_id not in rules_dict:
                     rules_dict[rule_id] = {
                         "id": rule_id,
@@ -58,6 +60,7 @@ def render_sarif(aggregated: AggregatedResult) -> str:
                         "defaultConfiguration": {
                             "level": _severity_to_level(finding.severity)
                         },
+                        "properties": {"tags": tags},
                     }
 
                 clean_file = normalize_sarif_path(finding.file_path)
@@ -86,6 +89,7 @@ def render_sarif(aggregated: AggregatedResult) -> str:
                                 }
                             }
                         ],
+                        "properties": {"threatNature": threat_nat_val},
                     }
                 )
         else:
