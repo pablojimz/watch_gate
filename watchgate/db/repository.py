@@ -48,6 +48,7 @@ def create_organization(
     name: str,
     plan_tier: str = "starter",
     monthly_token_quota: int = 1_000_000,
+    policy_json: str | None = None,
     org_id: str | None = None,
 ) -> Organization:
     """Crea una nueva organización (tenant) o la recupera si ya existe el ID."""
@@ -63,6 +64,7 @@ def create_organization(
         name=name,
         plan_tier=plan_tier,
         monthly_token_quota=monthly_token_quota,
+        policy_json=policy_json,
     )
     session.add(org)
     session.commit()
