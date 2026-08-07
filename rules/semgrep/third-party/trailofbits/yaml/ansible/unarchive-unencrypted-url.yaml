@@ -13,6 +13,11 @@ rules:
       impact: HIGH
       references:
         - https://docs.ansible.com/ansible/latest/collections/ansible/builtin/unarchive_module.html#parameter-src
+      severity_score: 75
+      confidence_score: 100
+      exploitability_score: 100
+      risk_score: 89
+      risk_justification: Descarga y extracción de archivo sin cifrar; contenido puede incluir scripts ejecutados después.
     patterns:
       - pattern-inside: |
           $UNARCHIVE:

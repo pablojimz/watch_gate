@@ -18,5 +18,10 @@ rules:
       references:
         - https://github.com/apollographql/apollo-server/security/advisories/GHSA-2p3c-p3qw-69r4
 
+      severity_score: 75
+      confidence_score: 60
+      exploitability_score: 40
+      risk_score: 62
+      risk_justification: Habilita multipart sin verificar si existe protección CSRF adicional; depende de configuración externa no comprobada.
     patterns:
       - pattern: app.use(graphqlUploadExpress());

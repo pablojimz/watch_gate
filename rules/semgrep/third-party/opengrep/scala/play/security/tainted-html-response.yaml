@@ -20,6 +20,11 @@ rules:
     - vuln
     likelihood: HIGH
     impact: MEDIUM
+    severity_score: 75
+    confidence_score: 80
+    exploitability_score: 60
+    risk_score: 73
+    risk_justification: XSS taint real desde Request de Play hacia Ok().as(HTML); requiere que víctima curse petición con payload.
   message: >-
     Detected a request with potential user-input going into an `Ok()` response. This bypasses any view
     or template environments, including HTML escaping, which may

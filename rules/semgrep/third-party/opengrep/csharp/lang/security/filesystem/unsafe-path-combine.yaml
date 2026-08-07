@@ -34,8 +34,7 @@ rules:
           throw new $EXCEPTION(...);
         }
         ...
-  message: String argument $A is used to read or write data from a file via Path.Combine without direct
-    sanitization via Path.GetFileName. If the path is user-supplied data this can lead to path traversal.
+  message: String argument $A is used to read or write data from a file via Path.Combine without direct sanitization via Path.GetFileName. If the path is user-supplied data this can lead to path traversal.
   languages:
   - csharp
   severity: WARNING
@@ -58,3 +57,8 @@ rules:
     - vuln
     likelihood: LOW
     impact: MEDIUM
+    severity_score: 100
+    confidence_score: 60
+    exploitability_score: 40
+    risk_score: 73
+    risk_justification: Taint hacia File.Read/Write sin sanitizar; fuente es cualquier parámetro público, no confirma origen externo real.

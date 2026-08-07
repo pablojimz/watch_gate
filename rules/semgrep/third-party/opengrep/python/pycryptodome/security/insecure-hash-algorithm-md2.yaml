@@ -3,8 +3,7 @@ rules:
   message: >-
     Detected MD2 hash algorithm which is considered insecure. MD2 is not
     collision resistant and is therefore not suitable as a cryptographic
-    signature. 
-    Use a modern hash algorithm from the SHA-2, SHA-3, or BLAKE2 family instead.
+    signature.  Use a modern hash algorithm from the SHA-2, SHA-3, or BLAKE2 family instead.
   metadata:
     source-rule-url: https://github.com/PyCQA/bandit/blob/d5f8fa0d89d7b11442fc6ec80ca42953974354c8/bandit/blacklists/calls.py#L59
     cwe:
@@ -29,6 +28,11 @@ rules:
     functional-categories:
     - crypto::search::hash-algorithm::pycryptodome
     - crypto::search::hash-algorithm::pycryptodomex
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: MD2 exacto, hash roto y no colision-resistente.
   options:
     symbolic_propagation: true
   severity: WARNING

@@ -20,6 +20,11 @@ rules:
     likelihood: HIGH
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 75
+    confidence_score: 45
+    exploitability_score: 40
+    risk_score: 57
+    risk_justification: XSS en link_to; comportamiento depende de versión Rails (2.x vs moderno) y lógica de sanitizador dudosa.
   message: >-
     This code includes user input in `link_to`. In Rails 2.x, the body of `link_to` is not escaped.
     This means that user input which reaches the body will be executed when the HTML is rendered.

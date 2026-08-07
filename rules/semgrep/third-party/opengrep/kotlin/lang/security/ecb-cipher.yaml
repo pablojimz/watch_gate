@@ -18,9 +18,12 @@ rules:
     likelihood: LOW
     impact: MEDIUM
     confidence: MEDIUM
-  message: Cipher in ECB mode is detected. ECB mode produces the same output for the same input each time
-    which allows an attacker to intercept and replay the data. Further, ECB mode does not provide any
-    integrity checking. See https://find-sec-bugs.github.io/bugs.htm#CIPHER_INTEGRITY.
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: Regex ECB sobre literal de modo cifrado en Kotlin, preciso.
+  message: Cipher in ECB mode is detected. ECB mode produces the same output for the same input each time which allows an attacker to intercept and replay the data. Further, ECB mode does not provide any integrity checking. See https://find-sec-bugs.github.io/bugs.htm#CIPHER_INTEGRITY.
   severity: WARNING
   languages:
   - kt

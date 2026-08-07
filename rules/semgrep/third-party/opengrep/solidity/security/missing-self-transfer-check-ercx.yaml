@@ -23,6 +23,11 @@ rules:
     references:
     - https://blog.verichains.io/p/miner-project-attacked-by-vulnerabilities
     - https://x.com/shoucccc/status/1757777764646859121
+    severity_score: 100
+    confidence_score: 80
+    exploitability_score: 80
+    risk_score: 89
+    risk_justification: Falta check from!=to en _update; permite inflar balance en self-transfer, incidente real reciente citado.
   patterns:
   - pattern-either:
     - pattern: |

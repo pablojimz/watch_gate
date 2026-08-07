@@ -26,6 +26,11 @@ rules:
     likelihood: LOW
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 100
+    confidence_score: 80
+    exploitability_score: 40
+    risk_score: 79
+    risk_justification: getObject() en MessageListener; requiere que la cola reciba mensajes de productor no confiable.
   message: >-
     JMS Object messages depend on Java Serialization for marshalling/unmarshalling
     of the message payload when ObjectMessage.getObject() is called.

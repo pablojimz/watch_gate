@@ -28,6 +28,11 @@ rules:
     likelihood: LOW
     impact: HIGH
     confidence: MEDIUM
+    severity_score: 75
+    confidence_score: 60
+    exploitability_score: 100
+    risk_score: 77
+    risk_justification: Statement Allow Principal:* sobre recurso S3; no filtra por Action, ambigüedad de alcance.
   severity: WARNING
   languages:
   - json

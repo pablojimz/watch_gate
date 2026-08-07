@@ -18,13 +18,17 @@ rules:
         - A10:2025 - Mishandling of Exceptional Conditions
       references:
         - https://github.com/struct/mms
+      severity_score: 100
+      confidence_score: 80
+      exploitability_score: 40
+      risk_score: 79
+      risk_justification: Resultado de strlen truncado a short; wraparound clásico, requiere cadena larga controlada externamente.
     message: >-
       The software performs a calculation that can produce an integer
       overflow or wraparound, when the logic assumes that the resulting
       value will always be larger than the original value. This can
       introduce other weaknesses when the calculation is used for resource
-      management or execution control. When influenced by the size of an 
-      input it is often easier to overflow a short than an int.
+      management or execution control. When influenced by the size of an  input it is often easier to overflow a short than an int.
     severity: WARNING
     languages:
       - c

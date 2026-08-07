@@ -13,6 +13,11 @@ rules:
       impact: HIGH
       references:
         - https://linux.die.net/man/1/wget
+      severity_score: 50
+      confidence_score: 100
+      exploitability_score: 80
+      risk_score: 72
+      risk_justification: 'FALTA DATO: idem ejecución, conservador=80. Desactiva validación de certificado TLS.'
     pattern-either:
       - pattern: wget ... --no-check-certificate
       - pattern: wget ... --no-hsts

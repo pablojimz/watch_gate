@@ -2,13 +2,7 @@ rules:
   - id: tainted-url-host
     languages:
       - go
-    message: A request was found to be crafted from user-input `$REQUEST`. This can
-      lead to Server-Side Request Forgery (SSRF) vulnerabilities, potentially
-      exposing sensitive data. It is recommend where possible to not allow
-      user-input to craft the base request, but to be treated as part of the
-      path or query parameter. When user-input is necessary to craft the
-      request, it is recommended to follow OWASP best practices to prevent
-      abuse, including using an allowlist.
+    message: A request was found to be crafted from user-input `$REQUEST`. This can lead to Server-Side Request Forgery (SSRF) vulnerabilities, potentially exposing sensitive data. It is recommend where possible to not allow user-input to craft the base request, but to be treated as part of the path or query parameter. When user-input is necessary to craft the request, it is recommended to follow OWASP best practices to prevent abuse, including using an allowlist.
     options:
       interfile: true
     metadata:
@@ -30,6 +24,11 @@ rules:
       impact: MEDIUM
       likelihood: MEDIUM
       interfile: true
+      severity_score: 75
+      confidence_score: 80
+      exploitability_score: 80
+      risk_score: 78
+      risk_justification: Taint request hasta URL de peticion saliente (Get/Post/NewRequest); SSRF con logica CLEAN para excluir concatenaciones seguras.
     mode: taint
     pattern-sources:
       - label: INPUT

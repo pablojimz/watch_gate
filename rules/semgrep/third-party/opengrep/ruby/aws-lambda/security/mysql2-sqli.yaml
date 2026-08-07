@@ -28,6 +28,11 @@ rules:
     likelihood: MEDIUM
     impact: HIGH
     confidence: MEDIUM
+    severity_score: 75
+    confidence_score: 80
+    exploitability_score: 80
+    risk_score: 78
+    risk_justification: event->query/prepare de mysql2; sanitizador escape() reconocido.
   pattern-sinks:
   - patterns:
     - pattern: $QUERY

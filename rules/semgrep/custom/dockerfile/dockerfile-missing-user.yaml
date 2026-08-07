@@ -18,6 +18,11 @@ rules:
       references:
         - https://cwe.mitre.org/data/definitions/250.html
         - https://docs.docker.com/engine/reference/builder/#user
+      severity_score: 50
+      confidence_score: 60
+      exploitability_score: 100
+      risk_score: 66
+      risk_justification: "Contenedor corre como root, amplia el radio de una vulnerabilidad de escape (candado roto, no explotable por si sola); heuristica estructural sobre ausencia de USER; se aplica en cada build sin intervencion."
     patterns:
       - pattern: |
           FROM $IMAGE

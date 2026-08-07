@@ -16,29 +16,34 @@ rules:
       escaped before including them in scripts.
     metadata:
       cwe:
-      - "CWE-79: Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')"
+        - "CWE-79: Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')"
       owasp:
-      - A07:2017 - Cross-Site Scripting (XSS)
-      - A03:2021 - Injection
+        - A07:2017 - Cross-Site Scripting (XSS)
+        - A03:2021 - Injection
       references:
-      - https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/pages_security_tips_xss.htm
+        - https://developer.salesforce.com/docs/atlas.en-us.apexcode.meta/apexcode/pages_security_tips_xss.htm
       category: security
       subcategory:
-      - vuln
+        - vuln
       technology:
-      - salesforce
-      - visualforce
+        - salesforce
+        - visualforce
       cwe2022-top25: true
       cwe2021-top25: true
       likelihood: HIGH
       impact: MEDIUM
       confidence: MEDIUM
+      severity_score: 75
+      confidence_score: 80
+      exploitability_score: 60
+      risk_score: 73
+      risk_justification: XSS reflejado desde parámetro URL sin JSENCODE/escape; requiere que víctima siga enlace manipulado.
     patterns:
       - pattern-either:
         # Cannot use full VF syntax of {!$...} because Semgrep thinks CurrentPage is a metavariable
-        - pattern: <apex:outputText...escape="false"...value="{!...CurrentPage.parameters.$URL_PARAM}".../>
-        - pattern: <apex:outputText...value="{!...CurrentPage.parameters.$URL_PARAM}"...escape="false".../>
-        - pattern: <script>...'{!...CurrentPage.parameters.$URL_PARAM}'...</script>
+          - pattern: <apex:outputText...escape="false"...value="{!...CurrentPage.parameters.$URL_PARAM}".../>
+          - pattern: <apex:outputText...value="{!...CurrentPage.parameters.$URL_PARAM}"...escape="false".../>
+          - pattern: <script>...'{!...CurrentPage.parameters.$URL_PARAM}'...</script>
       - pattern-not: <script>...'{!...JSENCODE(...CurrentPage.parameters.$URL_PARAM})'...</script>
     paths:
       include:

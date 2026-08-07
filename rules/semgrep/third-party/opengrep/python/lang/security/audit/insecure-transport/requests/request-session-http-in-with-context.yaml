@@ -1,29 +1,29 @@
 rules:
 - id: request-session-http-in-with-context
   options:
-      symbolic_propagation: true
+    symbolic_propagation: true
   mode: taint
   pattern-sources:
-    - patterns:
-        - pattern: |
-            "$URL"
-        - metavariable-pattern:
-            metavariable: $URL
-            language: regex
-            patterns:
-              - pattern-regex: http://
-              - pattern-not-regex: >-
-                  .*://localhost
-              - pattern-not-regex: >-
-                  .*://127\.0\.0\.1
+  - patterns:
+    - pattern: |
+        "$URL"
+    - metavariable-pattern:
+        metavariable: $URL
+        language: regex
+        patterns:
+        - pattern-regex: http://
+        - pattern-not-regex: >-
+            .*://localhost
+        - pattern-not-regex: >-
+            .*://127\.0\.0\.1
   pattern-sinks:
   - patterns:
     - pattern-inside: |
         with requests.Session(...) as $SESSION:
           ...
     - pattern-either:
-        - pattern: $SESSION.$W($SINK, ...)
-        - pattern: $SESSION.request($METHOD, $SINK, ...)
+      - pattern: $SESSION.$W($SINK, ...)
+      - pattern: $SESSION.request($METHOD, $SINK, ...)
     - focus-metavariable: $SINK
   fix-regex:
     regex: '[Hh][Tt][Tt][Pp]://'
@@ -53,5 +53,10 @@ rules:
     likelihood: LOW
     impact: LOW
     confidence: MEDIUM
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: URL http:// literal exacta detectada por regex, excluye localhost/127.0.0.1.
   languages: [python]
   severity: INFO

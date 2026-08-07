@@ -38,8 +38,7 @@ rules:
     - pattern: |
         Illuminate\Validation\Rule::unique(...)->ignore(...,$IGNORE,...)
     - focus-metavariable: $IGNORE
-  message: Found a request argument passed to an `ignore()` definition in a Rule constraint. This
-    can lead to SQL injection.
+  message: Found a request argument passed to an `ignore()` definition in a Rule constraint. This can lead to SQL injection.
   languages:
   - php
   severity: ERROR
@@ -62,3 +61,8 @@ rules:
     likelihood: HIGH
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 75
+    confidence_score: 80
+    exploitability_score: 80
+    risk_score: 78
+    risk_justification: Input de Request a Rule::unique()->ignore(); taint razonablemente preciso.

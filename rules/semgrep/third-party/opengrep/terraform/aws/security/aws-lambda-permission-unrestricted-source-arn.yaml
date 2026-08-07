@@ -16,12 +16,7 @@ rules:
   - metavariable-regex:
       metavariable: $PRINCIPAL
       regex: .*[.]amazonaws[.]com$
-  message: The AWS Lambda permission has an AWS service principal but does not specify
-    a source ARN. If you grant permission to a service principal without specifying
-    the source, other accounts could potentially configure resources in their account
-    to invoke your Lambda function. Set the source_arn value to the ARN of the AWS
-    resource that invokes the function, eg. an S3 bucket, CloudWatch Events Rule,
-    API Gateway, or SNS topic.
+  message: The AWS Lambda permission has an AWS service principal but does not specify a source ARN. If you grant permission to a service principal without specifying the source, other accounts could potentially configure resources in their account to invoke your Lambda function. Set the source_arn value to the ARN of the AWS resource that invokes the function, eg. an S3 bucket, CloudWatch Events Rule, API Gateway, or SNS topic.
   languages:
   - hcl
   severity: ERROR
@@ -43,3 +38,8 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: HIGH
+    severity_score: 75
+    confidence_score: 80
+    exploitability_score: 100
+    risk_score: 83
+    risk_justification: Permission sin source_arn con principal de servicio AWS; confused deputy cross-account.

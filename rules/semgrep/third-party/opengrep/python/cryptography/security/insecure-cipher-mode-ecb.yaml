@@ -1,9 +1,7 @@
 rules:
 - id: insecure-cipher-mode-ecb
   message: >-
-    ECB (Electronic Code Book) is the simplest mode of operation for block ciphers. 
-    Each block of data is encrypted in the same way. 
-    This means identical plaintext blocks will always result in identical ciphertext blocks, which can leave significant patterns in the output.
+    ECB (Electronic Code Book) is the simplest mode of operation for block ciphers.  Each block of data is encrypted in the same way.  This means identical plaintext blocks will always result in identical ciphertext blocks, which can leave significant patterns in the output.
     Use a different, cryptographically strong mode instead, such as GCM.
   metadata:
     source-rule-url: https://github.com/PyCQA/bandit/blob/d5f8fa0d89d7b11442fc6ec80ca42953974354c8/bandit/blacklists/calls.py#L101
@@ -26,6 +24,11 @@ rules:
     confidence: MEDIUM
     functional-categories:
     - crypto::search::mode::cryptography
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: ECB exacto vía hazmat; modo de cifrado débil sin caso de uso seguro.
   severity: WARNING
   languages:
   - python

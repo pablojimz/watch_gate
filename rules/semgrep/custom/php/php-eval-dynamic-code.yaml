@@ -15,6 +15,11 @@ rules:
       references:
         - https://cwe.mitre.org/data/definitions/95.html
         - https://owasp.org/www-community/attacks/Direct_Dynamic_Code_Evaluation_Eval_Injection
+      severity_score: 100
+      confidence_score: 100
+      exploitability_score: 80
+      risk_score: 95
+      risk_justification: "eval() con dato no literal es RCE directa, sin caso de uso seguro (HIGH); ejecucion normal."
     patterns:
       - pattern: eval($CODE)
       - pattern-not: eval("...")

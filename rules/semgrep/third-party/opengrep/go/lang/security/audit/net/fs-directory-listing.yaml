@@ -46,3 +46,8 @@ rules:
     - vuln
     likelihood: MEDIUM
     impact: MEDIUM
+    severity_score: 50
+    confidence_score: 60
+    exploitability_score: 80
+    risk_score: 60
+    risk_justification: http.FileServer como handler expone listado de directorio; uso legitimo comun para servir assets estaticos reduce precision.

@@ -20,11 +20,13 @@ rules:
       references:
         - https://nullprogram.com/blog/2019/10/28/
         - https://docs.microsoft.com/en-us/cpp/sanitizers/asan-error-examples
+      severity_score: 75
+      confidence_score: 60
+      exploitability_score: 40
+      risk_score: 62
+      risk_justification: alloca() sin bounds checking; requiere tamaño grande/controlado externamente para desbordar la pila.
     message: >-
-      Use of alloca() is unsafe because it cannot ensure that the pointer 
-      returned points to a valid and usable block of memory. The allocation 
-      made may exceed the bounds of the stack, or even go further into other 
-      objects in memory, and alloca() cannot determine such an error.
+      Use of alloca() is unsafe because it cannot ensure that the pointer  returned points to a valid and usable block of memory. The allocation  made may exceed the bounds of the stack, or even go further into other  objects in memory, and alloca() cannot determine such an error.
     severity: ERROR
     languages:
       - c

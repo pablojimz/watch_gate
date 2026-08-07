@@ -15,6 +15,11 @@ rules:
       references:
         - https://bishopfox.com/blog/ruby-vulnerabilities-exploits
         - https://github.com/semgrep/semgrep-rules/blob/develop/ruby/lang/security/bad-deserialization-yaml.yaml
+      severity_score: 100
+      confidence_score: 60
+      exploitability_score: 40
+      risk_score: 73
+      risk_justification: YAML/Psych unsafe_load (RCE clásico Ruby); excluye solo literal, requiere fuente no confiable.
     patterns:
       - pattern-either:
           - pattern: YAML.unsafe_load(...)

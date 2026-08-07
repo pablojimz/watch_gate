@@ -2,8 +2,7 @@ rules:
   - id: wildcard-cors
     languages:
       - python
-    message: CORS policy allows any origin (using wildcard '*'). This is insecure
-      and should be avoided.
+    message: CORS policy allows any origin (using wildcard '*'). This is insecure and should be avoided.
     mode: taint
     pattern-sources:
       - pattern: '[..., "*", ...]'
@@ -35,3 +34,8 @@ rules:
         - Configuration
       subcategory:
         - vuln
+      severity_score: 75
+      confidence_score: 100
+      exploitability_score: 80
+      risk_score: 84
+      risk_justification: allow_origins con '*' literal detectado por taint; CORS totalmente abierto, sin ambigüedad.

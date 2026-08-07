@@ -104,5 +104,10 @@ rules:
     - vuln
     likelihood: MEDIUM
     impact: HIGH
+    severity_score: 100
+    confidence_score: 60
+    exploitability_score: 40
+    risk_score: 73
+    risk_justification: Taint env/argv->os.exec*; RCE, env/argv no siempre son controlados por atacante externo.
   languages: [python]
   severity: ERROR

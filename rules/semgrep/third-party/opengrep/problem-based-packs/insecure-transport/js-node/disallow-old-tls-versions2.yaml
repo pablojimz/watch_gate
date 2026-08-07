@@ -21,6 +21,11 @@ rules:
     technology:
     - node.js
     vulnerability: Insecure Transport
+    severity_score: 50
+    confidence_score: 60
+    exploitability_score: 80
+    risk_score: 60
+    risk_justification: 'Misma limitacion: solo 6 permutaciones literales excluidas de opciones inseguras.'
   languages:
   - javascript
   - typescript

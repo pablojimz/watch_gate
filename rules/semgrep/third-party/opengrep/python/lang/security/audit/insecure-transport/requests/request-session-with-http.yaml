@@ -1,5 +1,5 @@
 rules:
-  - id: request-session-with-http 
+  - id: request-session-with-http
     options:
       symbolic_propagation: true
     mode: taint
@@ -26,17 +26,16 @@ rules:
       regex: "[Hh][Tt][Tt][Pp]://"
       replacement: https://
       count: 1
-    message: Detected a request using 'http://'. This request will be unencrypted.
-      Use 'https://' instead.
+    message: Detected a request using 'http://'. This request will be unencrypted. Use 'https://' instead.
     languages:
       - python
     severity: INFO
     metadata:
       owasp:
-      - A03:2017 - Sensitive Data Exposure
-      - A02:2021 - Cryptographic Failures
+        - A03:2017 - Sensitive Data Exposure
+        - A02:2021 - Cryptographic Failures
       cwe:
-      - 'CWE-319: Cleartext Transmission of Sensitive Information'
+        - 'CWE-319: Cleartext Transmission of Sensitive Information'
       asvs:
         section: V9 Communications Verification Requirements
         control_id: 9.1.1 Weak TLS
@@ -44,12 +43,16 @@ rules:
         version: '4'
       category: security
       technology:
-      - requests
+        - requests
       references:
-      - https://owasp.org/Top10/A02_2021-Cryptographic_Failures
+        - https://owasp.org/Top10/A02_2021-Cryptographic_Failures
       subcategory:
-      - audit
+        - audit
       likelihood: LOW
       impact: LOW
       confidence: MEDIUM
-  
+      severity_score: 50
+      confidence_score: 100
+      exploitability_score: 80
+      risk_score: 72
+      risk_justification: Igual, http literal exacto en requests.Session().

@@ -19,6 +19,11 @@ rules:
       references:
         - https://semgrep.dev/docs/writing-rules/metavariable-analysis
         - https://github.com/semgrep/semgrep/pull/4672
+      severity_score: 50
+      confidence_score: 80
+      exploitability_score: 40
+      risk_score: 56
+      risk_justification: Analizador ReDoS real (no solo heurística de nombres); requiere que input controlado por atacante llegue al regex.
     message: >-
       The software uses a regular expression with an inefficient, possibly
       exponential worst-case computational complexity that consumes excessive

@@ -27,6 +27,11 @@ rules:
     confidence: MEDIUM
     references:
     - https://owasp.org/Top10/A04_2021-Insecure_Design
+    severity_score: 50
+    confidence_score: 60
+    exploitability_score: 40
+    risk_score: 50
+    risk_justification: Debilita revocación de sesión; requiere fuga previa del token para importar.
   languages:
   - javascript
   - typescript

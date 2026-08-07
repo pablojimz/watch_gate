@@ -13,6 +13,11 @@ rules:
       impact: HIGH
       references:
         - https://docs.ansible.com/ansible/latest/collections/ansible/builtin/apt_module.html#parameter-deb
+      severity_score: "87.5"
+      confidence_score: 100
+      exploitability_score: 100
+      risk_score: 94
+      risk_justification: Descarga .deb sin cifrar; MITM puede sustituir paquete y lograr ejecución de código como root al instalar.
     patterns:
       - pattern-inside: |
           $APT:

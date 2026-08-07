@@ -10,14 +10,14 @@ rules:
       import "net/http/httputil"
       ...
   - pattern-either:
-      - pattern: $PROXY.Director = $FUNC
-      - patterns:
-          - pattern-inside: |
-              httputil.ReverseProxy{
-                  ...
-              }
-          - pattern: |
-              Director: $FUNC
+    - pattern: $PROXY.Director = $FUNC
+    - patterns:
+      - pattern-inside: |
+          httputil.ReverseProxy{
+              ...
+          }
+      - pattern: |
+          Director: $FUNC
   metadata:
     cwe:
     - "CWE-115: Misinterpretation of Input"
@@ -25,9 +25,14 @@ rules:
     subcategory:
     - audit
     technology:
-      - go
+    - go
     confidence: MEDIUM
     likelihood: LOW
     impact: LOW
     references:
-      - https://github.com/golang/go/issues/50580
+    - https://github.com/golang/go/issues/50580
+    severity_score: 25
+    confidence_score: 30
+    exploitability_score: 40
+    risk_score: 30
+    risk_justification: Uso de campo Director en ReverseProxy; patron estandar pre-Go1.20, mayoria de usos legitimos, riesgo indirecto de headers.

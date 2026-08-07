@@ -14,6 +14,11 @@ rules:
       technology: [terraform]
       references:
         - https://registry.terraform.io/providers/hashicorp/vault/latest/docs#token
+      severity_score: 75
+      confidence_score: 100
+      exploitability_score: 100
+      risk_score: 89
+      risk_justification: Token de Vault hardcodeado en provider Terraform; secreto expuesto en repo/estado.
     patterns:
       - pattern-inside: provider "vault" { ... }
       - pattern: token = "..."

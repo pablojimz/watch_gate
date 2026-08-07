@@ -13,4 +13,9 @@ rules:
       impact: HIGH
       references:
         - https://man7.org/linux/man-pages/man1/ssh.1.html
+      severity_score: 50
+      confidence_score: 100
+      exploitability_score: 80
+      risk_score: 72
+      risk_justification: 'FALTA DATO: idem ejecución, conservador=80. Desactiva verificación de host SSH, habilita MITM.'
     pattern: ssh ... StrictHostKeyChecking=no

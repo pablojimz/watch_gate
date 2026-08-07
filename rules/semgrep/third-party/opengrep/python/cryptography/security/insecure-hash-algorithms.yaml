@@ -1,12 +1,12 @@
 rules:
 - id: insecure-hash-algorithm-sha1
-  patterns: 
-    - pattern: cryptography.hazmat.primitives.hashes.$SHA(...)
-    - metavariable-pattern:
-        metavariable: $SHA
-        pattern: |
-          SHA1
-    - focus-metavariable: $SHA
+  patterns:
+  - pattern: cryptography.hazmat.primitives.hashes.$SHA(...)
+  - metavariable-pattern:
+      metavariable: $SHA
+      pattern: |
+        SHA1
+  - focus-metavariable: $SHA
   fix: |
     SHA256
   message: >-
@@ -37,6 +37,11 @@ rules:
     confidence: MEDIUM
     functional-categories:
     - crypto::search::symmetric-algorithm::cryptography
+    severity_score: 50
+    confidence_score: 80
+    exploitability_score: 80
+    risk_score: 66
+    risk_justification: hazmat.hashes.SHA1 exacto; API dedicada a crypto, hash débil.
   severity: WARNING
   languages:
   - python

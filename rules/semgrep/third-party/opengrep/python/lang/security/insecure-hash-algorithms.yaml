@@ -34,6 +34,11 @@ rules:
     likelihood: LOW
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 50
+    confidence_score: 30
+    exploitability_score: 80
+    risk_score: 52
+    risk_justification: hashlib.sha1 sin exclusión alguna; uso muy común también para fines no criptográficos (checksums, dedup).
   severity: WARNING
   languages:
   - python

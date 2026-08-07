@@ -36,6 +36,11 @@ rules:
     likelihood: HIGH
     impact: HIGH
     confidence: MEDIUM
+    severity_score: 100
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 95
+    risk_justification: 'Duplicado de tainted-exec de injection/: superglobales a exec/system/popen; RCE directo.'
   languages: [php]
   severity: ERROR
 

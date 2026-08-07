@@ -43,12 +43,12 @@ rules:
         - pattern: |
             java.net.URLDecoder.decode($PARAM, ...)
   pattern-sinks:
-    - patterns:
-        - pattern: (HttpServletRequest $REQ).getSession().$FUNC($NAME, $VALUE);
-        - metavariable-regex:
-            metavariable: $FUNC
-            regex: ^(putValue|setAttribute)$
-        - focus-metavariable: $VALUE
+  - patterns:
+    - pattern: (HttpServletRequest $REQ).getSession().$FUNC($NAME, $VALUE);
+    - metavariable-regex:
+        metavariable: $FUNC
+        regex: ^(putValue|setAttribute)$
+    - focus-metavariable: $VALUE
   options:
     interfile: true
   metadata:
@@ -67,3 +67,8 @@ rules:
     likelihood: MEDIUM
     confidence: MEDIUM
     interfile: true
+    severity_score: 25
+    confidence_score: 80
+    exploitability_score: 80
+    risk_score: 55
+    risk_justification: Violacion de limite de confianza sin via de explotacion directa demostrada.

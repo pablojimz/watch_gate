@@ -17,6 +17,11 @@ rules:
       references:
         - https://pkg.go.dev/golang.org/x/sys/windows#LazyDLL
 
+      severity_score: 100
+      confidence_score: 80
+      exploitability_score: 40
+      risk_score: 79
+      risk_justification: Carga de DLL vulnerable a DLL hijacking (RCE); requiere que atacante controle ruta de búsqueda.
     patterns:
       - pattern-either:
           - pattern: syscall.LoadDLL(...)

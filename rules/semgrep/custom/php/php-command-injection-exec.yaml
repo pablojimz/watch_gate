@@ -17,6 +17,11 @@ rules:
       references:
         - https://cwe.mitre.org/data/definitions/78.html
         - https://owasp.org/www-community/attacks/Command_Injection
+      severity_score: 100
+      confidence_score: 60
+      exploitability_score: 80
+      risk_score: 83
+      risk_justification: "exec/system/shell_exec/passthru con comando no literal permite inyeccion de comandos; sin taint tracking, solo excluye literal; ejecucion normal."
     patterns:
       - pattern-either:
           - pattern: exec($CMD, ...)

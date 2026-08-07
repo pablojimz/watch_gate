@@ -21,6 +21,11 @@ rules:
     technology:
     - spring
     vulnerability: Insecure Transport
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: RestTemplate con URL literal http://, lista cerrada de metodos validos.
   languages:
   - java
   fix-regex:

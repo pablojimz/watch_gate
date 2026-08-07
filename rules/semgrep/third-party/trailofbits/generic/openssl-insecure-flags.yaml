@@ -13,6 +13,11 @@ rules:
       impact: HIGH
       references:
         - https://www.openssl.org/docs/manmaster/man1/
+      severity_score: "62.5"
+      confidence_score: 100
+      exploitability_score: 80
+      risk_score: 78
+      risk_justification: 'FALTA DATO: idem ejecución, conservador=80. Mezcla exposición de password en CLI (pass:) con debilitamiento cripto (-nodes/-sha1); punto medio.'
     pattern-either:
       # A space character was left at the end of some patterns to help ensure
       # that the intended flag was used, and minimize the chance that another,

@@ -21,10 +21,14 @@ rules:
         - http://phrack.org/issues/70/13.html#article
         - https://g.co/kgs/PCHQjJ
         - https://www.sei.cmu.edu/downloads/sei-cert-c-coding-standard-2016-v01.pdf
+      severity_score: 100
+      confidence_score: 60
+      exploitability_score: 40
+      risk_score: 73
+      risk_justification: printf/scanf/syslog con formato dinámico; excluye literal pero no confirma origen externo.
     message: >-
       The software uses a function that accepts a format string as an argument,
-      but the format string originates from an external source. This can lead 
-      to buffer overflows, denial of service, or data representation problems.
+      but the format string originates from an external source. This can lead  to buffer overflows, denial of service, or data representation problems.
     severity: ERROR
     languages:
       - c

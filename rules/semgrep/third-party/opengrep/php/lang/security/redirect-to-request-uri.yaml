@@ -11,8 +11,7 @@ rules:
       regex: '^(?i)location:\s*$'
   message: >-
     Redirecting to the current request URL may redirect to another domain, if
-    the current path starts with two slashes. 
-    E.g. in https://www.example.com//attacker.com, the value of REQUEST_URI
+    the current path starts with two slashes.  E.g. in https://www.example.com//attacker.com, the value of REQUEST_URI
     is //attacker.com, and redirecting to it will redirect to that domain.
   metadata:
     references:
@@ -30,6 +29,11 @@ rules:
     impact: LOW
     confidence: MEDIUM
     subcategory:
-      - vuln
+    - vuln
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: Open redirect vía REQUEST_URI concatenado a Location; patrón exacto y sin uso seguro.
   languages: [php]
   severity: WARNING

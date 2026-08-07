@@ -64,3 +64,8 @@ rules:
     likelihood: HIGH
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 50
+    confidence_score: 60
+    exploitability_score: 40
+    risk_score: 50
+    risk_justification: ReDoS; no valida si el patrón envolvente realmente causa backtracking catastrófico.

@@ -10,21 +10,26 @@ rules:
       likelihood: LOW
       impact: LOW
       subcategory:
-          - audit
+        - audit
       references:
         - https://entethalliance.org/specs/ethtrust-sl/v1/#req-1-unicode-bdo
+      severity_score: 25
+      confidence_score: 100
+      exploitability_score: 100
+      risk_score: 66
+      risk_justification: Caracteres de control bidi Unicode (trojan source); regex exacta, presente siempre en el código fuente.
     patterns:
-    - pattern-either:
-      - pattern-regex: ‪             # left-to-right embedding (LRE)
-      - pattern-regex: ‫             # right-to-left embedding (RLE)
-      - pattern-regex: ‭             # left-to-right override (LRO)
-      - pattern-regex: ‮             # right-to-left override (RLO)
-      - pattern-regex: ⁦             # left-to-right isolate (LRI)
-      - pattern-regex: ⁧             # right-to-left isolate (RLI)
-      - pattern-regex: ⁨             # first strong isolate (FSI)
-      - pattern-regex: ‬             # pop directional formatting (PDF)
-      - pattern-regex: ⁩             # pop directional isolate (PDI)
-    languages: 
+      - pattern-either:
+          - pattern-regex: ‪         # left-to-right embedding (LRE)
+          - pattern-regex: ‫         # right-to-left embedding (RLE)
+          - pattern-regex: ‭         # left-to-right override (LRO)
+          - pattern-regex: ‮         # right-to-left override (RLO)
+          - pattern-regex: ⁦         # left-to-right isolate (LRI)
+          - pattern-regex: ⁧         # right-to-left isolate (RLI)
+          - pattern-regex: ⁨         # first strong isolate (FSI)
+          - pattern-regex: ‬         # pop directional formatting (PDF)
+          - pattern-regex: ⁩         # pop directional isolate (PDI)
+    languages:
       - solidity
     severity: WARNING
 

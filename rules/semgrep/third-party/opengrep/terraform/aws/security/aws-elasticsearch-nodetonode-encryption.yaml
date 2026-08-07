@@ -57,5 +57,10 @@ rules:
     likelihood: LOW
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 50
+    confidence_score: 80
+    exploitability_score: 100
+    risk_score: 72
+    risk_justification: Cifrado nodo-a-nodo ausente en cluster multi-instancia; logica bastante precisa.
   languages: [hcl]
   severity: WARNING

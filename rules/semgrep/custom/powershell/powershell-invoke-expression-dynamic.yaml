@@ -23,6 +23,11 @@ rules:
         - https://learn.microsoft.com/en-us/powershell/utility-modules/psscriptanalyzer/rules/avoidusinginvokeexpression
     options:
       generic_ellipsis_max_span: 0
+      severity_score: 100
+      confidence_score: 30
+      exploitability_score: 80
+      risk_score: 74
+      risk_justification: "Invoke-Expression ejecuta codigo arbitrario si el string se vuelve dinamico; la regla marca TODO uso, incluidos literales sin riesgo real (maxima tasa de falsos positivos por diseno); ejecucion normal."
     patterns:
       - pattern-either:
           - pattern: Invoke-Expression ...

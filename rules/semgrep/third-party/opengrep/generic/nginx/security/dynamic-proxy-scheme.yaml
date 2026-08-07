@@ -30,4 +30,9 @@ rules:
     - audit
     likelihood: LOW
     impact: LOW
+    severity_score: 50
+    confidence_score: 30
+    exploitability_score: 40
+    risk_score: 42
+    risk_justification: Scheme dinámico en proxy_pass; heurística amplia, menor impacto que host dinámico.
   pattern: proxy_pass $$SCHEME:// ...;

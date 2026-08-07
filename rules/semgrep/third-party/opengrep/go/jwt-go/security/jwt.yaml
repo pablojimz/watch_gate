@@ -27,6 +27,11 @@ rules:
     likelihood: HIGH
     impact: MEDIUM
     interfile: true
+    severity_score: 75
+    confidence_score: 100
+    exploitability_score: 100
+    risk_score: 89
+    risk_justification: Literal string en []byte(...) usado como clave de firma JWT; credencial hardcodeada, expuesta en el codigo fuente.
   severity: WARNING
   languages: [go]
   mode: taint

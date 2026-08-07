@@ -20,6 +20,11 @@ rules:
       references:
         - https://g.co/kgs/PCHQjJ
         - https://github.com/struct/mms
+      severity_score: 100
+      confidence_score: 60
+      exploitability_score: 80
+      risk_score: 83
+      risk_justification: Múltiples patrones de off-by-one en índices/strncat/malloc sin espacio para NUL; escritura fuera de límites.
     message: >-
       The software calculates or uses an incorrect maximum or minimum value
       that is 1 more, or 1 less, than the correct value.

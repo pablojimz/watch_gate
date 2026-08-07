@@ -18,6 +18,11 @@ rules:
       references:
         - https://cwe.mitre.org/data/definitions/90.html
         - https://owasp.org/www-community/attacks/LDAP_Injection
+      severity_score: 75
+      confidence_score: 60
+      exploitability_score: 80
+      risk_score: 72
+      risk_justification: "Filtro LDAP concatenado permite bypass de auth/extraccion de datos del directorio; sin taint tracking; ejecucion normal."
     patterns:
       - pattern: $SEARCHER.Filter = $FILTER;
       - pattern-not: $SEARCHER.Filter = "...";

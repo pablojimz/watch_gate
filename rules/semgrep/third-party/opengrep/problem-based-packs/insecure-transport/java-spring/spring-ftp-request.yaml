@@ -19,6 +19,11 @@ rules:
     technology:
     - spring
     vulnerability: Insecure Transport
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: setHost con literal ftp:// exacto en DefaultFtpSessionFactory.
   languages:
   - java
   fix-regex:

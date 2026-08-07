@@ -23,6 +23,11 @@ rules:
     - audit
     likelihood: LOW
     impact: LOW
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 40
+    risk_score: 62
+    risk_justification: InsecureIgnoreHostKey() exacto, sin uso seguro conocido; explotacion requiere atacante en red (MITM).
   languages: [go]
   severity: WARNING
   pattern: |-

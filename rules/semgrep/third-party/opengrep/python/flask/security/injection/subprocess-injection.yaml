@@ -84,3 +84,8 @@ rules:
     - vuln
     likelihood: HIGH
     impact: MEDIUM
+    severity_score: 100
+    confidence_score: 80
+    exploitability_score: 80
+    risk_score: 89
+    risk_justification: Taint request->subprocess con sanitizer de allowlist por dict y exclusión de literales; confidence HIGH declarada por autor, patrón bastante preciso.

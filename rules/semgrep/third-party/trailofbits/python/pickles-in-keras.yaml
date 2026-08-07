@@ -20,6 +20,11 @@ rules:
       references:
         - https://blog.trailofbits.com/2021/03/15/never-a-dill-moment-exploiting-machine-learning-pickle-files/
 
+      severity_score: 100
+      confidence_score: 60
+      exploitability_score: 40
+      risk_score: 73
+      risk_justification: load_model puede cargar pickle/hdf5 con lambda arbitraria (RCE); excluye literal de ruta en las 4 variantes.
     patterns:
       - pattern-either:
           - patterns:

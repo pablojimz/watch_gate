@@ -26,11 +26,7 @@ rules:
           $VAR = {..., user_hash: $USER_HASH, ...};
           ...
           Intercom('boot', $VAR);
-    message: Found an initialization of the Intercom Messenger that identifies a
-      User, but does not specify a `user_hash`. This configuration allows users
-      to impersonate one another. See the Intercom Identity Verification docs
-      for more context
-      https://www.intercom.com/help/en/articles/183-set-up-identity-verification-for-web-and-mobile
+    message: Found an initialization of the Intercom Messenger that identifies a User, but does not specify a `user_hash`. This configuration allows users to impersonate one another. See the Intercom Identity Verification docs for more context https://www.intercom.com/help/en/articles/183-set-up-identity-verification-for-web-and-mobile
     languages:
       - js
     severity: WARNING
@@ -47,3 +43,8 @@ rules:
         - intercom
       references:
         - https://www.intercom.com/help/en/articles/183-set-up-identity-verification-for-web-and-mobile
+      severity_score: "87.5"
+      confidence_score: 80
+      exploitability_score: 80
+      risk_score: 83
+      risk_justification: 'FALTA DATO: requiere que Identity Verification esté activo en backend de Intercom; asumo que sí (conservador). Permite impersonar identidad de usuario.'

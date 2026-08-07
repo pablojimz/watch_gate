@@ -22,6 +22,11 @@ rules:
     impact: MEDIUM
     likelihood: MEDIUM
     confidence: MEDIUM
+    severity_score: 75
+    confidence_score: 80
+    exploitability_score: 80
+    risk_score: 78
+    risk_justification: Taint real HttpServletRequest -> DirContext.search con exclusion de filtro literal.
   severity: WARNING
   languages: [java]
   mode: taint

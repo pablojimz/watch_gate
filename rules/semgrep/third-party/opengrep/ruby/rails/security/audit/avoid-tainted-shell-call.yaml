@@ -18,6 +18,11 @@ rules:
     likelihood: HIGH
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 100
+    confidence_score: 45
+    exploitability_score: 80
+    risk_score: 78
+    risk_justification: Incluye Kernel.system/exec (RCE real) pero mezcla nombres de método que no existen bajo ese receptor.
   message: >-
     Using user input when accessing files is potentially dangerous. A malicious actor could use this to
     modify or access files
@@ -34,7 +39,7 @@ rules:
   - patterns:
     - pattern-either:
       - patterns:
-          - pattern: Kernel.$X(...)
+        - pattern: Kernel.$X(...)
       - patterns:
         - pattern-either:
           - pattern: Shell.$X(...)

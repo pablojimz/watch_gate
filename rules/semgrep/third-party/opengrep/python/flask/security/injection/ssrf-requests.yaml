@@ -3,10 +3,7 @@ rules:
   languages:
   - python
   severity: ERROR
-  message: Data from request object is passed to a new server-side request. This could lead to a server-side
-    request forgery (SSRF). To mitigate, ensure that schemes and hosts are validated against an allowlist,
-    do not forward the response to the user, and ensure proper authentication and transport-layer security
-    in the proxied request.
+  message: Data from request object is passed to a new server-side request. This could lead to a server-side request forgery (SSRF). To mitigate, ensure that schemes and hosts are validated against an allowlist, do not forward the response to the user, and ensure proper authentication and transport-layer security in the proxied request.
   metadata:
     cwe:
     - 'CWE-918: Server-Side Request Forgery (SSRF)'
@@ -24,6 +21,11 @@ rules:
     likelihood: MEDIUM
     impact: HIGH
     confidence: MEDIUM
+    severity_score: 75
+    confidence_score: 60
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: Taint request->requests.*; SSRF, no aísla si el dato tainted es la URL u otro parámetro.
   pattern-either:
   - patterns:
           # Written this way so that Semgrep only matches the requests call,

@@ -1,15 +1,15 @@
 rules:
 - id: pyramid-authtkt-cookie-httponly-unsafe-default
   patterns:
-      - pattern: pyramid.authentication.$FUNC($...PARAMS)
-      - metavariable-pattern:
-          metavariable: $FUNC
-          pattern-either:
-            - pattern: AuthTktCookieHelper
-            - pattern: AuthTktAuthenticationPolicy
-      - pattern-not: pyramid.authentication.$FUNC(..., httponly=$HTTPONLY, ...)
-      - pattern-not: pyramid.authentication.$FUNC(..., **$PARAMS, ...)
-      - focus-metavariable: $...PARAMS
+  - pattern: pyramid.authentication.$FUNC($...PARAMS)
+  - metavariable-pattern:
+      metavariable: $FUNC
+      pattern-either:
+      - pattern: AuthTktCookieHelper
+      - pattern: AuthTktAuthenticationPolicy
+  - pattern-not: pyramid.authentication.$FUNC(..., httponly=$HTTPONLY, ...)
+  - pattern-not: pyramid.authentication.$FUNC(..., **$PARAMS, ...)
+  - focus-metavariable: $...PARAMS
   fix: |
     $...PARAMS, httponly=True
   message: >-
@@ -32,5 +32,10 @@ rules:
     likelihood: LOW
     impact: LOW
     confidence: MEDIUM
+    severity_score: 50
+    confidence_score: 60
+    exploitability_score: 80
+    risk_score: 60
+    risk_justification: AuthTkt sin httponly explícito; excluye si se define httponly o se pasan **kwargs.
   languages: [python]
   severity: WARNING

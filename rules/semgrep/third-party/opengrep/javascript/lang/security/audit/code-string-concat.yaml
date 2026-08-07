@@ -27,6 +27,11 @@ rules:
     - vuln
     likelihood: MEDIUM
     impact: MEDIUM
+    severity_score: 100
+    confidence_score: 80
+    exploitability_score: 80
+    risk_score: 89
+    risk_justification: Taint req/next-router->eval, ejecución de código arbitrario.
   languages:
   - javascript
   - typescript

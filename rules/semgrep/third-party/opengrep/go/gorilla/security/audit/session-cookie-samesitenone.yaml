@@ -11,8 +11,7 @@ rules:
       &sessions.Options{
         ...,
       }
-  message: Found SameSiteNoneMode setting in Gorilla session options. Consider setting
-    SameSite to Lax, Strict or Default for enhanced security.
+  message: Found SameSiteNoneMode setting in Gorilla session options. Consider setting SameSite to Lax, Strict or Default for enhanced security.
   metadata:
     cwe:
     - 'CWE-1275: Sensitive Cookie with Improper SameSite Attribute'
@@ -28,6 +27,11 @@ rules:
     - audit
     likelihood: LOW
     impact: LOW
+    severity_score: 50
+    confidence_score: 60
+    exploitability_score: 80
+    risk_score: 60
+    risk_justification: SameSite=None debilita proteccion CSRF; a veces uso legitimo cross-site intencional.
   fix-regex:
     regex: (SameSite\s*:\s+)http.SameSiteNoneMode
     replacement: \1http.SameSiteDefaultMode

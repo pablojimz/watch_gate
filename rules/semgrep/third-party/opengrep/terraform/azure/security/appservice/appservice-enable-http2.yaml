@@ -47,5 +47,10 @@ rules:
     likelihood: LOW
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 25
+    confidence_score: 30
+    exploitability_score: 100
+    risk_score: 45
+    risk_justification: HTTP2 deshabilitado (default); hallazgo menor, matchea la mayoria de configs normales.
   languages: [hcl]
   severity: INFO

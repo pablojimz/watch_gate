@@ -1,8 +1,6 @@
 rules:
 - id: express-third-party-object-deserialization
-  message: The following function call $SER.$FUNC accepts user controlled data which can result in Remote
-    Code Execution (RCE) through Object Deserialization. It is recommended to use secure data processing
-    alternatives such as JSON.parse() and Buffer.from().
+  message: The following function call $SER.$FUNC accepts user controlled data which can result in Remote Code Execution (RCE) through Object Deserialization. It is recommended to use secure data processing alternatives such as JSON.parse() and Buffer.from().
   options:
     interfile: true
   metadata:
@@ -26,6 +24,11 @@ rules:
     likelihood: HIGH
     impact: HIGH
     confidence: HIGH
+    severity_score: 100
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 95
+    risk_justification: node-serialize.unserialize con dato taint, gadget RCE conocido.
   languages:
   - javascript
   - typescript

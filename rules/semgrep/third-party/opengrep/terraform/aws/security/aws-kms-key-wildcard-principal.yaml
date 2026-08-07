@@ -42,5 +42,10 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 75
+    confidence_score: 100
+    exploitability_score: 100
+    risk_score: 89
+    risk_justification: kms:* con Principal=* y Resource=*; control total de la clave para cualquiera, literal exacto.
   languages: [hcl]
   severity: ERROR

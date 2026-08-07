@@ -15,14 +15,10 @@ rules:
       - pattern: asyncio.create_subprocess_exec($PROG, [$CMD, ...], ...)
       - pattern: asyncio.subprocess.create_subprocess_exec($PROG, $CMD, ...)
       - pattern: asyncio.subprocess.create_subprocess_exec($PROG, [$CMD, ...], ...)
-      - pattern: asyncio.create_subprocess_exec($PROG, "=~/(sh|bash|ksh|csh|tcsh|zsh)/", "-c",
-          $CMD, ...)
-      - pattern: asyncio.create_subprocess_exec($PROG, ["=~/(sh|bash|ksh|csh|tcsh|zsh)/", "-c",
-          $CMD, ...], ...)
-      - pattern: asyncio.subprocess.create_subprocess_exec($PROG, "=~/(sh|bash|ksh|csh|tcsh|zsh)/",
-          "-c", $CMD, ...)
-      - pattern: asyncio.subprocess.create_subprocess_exec($PROG, ["=~/(sh|bash|ksh|csh|tcsh|zsh)/",
-          "-c", $CMD, ...], ...)
+      - pattern: asyncio.create_subprocess_exec($PROG, "=~/(sh|bash|ksh|csh|tcsh|zsh)/", "-c", $CMD, ...)
+      - pattern: asyncio.create_subprocess_exec($PROG, ["=~/(sh|bash|ksh|csh|tcsh|zsh)/", "-c", $CMD, ...], ...)
+      - pattern: asyncio.subprocess.create_subprocess_exec($PROG, "=~/(sh|bash|ksh|csh|tcsh|zsh)/", "-c", $CMD, ...)
+      - pattern: asyncio.subprocess.create_subprocess_exec($PROG, ["=~/(sh|bash|ksh|csh|tcsh|zsh)/", "-c", $CMD, ...], ...)
   message: >-
     Detected 'create_subprocess_exec' function with argument tainted by `event` object. If
     this data can be controlled by a malicious actor, it may be an instance of
@@ -54,6 +50,11 @@ rules:
     likelihood: HIGH
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 100
+    confidence_score: 60
+    exploitability_score: 80
+    risk_score: 83
+    risk_justification: Taint event->asyncio subprocess_exec; RCE si event es de atacante; no distingue tipo de trigger Lambda.
   languages:
   - python
   severity: ERROR

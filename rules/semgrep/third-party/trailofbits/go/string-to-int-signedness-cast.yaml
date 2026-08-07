@@ -15,6 +15,11 @@ rules:
       references:
         - https://github.com/golang/go/issues/30209
 
+      severity_score: 25
+      confidence_score: 60
+      exploitability_score: 40
+      risk_score: 39
+      risk_justification: Downcast/cambio de signo; bug lógico, requiere valor fuera de rango en runtime.
     pattern-either:
       # 64 -> lower or sign
       - patterns:

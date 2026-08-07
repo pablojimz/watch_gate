@@ -17,6 +17,11 @@ rules:
       references:
         - https://tanelp.github.io/posts/a-bug-that-plagues-thousands-of-open-source-ml-projects
 
+      severity_score: 25
+      confidence_score: 80
+      exploitability_score: 80
+      risk_score: 55
+      risk_justification: RNG de NumPy en Dataset causa augmentations duplicadas; bug de calidad ML, no vulnerabilidad de seguridad real.
     patterns:
       - pattern: |
           class $X(torch.utils.data.Dataset):

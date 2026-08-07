@@ -20,6 +20,11 @@ rules:
         - https://nastystereo.com/security/rails-_json-juggling-attack.html
         - https://api.rubyonrails.org/v5.1.7/classes/ActionDispatch/Http/Parameters.html
         - https://api.rubyonrails.org/classes/ActionController/Parameters.html
+      severity_score: 75
+      confidence_score: 80
+      exploitability_score: 40
+      risk_score: 68
+      risk_justification: Uso de params[:_json] habilita parser-juggling; requiere lógica de tipo sensible aguas abajo no verificada.
     pattern-either:
       - pattern: "params[:_json]"
       - pattern: "params['_json']"

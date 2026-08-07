@@ -15,6 +15,11 @@ rules:
       references:
         - https://onnxruntime.ai/docs/reference/operators/add-custom-op.html
 
+      severity_score: 100
+      confidence_score: 60
+      exploitability_score: 40
+      risk_score: 73
+      risk_justification: register_custom_ops_library dinámico carga código nativo (RCE); requiere ruta no confiable.
     patterns:
       - pattern-inside: |
           $SESSION = onnxruntime.SessionOptions(...)

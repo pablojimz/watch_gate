@@ -17,34 +17,39 @@ rules:
     likelihood: LOW
     impact: LOW
     confidence: HIGH
+    severity_score: 50
+    confidence_score: 60
+    exploitability_score: 80
+    risk_score: 60
+    risk_justification: Debilita entropía de token vía base_convert; taint desde funciones hash/random especificas.
   languages: [php]
   severity: WARNING
   mode: taint
   pattern-sources:
-    - pattern: hash(...)
-    - pattern: hash_hmac(...)
-    - pattern: sha1(...)
-    - pattern: md5(...)
-    - patterns:
-      - pattern: random_bytes($N)
-      - metavariable-comparison:
-          metavariable: $N
-          comparison: $N > 7
-    - patterns:
-      - pattern: openssl_random_pseudo_bytes($N)
-      - metavariable-comparison:
-          metavariable: $N
-          comparison: $N > 7
-    - patterns:
-      - pattern: $OBJ->get_random_bytes($N)
-      - metavariable-comparison:
-          metavariable: $N
-          comparison: $N > 7
+  - pattern: hash(...)
+  - pattern: hash_hmac(...)
+  - pattern: sha1(...)
+  - pattern: md5(...)
+  - patterns:
+    - pattern: random_bytes($N)
+    - metavariable-comparison:
+        metavariable: $N
+        comparison: $N > 7
+  - patterns:
+    - pattern: openssl_random_pseudo_bytes($N)
+    - metavariable-comparison:
+        metavariable: $N
+        comparison: $N > 7
+  - patterns:
+    - pattern: $OBJ->get_random_bytes($N)
+    - metavariable-comparison:
+        metavariable: $N
+        comparison: $N > 7
   pattern-sinks:
-    - pattern: base_convert(...)
+  - pattern: base_convert(...)
   pattern-sanitizers:
-    - patterns:
-        - pattern: substr(..., $LENGTH)
-        - metavariable-comparison:
-            metavariable: $LENGTH
-            comparison: $LENGTH <= 7
+  - patterns:
+    - pattern: substr(..., $LENGTH)
+    - metavariable-comparison:
+        metavariable: $LENGTH
+        comparison: $LENGTH <= 7

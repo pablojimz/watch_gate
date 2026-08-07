@@ -70,3 +70,8 @@ rules:
     impact: HIGH
     confidence: MEDIUM
     interfile: true
+    severity_score: 75
+    confidence_score: 80
+    exploitability_score: 80
+    risk_score: 78
+    risk_justification: Taint real evento Lambda -> sentencia SQL ejecutada; fuente externa confirmada.

@@ -16,6 +16,11 @@ rules:
     - audit
     likelihood: MEDIUM
     impact: HIGH
+    severity_score: 100
+    confidence_score: 100
+    exploitability_score: 90
+    risk_score: 98
+    risk_justification: Shell reversa explícita en script; patrón literal exacto, se ejecuta en cada corrida del pipeline/build.
   message: Semgrep found a bash reverse shell
   severity: ERROR
   languages:

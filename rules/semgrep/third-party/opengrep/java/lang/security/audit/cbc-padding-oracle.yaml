@@ -26,6 +26,11 @@ rules:
     likelihood: HIGH
     impact: MEDIUM
     confidence: HIGH
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: Regex exacta de modo CBC/PKCS5Padding, patron inequivoco.
   severity: WARNING
   fix: |
     "AES/GCM/NoPadding"

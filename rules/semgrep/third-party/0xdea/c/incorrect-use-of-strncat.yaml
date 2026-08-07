@@ -19,13 +19,15 @@ rules:
         - A10:2025 - Mishandling of Exceptional Conditions
       references:
         - https://g.co/kgs/PCHQjJ
+      severity_score: 100
+      confidence_score: 80
+      exploitability_score: 80
+      risk_score: 89
+      risk_justification: Tamaño incorrecto (sizeof/strlen del propio dst) en strncat; escritura fuera de límites clásica y bien definida.
     message: >-
       The strncat() function is nearly as dangerous as strcat(), in that it's
-      quite easy to misuse. The first common mistake is supplying the size of 
-      the entire buffer instead of the size remaining in the buffer. A more 
-      subtle mistake can be made: the size parameter needs to be the amount of
-      space left in the buffer less one; otherwise, the NUL byte is written 
-      one byte past the end of the buffer.
+      quite easy to misuse. The first common mistake is supplying the size of  the entire buffer instead of the size remaining in the buffer. A more  subtle mistake can be made: the size parameter needs to be the amount of
+      space left in the buffer less one; otherwise, the NUL byte is written  one byte past the end of the buffer.
     severity: ERROR
     languages:
       - c

@@ -19,6 +19,11 @@ rules:
       references:
         - https://legends2k.github.io/note/assert_vs_if/
         - https://github.com/struct/mms
+      severity_score: 50
+      confidence_score: 30
+      exploitability_score: 40
+      risk_score: 42
+      risk_justification: assert puede ser no-op en builds release; regex genérica sobre cualquier macro assert-like con comparación.
     message: >-
       Most codebases define assertion macros which compile to a no-op on
       non-debug builds. If assertions are the only line of defense against

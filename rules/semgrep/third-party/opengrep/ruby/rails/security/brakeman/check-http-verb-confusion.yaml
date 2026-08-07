@@ -13,9 +13,7 @@ rules:
       elsif ...
         ...
       end
-  message: Found an improperly constructed control flow block with `request.get?`. Rails will route HEAD
-    requests as GET requests but they will fail the `request.get?` check, potentially causing unexpected
-    behavior unless an `elif` condition is used.
+  message: Found an improperly constructed control flow block with `request.get?`. Rails will route HEAD requests as GET requests but they will fail the `request.get?` check, potentially causing unexpected behavior unless an `elif` condition is used.
   languages:
   - ruby
   severity: ERROR
@@ -36,3 +34,8 @@ rules:
     likelihood: HIGH
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 50
+    confidence_score: 60
+    exploitability_score: 80
+    risk_score: 60
+    risk_justification: if request.get? sin elsif; confusión de verbos HTTP puede saltar controles según contenido de ramas.

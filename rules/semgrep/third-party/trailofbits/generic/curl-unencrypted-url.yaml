@@ -13,6 +13,11 @@ rules:
       impact: HIGH
       references:
         - https://curl.se/docs/manpage.html
+      severity_score: 50
+      confidence_score: 80
+      exploitability_score: 80
+      risk_score: 66
+      risk_justification: 'FALTA DATO: idem ejecución, conservador=80. Excluye IPs locales/metadata pero no evalúa sensibilidad del dato transmitido.'
     patterns:
       - pattern-either:
           - pattern: curl ... http://

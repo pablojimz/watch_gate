@@ -31,8 +31,7 @@ rules:
         customer_master_key_spec = "RSA_2096"
         ...
       }
-  message: The AWS KMS has no rotation. Missing rotation can cause leaked key to be used by attackers.
-    To fix this, set a `enable_key_rotation`.
+  message: The AWS KMS has no rotation. Missing rotation can cause leaked key to be used by attackers. To fix this, set a `enable_key_rotation`.
   languages: [hcl]
   severity: WARNING
   metadata:
@@ -52,3 +51,8 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 50
+    confidence_score: 60
+    exploitability_score: 100
+    risk_score: 66
+    risk_justification: Rotacion de clave KMS deshabilitada; heuristica no distingue claves asimetricas (rotacion no aplica), posibles FP.

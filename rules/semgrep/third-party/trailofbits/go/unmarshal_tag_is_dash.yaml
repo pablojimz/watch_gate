@@ -14,6 +14,11 @@ rules:
       technology: [--no-technology--]
       references:
         - https://pkg.go.dev/encoding/json#Marshal
+      severity_score: 50
+      confidence_score: 100
+      exploitability_score: 80
+      risk_score: 72
+      risk_justification: Tag mal formado permite decodificar campo que se creía excluido; puede exponer asignación no intencionada.
     patterns:
       - pattern: |
           type $T1 struct {

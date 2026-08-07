@@ -7,8 +7,7 @@ rules:
   - metavariable-comparison:
       metavariable: $M
       comparison: re.match(".*-CBC",$M)
-  message: Static IV used with AES in CBC mode. Static IVs enable chosen-plaintext attacks against encrypted
-    data.
+  message: Static IV used with AES in CBC mode. Static IVs enable chosen-plaintext attacks against encrypted data.
   languages:
   - php
   severity: ERROR
@@ -28,3 +27,8 @@ rules:
     likelihood: HIGH
     impact: MEDIUM
     confidence: HIGH
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: IV estático literal en modo CBC; patrón exacto sin caso de uso seguro.

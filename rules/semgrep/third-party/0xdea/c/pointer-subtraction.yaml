@@ -18,6 +18,11 @@ rules:
         - A10:2025 - Mishandling of Exceptional Conditions
       references:
         - https://github.com/struct/mms
+      severity_score: 50
+      confidence_score: 30
+      exploitability_score: 40
+      risk_score: 42
+      risk_justification: Resta de punteros para tamaño; patrón muy común y a menudo válido dentro del mismo array, requiere chunks distintos.
     message: >-
       The software subtracts one pointer from another in order to determine
       size, but this calculation can be incorrect if the pointers do not

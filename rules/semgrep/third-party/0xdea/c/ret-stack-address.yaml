@@ -21,6 +21,11 @@ rules:
         - https://www.sei.cmu.edu/downloads/sei-cert-c-coding-standard-2016-v01.pdf
         - https://docs.microsoft.com/en-us/cpp/sanitizers/asan-error-examples
         - https://rules.sonarsource.com/c/type/Bug/RSPEC-946
+      severity_score: 75
+      confidence_score: 60
+      exploitability_score: 40
+      risk_score: 62
+      risk_justification: Retorno de dirección de variable de pila; el propio mensaje indica típicamente crash, no RCE confirmado.
     message: >-
       A function returns the address of a stack variable, which will cause
       unintended program behavior, typically in the form of a crash.

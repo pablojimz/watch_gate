@@ -29,3 +29,8 @@ rules:
       impact: MEDIUM
       confidence: MEDIUM
       deprecated: true
+      severity_score: 25
+      confidence_score: 30
+      exploitability_score: 10
+      risk_score: 23
+      risk_justification: 'Regla deprecada con patron roto (pattern: a / pattern: b), practicamente inalcanzable/no funcional.'

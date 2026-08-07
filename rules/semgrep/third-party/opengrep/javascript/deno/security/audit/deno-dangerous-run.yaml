@@ -21,6 +21,11 @@ rules:
     likelihood: LOW
     impact: HIGH
     confidence: MEDIUM
+    severity_score: 100
+    confidence_score: 30
+    exploitability_score: 40
+    risk_score: 64
+    risk_justification: Deno.run = command injection, pero fuente es cualquier parámetro de función.
   languages:
   - javascript
   - typescript

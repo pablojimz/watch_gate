@@ -1,8 +1,7 @@
 rules:
 - id: tainted-env-from-http-request
   message: >-
-    Detected input from a HTTPServletRequest going into the environment variables of an 'exec' command. 
-    Instead, call the command with user-supplied arguments by using the overloaded method with one String array as the argument.
+    Detected input from a HTTPServletRequest going into the environment variables of an 'exec' command.  Instead, call the command with user-supplied arguments by using the overloaded method with one String array as the argument.
     `exec({"command", "arg1", "arg2"})`.
   languages: [java]
   severity: ERROR
@@ -22,9 +21,9 @@ rules:
         - pattern: |
             $COOKIE.getValue(...)
   pattern-sinks:
-       - patterns:
-           - pattern: (java.lang.Runtime $R).exec($CMD, $ENV_ARGS, ...);
-           - focus-metavariable: $ENV_ARGS
+  - patterns:
+    - pattern: (java.lang.Runtime $R).exec($CMD, $ENV_ARGS, ...);
+    - focus-metavariable: $ENV_ARGS
   metadata:
     category: security
     technology:
@@ -43,3 +42,8 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 75
+    confidence_score: 80
+    exploitability_score: 40
+    risk_score: 68
+    risk_justification: Origen externo confirmado, pero impacto real depende de que variable/programa se ejecute (condicion adicional).

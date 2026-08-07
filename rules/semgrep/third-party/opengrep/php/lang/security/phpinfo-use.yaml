@@ -20,5 +20,10 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 25
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 61
+    risk_justification: Exposición de información de entorno; función exacta, sin vía de explotación directa.
   languages: [php]
   severity: ERROR

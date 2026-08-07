@@ -13,6 +13,11 @@ rules:
       impact: HIGH
       references:
         - https://docs.docker.com/engine/reference/commandline/run/
+      severity_score: 75
+      confidence_score: 100
+      exploitability_score: 80
+      risk_score: 84
+      risk_justification: 'FALTA DATO: ejecución del script no confirmada, conservador=80. Flags host-ns/SYS_MODULE facilitan escape de contenedor pero requieren código previo dentro de este.'
     pattern-either:
       - pattern: docker ... --privileged
       - pattern: docker ... --cap-add=ALL

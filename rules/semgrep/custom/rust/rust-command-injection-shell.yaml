@@ -19,6 +19,11 @@ rules:
       references:
         - https://cwe.mitre.org/data/definitions/78.html
         - https://doc.rust-lang.org/std/process/struct.Command.html
+      severity_score: 100
+      confidence_score: 60
+      exploitability_score: 80
+      risk_score: 83
+      risk_justification: "Command::new invocando sh/cmd explicitamente reintroduce inyeccion de comandos; sin taint tracking, solo excluye literal; ejecucion normal."
     patterns:
       - pattern-either:
           - pattern: Command::new("sh").arg("-c").arg($CMD)

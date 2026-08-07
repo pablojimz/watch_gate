@@ -13,4 +13,9 @@ rules:
       impact: HIGH
       references:
         - https://docs.ansible.com/ansible/latest/os_guide/windows_winrm.html#https-certificate-validation
+      severity_score: 75
+      confidence_score: 100
+      exploitability_score: 100
+      risk_score: 89
+      risk_justification: Desactiva validación de certificado WinRM; MITM puede interceptar/alterar canal de administración remota de Windows.
     pattern: "ansible_winrm_server_cert_validation: ignore"

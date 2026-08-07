@@ -16,6 +16,11 @@ rules:
       references:
         - https://docs.python.org/3/library/tarfile.html#tarfile.TarFile.extractall
 
+      severity_score: 100
+      confidence_score: 80
+      exploitability_score: 40
+      risk_score: 79
+      risk_justification: extractall sin filtro members (path traversal clásico); patrón exacto y bien excluido, requiere tar no confiable.
     patterns:
       - pattern-either:
           - pattern: |

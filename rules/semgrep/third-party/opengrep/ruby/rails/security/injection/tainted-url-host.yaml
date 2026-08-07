@@ -30,6 +30,11 @@ rules:
     likelihood: MEDIUM
     impact: HIGH
     confidence: MEDIUM
+    severity_score: 75
+    confidence_score: 60
+    exploitability_score: 40
+    risk_score: 62
+    risk_justification: SSRF; solo detecta construcción de string con esquema://, no confirma uso en petición de red.
   mode: taint
   pattern-sanitizers:
   - pattern: SsrfFilter

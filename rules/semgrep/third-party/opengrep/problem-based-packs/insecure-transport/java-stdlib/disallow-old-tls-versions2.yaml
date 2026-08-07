@@ -18,16 +18,21 @@ rules:
     technology:
     - java
     vulnerability: Insecure Transport
+    severity_score: 50
+    confidence_score: 80
+    exploitability_score: 80
+    risk_score: 66
+    risk_justification: Regex sobre valor literal de property jdk.tls.client.protocols, bastante preciso pero basado en texto.
   languages: [java]
   patterns:
   - pattern: $VALUE. ... .setProperty("jdk.tls.client.protocols", "$PATTERNS");
-  - metavariable-pattern: 
+  - metavariable-pattern:
       metavariable: $PATTERNS
       language: generic
       patterns:
-        - pattern-either:
-            - pattern: TLS1
+      - pattern-either:
+        - pattern: TLS1
             # Looks for anything with SSLv or ends with TLSv1
-            - pattern-regex: ^(.*TLSv1|.*SSLv.*)$
+        - pattern-regex: ^(.*TLSv1|.*SSLv.*)$
             # Looks for TLSv1,
-            - pattern-regex: ^(.*TLSv1,.*)
+        - pattern-regex: ^(.*TLSv1,.*)

@@ -31,6 +31,11 @@ rules:
     likelihood: HIGH
     impact: MEDIUM
     confidence: HIGH
+    severity_score: 75
+    confidence_score: 100
+    exploitability_score: 100
+    risk_score: 89
+    risk_justification: Secreto JWT literal en JWT.verify/sign, expuesto permanentemente.
   languages:
   - javascript
   - typescript

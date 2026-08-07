@@ -4,11 +4,7 @@ rules:
   - scala
   severity: ERROR
   mode: taint
-  message: User data flows into this manually-constructed SQL string. User data can be safely inserted
-    into SQL strings using prepared statements or an object-relational mapper (ORM). Manually-constructed
-    SQL strings is a possible indicator of SQL injection, which could let an attacker steal or manipulate
-    data from the database. Instead, use prepared statements (`connection.PreparedStatement`) or a safe
-    library.
+  message: User data flows into this manually-constructed SQL string. User data can be safely inserted into SQL strings using prepared statements or an object-relational mapper (ORM). Manually-constructed SQL strings is a possible indicator of SQL injection, which could let an attacker steal or manipulate data from the database. Instead, use prepared statements (`connection.PreparedStatement`) or a safe library.
   metadata:
     cwe:
     - "CWE-89: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')"
@@ -28,6 +24,11 @@ rules:
     - vuln
     likelihood: MEDIUM
     impact: HIGH
+    severity_score: 75
+    confidence_score: 60
+    exploitability_score: 40
+    risk_score: 62
+    risk_justification: Taint hacia concatenación SQL desde param de función tipo controlador; fuente genérica, no confirma exposición HTTP real.
   pattern-sources:
   - patterns:
     - pattern: $PARAM

@@ -16,4 +16,9 @@ rules:
         - https://pytorch.org/docs/1.13/package.html#torch-package
         - https://blog.trailofbits.com/2021/03/15/never-a-dill-moment-exploiting-machine-learning-pickle-files/
 
+      severity_score: 100
+      confidence_score: 30
+      exploitability_score: 40
+      risk_score: 64
+      risk_justification: Solo detecta el import, no el uso real de deserialización insegura; heurística muy amplia, confianza baja del propio autor.
     pattern: import torch.package

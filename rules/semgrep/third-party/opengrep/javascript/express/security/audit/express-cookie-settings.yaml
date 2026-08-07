@@ -8,22 +8,27 @@ rules:
     languages: [javascript, typescript]
     metadata:
       cwe:
-      - 'CWE-522: Insufficiently Protected Credentials'
+        - 'CWE-522: Insufficiently Protected Credentials'
       owasp:
-      - A02:2017 - Broken Authentication
-      - A04:2021 - Insecure Design
+        - A02:2017 - Broken Authentication
+        - A04:2021 - Insecure Design
       source-rule-url: https://expressjs.com/en/advanced/best-practice-security.html
       category: security
       technology:
-      - express
+        - express
       cwe2021-top25: true
       subcategory:
-      - vuln
+        - vuln
       likelihood: HIGH
       impact: LOW
       confidence: MEDIUM
       references:
-      - https://owasp.org/Top10/A04_2021-Insecure_Design
+        - https://owasp.org/Top10/A04_2021-Insecure_Design
+      severity_score: 25
+      confidence_score: 60
+      exploitability_score: 80
+      risk_score: 49
+      risk_justification: Nombre de cookie por defecto solo facilita fingerprinting.
     patterns:
       - pattern-either:
           - pattern-inside: |
@@ -52,22 +57,27 @@ rules:
     languages: [javascript, typescript]
     metadata:
       cwe:
-      - 'CWE-522: Insufficiently Protected Credentials'
+        - 'CWE-522: Insufficiently Protected Credentials'
       owasp:
-      - A02:2017 - Broken Authentication
-      - A04:2021 - Insecure Design
+        - A02:2017 - Broken Authentication
+        - A04:2021 - Insecure Design
       source-rule-url: https://expressjs.com/en/advanced/best-practice-security.html
       category: security
       technology:
-      - express
+        - express
       cwe2021-top25: true
       subcategory:
-      - vuln
+        - vuln
       likelihood: HIGH
       impact: LOW
       confidence: MEDIUM
       references:
-      - https://owasp.org/Top10/A04_2021-Insecure_Design
+        - https://owasp.org/Top10/A04_2021-Insecure_Design
+      severity_score: 50
+      confidence_score: 60
+      exploitability_score: 80
+      risk_score: 60
+      risk_justification: 'FALTA DATO: no se sabe si se sirve por HTTP; asumo exposición mixta (conservador).'
     patterns:
       - pattern-either:
           - pattern-inside: |
@@ -114,22 +124,27 @@ rules:
     languages: [javascript, typescript]
     metadata:
       cwe:
-      - 'CWE-522: Insufficiently Protected Credentials'
+        - 'CWE-522: Insufficiently Protected Credentials'
       owasp:
-      - A02:2017 - Broken Authentication
-      - A04:2021 - Insecure Design
+        - A02:2017 - Broken Authentication
+        - A04:2021 - Insecure Design
       source-rule-url: https://expressjs.com/en/advanced/best-practice-security.html
       category: security
       technology:
-      - express
+        - express
       cwe2021-top25: true
       subcategory:
-      - vuln
+        - vuln
       likelihood: HIGH
       impact: LOW
       confidence: MEDIUM
       references:
-      - https://owasp.org/Top10/A04_2021-Insecure_Design
+        - https://owasp.org/Top10/A04_2021-Insecure_Design
+      severity_score: 50
+      confidence_score: 60
+      exploitability_score: 80
+      risk_score: 60
+      risk_justification: 'FALTA DATO: no se sabe si existe vector XSS que explote esto; asumo que sí (conservador).'
     patterns:
       - pattern-either:
           - pattern-inside: |
@@ -177,22 +192,27 @@ rules:
     languages: [javascript, typescript]
     metadata:
       cwe:
-      - 'CWE-522: Insufficiently Protected Credentials'
+        - 'CWE-522: Insufficiently Protected Credentials'
       owasp:
-      - A02:2017 - Broken Authentication
-      - A04:2021 - Insecure Design
+        - A02:2017 - Broken Authentication
+        - A04:2021 - Insecure Design
       source-rule-url: https://expressjs.com/en/advanced/best-practice-security.html
       category: security
       technology:
-      - express
+        - express
       cwe2021-top25: true
       subcategory:
-      - vuln
+        - vuln
       likelihood: HIGH
       impact: LOW
       confidence: MEDIUM
       references:
-      - https://owasp.org/Top10/A04_2021-Insecure_Design
+        - https://owasp.org/Top10/A04_2021-Insecure_Design
+      severity_score: 25
+      confidence_score: 60
+      exploitability_score: 40
+      risk_score: 39
+      risk_justification: Falta de 'domain' es higiene, impacto bajo por sí solo.
     patterns:
       - pattern-either:
           - pattern-inside: |
@@ -239,22 +259,27 @@ rules:
     languages: [javascript, typescript]
     metadata:
       cwe:
-      - 'CWE-522: Insufficiently Protected Credentials'
+        - 'CWE-522: Insufficiently Protected Credentials'
       owasp:
-      - A02:2017 - Broken Authentication
-      - A04:2021 - Insecure Design
+        - A02:2017 - Broken Authentication
+        - A04:2021 - Insecure Design
       source-rule-url: https://expressjs.com/en/advanced/best-practice-security.html
       category: security
       technology:
-      - express
+        - express
       cwe2021-top25: true
       subcategory:
-      - vuln
+        - vuln
       likelihood: HIGH
       impact: LOW
       confidence: MEDIUM
       references:
-      - https://owasp.org/Top10/A04_2021-Insecure_Design
+        - https://owasp.org/Top10/A04_2021-Insecure_Design
+      severity_score: 25
+      confidence_score: 60
+      exploitability_score: 40
+      risk_score: 39
+      risk_justification: Falta de 'path' es higiene, impacto bajo por sí solo.
     patterns:
       - pattern-either:
           - pattern-inside: |
@@ -301,22 +326,27 @@ rules:
     languages: [javascript, typescript]
     metadata:
       cwe:
-      - 'CWE-522: Insufficiently Protected Credentials'
+        - 'CWE-522: Insufficiently Protected Credentials'
       owasp:
-      - A02:2017 - Broken Authentication
-      - A04:2021 - Insecure Design
+        - A02:2017 - Broken Authentication
+        - A04:2021 - Insecure Design
       source-rule-url: https://expressjs.com/en/advanced/best-practice-security.html
       category: security
       technology:
-      - express
+        - express
       cwe2021-top25: true
       subcategory:
-      - vuln
+        - vuln
       likelihood: HIGH
       impact: LOW
       confidence: MEDIUM
       references:
-      - https://owasp.org/Top10/A04_2021-Insecure_Design
+        - https://owasp.org/Top10/A04_2021-Insecure_Design
+      severity_score: 25
+      confidence_score: 60
+      exploitability_score: 40
+      risk_score: 39
+      risk_justification: Cookie persistente sin expiración, riesgo menor.
     patterns:
       - pattern-either:
           - pattern-inside: |

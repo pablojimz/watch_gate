@@ -34,3 +34,8 @@ rules:
     - audit
     likelihood: LOW
     impact: MEDIUM
+    severity_score: 50
+    confidence_score: 80
+    exploitability_score: 100
+    risk_score: 72
+    risk_justification: Falta ssl_protocols, usa default inseguro (TLSv1/1.1); patrón preciso, config siempre activa.

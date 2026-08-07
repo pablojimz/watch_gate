@@ -20,6 +20,11 @@ rules:
     technology:
     - java
     vulnerability: Insecure Transport
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: HttpClients.execute con URL literal http:// exacto.
   languages:
   - java
   fix-regex:

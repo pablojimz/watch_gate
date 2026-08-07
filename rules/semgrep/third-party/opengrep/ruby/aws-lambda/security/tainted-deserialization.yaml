@@ -31,6 +31,11 @@ rules:
     likelihood: MEDIUM
     impact: HIGH
     confidence: MEDIUM
+    severity_score: 100
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 95
+    risk_justification: event hacia YAML/Marshal/CSV.load; deserialización insegura clásica en Ruby, RCE.
   pattern-sinks:
   - patterns:
     - pattern: $SINK

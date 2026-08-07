@@ -24,6 +24,11 @@ rules:
     - vuln
     likelihood: HIGH
     impact: MEDIUM
+    severity_score: 75
+    confidence_score: 80
+    exploitability_score: 80
+    risk_score: 78
+    risk_justification: Taint real location.*->angular.element html/append, con sanitizadores.
   languages:
   - javascript
   - typescript

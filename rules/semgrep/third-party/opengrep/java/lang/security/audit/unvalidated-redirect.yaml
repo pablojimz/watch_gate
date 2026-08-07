@@ -25,6 +25,11 @@ rules:
     impact: LOW
     likelihood: MEDIUM
     confidence: MEDIUM
+    severity_score: 50
+    confidence_score: 60
+    exploitability_score: 80
+    risk_score: 60
+    risk_justification: Open redirect, no valida saneamiento intermedio en el metodo.
   severity: WARNING
   languages: [java]
   pattern-either:

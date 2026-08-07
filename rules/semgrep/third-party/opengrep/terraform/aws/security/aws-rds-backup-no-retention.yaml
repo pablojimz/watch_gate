@@ -14,8 +14,7 @@ rules:
           backup_retention_period = 0
           ...
         }
-  message: The AWS RDS has no retention. Missing retention can cause losing important event information.
-    To fix this, set a `backup_retention_period`.
+  message: The AWS RDS has no retention. Missing retention can cause losing important event information. To fix this, set a `backup_retention_period`.
   languages: [hcl]
   severity: WARNING
   metadata:
@@ -34,3 +33,8 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 25
+    confidence_score: 100
+    exploitability_score: 100
+    risk_score: 66
+    risk_justification: backup_retention_period=0; afecta resiliencia/DR, no confidencialidad, literal exacto.

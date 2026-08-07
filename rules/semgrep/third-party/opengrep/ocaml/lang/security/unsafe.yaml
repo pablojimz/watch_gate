@@ -30,15 +30,15 @@ rules:
       - pattern: $X.unsafe_single_write
       - pattern: $X.unsafe_string
       - pattern: $X.unsafe_sub
-      - pattern: $X.unsafe_write 
+      - pattern: $X.unsafe_write
     message: Unsafe functions do not perform boundary checks or have other side effects, use with care.
     languages: [ocaml]
     severity: WARNING
     metadata:
       category: security
       references:
-      - https://v2.ocaml.org/api/Bigarray.Array1.html#VALunsafe_get
-      - https://v2.ocaml.org/api/Bytes.html#VALunsafe_to_string
+        - https://v2.ocaml.org/api/Bigarray.Array1.html#VALunsafe_get
+        - https://v2.ocaml.org/api/Bytes.html#VALunsafe_to_string
       technology:
         - ocaml
       cwe: "CWE-242: Use of Inherently Dangerous Function (4.12)"
@@ -47,3 +47,8 @@ rules:
       impact: MEDIUM
       subcategory:
         - audit
+      severity_score: 50
+      confidence_score: 30
+      exploitability_score: 40
+      risk_score: 42
+      risk_justification: Lista amplia de funciones Unsafe.*, muchas con uso legítimo en código de rendimiento.

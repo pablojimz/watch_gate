@@ -69,3 +69,8 @@ rules:
     - audit
     likelihood: MEDIUM
     impact: MEDIUM
+    severity_score: 100
+    confidence_score: 80
+    exploitability_score: 40
+    risk_score: 79
+    risk_justification: SAXParser/SAXReader/SAXBuilder sin deshabilitar entidades externas; exclusiones cubren fix típico, requiere XML malicioso.

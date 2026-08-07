@@ -19,6 +19,11 @@ rules:
         - https://securitylabs.datadoghq.com/articles/exploring-github-to-aws-keyless-authentication-flaws/
         - https://www.rezonate.io/blog/github-misconfigurations-put-gcp-aws-in-account-takeover-risk
         - https://github.com/Rezonate-io/github-oidc-checker/
+      severity_score: "87.5"
+      confidence_score: 100
+      exploitability_score: 100
+      risk_score: 94
+      risk_justification: Condición duplicada en policy IAM anula restricción previa; duda 75/100 según qué condición prevalece.
     patterns:
       - pattern-inside: |
           {

@@ -1,10 +1,8 @@
 rules:
 - id: missing-ssl-minversion
   message: >-
-    `MinVersion` is missing from this TLS configuration. 
-    By default, TLS 1.2 is currently used as the minimum when acting as a client, and TLS 1.0 when acting as a server.
-    General purpose web applications should default to TLS 1.3 with all other protocols disabled. 
-    Only where it is known that a web server must support legacy clients
+    `MinVersion` is missing from this TLS configuration.  By default, TLS 1.2 is currently used as the minimum when acting as a client, and TLS 1.0 when acting as a server.
+    General purpose web applications should default to TLS 1.3 with all other protocols disabled.  Only where it is known that a web server must support legacy clients
     with unsupported an insecure browsers (such as Internet Explorer 10), it may be necessary to enable TLS 1.0 to provide support.
     Add `MinVersion: tls.VersionTLS13' to the TLS configuration to bump the minimum version to TLS 1.3.
   metadata:
@@ -26,6 +24,11 @@ rules:
     - audit
     likelihood: MEDIUM
     impact: LOW
+    severity_score: 50
+    confidence_score: 80
+    exploitability_score: 80
+    risk_score: 66
+    risk_justification: tls.Config sin MinVersion; permite negociar protocolos antiguos inseguros.
   languages: [go]
   severity: WARNING
   patterns:

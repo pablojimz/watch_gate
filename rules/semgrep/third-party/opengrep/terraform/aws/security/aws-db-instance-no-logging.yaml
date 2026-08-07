@@ -31,3 +31,8 @@ rules:
     likelihood: MEDIUM
     impact: LOW
     confidence: MEDIUM
+    severity_score: 25
+    confidence_score: 100
+    exploitability_score: 100
+    risk_score: 66
+    risk_justification: Falta exportacion de logs de RDS; hallazgo de auditoria, campo exacto.

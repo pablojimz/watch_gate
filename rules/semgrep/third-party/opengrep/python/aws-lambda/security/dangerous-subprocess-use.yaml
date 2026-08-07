@@ -2,8 +2,7 @@ rules:
 - id: dangerous-subprocess-use
   mode: taint
   message: >-
-    Detected subprocess function with argument tainted by an `event` object. 
-    If this data can be controlled by a malicious actor, it may be an instance of
+    Detected subprocess function with argument tainted by an `event` object.  If this data can be controlled by a malicious actor, it may be an instance of
     command injection. The default option for `shell` is False, and this is secure by default.
     Consider removing the `shell=True` or setting it to False explicitely.
     Using `shell=False` means you have to split the command string into an array of
@@ -34,6 +33,11 @@ rules:
     likelihood: HIGH
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 100
+    confidence_score: 60
+    exploitability_score: 80
+    risk_score: 83
+    risk_justification: subprocess shell=True con event; hay sanitizers (shlex/pipes.quote) pero taint genérico.
   languages:
   - python
   severity: ERROR

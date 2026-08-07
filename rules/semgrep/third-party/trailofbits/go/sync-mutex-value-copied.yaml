@@ -1,8 +1,7 @@
 rules:
   - id: sync-mutex-value-copied
     message: >-
-      A `sync.Mutex` is copied in function `$FUNC` given that `$T` is value receiver. 
-      As a result, the struct `$T` may not be locked as intended
+      A `sync.Mutex` is copied in function `$FUNC` given that `$T` is value receiver.  As a result, the struct `$T` may not be locked as intended
     languages: [go]
     severity: ERROR
     metadata:
@@ -17,6 +16,11 @@ rules:
       references:
         - https://go101.org/article/concurrent-common-mistakes.html
 
+      severity_score: 50
+      confidence_score: 100
+      exploitability_score: 80
+      risk_score: 72
+      risk_justification: Copia de sync.Mutex vía value receiver anula por completo la exclusión mutua; sin caso de uso seguro.
     patterns:
       - pattern-either:
           - pattern: |

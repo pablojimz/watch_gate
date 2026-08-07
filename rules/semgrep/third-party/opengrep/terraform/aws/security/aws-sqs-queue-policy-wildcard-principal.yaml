@@ -65,8 +65,12 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: MEDIUM
-    rule-origin-note: published from /src/aws-sqs-queue-policy-wildcard-principal.yml
-      in None
+    rule-origin-note: published from /src/aws-sqs-queue-policy-wildcard-principal.yml in None
+    severity_score: 75
+    confidence_score: 80
+    exploitability_score: 100
+    risk_score: 83
+    risk_justification: Wildcard Allow en policy de SQS; lectura/escritura publica de la cola.
   languages:
   - hcl
   severity: ERROR

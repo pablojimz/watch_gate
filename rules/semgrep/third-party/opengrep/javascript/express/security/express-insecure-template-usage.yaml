@@ -1,7 +1,6 @@
 rules:
 - id: express-insecure-template-usage
-  message: User data from `$REQ` is being compiled into the template, which can lead to a Server Side
-    Template Injection (SSTI) vulnerability.
+  message: User data from `$REQ` is being compiled into the template, which can lead to a Server Side Template Injection (SSTI) vulnerability.
   options:
     interfile: true
   metadata:
@@ -36,6 +35,11 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 100
+    confidence_score: 80
+    exploitability_score: 80
+    risk_score: 89
+    risk_justification: Taint req.*->compile/render de múltiples motores de plantillas, SSTI.
   languages:
   - javascript
   - typescript

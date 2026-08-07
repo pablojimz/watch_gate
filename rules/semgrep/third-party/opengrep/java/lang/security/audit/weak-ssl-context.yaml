@@ -18,6 +18,11 @@ rules:
     likelihood: LOW
     impact: MEDIUM
     confidence: HIGH
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: Excluye literales TLSv1.2/1.3 exactos, resto de protocolos literal detectado sin ambiguedad.
   message: >-
     An insecure SSL context was detected. TLS versions 1.0, 1.1, and all SSL versions
     are considered weak encryption and are deprecated.

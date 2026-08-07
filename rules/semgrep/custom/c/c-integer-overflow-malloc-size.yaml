@@ -20,5 +20,10 @@ rules:
       references:
         - https://cwe.mitre.org/data/definitions/190.html
         - https://owasp.org/www-community/vulnerabilities/Integer_overflow
+      severity_score: 100
+      confidence_score: 30
+      exploitability_score: 80
+      risk_score: 74
+      risk_justification: "Overflow en malloc(a*b) puede derivar en heap overflow y RCE; patron muy amplio sin distinguir constantes seguras (LOW ya en yaml); ejecucion normal."
     patterns:
       - pattern: malloc($A * $B)

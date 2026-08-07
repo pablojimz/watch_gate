@@ -19,6 +19,11 @@ rules:
       description: "Potentially bad CORS policy"
       references:
         - https://www.apollographql.com/docs/apollo-server/v3/security/cors#configuring-cors-options-for-apollo-server
+      severity_score: 25
+      confidence_score: 30
+      exploitability_score: 80
+      risk_score: 40
+      risk_justification: Regla de auditoría (taint) muy amplia; marca casi cualquier origin no-false/no-vacío, incluidos configs seguros.
     mode: taint
 
     pattern-sources:

@@ -55,5 +55,10 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 50
+    confidence_score: 80
+    exploitability_score: 100
+    risk_score: 72
+    risk_justification: Contenedor sin bloque securityContext; permite escalada de privilegios por defecto en k8s, aplica al desplegar.
   languages: [yaml]
   severity: WARNING

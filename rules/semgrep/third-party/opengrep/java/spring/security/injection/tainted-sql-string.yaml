@@ -3,16 +3,10 @@ rules:
     languages:
       - java
     severity: ERROR
-    message: User data flows into this manually-constructed SQL string. User data
-      can be safely inserted into SQL strings using prepared statements or an
-      object-relational mapper (ORM). Manually-constructed SQL strings is a
-      possible indicator of SQL injection, which could let an attacker steal or
-      manipulate data from the database. Instead, use prepared statements
-      (`connection.PreparedStatement`) or a safe library.
+    message: User data flows into this manually-constructed SQL string. User data can be safely inserted into SQL strings using prepared statements or an object-relational mapper (ORM). Manually-constructed SQL strings is a possible indicator of SQL injection, which could let an attacker steal or manipulate data from the database. Instead, use prepared statements (`connection.PreparedStatement`) or a safe library.
     metadata:
       cwe:
-        - "CWE-89: Improper Neutralization of Special Elements used in an SQL
-          Command ('SQL Injection')"
+        - "CWE-89: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')"
       owasp:
         - A01:2017 - Injection
         - A03:2021 - Injection
@@ -30,6 +24,11 @@ rules:
       impact: MEDIUM
       confidence: MEDIUM
       interfile: true
+      severity_score: 75
+      confidence_score: 80
+      exploitability_score: 80
+      risk_score: 78
+      risk_justification: Taint real anotaciones Spring hacia concatenacion SQL con exclusion de logging.
     options:
       taint_assume_safe_numbers: true
       taint_assume_safe_booleans: true

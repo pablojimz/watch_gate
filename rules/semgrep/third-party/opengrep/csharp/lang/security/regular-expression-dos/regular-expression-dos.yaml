@@ -18,9 +18,13 @@ rules:
     - audit
     likelihood: LOW
     impact: MEDIUM
+    severity_score: 50
+    confidence_score: 60
+    exploitability_score: 40
+    risk_score: 50
+    risk_justification: Regex.Match sin timeout sobre param de método público; no confirma complejidad vulnerable ni exposición externa.
   message: >-
-    When using `System.Text.RegularExpressions` to process untrusted input, pass a timeout. 
-    A malicious user can provide input to `RegularExpressions` that abuses the backtracking behaviour of this regular expression engine.
+    When using `System.Text.RegularExpressions` to process untrusted input, pass a timeout.  A malicious user can provide input to `RegularExpressions` that abuses the backtracking behaviour of this regular expression engine.
     This will lead to excessive CPU usage, causing a Denial-of-Service attack
   patterns:
   - pattern-inside: |

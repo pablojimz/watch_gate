@@ -14,6 +14,11 @@ rules:
       technology: [redis]
       references:
         - https://redis.io/docs/latest/develop/connect/cli/#host-port-password-and-database
+      severity_score: 50
+      confidence_score: 100
+      exploitability_score: 80
+      risk_score: 72
+      risk_justification: 'FALTA DATO: idem ejecución, conservador=80. Esquema redis:// es cleartext por definición, sin uso seguro.'
     options:
       generic_ellipsis_max_span: 0
     pattern: redis://...

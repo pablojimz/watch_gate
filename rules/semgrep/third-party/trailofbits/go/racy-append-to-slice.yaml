@@ -16,6 +16,11 @@ rules:
       references:
         - https://go.dev/blog/maps#concurrency
 
+      severity_score: 25
+      confidence_score: 60
+      exploitability_score: 80
+      risk_score: 49
+      risk_justification: Data race en slice compartido entre goroutines; corrupción de datos, no exploit directo.
     patterns:
       - pattern: |
           $SLICE = append($SLICE, $ITEM)

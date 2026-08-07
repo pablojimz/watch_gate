@@ -14,6 +14,11 @@ rules:
       technology: [amqp, rabbitmq]
       references:
         - https://www.rabbitmq.com/docs/uri-spec#the-amqps-uri-scheme
+      severity_score: 50
+      confidence_score: 100
+      exploitability_score: 80
+      risk_score: 72
+      risk_justification: 'FALTA DATO: no se sabe si la línea se ejecuta en script real o es doc/ejemplo; conservador=80. Esquema amqp:// es cleartext por definición, sin uso seguro conocido.'
     options:
       generic_ellipsis_max_span: 0
     pattern: amqp://...

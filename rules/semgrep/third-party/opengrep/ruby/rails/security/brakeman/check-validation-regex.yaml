@@ -10,9 +10,7 @@ rules:
   - metavariable-regex:
       metavariable: $V
       regex: /(.{2}(?<!\\A)[^\/]+|[^\/]+(?<!\\[Zz]))\/
-  message: $V Found an incorrectly-bounded regex passed to `validates_format_of` or `validate ... format
-    => ...`. Ruby regex behavior is multiline by default and lines should be terminated by `\A` for beginning
-    of line and `\Z` for end of line, respectively.
+  message: $V Found an incorrectly-bounded regex passed to `validates_format_of` or `validate ... format => ...`. Ruby regex behavior is multiline by default and lines should be terminated by `\A` for beginning of line and `\Z` for end of line, respectively.
   languages:
   - ruby
   severity: ERROR
@@ -36,3 +34,8 @@ rules:
     impact: MEDIUM
     likelihood: MEDIUM
     confidence: MEDIUM
+    severity_score: 50
+    confidence_score: 80
+    exploitability_score: 40
+    risk_score: 56
+    risk_justification: Regex de validación sin anclas \A/\Z; bypass posible solo si la validación es de uso security-sensitive.

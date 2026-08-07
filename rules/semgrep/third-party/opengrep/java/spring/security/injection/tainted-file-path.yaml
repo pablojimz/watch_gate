@@ -27,6 +27,11 @@ rules:
     likelihood: MEDIUM
     confidence: HIGH
     interfile: true
+    severity_score: 100
+    confidence_score: 80
+    exploitability_score: 80
+    risk_score: 89
+    risk_justification: Taint real con anotaciones Spring especificas y sanitizador reconocido.
   mode: taint
   pattern-sources:
   - patterns:

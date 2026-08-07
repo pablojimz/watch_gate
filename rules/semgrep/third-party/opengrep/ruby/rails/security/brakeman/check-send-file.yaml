@@ -19,8 +19,7 @@ rules:
   - patterns:
     - pattern: |
         send_file ...
-  message: Allowing user input to `send_file` allows a malicious user to potentially read arbitrary files
-    from the server. Avoid accepting user input in `send_file` or normalize with `File.basename(...)`
+  message: Allowing user input to `send_file` allows a malicious user to potentially read arbitrary files from the server. Avoid accepting user input in `send_file` or normalize with `File.basename(...)`
   languages:
   - ruby
   severity: ERROR
@@ -42,3 +41,8 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 100
+    confidence_score: 80
+    exploitability_score: 80
+    risk_score: 89
+    risk_justification: params/cookies/request.env a send_file; lectura arbitraria de archivos, taint real.

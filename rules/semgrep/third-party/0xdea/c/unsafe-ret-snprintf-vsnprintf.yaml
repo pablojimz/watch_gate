@@ -20,6 +20,11 @@ rules:
         - https://lwn.net/Articles/507319/
         - https://g.co/kgs/PCHQjJ
         - https://dustri.org/b/playing-with-weggli.html
+      severity_score: 75
+      confidence_score: 45
+      exploitability_score: 40
+      risk_score: 57
+      risk_justification: Captura el valor de retorno sin confirmar que se use luego como índice inseguro; regla no basada en taint.
     message: >-
       The snprintf() and vsnprintf() functions return the total length of
       the string they tried to create. Therefore, this return value can be

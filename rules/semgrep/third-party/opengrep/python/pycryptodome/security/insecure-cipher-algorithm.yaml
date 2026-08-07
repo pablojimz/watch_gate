@@ -21,6 +21,11 @@ rules:
     likelihood: LOW
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: XOR como cifrado exacto, sin seguridad criptográfica real.
   severity: WARNING
   languages:
   - python

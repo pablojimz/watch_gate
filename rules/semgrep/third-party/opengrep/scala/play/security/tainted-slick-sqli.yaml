@@ -22,6 +22,11 @@ rules:
     - vuln
     likelihood: HIGH
     impact: MEDIUM
+    severity_score: 75
+    confidence_score: 80
+    exploitability_score: 80
+    risk_score: 78
+    risk_justification: SQLi taint real desde Request de Play hacia sql interpolation/overrideSql; atacante envía request directamente.
   message: >-
     Detected a tainted SQL statement. This could lead to SQL
     injection if variables in the SQL statement are not properly sanitized.

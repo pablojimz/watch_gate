@@ -19,6 +19,11 @@ rules:
     - vuln
     likelihood: LOW
     impact: LOW
+    severity_score: 50
+    confidence_score: 80
+    exploitability_score: 80
+    risk_score: 66
+    risk_justification: Valida certificado por subject name en vez de chain validation; MITM requiere cert con nombre coincidente.
   message: >-
     Validating certificates based on subject name is bad practice. Use the X509Certificate2.Verify()
     method instead.

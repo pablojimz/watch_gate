@@ -58,3 +58,8 @@ rules:
     - audit
     likelihood: LOW
     impact: LOW
+    severity_score: 75
+    confidence_score: 60
+    exploitability_score: 40
+    risk_score: 62
+    risk_justification: Combinación Upgrade+Connection+http_version 1.1; heurística de indicadores, no confirma soporte h2c real del backend.

@@ -28,3 +28,8 @@ rules:
     - audit
     likelihood: LOW
     impact: LOW
+    severity_score: 25
+    confidence_score: 100
+    exploitability_score: 40
+    risk_score: 51
+    risk_justification: Flag -Vdebug/-Ydebug en build; literal exacto, pero requiere que ese perfil se use en producción.

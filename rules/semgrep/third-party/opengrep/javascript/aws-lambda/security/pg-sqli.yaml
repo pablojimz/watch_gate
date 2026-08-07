@@ -27,6 +27,11 @@ rules:
     likelihood: MEDIUM
     impact: HIGH
     confidence: MEDIUM
+    severity_score: 75
+    confidence_score: 80
+    exploitability_score: 80
+    risk_score: 78
+    risk_justification: Taint event->db.query, mismo patrón que otros conectores SQL.
   languages:
   - javascript
   - typescript

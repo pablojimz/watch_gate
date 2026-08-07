@@ -16,6 +16,11 @@ rules:
     likelihood: LOW
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 40
+    risk_score: 62
+    risk_justification: API exacta sin verificacion SSL; requiere atacante en posicion de red (MITM).
   message: >-
     Insecure SMTP connection detected. This connection will trust any SSL certificate.
     Enable certificate verification by setting 'email.setSSLCheckServerIdentity(true)'.
