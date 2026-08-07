@@ -20,7 +20,6 @@ import stat
 import subprocess
 import tempfile
 import time
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 

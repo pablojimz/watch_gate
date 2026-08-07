@@ -15,7 +15,7 @@ import os
 import re
 import sqlite3
 import threading
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -121,7 +121,7 @@ class OSVCache:
                     return None
                 resp_json, fetched_at_str = str(row[0]), str(row[1])
                 fetched_at = datetime.fromisoformat(fetched_at_str)
-                if datetime.now(timezone.utc) - fetched_at > timedelta(hours=_CACHE_TTL_HOURS):
+                if datetime.now(UTC) - fetched_at > timedelta(hours=_CACHE_TTL_HOURS):
                     return None
                 data: dict[str, Any] = json.loads(resp_json)
                 return data
@@ -139,7 +139,7 @@ class OSVCache:
         if self._conn is None:
             return
         v_key = version or ""
-        now_str = datetime.now(timezone.utc).isoformat()
+        now_str = datetime.now(UTC).isoformat()
         resp_json = json.dumps(response_data)
         with self._lock:
             try:

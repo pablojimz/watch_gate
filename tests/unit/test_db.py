@@ -32,7 +32,9 @@ def test_init_db_creates_tables() -> None:
 
 def test_create_user_and_api_key() -> None:
     session = _get_memory_session()
-    user = create_user(session, email="alice@example.com", name="Alice Developer", role="mantenedor")
+    user = create_user(
+        session, email="alice@example.com", name="Alice Developer", role="mantenedor"
+    )
 
     assert isinstance(user, User)
     assert user.email == "alice@example.com"
