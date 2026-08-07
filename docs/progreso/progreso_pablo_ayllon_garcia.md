@@ -4,7 +4,7 @@
 
 - Responsable: Pablo Ayllón García
 - Última actualización: 2026-08-07
-- Estado general: Completado al 100% / Engine API Server SaaS, Autenticación API Keys SHA-256, Capa de Datos Multi-Tenant (Fase 1), Servicio de Cuotas y Gobernanza (Fase 2), Adaptadores REST para Agentes de IA (Fase 3), Separación de Vulnerabilidades y Código Malicioso (Threat Nature), RAG Distribuido en Nube y Webhooks Implementados
+- Estado general: Completado al 100% / Engine API Server SaaS, Autenticación API Keys SHA-256, Capa de Datos Multi-Tenant (Fase 1), Servicio de Cuotas y Gobernanza (Fase 2), Adaptadores REST para Agentes (Fase 3), Adaptadores Multi-Plataforma Git pre-receive y Webhooks (Fase 4), Separación de Vulnerabilidades y Código Malicioso (Threat Nature), RAG Distribuido en Nube y Webhooks Implementados
 - Última revisión realizada por: Pablo Ayllón García (Ingeniero Senior de Arquitectura) / Javier Martín Jurado
 - Componentes registrados: CLI (`watchgate/cli.py`), Engine API Server (`watchgate/api/`), Dashboard API Keys Router (`watchgate/dashboard/backend/routers/keys.py`), RAG Cloud Support (`watchgate/core/rag/`), Cortocircuito (`watchgate/core/shortcircuit.py`), Capa de dependencias (`watchgate/core/layers/deps_layer.py`), Pipeline compartido (`watchgate/core/pipeline.py`), Control de coste (`watchgate/core/cost_control.py`), Orquestador (`watchgate/core/orchestrator.py`), Extractor de diffs (`watchgate/core/diffparser.py`), Persistencia SQLModel (`watchgate/db/`), Capa estática (`watchgate/core/layers/static_layer.py`), Modelos y Agregador (`watchgate/core/models.py`, `watchgate/core/layers/base.py`, `watchgate/core/aggregator.py`).
 
@@ -598,6 +598,7 @@ Adicionalmente, se han completado los siguientes hitos de infraestructura, API S
 | 2026-08-07 | Extensión Multi-Tenant e Identidad de Agente en SQLModel (`Organization`, `org_id`, `agent_id`, `SemanticCache` aislada) | Implementación de la Fase 1 del Plan SaaS para Agentes (`docs/planificacion/plan_adaptacion_saas_agentes.md`) | Pablo Ayllón García |
 | 2026-08-07 | Implementación del paquete de servicios de aplicación y gobernanza (`watchgate/service/`: `QuotaService`, `PolicyService`) | Implementación de la Fase 2 del Plan Maestro SaaS (`docs/planificacion/plan_adaptacion_saas_agentes.md`) | Pablo Ayllón García |
 | 2026-08-07 | Implementación de los adaptadores REST para Agentes de IA (`watchgate/api/routers/agent.py` y `watchgate/api/schemas/agent.py`) | Implementación de la Fase 3 del Plan Maestro SaaS (`docs/planificacion/plan_adaptacion_saas_agentes.md`) | Pablo Ayllón García |
+| 2026-08-07 | Implementación del Hook POSIX `pre-receive` universal (`watchgate/adapters/git_hook/pre_receive.py`) y Webhooks para GitLab y Bitbucket | Implementación de la Fase 4 del Plan Maestro SaaS (`docs/planificacion/plan_adaptacion_saas_agentes.md`) | Pablo Ayllón García |
 
 #### Estado actual
 - **Funcionalidades implementadas**:
@@ -607,12 +608,15 @@ Adicionalmente, se han completado los siguientes hitos de infraestructura, API S
     - `PolicyService`: Aplicación de gobernanza centralizada a través de `Organization.policy_json` sobre los ajustes locales `.watchgate.yml`.
   - Adaptadores y Router REST para Agentes de IA (`watchgate/api/routers/agent.py` y `watchgate/api/schemas/agent.py`):
     - `POST /api/v1/agent/precheck`: Evaluación ultrarrápida (<100ms) de capas deterministas con 0 consumo LLM.
-    - `POST /api/v1/agent/analyze`: Análisis completo con retorno de `AgentGuidance` (estructuración accionable para autocorrección de agentes).
-    - `POST /api/v1/agent/verify-fix`: Comparación sintáctica mediante `compute_finding_signature()` para identificar hallazgos resueltos e informar de reducción de riesgo.
+    - `POST /api/v1/agent/analyze`: Análisis completo con retorno de `AgentGuidance`.
+    - `POST /api/v1/agent/verify-fix`: Comparación sintáctica mediante `compute_finding_signature()`.
     - `GET /api/v1/agent/policy`: Exposición de cuotas y políticas corporativas vigentes.
+  - Adaptadores Multi-Plataforma Git (`watchgate/adapters/git_hook/pre_receive.py` y `watchgate/api/routers/webhooks.py`):
+    - Hook POSIX `pre-receive` universal con soporte para repos Bare, Gitolite, GitLab, Bitbucket, Gerrit y SSH; manejo explícito de SHA nulo (`00*40`), timeout HTTP de 8s y bloqueo con exit code 1 y salida por `stderr`.
+    - Receiver de Webhooks para **GitLab** (`POST /api/v1/webhooks/gitlab`) y **Bitbucket** (`POST /api/v1/webhooks/bitbucket`) con verificación de firma HMAC/Token de secreto.
   - Conexión de routers REST en `watchgate/api/main.py`.
-- **Funcionalidades pendientes**: Fase 4 (Adaptadores Multi-Plataforma Git: Hook POSIX `pre-receive` y Webhooks GitLab/Bitbucket).
-- **Partes completas**: Todos los modelos, servicios, esquemas y routers verificados mediante `tests/unit/test_db.py`, `tests/unit/test_db_multitenant.py`, `tests/unit/test_quota_degraded.py` y `tests/unit/test_agent_api.py`.
+- **Funcionalidades pendientes**: Fase 5 (Servidor MCP Nativo en `stdio` `watchgate/mcp/`).
+- **Partes completas**: Todos los modelos, servicios, esquemas, adaptadores y routers verificados mediante `tests/unit/test_db.py`, `tests/unit/test_db_multitenant.py`, `tests/unit/test_quota_degraded.py`, `tests/unit/test_agent_api.py`, `tests/unit/test_git_hook.py` y `tests/unit/test_webhooks_multiplatform.py`.
 
 #### Arquitectura e integración
 - **Responsabilidad**: Gestionar la persistencia de datos de usuarios, claves API, presupuestos de tokens, caché semántica e histórico de puntuaciones de PRs.
@@ -868,4 +872,5 @@ La suite de tests unitarios e integrados cuenta con **244 pruebas pasadas al 100
 - [x] **Fase 1 Plan SaaS Agentes — Capa de Datos Multi-Tenant & Identidad de Agente**: Implementar `Organization`, `org_id`, `agent_id`, aislamiento de `SemanticCache` e imputación de consumo en `watchgate/db/` con suite `tests/unit/test_db_multitenant.py`.
 - [x] **Fase 2 Plan SaaS Agentes — Capa de Servicios de Gobernanza y Cuotas (`watchgate/service/`)**: Implementar `QuotaService` (control de presupuesto + Modo Degradado B con HTTP 200 OK) y `PolicyService` (`policy_json`) con suite `tests/unit/test_quota_degraded.py`.
 - [x] **Fase 3 Plan SaaS Agentes — Adaptadores REST para Agentes de IA (`/api/v1/agent/*`)**: Implementar `/precheck`, `/analyze`, `/verify-fix` con matching sintáctico `compute_finding_signature()` y `AgentGuidance` con suite `tests/unit/test_agent_api.py`.
+- [x] **Fase 4 Plan SaaS Agentes — Adaptadores Git Multi-Plataforma & Webhooks**: Implementar Hook POSIX `pre-receive` universal (`watchgate/adapters/git_hook/pre_receive.py`) y Webhooks para GitLab y Bitbucket con suites `tests/unit/test_git_hook.py` y `tests/unit/test_webhooks_multiplatform.py`.
 - [x] Ejecutar y validar la batería de los 10 casos de prueba de integración (`tests/cases/`).
