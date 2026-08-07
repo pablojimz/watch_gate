@@ -21,7 +21,7 @@ import sys
 from typing import Any
 
 import watchgate.core.layers  # noqa: F401 - registrar capas en LAYER_REGISTRY
-from watchgate.adapters.github_action import dashboard_client
+from watchgate.adapters.github_action import dashboard_client, dashboard_settings_client
 from watchgate.adapters.github_action.github_client import GitHubClient
 from watchgate.config import load_config
 from watchgate.core.comment_template import render_comment
@@ -66,6 +66,7 @@ def run(
     reputation_metadata = github_client.get_reputation_metadata(owner, repo, author_login)
 
     config = load_config(config_path)
+    config = dashboard_settings_client.apply_dashboard_config(config, f"{owner}/{repo}")
     metadata: dict[str, object] = {
         "pr_id": str(pr_number),
         "repo": f"{owner}/{repo}",

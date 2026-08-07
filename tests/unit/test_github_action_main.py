@@ -161,6 +161,39 @@ def test_run_persists_result_to_dashboard(tmp_path):
     mock_post_score.assert_called_once_with(result, "author-login")
 
 
+def test_run_applies_dashboard_config_before_analysis(tmp_path):
+    event_path = _write_event(tmp_path)
+    fake_client = MagicMock()
+    fake_client.get_pr_diff_shas.return_value = ("base" * 10, "head" * 10)
+    result = _fake_result(Semaforo.VERDE, 5)
+    config_from_dashboard = object()  # sentinel distinto del config de load_config()
+
+    with (
+        patch(
+            "watchgate.adapters.github_action.main.GitHubClient", return_value=fake_client
+        ),
+        patch("watchgate.adapters.github_action.main.parse_diff", return_value=_fake_diff()),
+        patch(
+            "watchgate.adapters.github_action.main.run_full_analysis", return_value=result
+        ) as mock_run_full_analysis,
+        patch("watchgate.adapters.github_action.main.dashboard_client.post_score"),
+        patch(
+            "watchgate.adapters.github_action.main.dashboard_settings_client."
+            "apply_dashboard_config",
+            return_value=config_from_dashboard,
+        ) as mock_apply_config,
+    ):
+        gha_main.run(event_path, github_token="fake-token")
+
+    mock_apply_config.assert_called_once()
+    args, _ = mock_apply_config.call_args
+    assert args[1] == "org/repo"
+    # run_full_analysis debe recibir el config ya combinado con el del
+    # dashboard, no el que devuelve load_config() a secas.
+    analysis_args, _ = mock_run_full_analysis.call_args
+    assert analysis_args[2] is config_from_dashboard
+
+
 def test_main_exits_early_without_github_token(monkeypatch, tmp_path):
     monkeypatch.setenv("GITHUB_EVENT_PATH", _write_event(tmp_path))
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
