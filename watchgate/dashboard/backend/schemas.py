@@ -96,7 +96,8 @@ class RepoSettings(BaseModel):
     weights: dict[str, float] = Field(
         default_factory=lambda: {
             "static": 0.25,
-            "deps": 0.25,
+            "deps": 0.15,
+            "vulnerabilities": 0.10,
             "reputation": 0.15,
             "semantic": 0.35,
         }
@@ -106,6 +107,7 @@ class RepoSettings(BaseModel):
         default_factory=lambda: {
             "static": True,
             "deps": True,
+            "vulnerabilities": True,
             "reputation": True,
             "semantic": True,
         }

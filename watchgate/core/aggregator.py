@@ -23,7 +23,12 @@ DEFAULT_THRESHOLDS: dict[str, int] = {"yellow": 40, "red": 70}
 # shortcircuit.py para "parcial alto, semántica baja": aquí es "semántica muy
 # alta y de confianza, resto de capas bajo".
 _SEVERE_CATEGORIES = frozenset(
-    {RiskCategory.BACKDOOR, RiskCategory.EXFILTRACION, RiskCategory.ESCALADA_PRIVILEGIOS}
+    {
+        RiskCategory.BACKDOOR,
+        RiskCategory.EXFILTRACION,
+        RiskCategory.ESCALADA_PRIVILEGIOS,
+        RiskCategory.OFUSCACION,
+    }
 )
 # Calibrado contra un caso real: una campaña de compromiso de paquetes npm
 # (script "bun.sh/install | bash" inyectado) daba semantic=90,
@@ -31,6 +36,18 @@ _SEVERE_CATEGORIES = frozenset(
 # ninguna señal de reputación sospechosa (ese es justo el objetivo del
 # ataque), así que el combinado se quedaba en 65, por debajo del umbral rojo
 # por muy poco. Verificado contra la suite de validación real (tests/cases/).
+#
+# OFUSCACION se añadió tras encontrar el mismo problema con la detección
+# mecánica de inyección de prompt (`_apply_prompt_injection_floor` en
+# `_semantic/layer.py`): fuerza semantic=100/confidence=alta/categoría
+# ofuscación de forma determinista (el intento en sí es la prueba, sin
+# margen de duda), pero al no estar antes en este set, el peso nominal de
+# `semantic` (0.40 desde que hay 5 capas reales) dejaba el combinado en 51
+# -- por debajo del umbral rojo -- porque static/dependencies/vulnerabilities
+# no tienen ninguna señal que ver en un ataque que vive en un comentario o
+# docstring, no en el código ejecutable. Reproducido en vivo con
+# `tests/cases/prompt_injection_fake_approval` y
+# `tests/cases/prompt_injection_hides_real_payload`.
 _SEMANTIC_FLOOR_MIN_SCORE = 85
 
 
