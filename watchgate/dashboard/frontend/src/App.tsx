@@ -8,6 +8,7 @@ import RepoPage from '@/pages/RepoPage'
 import FeedbackPage from '@/pages/FeedbackPage'
 import AdminPage from '@/pages/AdminPage'
 import MetricsPage from '@/pages/MetricsPage'
+import ApiKeysPage from '@/pages/ApiKeysPage'
 import { Skeleton } from '@/components/ui/skeleton'
 
 function RequireAuth({
@@ -54,6 +55,7 @@ export default function App() {
           <Route path="repos/:owner/:name" element={<RepoPage />} />
           <Route path="repos/:owner/:name/feedback" element={<FeedbackPage />} />
           <Route path="metrics" element={<MetricsPage />} />
+          <Route path="api-keys" element={<ApiKeysPage />} />
           <Route
             path="admin"
             element={

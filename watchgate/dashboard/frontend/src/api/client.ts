@@ -99,6 +99,20 @@ export interface RepoRole {
   role: RoleName
 }
 
+export interface ApiKey {
+  id: string
+  name: string
+  key_prefix: string
+  scopes: string
+  created_at: string
+  expires_at: string | null
+  last_used_at: string | null
+}
+
+export interface CreatedApiKey extends ApiKey {
+  raw_token: string
+}
+
 const API = '/api'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -183,4 +197,12 @@ export const api = {
     request<void>(`/admin/roles/${encodeURIComponent(userLogin)}/${repo}`, {
       method: 'DELETE',
     }),
+  listApiKeys: () => request<ApiKey[]>('/keys'),
+  createApiKey: (name: string) =>
+    request<CreatedApiKey>('/keys', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    }),
+  deleteApiKey: (id: string) =>
+    request<{ status: string; id: string }>(`/keys/${id}`, { method: 'DELETE' }),
 }
