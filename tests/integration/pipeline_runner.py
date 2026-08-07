@@ -1,14 +1,21 @@
 """Runner del pipeline completo para la suite de aceptación (spec §14).
 
-`static_layer.py` y `deps_layer.py` (Línea 3, Pablo Jiménez Castro) siguen
-siendo stubs sin `@register_layer` -- no aparecen en `LAYER_REGISTRY`, así
-que `run_analysis()` ya los excluye solo (ver orchestrator.py: solo
-instancia capas con `weight > 0` que además estén registradas). Este runner
-ejecuta de verdad `reputation` + `semantic` (lo único real de Línea 2 hoy);
-el score se renormaliza sobre esas dos únicamente -- no es el score final de
-las 4 capas que exige la memoria §8, solo lo que ya se puede medir. Cuando
-Línea 3 registre sus capas, este mismo runner las recogerá sin cambios (basta
-con que aparezcan en `LAYER_REGISTRY` con peso > 0).
+Ejecuta las 5 capas reales registradas en `LAYER_REGISTRY` (static,
+dependencies, vulnerabilities, reputation, semantic) -- `watchgate.core.
+layers.__init__` las registra todas en cuanto se importa cualquier cosa
+bajo `watchgate.core.layers` (este módulo importa `SemanticLayer` desde
+ahí, lo que ya dispara el registro completo).
+
+Nota histórica: `static_layer.py`/`deps_layer.py` sí estaban implementadas
+desde hace tiempo, pero `watchgate/core/layers/__init__.py` nunca importaba
+`static_layer` -- `LAYER_REGISTRY["static"]` no existía en ninguna
+ejecución real (ni aquí ni en la CLI/Action), así que la capa estática
+jamás llegó a ejecutarse contra un PR de verdad pese a tener peso 0.25 por
+defecto. Corregido en `__init__.py`; los resultados de
+`docs/validation_report.md` anteriores a ese fix (y a la separación de
+`vulnerabilities_layer.py`) no reflejan las 5 capas reales -- hace falta
+regenerar el informe (`generate_validation_report.py` contra la API real de
+Gemini) para tener una cifra actualizada.
 
 Convención de cada caso en `tests/cases/<nombre>/`:
     before/           árbol de ficheros del commit base (puede faltar si el
@@ -44,10 +51,11 @@ from watchgate.core.orchestrator import LayerFactory, run_analysis
 
 CASES_DIR = Path(__file__).resolve().parents[1] / "cases"
 
-# Pesos de las 4 capas activas registradas en LAYER_REGISTRY
+# Mismos pesos por defecto que config.py::_DEFAULT_WEIGHTS.
 _WEIGHTS: dict[str, float] = {
     "static": 0.25,
-    "dependencies": 0.20,
+    "dependencies": 0.10,
+    "vulnerabilities": 0.10,
     "reputation": 0.15,
     "semantic": 0.40,
 }

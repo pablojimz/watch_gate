@@ -27,11 +27,17 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger("watchgate.config")
 
-# Pesos por defecto: iguales a los usados en el ejemplo de regresión de la
-# memoria (spec §10) para las 4 capas conocidas hasta ahora.
+# Pesos por defecto. El ejemplo de regresión de la memoria (spec §10) fija
+# estos cuatro: static=0.25, dependencies=0.20, reputation=0.15,
+# semantic=0.40 -- al añadir "vulnerabilities" (CVEs conocidas vía OSV,
+# separada de "dependencies" para poder desactivarla sin perder las señales
+# de ataque a la cadena de suministro) se reparte a la mitad el 0.20 que
+# antes tenía solo "dependencies", dejando el resto exactamente igual que
+# en la memoria.
 _DEFAULT_WEIGHTS: dict[str, float] = {
     "static": 0.25,
-    "dependencies": 0.20,
+    "dependencies": 0.10,
+    "vulnerabilities": 0.10,
     "reputation": 0.15,
     "semantic": 0.40,
 }

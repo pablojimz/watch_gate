@@ -117,9 +117,21 @@ CREATE TABLE IF NOT EXISTS ui_settings (
 );
 """
 
-DEFAULT_WEIGHTS = {"static": 0.25, "deps": 0.25, "reputation": 0.15, "semantic": 0.35}
+DEFAULT_WEIGHTS = {
+    "static": 0.25,
+    "deps": 0.15,
+    "vulnerabilities": 0.10,
+    "reputation": 0.15,
+    "semantic": 0.35,
+}
 DEFAULT_THRESHOLDS = {"amarillo": 34, "rojo": 66}
-DEFAULT_LAYERS = {"static": True, "deps": True, "reputation": True, "semantic": True}
+DEFAULT_LAYERS = {
+    "static": True,
+    "deps": True,
+    "vulnerabilities": True,
+    "reputation": True,
+    "semantic": True,
+}
 DEFAULT_RISK_COLORS = {"verde": "#3d9b5f", "amarillo": "#d4a017", "rojo": "#c23b3b"}
 DEFAULT_LLM = {
     "provider": "anthropic",
@@ -132,6 +144,7 @@ DEFAULT_UI = UiSettings()
 _LAYER_COLS = (
     ("static", "static_score", "static_skipped"),
     ("deps", "deps_score", "deps_skipped"),
+    ("vulnerabilities", "vulnerabilities_score", "vulnerabilities_skipped"),
     ("reputation", "reputation_score", "reputation_skipped"),
     ("semantic", "semantic_score", "semantic_skipped"),
 )
@@ -162,6 +175,12 @@ def _init_db_postgres(conn: PostgresConnection) -> None:
     # A diferencia de SQLite, Postgres soporta IF NOT EXISTS en ADD COLUMN de
     # forma nativa -- no hace falta el sondeo vía PRAGMA table_info de abajo.
     conn.execute("ALTER TABLE pr_scores ADD COLUMN IF NOT EXISTS author_login TEXT")
+    conn.execute(
+        "ALTER TABLE pr_scores ADD COLUMN IF NOT EXISTS vulnerabilities_score INTEGER"
+    )
+    conn.execute(
+        "ALTER TABLE pr_scores ADD COLUMN IF NOT EXISTS vulnerabilities_skipped BOOLEAN"
+    )
     conn.execute(
         "ALTER TABLE repo_settings ADD COLUMN IF NOT EXISTS "
         "layers_enabled_json TEXT NOT NULL DEFAULT '{}'"
@@ -197,6 +216,10 @@ def init_db(conn: DBConnection) -> None:
     cols = {row[1] for row in conn.execute("PRAGMA table_info(pr_scores)").fetchall()}
     if "author_login" not in cols:
         conn.execute("ALTER TABLE pr_scores ADD COLUMN author_login TEXT")
+    if "vulnerabilities_score" not in cols:
+        conn.execute("ALTER TABLE pr_scores ADD COLUMN vulnerabilities_score INTEGER")
+    if "vulnerabilities_skipped" not in cols:
+        conn.execute("ALTER TABLE pr_scores ADD COLUMN vulnerabilities_skipped BOOLEAN")
     repo_cols = {row[1] for row in conn.execute("PRAGMA table_info(repo_settings)").fetchall()}
     if "layers_enabled_json" not in repo_cols:
         conn.execute(
@@ -280,10 +303,11 @@ def insert_aggregated(
           repo, pr_number, timestamp, score, semaforo,
           static_score, static_skipped,
           deps_score, deps_skipped,
+          vulnerabilities_score, vulnerabilities_skipped,
           reputation_score, reputation_skipped,
           semantic_score, semantic_skipped, semantic_justification,
           weights_json, author_login, human_feedback
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
         """
     params = (
         result.repo,
@@ -295,6 +319,8 @@ def insert_aggregated(
         skipped_of("static"),
         score_of("deps"),
         skipped_of("deps"),
+        score_of("vulnerabilities"),
+        skipped_of("vulnerabilities"),
         score_of("reputation"),
         skipped_of("reputation"),
         score_of("semantic"),
@@ -744,7 +770,13 @@ def compute_org_metrics(conn: DBConnection, repos: list[str]) -> OrgMetrics:
             feedback_correct=0,
             feedback_false_positive=0,
             feedback_pending=0,
-            layer_avg={"static": 0.0, "deps": 0.0, "reputation": 0.0, "semantic": 0.0},
+            layer_avg={
+                "static": 0.0,
+                "deps": 0.0,
+                "vulnerabilities": 0.0,
+                "reputation": 0.0,
+                "semantic": 0.0,
+            },
             by_repo=[],
             trend=[],
         )
@@ -764,6 +796,7 @@ def compute_org_metrics(conn: DBConnection, repos: list[str]) -> OrgMetrics:
     layer_sums: dict[str, list[int]] = {
         "static": [],
         "deps": [],
+        "vulnerabilities": [],
         "reputation": [],
         "semantic": [],
     }
@@ -782,12 +815,12 @@ def compute_org_metrics(conn: DBConnection, repos: list[str]) -> OrgMetrics:
         else:
             feedback_pending += 1
 
-        for layer, score_col, skip_col in (
-            ("static", "static_score", "static_skipped"),
-            ("deps", "deps_score", "deps_skipped"),
-            ("reputation", "reputation_score", "reputation_skipped"),
-            ("semantic", "semantic_score", "semantic_skipped"),
-        ):
+        # Misma tripleta (nombre, columna score, columna skipped) que
+        # _LAYER_COLS -- reutilizada en vez de duplicada, para no tener que
+        # acordarse de actualizar dos sitios el día que cambien las capas
+        # (ya pasaba antes de esta ronda: esta tupla vivía por su cuenta,
+        # desincronizada de _LAYER_COLS aunque tuviera la misma forma).
+        for layer, score_col, skip_col in _LAYER_COLS:
             if not r[skip_col] and r[score_col] is not None:
                 layer_sums[layer].append(int(r[score_col]))
 
@@ -959,7 +992,7 @@ def seed_demo(conn: DBConnection) -> None:
         return
 
     now = datetime.now(UTC)
-    weights = {"static": 0.25, "deps": 0.25, "reputation": 0.15, "semantic": 0.35}
+    weights = dict(DEFAULT_WEIGHTS)
 
     def layers(
         static: int,
@@ -968,10 +1001,13 @@ def seed_demo(conn: DBConnection) -> None:
         semantic: int,
         *,
         deps_skipped: bool = False,
+        vulnerabilities: int = 0,
+        vulnerabilities_skipped: bool = False,
     ) -> dict[str, tuple[int, bool]]:
         return {
             "static": (static, False),
             "deps": (deps, deps_skipped),
+            "vulnerabilities": (vulnerabilities, vulnerabilities_skipped),
             "reputation": (reputation, False),
             "semantic": (semantic, False),
         }
@@ -1140,7 +1176,13 @@ def seed_demo(conn: DBConnection) -> None:
         conn,
         "acme/payments-api",
         RepoSettings(
-            weights={"static": 0.3, "deps": 0.3, "reputation": 0.1, "semantic": 0.3},
+            weights={
+                "static": 0.3,
+                "deps": 0.2,
+                "vulnerabilities": 0.1,
+                "reputation": 0.1,
+                "semantic": 0.3,
+            },
             thresholds={"amarillo": 30, "rojo": 70},
             layers_enabled=dict(DEFAULT_LAYERS),
             risk_colors={

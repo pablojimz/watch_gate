@@ -53,9 +53,15 @@ type Tab = 'access' | 'config' | 'appearance' | 'llm'
 type ConfigScope = 'default' | 'repo'
 
 const EMPTY_SETTINGS: RepoSettings = {
-  weights: { static: 0.25, deps: 0.25, reputation: 0.15, semantic: 0.35 },
+  weights: { static: 0.25, deps: 0.15, vulnerabilities: 0.1, reputation: 0.15, semantic: 0.35 },
   thresholds: { amarillo: 34, rojo: 66 },
-  layers_enabled: { static: true, deps: true, reputation: true, semantic: true },
+  layers_enabled: {
+    static: true,
+    deps: true,
+    vulnerabilities: true,
+    reputation: true,
+    semantic: true,
+  },
   risk_colors: { verde: '#3d9b5f', amarillo: '#d4a017', rojo: '#c23b3b' },
   block_on_high: true,
   require_feedback_on_high: false,

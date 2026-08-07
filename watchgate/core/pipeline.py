@@ -15,7 +15,7 @@ from watchgate.core.aggregator import aggregate
 from watchgate.core.cost_control import CostController
 from watchgate.core.layers._semantic.layer import SemanticLayer
 from watchgate.core.layers._semantic.llm_factory import build_llm_client
-from watchgate.core.layers.deps_layer import DepsLayer
+from watchgate.core.layers.vulnerabilities_layer import VulnerabilitiesLayer
 from watchgate.core.models import AggregatedResult, LayerResult, NormalizedDiff
 from watchgate.core.orchestrator import LayerFactory, ProgressCallback, run_analysis
 from watchgate.core.shortcircuit import evaluate_shortcircuit
@@ -46,8 +46,13 @@ def run_full_analysis(
     cost_control = None
     layer_factories: dict[str, LayerFactory] = {}
 
-    if config.weights.get("dependencies", 0) > 0 or config.weights.get("deps", 0) > 0:
-        layer_factories["dependencies"] = lambda: DepsLayer(
+    # DepsLayer ya no necesita fábrica (sin argumentos obligatorios desde que
+    # se le extrajo la consulta a OSV, ver vulnerabilities_layer.py) --
+    # LAYER_REGISTRY["dependencies"]() por defecto en orchestrator.py basta.
+    # max_dependency_checks sí sigue haciendo falta, pero ahora es
+    # VulnerabilitiesLayer quien lo consume (max_osv_queries).
+    if config.weights.get("vulnerabilities", 0) > 0:
+        layer_factories["vulnerabilities"] = lambda: VulnerabilitiesLayer(
             max_osv_queries=config.max_dependency_checks
         )
 
