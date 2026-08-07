@@ -54,7 +54,7 @@ _NETWORK_CALL_PATTERNS: list[str] = [
 _FORCING_RE = [re.compile(p) for p in FORCING_PATTERNS]
 _NETWORK_RE = [re.compile(p) for p in _NETWORK_CALL_PATTERNS]
 
-_PARTIAL_LAYER_NAMES = ("static", "deps", "reputation")
+_PARTIAL_LAYER_NAMES = ("static", "dependencies", "deps", "reputation")
 
 
 def _matches_forcing_pattern(diff: NormalizedDiff) -> bool:

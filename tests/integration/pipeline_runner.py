@@ -44,10 +44,13 @@ from watchgate.core.orchestrator import LayerFactory, run_analysis
 
 CASES_DIR = Path(__file__).resolve().parents[1] / "cases"
 
-# static/deps (Línea 3) no están implementadas todavía; solo reputation+semantic
-# son reales hoy. weighted_average() renormaliza sobre las capas realmente
-# ejecutadas, así que estos dos pesos son el 100% del score en esta suite.
-_WEIGHTS: dict[str, float] = {"reputation": 0.15, "semantic": 0.40}
+# Pesos de las 4 capas activas registradas en LAYER_REGISTRY
+_WEIGHTS: dict[str, float] = {
+    "static": 0.25,
+    "dependencies": 0.20,
+    "reputation": 0.15,
+    "semantic": 0.40,
+}
 _THRESHOLDS: dict[str, int] = {"yellow": 40, "red": 70}
 
 

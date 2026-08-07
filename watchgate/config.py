@@ -21,14 +21,14 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Pesos por defecto: iguales a los usados en el ejemplo de regresión de la
 # memoria (spec §10) para las 4 capas conocidas hasta ahora.
 _DEFAULT_WEIGHTS: dict[str, float] = {
     "static": 0.25,
-    "deps": 0.20,
+    "dependencies": 0.20,
     "reputation": 0.15,
     "semantic": 0.40,
 }
@@ -48,6 +48,14 @@ class WatchGateConfig(BaseSettings):
 
     weights: dict[str, float] = Field(default_factory=lambda: dict(_DEFAULT_WEIGHTS))
     thresholds: dict[str, int] = Field(default_factory=lambda: dict(_DEFAULT_THRESHOLDS))
+
+    @field_validator("weights", mode="before")
+    @classmethod
+    def _normalize_weights(cls, v: Any) -> Any:
+        if isinstance(v, dict):
+            if "deps" in v and "dependencies" not in v:
+                v["dependencies"] = v.pop("deps")
+        return v
 
     # Usados por cost_control.py (§8).
     max_diff_tokens: int = 8000
