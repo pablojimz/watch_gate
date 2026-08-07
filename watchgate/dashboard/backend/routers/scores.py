@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from watchgate.dashboard.backend import db as database
 from watchgate.dashboard.backend.auth import CurrentUser, require_ingest_token, require_role
-from watchgate.dashboard.backend.schemas import IngestScoreIn, RepoSettings, ScoreOut
+from watchgate.dashboard.backend.schemas import CiConfigOut, IngestScoreIn, RepoSettings, ScoreOut
 
 router = APIRouter(tags=["scores"])
 
@@ -66,6 +66,32 @@ def reset_repo_settings(repo: str, request: Request, user: CurrentUser) -> RepoS
 def my_role(repo: str, request: Request, user: CurrentUser) -> dict[str, str]:
     role = require_role(user, repo, min_role="revisor", request=request)
     return {"repo": repo, "role": role}
+
+
+@router.get(
+    "/repos/{repo:path}/ci-config",
+    response_model=CiConfigOut,
+    dependencies=[Depends(require_ingest_token)],
+)
+def get_ci_config(repo: str) -> CiConfigOut:
+    """Configuración de este repo lista para que la Action la aplique
+    (sin cookie de usuario -- mismo bearer token que `POST /api/scores`).
+
+    `monthly_budget_tokens`/`max_diff_tokens` salen de los ajustes de LLM,
+    que son de organización (no hay uno por repo todavía) -- ver
+    `ensure_llm_settings` en db.py.
+    """
+    with database.db_session() as conn:
+        settings = database.get_settings(conn, repo)
+        llm = database.get_llm_settings(conn)
+    return CiConfigOut(
+        weights=settings.weights,
+        thresholds=settings.thresholds,
+        layers_enabled=settings.layers_enabled,
+        block_on_high=settings.block_on_high,
+        monthly_budget_tokens=llm.monthly_budget_tokens,
+        max_diff_tokens=llm.max_diff_tokens,
+    )
 
 
 @router.post(

@@ -370,3 +370,39 @@ def test_ingest_score_requires_bearer_token_when_configured(
             headers={"Authorization": "Bearer secreto-ci"},
         )
         assert ok.status_code == 201, ok.text
+
+
+def test_ci_config_returns_settings_with_dashboard_naming_convention(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """GET /repos/{repo}/ci-config es lo que consume dashboard_settings_client.py
+    en la Action -- devuelve las claves propias del dashboard ("deps",
+    "amarillo"/"rojo"); la traducción a la convención del motor
+    ("dependencies", "yellow"/"red") es responsabilidad del cliente, no de
+    este endpoint (ver test_dashboard_settings_client.py)."""
+    db_path = tmp_path / "ci_config.db"
+    monkeypatch.setenv("WATCHGATE_DASHBOARD_DB", str(db_path))
+    monkeypatch.setenv("WATCHGATE_DASHBOARD_SEED", "0")
+    monkeypatch.setenv("WATCHGATE_DASHBOARD_INGEST_TOKEN", "secreto-ci")
+
+    with database.db_session(db_path) as conn:
+        settings = database.get_settings(conn, "acme/payments-api")
+        settings.layers_enabled["deps"] = False
+        settings.thresholds = {"amarillo": 30, "rojo": 80}
+        database.set_settings(conn, "acme/payments-api", settings)
+
+    app = create_app()
+    with TestClient(app) as ci_client:
+        no_auth = ci_client.get("/api/repos/acme/payments-api/ci-config")
+        assert no_auth.status_code == 401
+
+        ok = ci_client.get(
+            "/api/repos/acme/payments-api/ci-config",
+            headers={"Authorization": "Bearer secreto-ci"},
+        )
+        assert ok.status_code == 200, ok.text
+        body = ok.json()
+        assert body["layers_enabled"]["deps"] is False
+        assert body["thresholds"] == {"amarillo": 30, "rojo": 80}
+        assert body["monthly_budget_tokens"] == 2_000_000  # default de llm_settings
+        assert "api_key" not in body and "api_key_masked" not in body
