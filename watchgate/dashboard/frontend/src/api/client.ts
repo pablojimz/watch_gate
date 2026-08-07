@@ -91,6 +91,7 @@ export interface UiSettings {
   font_scale: 'sm' | 'md' | 'lg'
   density: 'compact' | 'comfortable'
   default_theme: 'light' | 'dark' | 'system'
+  logo_data_url: string | null
 }
 
 export interface RepoRole {

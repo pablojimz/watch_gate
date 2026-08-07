@@ -6,7 +6,7 @@ import {
   Settings2,
   Shield,
 } from 'lucide-react'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Toaster, toast } from 'sonner'
@@ -28,12 +28,14 @@ function navLinkClass({ isActive }: { isActive: boolean }) {
 export function AppLayout({ isAdmin }: { isAdmin: boolean }) {
   const { t } = useTranslation()
   const { mode, setMode } = useTheme()
+  const [logoUrl, setLogoUrl] = useState<string | null>(null)
 
   useEffect(() => {
     void Promise.all([api.getDefaultSettings(), api.getUiSettings()])
       .then(([settings, ui]) => {
         applyRiskColors(settings.risk_colors)
         applyUiTheme(ui)
+        setLogoUrl(ui.logo_data_url)
         if (!localStorage.getItem('watchgate-theme') && ui.default_theme) {
           setMode(ui.default_theme as ThemeMode)
         }
@@ -57,7 +59,11 @@ export function AppLayout({ isAdmin }: { isAdmin: boolean }) {
     <div className="flex h-screen flex-col bg-background">
       <header className="flex items-center gap-3 border-b px-4 py-3 sm:gap-4 sm:px-6">
         <div className="flex items-center gap-2">
-          <Shield className="size-5 text-primary" strokeWidth={1.75} />
+          {logoUrl ? (
+            <img src={logoUrl} alt={t('brand')} className="size-6 rounded object-contain" />
+          ) : (
+            <Shield className="size-5 text-primary" strokeWidth={1.75} />
+          )}
           <span className="font-semibold tracking-tight">{t('brand')}</span>
         </div>
         <nav className="flex flex-wrap gap-1">
