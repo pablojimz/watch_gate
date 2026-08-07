@@ -83,6 +83,18 @@ def _checkout_rule_folders(repo: str, ref: str, token: str, dest: Path, patterns
     habilitado. manifest.json NO se lee de aquí -- es un asset de Release,
     se obtiene aparte vía `fetch_release_manifest` -- así que este checkout
     puede ir directo a los patrones finales, en un único paso.
+
+    OJO con una particularidad de sparse-checkout en modo cone: al pedir
+    una subcarpeta (p. ej. rules/semgrep/custom/python), Git incluye
+    TAMBIÉN, sin pedirlo, los ficheros sueltos de cada carpeta ANCESTRA
+    (rules/semgrep/, rules/) -- ahí vive rules/semgrep/config.yaml, que es
+    config de LiteLLM sin relación con las reglas y que nunca debemos
+    tocar. Por eso el checkout se hace con `--skip-smudge` (deja TODO como
+    punteros de texto, nunca falla por red/permisos de un fichero que ni
+    siquiera pedimos) y el contenido real solo se resuelve después, con
+    `git lfs pull --include=<patterns>` acotado exactamente a las carpetas
+    que sí pedimos. config.yaml se queda como puntero sin resolver, nunca
+    se descarga ni se toca -- justo lo que pide la spec del proyecto.
     """
     url = f"https://x-access-token:{token}@github.com/{repo}.git"
     _run_git(
@@ -91,18 +103,19 @@ def _checkout_rule_folders(repo: str, ref: str, token: str, dest: Path, patterns
         mask=token,
     )
     _run_git(["sparse-checkout", "init", "--cone"], cwd=dest)
-    # Habilita el filtro smudge de LFS ANTES de materializar nada, para que
-    # el checkout resuelva el contenido real y no un puntero de 3 líneas.
-    _run_git(["lfs", "install", "--local"], cwd=dest)
+    _run_git(["lfs", "install", "--local", "--skip-smudge"], cwd=dest)
     if patterns:
         _run_git(["sparse-checkout", "set", *patterns], cwd=dest)
+    # Con --skip-smudge, este checkout SIEMPRE materializa como punteros de
+    # texto (nunca descarga ni falla), aunque cone mode cuele algún fichero
+    # "vecino" que no pedimos.
     _run_git(["checkout", ref], cwd=dest)
-    # `git lfs pull` es la red de seguridad explícita frente al fallo de
-    # "silenciosamente hasheas el puntero LFS, no la regla": aunque el
-    # smudge filter ya debería haber resuelto el contenido durante el
-    # checkout, esto lo garantiza incluso si algo en el runner no tenía
-    # git-lfs listo a tiempo.
-    _run_git(["lfs", "pull"], cwd=dest)
+    # Ahora sí: resuelve el contenido real vía LFS, pero SOLO para las
+    # rutas que de verdad pedimos (nunca para los "vecinos" colados por
+    # cone mode, como config.yaml).
+    if patterns:
+        include = ",".join(f"{pattern}/**" for pattern in patterns)
+        _run_git(["lfs", "pull", "--include", include], cwd=dest)
 
 
 def _assert_no_lfs_pointers(directory: Path) -> None:
