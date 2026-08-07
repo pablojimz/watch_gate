@@ -11,7 +11,7 @@ from typing import Any
 from fastapi import FastAPI, Request, Response, status
 from fastapi.responses import JSONResponse
 
-from watchgate.api.routers import analyze, webhooks
+from watchgate.api.routers import agent, analyze, webhooks
 from watchgate.db.connection import init_db
 
 # Límite máximo de payload HTTP: 10 MB
@@ -101,6 +101,7 @@ async def max_payload_size_middleware(
     return response
 
 
+app.include_router(agent.router)
 app.include_router(analyze.router)
 app.include_router(webhooks.router)
 
