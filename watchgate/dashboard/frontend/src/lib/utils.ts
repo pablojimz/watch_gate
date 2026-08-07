@@ -36,6 +36,17 @@ export function applyUiTheme(settings?: UiSettings | null) {
   root.style.setProperty('--radius', RADIUS_MAP[settings.radius] ?? RADIUS_MAP.md)
   root.dataset.fontScale = settings.font_scale
   root.dataset.density = settings.density
+  applyFavicon(settings.logo_data_url)
+}
+
+// Actualiza la pestaña del navegador con el logo subido en Apariencia. Sin
+// logo, vuelve al placeholder vacío de index.html (no hay favicon propio de
+// WatchGate como fichero estático, así que "sin logo" es "sin icono", no un
+// icono roto).
+export function applyFavicon(logoDataUrl?: string | null) {
+  const link = document.getElementById('app-favicon') as HTMLLinkElement | null
+  if (!link) return
+  link.href = logoDataUrl || 'data:,'
 }
 
 export function semaforoColor(semaforo: string): string {

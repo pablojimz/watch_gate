@@ -4,6 +4,8 @@ import {
   KeyRound,
   Palette,
   Scale,
+  Trash2,
+  Upload,
   Users,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -20,9 +22,9 @@ import {
 import { DashboardTabs } from '@/components/dashboard/DashboardTabs'
 import { RiskBadge } from '@/components/dashboard/RiskBadge'
 import { TableSkeleton } from '@/components/dashboard/TableSkeleton'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { applyRiskColors, applyUiTheme } from '@/lib/utils'
+import { applyRiskColors, applyUiTheme, cn } from '@/lib/utils'
 import { useTheme, type ThemeMode } from '@/lib/theme'
 
 const ROLES: RoleName[] = ['admin_organizacion', 'mantenedor', 'revisor']
@@ -41,7 +43,12 @@ const EMPTY_UI: UiSettings = {
   font_scale: 'md',
   density: 'comfortable',
   default_theme: 'system',
+  logo_data_url: null,
 }
+// Mismo límite que _MAX_LOGO_DATA_URL_LENGTH en schemas.py (400_000
+// caracteres de base64 ~= 290 KB reales) -- se valida aquí también para
+// dar un error inmediato en vez de esperar al 422 del servidor.
+const MAX_LOGO_FILE_BYTES = 280 * 1024
 type Tab = 'access' | 'config' | 'appearance' | 'llm'
 type ConfigScope = 'default' | 'repo'
 
@@ -302,8 +309,72 @@ function AppearanceForm({
     }
   }
 
+  function handleLogoFile(file: File | undefined) {
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      toast.error(t('admin.logoInvalidType'))
+      return
+    }
+    if (file.size > MAX_LOGO_FILE_BYTES) {
+      toast.error(t('admin.logoTooLarge'))
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      setForm({ ...form, logo_data_url: reader.result as string })
+    }
+    reader.onerror = () => toast.error(t('admin.logoReadError'))
+    reader.readAsDataURL(file)
+  }
+
   return (
     <div className="flex flex-col gap-4">
+      <SectionCard title={t('admin.logoTitle')} hint={t('admin.logoHint')}>
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex size-16 shrink-0 items-center justify-center rounded-md border bg-muted">
+            {form.logo_data_url ? (
+              <img
+                src={form.logo_data_url}
+                alt={t('admin.logoPreviewAlt')}
+                className="size-full rounded-md object-contain p-1"
+              />
+            ) : (
+              <span className="text-xs text-muted-foreground">{t('admin.logoNone')}</span>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <label>
+              <span
+                className={cn(
+                  buttonVariants({ variant: 'outline', size: 'sm' }),
+                  'cursor-pointer',
+                )}
+              >
+                <Upload className="size-4" strokeWidth={1.75} />
+                {t('admin.logoUpload')}
+              </span>
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => handleLogoFile(e.target.files?.[0])}
+              />
+            </label>
+            {form.logo_data_url ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setForm({ ...form, logo_data_url: null })}
+              >
+                <Trash2 className="size-4" strokeWidth={1.75} />
+                {t('admin.logoRemove')}
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      </SectionCard>
+
       <SectionCard title={t('admin.brandColors')} hint={t('admin.brandColorsHint')}>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="flex flex-col gap-2 text-sm">

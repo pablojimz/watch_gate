@@ -225,20 +225,36 @@ def test_admin_can_manage_roles_and_settings(client: TestClient) -> None:
     assert body["api_key_masked"]
     ui = client.get("/api/settings/ui")
     assert ui.status_code == 200
-    assert (
-        client.put(
-            "/api/settings/ui",
-            json={
-                "primary_color": "#255f99",
-                "accent_color": "#4d6b82",
-                "radius": "lg",
-                "font_scale": "sm",
-                "density": "compact",
-                "default_theme": "dark",
-            },
-        ).status_code
-        == 200
+    logo = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk"
+    put_ui = client.put(
+        "/api/settings/ui",
+        json={
+            "primary_color": "#255f99",
+            "accent_color": "#4d6b82",
+            "radius": "lg",
+            "font_scale": "sm",
+            "density": "compact",
+            "default_theme": "dark",
+            "logo_data_url": logo,
+        },
     )
+    assert put_ui.status_code == 200
+    assert put_ui.json()["logo_data_url"] == logo
+    assert client.get("/api/settings/ui").json()["logo_data_url"] == logo
+
+    invalid_logo = client.put(
+        "/api/settings/ui",
+        json={
+            "primary_color": "#255f99",
+            "accent_color": "#4d6b82",
+            "radius": "lg",
+            "font_scale": "sm",
+            "density": "compact",
+            "default_theme": "dark",
+            "logo_data_url": "not-a-data-url",
+        },
+    )
+    assert invalid_logo.status_code == 422
 
 
 def test_revisor_cannot_see_unassigned_repo(client: TestClient) -> None:
