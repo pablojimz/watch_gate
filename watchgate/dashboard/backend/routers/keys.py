@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 
 from watchgate.dashboard.backend.auth import CurrentUser
+from watchgate.dashboard.backend.schemas import normalize_login
 from watchgate.db.connection import get_db_session
 from watchgate.db.models import User as DBUser
 from watchgate.db.models import UserAPIKey
@@ -45,9 +46,17 @@ class CreatedKeyResponse(KeyResponse):
 
 
 def _get_or_create_db_user(session: Session, user_login: str) -> DBUser:
-    """Asegura que el usuario autenticado del Dashboard exista en el esquema SQLModel DB."""
-    email = f"{user_login}@watchgate.internal"
-    return create_user(session, email=email, name=user_login)
+    """Asegura que el usuario autenticado del Dashboard exista en el esquema SQLModel DB.
+
+    `current_user.login` ya llega normalizado desde la cookie de sesión
+    (`create_session_token`), pero se normaliza también aquí -- este email
+    sintético es la clave de identidad de un esquema de usuarios aparte
+    (watchgate/db/, el de la Engine API), y no debería depender de que la
+    normalización de la sesión nunca cambie para seguir siendo correcto.
+    """
+    normalized = normalize_login(user_login)
+    email = f"{normalized}@watchgate.internal"
+    return create_user(session, email=email, name=normalized)
 
 
 @router.post("", response_model=CreatedKeyResponse, status_code=status.HTTP_201_CREATED)

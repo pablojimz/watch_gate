@@ -12,7 +12,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from jose import JWTError, jwt
 
 from watchgate.dashboard.backend import db as database
-from watchgate.dashboard.backend.schemas import DevLoginIn, PasswordLoginIn, RoleName, User
+from watchgate.dashboard.backend.schemas import (
+    DevLoginIn,
+    PasswordLoginIn,
+    RoleName,
+    User,
+    normalize_login,
+)
 
 SESSION_COOKIE = "watchgate_session"
 ROLE_RANK: dict[RoleName, int] = {
@@ -111,8 +117,13 @@ def require_ingest_token(request: Request) -> None:
 
 
 def create_session_token(login: str, github_token: str | None = None) -> str:
+    # Único punto por el que pasan las cuatro vías de login (dev, local,
+    # GitHub, OIDC) -- normalizar aquí garantiza que el `sub` de la cookie
+    # de sesión (y por tanto CurrentUser.login en el resto del backend)
+    # siempre sea la forma canónica, sin depender de que cada caller la
+    # haya normalizado ya. Ver normalize_login() en schemas.py.
     payload: dict[str, object] = {
-        "sub": login,
+        "sub": normalize_login(login),
         "exp": datetime.now(UTC) + timedelta(days=7),
     }
     if github_token:

@@ -726,8 +726,16 @@ export default function AdminPage() {
   }, [tab])
 
   async function addRole() {
+    // El backend ya normaliza (minúsculas, sin espacios) y por tanto ya
+    // impide duplicados de la misma persona con distinta may/min -- esto
+    // solo evita una llamada de más si el campo quedó vacío tras recortar.
+    const normalizedLogin = userLogin.trim().toLowerCase()
+    if (!normalizedLogin) {
+      toast.error(t('admin.userRequired'))
+      return
+    }
     try {
-      await api.upsertRole({ user_login: userLogin, repo, role })
+      await api.upsertRole({ user_login: normalizedLogin, repo, role })
       setUserLogin('')
       await reloadRoles()
       toast.success(t('admin.roleSaved'))
@@ -806,11 +814,14 @@ export default function AdminPage() {
             </div>
 
             <div className="grid gap-3 rounded-xl border p-4 sm:grid-cols-2 xl:grid-cols-4">
-              <Input
-                placeholder={t('admin.user')}
-                value={userLogin}
-                onChange={(e) => setUserLogin(e.target.value)}
-              />
+              <div>
+                <Input
+                  placeholder={t('admin.user')}
+                  value={userLogin}
+                  onChange={(e) => setUserLogin(e.target.value)}
+                />
+                <p className="mt-1 text-xs text-muted-foreground">{t('admin.userHint')}</p>
+              </div>
               <Input
                 placeholder={t('admin.repo')}
                 value={repo}

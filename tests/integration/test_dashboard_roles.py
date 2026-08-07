@@ -170,6 +170,28 @@ def test_admin_can_manage_roles_and_settings(client: TestClient) -> None:
         ).status_code
         == 200
     )
+
+    # Mismo usuario, distinta may/min y espacios -- no debe crear una
+    # segunda fila (normalize_login en schemas.py + db.py).
+    dup = client.put(
+        "/api/admin/roles",
+        json={"user_login": "  Nuevo  ", "repo": "acme/payments-api", "role": "mantenedor"},
+    )
+    assert dup.status_code == 200
+    assert dup.json()["user_login"] == "nuevo"
+    matching = [
+        r for r in client.get("/api/admin/roles").json() if r["repo"] == "acme/payments-api"
+    ]
+    assert sum(1 for r in matching if r["user_login"] == "nuevo") == 1
+    assert next(r for r in matching if r["user_login"] == "nuevo")["role"] == "mantenedor"
+
+    # DELETE recibe el login como parámetro de ruta, no por RepoRoleIn --
+    # comprueba que también ahí "NUEVO" borra al mismo "nuevo".
+    assert client.delete("/api/admin/roles/NUEVO/acme/payments-api").status_code == 204
+    assert not any(
+        r["user_login"] == "nuevo" and r["repo"] == "acme/payments-api"
+        for r in client.get("/api/admin/roles").json()
+    )
     assert (
         client.put(
             "/api/repos/acme/payments-api/settings",
