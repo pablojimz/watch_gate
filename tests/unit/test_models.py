@@ -11,11 +11,14 @@ from watchgate.core.models import (
     Confidence,
     FileChange,
     FileStatus,
+    Finding,
     LayerResult,
     NormalizedDiff,
     ReputationMetadata,
     RiskCategory,
     Semaforo,
+    ThreatNature,
+    compute_dominant_threat_nature,
 )
 
 
@@ -112,6 +115,24 @@ def test_aggregated_result_is_the_single_json_contract():
     assert payload["layer_results"]["semantic"]["risk_score"] == 85
     # Round-trip: lo que produce el modelo es válido para reconstruirlo.
     assert AggregatedResult.model_validate(payload) == aggregated
+
+
+def test_compute_dominant_threat_nature():
+    assert compute_dominant_threat_nature([]) is None
+
+    f_vuln = Finding(
+        file_path="a.py", rule_id="r1", message="m1", threat_nature=ThreatNature.VULNERABILITY
+    )
+    f_unc = Finding(
+        file_path="b.py", rule_id="r2", message="m2", threat_nature=ThreatNature.UNCERTAIN
+    )
+    f_mal = Finding(
+        file_path="c.py", rule_id="r3", message="m3", threat_nature=ThreatNature.MALICIOUS
+    )
+
+    assert compute_dominant_threat_nature([f_vuln, f_unc]) == ThreatNature.VULNERABILITY
+    assert compute_dominant_threat_nature([f_vuln, f_mal, f_unc]) == ThreatNature.MALICIOUS
+    assert compute_dominant_threat_nature([f_unc]) == ThreatNature.UNCERTAIN
 
 
 def test_reputation_metadata_optional_fields():
