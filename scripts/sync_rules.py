@@ -16,10 +16,13 @@ si se reescribe cada vez en `run: |` de un workflow distinto.
 Diseño de seguridad clave (ver README del reto / justificación académica):
   - El `ref` de Git que se descarga es SIEMPRE el tag exacto de la versión
     (nunca `main`), así que lo que se hashea es inmutable.
-  - Los hashes contra los que se compara se leen del `manifest.json` que
-    viene DENTRO de ese mismo checkout fijado al tag -- no del payload del
-    evento -- para que la verificación esté atada criptográficamente al
-    commit descargado y no a un JSON que llega por un canal aparte.
+  - manifest.json NO vive en el árbol git (ni en `main` ni en el propio
+    tag): se publica como ASSET adjunto a la Release de GitHub (se baja
+    vía `releases/download/<tag>/manifest.json`). Por eso se obtiene por
+    separado, vía la Releases API, pidiendo explícitamente el release
+    identificado por ese mismo tag exacto -- así la autenticidad del
+    manifest sigue atada a la versión concreta que se está sincronizando,
+    aunque el mecanismo de transporte ya no sea git.
   - La verificación es POR CLAVE (idioma / vendor+carpeta / categoría
     YARA) y todo-o-nada: si una sola clave falla, no se activa NINGUNA
     (ni siquiera las que sí verificaron), y se listan explícitamente las
@@ -48,7 +51,11 @@ from rules_hash import compute_dir_hash, hashes_match
 CUSTOM_PREFIX = "rules/semgrep/custom"
 THIRD_PARTY_PREFIX = "rules/semgrep/third-party"
 YARA_PREFIX = "dist/yara_scored"
-DEFAULT_MANIFEST_PATH = "manifest.json"
+
+# manifest.json se publica como asset adjunto a cada Release de GitHub
+# (releases/download/<tag>/manifest.json), NO como fichero commiteado en
+# el árbol git -- se obtiene vía la Releases API, no vía checkout/Contents API.
+DEFAULT_MANIFEST_ASSET = "manifest.json"
 
 # Rutas equivalentes DENTRO de watch_gate (este repo) donde se activa el
 # contenido ya verificado. YARA se remapea de dist/yara_scored/<cat> a
@@ -70,17 +77,12 @@ def _run_git(args: list[str], cwd: Path, mask: str | None = None) -> None:
         raise RuntimeError(f"Fallo `git {printable}`: {stderr.strip()}")
 
 
-def _clone_sparse(repo: str, ref: str, token: str, dest: Path, manifest_path: str) -> None:
-    """Clona el repo de reglas en modo disperso (sparse-checkout, cone mode),
-    fijado EXACTAMENTE al `ref` recibido, con Git LFS habilitado.
-
-    Fase 1: solo materializa lo estrictamente necesario para leer
-    manifest.json (por defecto, en cone mode, eso ya son los ficheros de
-    la raíz del repo sin necesidad de patrón alguno; si `manifest_path`
-    tuviera un directorio por delante -- p. ej. "dist/manifest.json" --
-    ese directorio se añade explícitamente). Las carpetas concretas de
-    reglas se añaden después, una vez sabemos qué claves necesitamos
-    verificar (ver `_broaden_sparse_checkout`).
+def _checkout_rule_folders(repo: str, ref: str, token: str, dest: Path, patterns: list[str]) -> None:
+    """Checkout disperso (sparse-checkout, cone mode) de las carpetas de
+    reglas necesarias, fijado EXACTAMENTE al `ref` recibido, con Git LFS
+    habilitado. manifest.json NO se lee de aquí -- es un asset de Release,
+    se obtiene aparte vía `fetch_release_manifest` -- así que este checkout
+    puede ir directo a los patrones finales, en un único paso.
     """
     url = f"https://x-access-token:{token}@github.com/{repo}.git"
     _run_git(
@@ -90,29 +92,15 @@ def _clone_sparse(repo: str, ref: str, token: str, dest: Path, manifest_path: st
     )
     _run_git(["sparse-checkout", "init", "--cone"], cwd=dest)
     # Habilita el filtro smudge de LFS ANTES de materializar nada, para que
-    # cualquier checkout posterior resuelva el contenido real y no un
-    # puntero de 3 líneas.
+    # el checkout resuelva el contenido real y no un puntero de 3 líneas.
     _run_git(["lfs", "install", "--local"], cwd=dest)
-
-    manifest_parent = Path(manifest_path).parent
-    if str(manifest_parent) not in (".", ""):
-        _run_git(["sparse-checkout", "set", str(manifest_parent)], cwd=dest)
-
-    # En cone mode, `checkout` materializa siempre los ficheros de la raíz
-    # del repo además de los directorios explícitamente añadidos -- ahí es
-    # donde vive manifest.json por defecto.
-    _run_git(["checkout", ref], cwd=dest)
-
-
-def _broaden_sparse_checkout(dest: Path, patterns: list[str]) -> None:
-    """Amplía el sparse-checkout para incluir las carpetas de reglas
-    concretas que necesitamos, y baja su contenido real vía Git LFS."""
     if patterns:
         _run_git(["sparse-checkout", "set", *patterns], cwd=dest)
+    _run_git(["checkout", ref], cwd=dest)
     # `git lfs pull` es la red de seguridad explícita frente al fallo de
     # "silenciosamente hasheas el puntero LFS, no la regla": aunque el
-    # smudge filter ya debería haber resuelto el contenido en el paso
-    # anterior, esto lo garantiza incluso si algo en el runner no tenía
+    # smudge filter ya debería haber resuelto el contenido durante el
+    # checkout, esto lo garantiza incluso si algo en el runner no tenía
     # git-lfs listo a tiempo.
     _run_git(["lfs", "pull"], cwd=dest)
 
@@ -137,13 +125,70 @@ def _assert_no_lfs_pointers(directory: Path) -> None:
             )
 
 
-def _load_manifest(dest: Path, manifest_path: str) -> dict[str, Any]:
-    manifest_file = dest / manifest_path
-    if not manifest_file.exists():
+def _github_headers(token: str, accept: str) -> dict[str, str]:
+    return {
+        "Authorization": f"Bearer {token}",
+        "Accept": accept,
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+
+def _get_release(repo: str, ref: str, token: str) -> dict[str, Any]:
+    """Obtiene los metadatos (incluida la lista de assets) de una Release.
+
+    `ref == "latest"` pide el último release PUBLICADO (no borrador, no
+    prerelease) -- es lo que usa reconcile-rules.yml para el chequeo diario.
+    Cualquier otro valor se trata como el tag exacto de la release (lo que
+    usa sync-rules.yml, fijado siempre al tag recibido en el payload).
+    """
+    if ref == "latest":
+        url = f"https://api.github.com/repos/{repo}/releases/latest"
+    else:
+        url = f"https://api.github.com/repos/{repo}/releases/tags/{ref}"
+    response = httpx.get(url, headers=_github_headers(token, "application/vnd.github+json"), timeout=15.0)
+    if response.status_code == 404:
         raise RuntimeError(
-            f"No se encontró '{manifest_path}' en el checkout disperso del repo de reglas."
+            f"No existe una Release '{ref}' en {repo} (o el token no tiene acceso a ella)."
         )
-    return json.loads(manifest_file.read_text(encoding="utf-8"))
+    response.raise_for_status()
+    return response.json()
+
+
+def _download_release_asset(repo: str, release: dict[str, Any], asset_name: str, token: str) -> bytes:
+    """Descarga el CONTENIDO de un asset de Release por su nombre.
+
+    Los assets de Release no son ficheros del árbol git: se descargan vía
+    la URL de la API de cada asset (`asset["url"]`) con
+    `Accept: application/octet-stream`. La URL pública
+    `releases/download/<tag>/<asset>` es para navegador con sesión, no
+    funciona con un token Bearer contra un repo privado.
+    """
+    assets = release.get("assets", [])
+    match = next((a for a in assets if a.get("name") == asset_name), None)
+    if match is None:
+        available = ", ".join(a.get("name", "?") for a in assets) or "(ninguno)"
+        raise RuntimeError(
+            f"La Release '{release.get('tag_name')}' de {repo} no tiene un asset llamado "
+            f"'{asset_name}'. Assets disponibles: {available}."
+        )
+    response = httpx.get(
+        match["url"],
+        headers=_github_headers(token, "application/octet-stream"),
+        timeout=30.0,
+        follow_redirects=True,
+    )
+    response.raise_for_status()
+    return response.content
+
+
+def fetch_release_manifest(
+    repo: str, ref: str, token: str, asset_name: str
+) -> tuple[str, bytes, dict[str, Any]]:
+    """Descarga manifest.json como asset de Release. Devuelve
+    (tag_name_real, contenido_raw, manifest_parseado)."""
+    release = _get_release(repo, ref, token)
+    raw = _download_release_asset(repo, release, asset_name, token)
+    return release.get("tag_name", ref), raw, json.loads(raw)
 
 
 def _flatten_third_party(third_party_hashes: dict[str, dict[str, str]]) -> list[tuple[str, str]]:
@@ -269,7 +314,7 @@ def _verify_keys(
 def _apply_verified_content(
     dest: Path,
     target_root: Path,
-    manifest_rel_path: str,
+    manifest_raw: bytes,
     languages: list[str],
     third_party: list[tuple[str, str]],
     yara_categories: list[str],
@@ -297,10 +342,12 @@ def _apply_verified_content(
     for category in yara_categories:
         _copy_dir(dest / YARA_PREFIX / category, target_root / LOCAL_YARA_DIR / category)
 
-    # manifest.json completo, siempre (requisito explícito (d)).
+    # manifest.json completo, siempre (requisito explícito (d)). Se escribe
+    # el contenido crudo tal cual se descargó del asset de la Release (no
+    # se copia de `dest`: ya no vive en el checkout git, ver fetch_release_manifest).
     manifest_dst = target_root / "rules" / "manifest.json"
     manifest_dst.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(dest / manifest_rel_path, manifest_dst)
+    manifest_dst.write_bytes(manifest_raw)
 
 
 def _load_state(state_file: Path) -> dict[str, Any]:
@@ -369,36 +416,36 @@ def cmd_sync(args: argparse.Namespace) -> int:
     languages_changed = json.loads(args.languages_changed) if args.languages_changed else []
     third_party_changed = json.loads(args.third_party_changed) if args.third_party_changed else []
 
+    print(f"-> Descargando manifest.json (asset de Release) de {args.rules_repo}@{args.ref}...")
+    tag_name, manifest_raw, manifest = fetch_release_manifest(
+        args.rules_repo, args.ref, token, args.manifest_asset
+    )
+    if manifest.get("version") != args.ref or tag_name != args.ref:
+        # No debería poder pasar (pedimos la Release por ese tag exacto),
+        # pero si el manifest o el tag_name real dijeran otra versión, es
+        # una señal de inconsistencia grave en el repo de reglas -> abortar.
+        print(
+            f"ERROR: la Release '{tag_name}' de {args.rules_repo} tiene manifest.json con "
+            f"version={manifest.get('version')!r}; no coincide con el ref solicitado {args.ref!r}.",
+            file=sys.stderr,
+        )
+        return 1
+
+    languages, third_party, yara_categories = _resolve_scope_keys(
+        manifest, args.scope, languages_changed, third_party_changed
+    )
+    print(
+        f"-> Claves a sincronizar: {len(languages)} lenguaje(s) custom, "
+        f"{len(third_party)} carpeta(s) third-party, {len(yara_categories)} "
+        "categoría(s) YARA (siempre todas)."
+    )
+    patterns = _build_sparse_patterns(languages, third_party, yara_categories)
+
     tmp_root = Path(tempfile.mkdtemp(prefix="rules-sync-"))
     dest = tmp_root / "rules-repo"
     try:
         print(f"-> Checkout disperso de {args.rules_repo}@{args.ref} (Git LFS habilitado)...")
-        _clone_sparse(args.rules_repo, args.ref, token, dest, args.manifest_path)
-
-        manifest = _load_manifest(dest, args.manifest_path)
-        if manifest.get("version") != args.ref:
-            # No debería poder pasar (el checkout está fijado a `ref`), pero
-            # si el manifest de ese tag dijera otra versión, es una señal de
-            # inconsistencia grave en el repo de reglas -> abortar.
-            print(
-                f"ERROR: manifest.json del tag {args.ref} declara version="
-                f"{manifest.get('version')!r}, no coincide con el ref checkouteado.",
-                file=sys.stderr,
-            )
-            return 1
-
-        languages, third_party, yara_categories = _resolve_scope_keys(
-            manifest, args.scope, languages_changed, third_party_changed
-        )
-        print(
-            f"-> Claves a sincronizar: {len(languages)} lenguaje(s) custom, "
-            f"{len(third_party)} carpeta(s) third-party, {len(yara_categories)} "
-            "categoría(s) YARA (siempre todas)."
-        )
-
-        patterns = _build_sparse_patterns(languages, third_party, yara_categories)
-        print("-> Ampliando sparse-checkout y descargando contenido real vía Git LFS...")
-        _broaden_sparse_checkout(dest, patterns)
+        _checkout_rule_folders(args.rules_repo, args.ref, token, dest, patterns)
         for rel in patterns:
             _assert_no_lfs_pointers(dest / rel)
 
@@ -421,7 +468,7 @@ def cmd_sync(args: argparse.Namespace) -> int:
         target_root = Path(args.target_root)
         state_file = target_root / args.state_file
         _apply_verified_content(
-            dest, target_root, args.manifest_path, languages, third_party, yara_categories
+            dest, target_root, manifest_raw, languages, third_party, yara_categories
         )
         _write_state(state_file, manifest, verified, args.triggered_by)
 
@@ -438,28 +485,23 @@ def cmd_sync(args: argparse.Namespace) -> int:
 
 
 def cmd_fetch_manifest(args: argparse.Namespace) -> int:
-    """Descarga SOLO manifest.json (sin checkout, sin LFS) vía la API de
-    contenidos de GitHub. Usado por reconcile-rules.yml para el chequeo
-    barato diario -- manifest.json no está gestionado por Git LFS."""
+    """Descarga SOLO manifest.json (sin checkout completo, sin LFS) como
+    asset de la Release más reciente (o de un tag concreto), vía la
+    Releases API de GitHub. Usado por reconcile-rules.yml para el chequeo
+    barato diario -- manifest.json no vive en el árbol git."""
     token = os.environ.get("RULES_REPO_TOKEN")
     if not token:
         print("ERROR: falta la variable de entorno RULES_REPO_TOKEN.", file=sys.stderr)
         return 2
 
-    url = f"https://api.github.com/repos/{args.rules_repo}/contents/{args.manifest_path}"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/vnd.github.raw+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-    }
-    print(f"-> Descargando {args.manifest_path} de {args.rules_repo}@{args.ref} (metadatos, sin LFS)...")
-    response = httpx.get(url, headers=headers, params={"ref": args.ref}, timeout=15.0)
-    response.raise_for_status()
+    print(f"-> Descargando '{args.manifest_asset}' de la Release '{args.ref}' de {args.rules_repo}...")
+    tag_name, raw, _manifest = fetch_release_manifest(args.rules_repo, args.ref, token, args.manifest_asset)
 
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_bytes(response.content)
-    print(f"-> Guardado en {out_path}.")
+    out_path.write_bytes(raw)
+    print(f"-> Guardado en {out_path} (release real: {tag_name}).")
+    _write_github_output(remote_release=tag_name)
     return 0
 
 
@@ -522,16 +564,16 @@ def main() -> int:
     p_sync.add_argument("--scope", choices=["changed", "full"], required=True)
     p_sync.add_argument("--languages-changed", default="[]", help="JSON array (solo scope=changed).")
     p_sync.add_argument("--third-party-changed", default="[]", help="JSON array 'vendor/carpeta' (solo scope=changed).")
-    p_sync.add_argument("--manifest-path", default=DEFAULT_MANIFEST_PATH)
+    p_sync.add_argument("--manifest-asset", default=DEFAULT_MANIFEST_ASSET, help="Nombre del asset de Release.")
     p_sync.add_argument("--target-root", required=True, help="Raíz de watch_gate donde activar el contenido.")
     p_sync.add_argument("--state-file", default="rules/.rules-state.json", help="Relativo a --target-root.")
     p_sync.add_argument("--triggered-by", default="sync_rules.py")
     p_sync.set_defaults(func=cmd_sync)
 
-    p_fetch = sub.add_parser("fetch-manifest", help="Descarga solo manifest.json (sin checkout/LFS).")
+    p_fetch = sub.add_parser("fetch-manifest", help="Descarga solo manifest.json (asset de Release, sin checkout/LFS).")
     p_fetch.add_argument("--rules-repo", required=True)
-    p_fetch.add_argument("--ref", default="main")
-    p_fetch.add_argument("--manifest-path", default=DEFAULT_MANIFEST_PATH)
+    p_fetch.add_argument("--ref", default="latest", help="Tag exacto, o 'latest' para la última Release publicada.")
+    p_fetch.add_argument("--manifest-asset", default=DEFAULT_MANIFEST_ASSET, help="Nombre del asset de Release.")
     p_fetch.add_argument("--out", required=True)
     p_fetch.set_defaults(func=cmd_fetch_manifest)
 
