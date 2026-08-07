@@ -96,13 +96,18 @@ Decisión que se mantuvo sin cambios: el hash se compara **por clave** (idioma c
 - **Tests de integración con Git+LFS real** (5 casos, `tests/unit/test_sync_rules_git_lfs.py`): contra un repo git+LFS local real (remoto `file://`, sin red ni token), reproduciendo los dos bugs de §5.2/§5.3 y confirmando que quedan resueltos.
 - **Ejecución real en producción**: `reconcile-rules.yml` lanzado manualmente contra los repos reales, iterando sobre los tres fallos de §5 hasta dejarlo en verde. Resultado confirmado: versión `v0.0.2` activa, 17 lenguajes custom + 4 vendors third-party (35 carpetas) + 2 categorías YARA, todos con hash verificado, comiteado automáticamente por el propio workflow (commit `4ed07e4`).
 
-## 7. Pendiente / gaps conocidos
+## 7. Conexión con la capa estática (cerrado)
+
+`watchgate/core/layers/static_layer.py` inicialmente solo cargaba `rules/semgrep/custom/<lenguaje>` (por una coincidencia de convenciones con `_get_rules_dir`, no por diseño deliberado) y cubría un mapa de lenguajes incompleto. Se conectó explícitamente con lo que sincroniza este flujo:
+
+- **`THIRD_PARTY_LANGUAGE_MAP`**: tabla explícita (a mano, nunca adivinada por coincidencia de nombre — respetando que `<carpeta>` de third-party es un namespace independiente, p. ej. `trailofbits/rs` son reglas de Rust) que conecta cada lenguaje con sus carpetas third-party relevantes. Excluye a propósito los paquetes no específicos de un lenguaje (`generic`, `noisy`, `problem-based-packs`), que no encajan en un análisis por-fichero.
+- `_run_semgrep_on_file` ahora incluye siempre `custom/<lenguaje>` + `custom/regex` (patrones de secretos, independiente del lenguaje) + las carpetas third-party relevantes.
+- `_detect_language` ampliado de 11 a 28 extensiones/patrones: cubre los 17 lenguajes de `custom/` y los que solo tienen reglas third-party (kotlin, scala, solidity, terraform); Dockerfile se detecta por nombre de fichero, no por extensión.
+- El fallback sin verificación (paso 4 de `_get_rules_dir`) ahora deja constancia explícita con `logger.warning` si se alcanza — sigue existiendo (es necesario para un consumidor externo del paquete sin el checkout ya sincronizado), pero nunca en silencio.
+
+## 8. Pendiente / gaps conocidos
 
 - **`sync-rules.yml` (el disparo real por `repository_dispatch`) todavía no se ha probado de punta a punta** — sí se validó `reconcile-rules.yml`, que comparte toda la lógica de sincronización, pero el disparo por evento en sí queda por confirmar (simulando el evento o publicando una release real desde el repo de reglas).
-- **La capa estática (`watchgate/core/layers/static_layer.py`) no usa todavía las reglas third-party ni YARA.** Su resolución de directorio (`_get_rules_dir`) prioriza `rules/semgrep/` local, así que en la práctica ya usa las reglas `custom/<lenguaje>` verificadas y activadas por este flujo -- pero:
-  - Solo carga `rules/semgrep/custom/<lenguaje>`; nunca toca `rules/semgrep/third-party/<vendor>/<carpeta>`, aunque este flujo ya sincroniza y verifica 4 vendors / 35 carpetas.
-  - Su mapa de detección de lenguaje (`_detect_language`) no cubre los 17 lenguajes disponibles en `custom/` (faltan, entre otros, dockerfile, csharp, rust, swift, php, powershell).
-  - Su ruta de fallback (paso 4 de `_get_rules_dir`) sigue haciendo su propio `git clone` del repo de reglas si `rules/semgrep/` no existiera localmente -- sin pasar por ninguna verificación de hash, lo cual contradice el requisito de que el análisis de PRs use siempre la versión activa *verificada*. En la práctica no se activa (el paso 3 siempre encuentra contenido, ya poblado por este flujo), pero sigue siendo una ruta de código sin blindar.
-  - **No existe ninguna capa YARA** en el código Python de `watchgate` todavía. `rules/yara/<categoria>/` queda poblado y verificado por este flujo, listo para cuando se implemente esa capa, pero hoy no lo usa nadie.
+- **No existe ninguna capa YARA** en el código Python de `watchgate` todavía. `rules/yara/<categoria>/` queda poblado y verificado por este flujo, listo para cuando se implemente esa capa, pero hoy no lo usa nadie.
 
-Estos cuatro puntos son candidatos naturales para una siguiente iteración, no bugs de lo entregado aquí.
+Estos dos puntos son candidatos naturales para una siguiente iteración, no bugs de lo entregado aquí.
