@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import secrets
 import uuid
 from datetime import UTC, datetime
@@ -172,8 +173,8 @@ def save_pr_score(
         user_id=user_id,
         score=aggregated_result.score,
         semaforo=aggregated_result.semaforo.value,
-        layer_results_json=str(layer_json),
-        weights_used_json=str(aggregated_result.weights_used),
+        layer_results_json=json.dumps(layer_json),
+        weights_used_json=json.dumps(aggregated_result.weights_used),
     )
     session.add(score_record)
     session.commit()
