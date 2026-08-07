@@ -56,7 +56,13 @@ def init_db(db_engine: engine.Engine | None = None) -> None:
 
 
 def get_session(db_engine: engine.Engine | None = None) -> Generator[Session, None, None]:
-    """Generador de sesión de FastAPI para inyección de dependencias."""
+    """Generador de sesión de SQLModel."""
     target_engine = db_engine or default_engine
     with Session(target_engine) as session:
+        yield session
+
+
+def get_db_session() -> Generator[Session, None, None]:
+    """Generador de sesión de FastAPI sin parámetros para inyección de dependencias."""
+    with Session(default_engine) as session:
         yield session
