@@ -30,5 +30,10 @@ rules:
     likelihood: LOW
     impact: LOW
     confidence: MEDIUM
+    severity_score: 25
+    confidence_score: 80
+    exploitability_score: 100
+    risk_score: 60
+    risk_justification: Key Vault key sin expiration_date; higiene de rotacion, no explotacion directa.
   languages: [hcl]
   severity: WARNING

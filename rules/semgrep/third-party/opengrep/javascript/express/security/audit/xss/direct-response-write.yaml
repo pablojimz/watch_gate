@@ -14,8 +14,7 @@ rules:
     - A07:2017 - Cross-Site Scripting (XSS)
     - A03:2021 - Injection
     cwe:
-    - 'CWE-79: Improper Neutralization of Input During Web Page Generation (''Cross-site
-      Scripting'')'
+    - 'CWE-79: Improper Neutralization of Input During Web Page Generation (''Cross-site Scripting'')'
     category: security
     technology:
     - express
@@ -29,6 +28,11 @@ rules:
     license: Commons Clause License Condition v1.0[LGPL-2.1-only]
     vulnerability_class:
     - Cross-Site-Scripting (XSS)
+    severity_score: 75
+    confidence_score: 80
+    exploitability_score: 80
+    risk_score: 78
+    risk_justification: Taint req.*->res.write/send, con exclusiones de content-type y sanitizadores reales.
   languages:
   - javascript
   - typescript

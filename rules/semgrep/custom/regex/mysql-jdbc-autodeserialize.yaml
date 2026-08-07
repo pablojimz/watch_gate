@@ -20,5 +20,10 @@ rules:
       references:
         - https://cwe.mitre.org/data/definitions/502.html
         - https://nvd.nist.gov/vuln/detail/CVE-2017-3523
+      severity_score: 100
+      confidence_score: 100
+      exploitability_score: 40
+      risk_score: 85
+      risk_justification: "autoDeserialize=true permite RCE si el servidor MySQL es malicioso o hay MITM (CVEs confirmadas); regex muy especifica e inequivoca (HIGH); requiere ademas un servidor/atacante en posicion de controlar la respuesta, no es automatico."
     patterns:
       - pattern-regex: (?i)jdbc:mysql://.+[?&]autoDeserialize=true

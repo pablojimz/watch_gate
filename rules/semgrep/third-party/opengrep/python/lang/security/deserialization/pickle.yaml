@@ -18,8 +18,13 @@ rules:
     likelihood: LOW
     impact: MEDIUM
     confidence: LOW
+    severity_score: 100
+    confidence_score: 30
+    exploitability_score: 80
+    risk_score: 74
+    risk_justification: 'FALTA DATO: no se sabe si la fuente es no confiable; asumo que sí (E alto). $FUNC sin restringir a load/loads incluye dump/dumps seguros.'
   languages:
-    - python
+  - python
   message: >-
     Avoid using `pickle`, which is known to lead to code execution vulnerabilities.
     When unpickling, the serialized data could be manipulated to run arbitrary code.
@@ -27,11 +32,11 @@ rules:
     serialization format.
   severity: WARNING
   patterns:
-    - pattern-either:
-      - pattern: pickle.$FUNC(...)
-      - pattern: _pickle.$FUNC(...)
-    - pattern-not: pickle.$FUNC("...")
-    - pattern-not: _pickle.$FUNC("...")
+  - pattern-either:
+    - pattern: pickle.$FUNC(...)
+    - pattern: _pickle.$FUNC(...)
+  - pattern-not: pickle.$FUNC("...")
+  - pattern-not: _pickle.$FUNC("...")
 - id: avoid-cPickle
   metadata:
     owasp:
@@ -51,8 +56,13 @@ rules:
     likelihood: LOW
     impact: MEDIUM
     confidence: LOW
+    severity_score: 100
+    confidence_score: 30
+    exploitability_score: 80
+    risk_score: 74
+    risk_justification: 'FALTA DATO: fuente no confiable no garantizada, asumo que sí (E alto). $FUNC sin filtrar deserialización, módulo legado py2.'
   languages:
-    - python
+  - python
   message: >-
     Avoid using `cPickle`, which is known to lead to code execution vulnerabilities.
     When unpickling, the serialized data could be manipulated to run arbitrary code.
@@ -81,8 +91,13 @@ rules:
     likelihood: LOW
     impact: MEDIUM
     confidence: LOW
+    severity_score: 100
+    confidence_score: 30
+    exploitability_score: 80
+    risk_score: 74
+    risk_justification: 'FALTA DATO: fuente no confiable no garantizada, asumo que sí (E alto). $FUNC sin filtrar incluye funciones de serialización segura.'
   languages:
-    - python
+  - python
   message: >-
     Avoid using `dill`, which uses `pickle`, which is known to lead to code execution
     vulnerabilities.
@@ -112,6 +127,11 @@ rules:
     likelihood: LOW
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 100
+    confidence_score: 30
+    exploitability_score: 80
+    risk_score: 74
+    risk_justification: 'FALTA DATO: fuente no confiable no garantizada, asumo que sí (E alto). shelve.$FUNC coincide con el uso normal (shelve.open).'
   languages:
   - python
   message: >-

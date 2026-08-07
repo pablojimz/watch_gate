@@ -17,6 +17,11 @@ rules:
     impact: MEDIUM
     likelihood: MEDIUM
     confidence: MEDIUM
+    severity_score: 75
+    confidence_score: 60
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: SSRF vía Net::HTTP; taint puede alcanzar cualquier argumento, no necesariamente el host/URL.
   message: >-
     Using user input when accessing files is potentially dangerous. A malicious actor could use this to
     modify or access files

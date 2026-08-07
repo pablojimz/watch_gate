@@ -16,6 +16,11 @@ rules:
       references:
         - https://blog.trailofbits.com/2021/03/15/never-a-dill-moment-exploiting-machine-learning-pickle-files/
 
+      severity_score: 100
+      confidence_score: 100
+      exploitability_score: 40
+      risk_score: 85
+      risk_justification: Funciones de comunicación distribuida usan pickle sobre objetos arbitrarios (RCE); requiere peer malicioso en el grupo.
     patterns:
       - pattern-either:
           - pattern: torch.distributed.broadcast_object_list(...)

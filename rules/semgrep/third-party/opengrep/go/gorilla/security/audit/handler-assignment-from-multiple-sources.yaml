@@ -14,6 +14,11 @@ rules:
     - audit
     impact: MEDIUM
     likelihood: LOW
+    severity_score: "37.5"
+    confidence_score: 30
+    exploitability_score: 40
+    risk_score: 36
+    risk_justification: Heuristica de posible bug logico (doble asignacion), no exploit demostrado; impacto incierto entre higiene y auth bypass.
   mode: taint
   pattern-sources:
   - patterns:

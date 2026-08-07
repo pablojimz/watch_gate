@@ -16,9 +16,7 @@ rules:
     - pattern-inside: |
         XmlTextReader $READER = new XmlTextReader(...);
         ...
-  message: XmlReaderSettings found with DtdProcessing.Parse on an XmlReader handling a string argument
-    from a public method. Enabling Document Type Definition (DTD) parsing may cause XML External Entity
-    (XXE) injection if supplied with user-controllable data.
+  message: XmlReaderSettings found with DtdProcessing.Parse on an XmlReader handling a string argument from a public method. Enabling Document Type Definition (DTD) parsing may cause XML External Entity (XXE) injection if supplied with user-controllable data.
   languages:
   - csharp
   severity: WARNING
@@ -42,3 +40,8 @@ rules:
     impact: MEDIUM
     likelihood: LOW
     confidence: MEDIUM
+    severity_score: 100
+    confidence_score: 60
+    exploitability_score: 40
+    risk_score: 73
+    risk_justification: XXE taint XmlTextReader sin DtdProcessing.Prohibit; fuente genérica, requiere XML malicioso.

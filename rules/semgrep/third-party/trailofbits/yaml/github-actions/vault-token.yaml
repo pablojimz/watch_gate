@@ -17,6 +17,11 @@ rules:
         - https://developer.hashicorp.com/vault/docs/platform/github-actions
         - https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-hashicorp-vault
         - https://github.com/hashicorp/vault-action
+      severity_score: 75
+      confidence_score: 30
+      exploitability_score: 100
+      risk_score: 68
+      risk_justification: "FALTA DATO: idem, 'token'/VAULT_TOKEN puede ser secrets.* legítimo; conservador=secreto expuesto."
     patterns:
       - pattern-inside: |
           uses: "$ACTION"

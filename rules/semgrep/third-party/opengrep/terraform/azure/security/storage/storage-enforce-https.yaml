@@ -35,5 +35,10 @@ rules:
     likelihood: LOW
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 100
+    risk_score: 78
+    risk_justification: enable_https_traffic_only=false explicito; literal exacto sin ambiguedad.
   languages: [hcl]
   severity: WARNING

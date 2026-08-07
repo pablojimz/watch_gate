@@ -39,3 +39,8 @@ rules:
     references:
     - https://developer.hashicorp.com/terraform/language/resources/provisioners/remote-exec
     - https://developer.hashicorp.com/terraform/language/resources/provisioners/local-exec
+    severity_score: 25
+    confidence_score: 60
+    exploitability_score: 80
+    risk_score: 49
+    risk_justification: Uso de provisioner remote/local-exec; feature legitima, sin verificar entrada no confiable.

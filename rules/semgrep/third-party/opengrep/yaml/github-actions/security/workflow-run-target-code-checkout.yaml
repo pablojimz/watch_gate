@@ -1,7 +1,7 @@
 rules:
 - id: workflow-run-target-code-checkout
   languages:
-    - yaml
+  - yaml
   message: >-
     This GitHub Actions workflow file uses `workflow_run` and checks out code
     from the incoming pull request. When using `workflow_run`, the Action
@@ -25,37 +25,42 @@ rules:
     subcategory:
     - vuln
     references:
-      - https://securitylab.github.com/research/github-actions-preventing-pwn-requests/
-      - https://github.com/justinsteven/advisories/blob/master/2021_github_actions_checkspelling_token_leak_via_advice_symlink.md
-      - https://www.legitsecurity.com/blog/github-privilege-escalation-vulnerability
+    - https://securitylab.github.com/research/github-actions-preventing-pwn-requests/
+    - https://github.com/justinsteven/advisories/blob/master/2021_github_actions_checkspelling_token_leak_via_advice_symlink.md
+    - https://www.legitsecurity.com/blog/github-privilege-escalation-vulnerability
     technology:
-      - github-actions
+    - github-actions
+    severity_score: 100
+    confidence_score: 60
+    exploitability_score: 40
+    risk_score: 73
+    risk_justification: Checkout de codigo de PR en workflow_run con acceso a secretos; requiere un paso posterior que ejecute ese codigo, no confirmado por el patron.
   patterns:
-    - pattern-inside: |
-        on:
-          ...
-          workflow_run: ...
-          ...
+  - pattern-inside: |
+      on:
         ...
-    - pattern-inside: |
-        jobs:
+        workflow_run: ...
+        ...
+      ...
+  - pattern-inside: |
+      jobs:
+        ...
+        $JOBNAME:
           ...
-          $JOBNAME:
+          steps:
             ...
-            steps:
-              ...
-    - pattern: |
+  - pattern: |
+      ...
+      uses: "$ACTION"
+      with:
         ...
-        uses: "$ACTION"
-        with:
-          ...
-          ref: $EXPR
-    - metavariable-regex:
-        metavariable: $ACTION
-        regex: actions/checkout@.*
-    - metavariable-pattern:
-        language: generic
-        metavariable: $EXPR
-        patterns:
-          - pattern: ${{ github.event.workflow_run ... }}
+        ref: $EXPR
+  - metavariable-regex:
+      metavariable: $ACTION
+      regex: actions/checkout@.*
+  - metavariable-pattern:
+      language: generic
+      metavariable: $EXPR
+      patterns:
+      - pattern: ${{ github.event.workflow_run ... }}
   severity: WARNING

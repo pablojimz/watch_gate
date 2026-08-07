@@ -16,6 +16,11 @@ rules:
       references:
         - https://blog.trailofbits.com/2021/03/15/never-a-dill-moment-exploiting-machine-learning-pickle-files/
 
+      severity_score: 100
+      confidence_score: 60
+      exploitability_score: 40
+      risk_score: 73
+      risk_justification: saved_model.load con ruta dinámica puede ejecutar código arbitrario; requiere modelo no confiable.
     patterns:
       - pattern: tensorflow.saved_model.load(...)
       - pattern-not: tensorflow.saved_model.load("...", ...)

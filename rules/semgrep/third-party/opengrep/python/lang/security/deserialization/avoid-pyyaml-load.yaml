@@ -19,6 +19,11 @@ rules:
     likelihood: LOW
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 100
+    confidence_score: 100
+    exploitability_score: 40
+    risk_score: 85
+    risk_justification: yaml.Loader/UnsafeLoader/CLoader/unsafe_load exacto, con exclusión de ruamel; deserialización insegura y RCE si el YAML procesado viene de fuente no confiable, condición no garantizada por el código.
   languages:
   - python
   message: >-

@@ -19,6 +19,11 @@ rules:
         - https://cwe.mitre.org/data/definitions/347.html
         - https://github.com/auth0/node-jsonwebtoken#jwtverifytoken-secretorpublickey-options-callback
         - https://auth0.com/blog/critical-vulnerabilities-in-json-web-token-libraries/
+      severity_score: 100
+      confidence_score: 60
+      exploitability_score: 80
+      risk_score: 83
+      risk_justification: "decode() sin verificar o algorithms:['none'] permite forjar tokens y tomar control de cualquier cuenta; jwt.decode() a veces se usa solo para inspeccion no relacionada con autorizacion (falso positivo posible); ejecucion normal."
     patterns:
       - pattern-either:
           - pattern: jwt.decode($TOKEN, ...)

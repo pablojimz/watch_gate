@@ -21,6 +21,11 @@ rules:
     likelihood: HIGH
     impact: MEDIUM
     confidence: HIGH
+    severity_score: 25
+    confidence_score: 30
+    exploitability_score: 80
+    risk_score: 40
+    risk_justification: bind a 0.0.0.0/'::'/''; uso muy frecuente e intencional en servidores, severidad INFO del propio autor.
   languages: [python]
   severity: INFO
   pattern-either:

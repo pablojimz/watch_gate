@@ -17,4 +17,9 @@ rules:
         - https://guides.rubygems.org/trusted-publishing/
         - https://guides.rubygems.org/api-key-scopes/#usage-with-gem-cli
         - https://github.com/rubygems/release-gem
+      severity_score: 75
+      confidence_score: 30
+      exploitability_score: 100
+      risk_score: 68
+      risk_justification: 'FALTA DATO: patrón es solo el identificador GEM_HOST_API_KEY sin contexto de valor, muy amplio; conservador=secreto expuesto.'
     pattern: GEM_HOST_API_KEY

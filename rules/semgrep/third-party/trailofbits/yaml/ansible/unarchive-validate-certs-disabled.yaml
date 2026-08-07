@@ -13,6 +13,11 @@ rules:
       impact: HIGH
       references:
         - https://docs.ansible.com/ansible/latest/collections/ansible/builtin/unarchive_module.html#parameter-validate_certs
+      severity_score: 75
+      confidence_score: 100
+      exploitability_score: 100
+      risk_score: 89
+      risk_justification: TLS no verificado al descargar archivo a extraer; mismo riesgo que unencrypted-url.
     patterns:
       - pattern-inside: |
           $UNARCHIVE:

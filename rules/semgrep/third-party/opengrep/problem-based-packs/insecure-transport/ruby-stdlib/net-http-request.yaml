@@ -19,6 +19,11 @@ rules:
     technology:
     - ruby
     vulnerability: Insecure Transport
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: Net::HTTP con URI literal http://, lista cerrada de verbos.
   languages:
   - ruby
   patterns:

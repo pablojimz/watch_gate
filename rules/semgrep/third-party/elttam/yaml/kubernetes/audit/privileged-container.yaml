@@ -22,5 +22,10 @@ rules:
         - kubernetes
       references:
         - https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
+      severity_score: 100
+      confidence_score: 100
+      exploitability_score: 100
+      risk_score: 100
+      risk_justification: 'privileged: true equivale a control casi total del host (fuga de contenedor); patrón exacto, siempre activo en despliegue.'
     languages: [yaml]
     severity: WARNING

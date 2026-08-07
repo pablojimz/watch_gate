@@ -27,6 +27,11 @@ rules:
     likelihood: HIGH
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 75
+    confidence_score: 60
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: Taint event->concat string con keywords SQL; SQLi clásica por concatenación.
   mode: taint
   pattern-sinks:
   - patterns:

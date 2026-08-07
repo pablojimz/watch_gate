@@ -19,6 +19,11 @@ rules:
       references:
         - https://cwe.mitre.org/data/definitions/494.html
         - https://docs.npmjs.com/cli/v10/configuring-npm/package-json#git-urls-as-dependencies
+      severity_score: 50
+      confidence_score: 30
+      exploitability_score: 40
+      risk_score: 42
+      risk_justification: "Dependencia git/unpinned bypasea verificacion de integridad del registro (candado roto, no ejecucion directa); muchas git URLs son legitimas y controladas (LOW); solo se materializa si en un futuro install el ref fue manipulado (repojacking)."
     patterns:
       - pattern: '"$PKG": $VALUE'
       - metavariable-regex:

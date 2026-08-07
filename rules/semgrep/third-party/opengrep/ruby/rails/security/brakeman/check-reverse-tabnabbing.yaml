@@ -40,8 +40,7 @@ rules:
               link_to '...', '...', ...
           - pattern-not: |
               link_to '...', target: ...
-  message: Setting an anchor target of `_blank` without the `noopener` or `noreferrer` attribute allows
-    reverse tabnabbing on Internet Explorer, Opera, and Android Webview.
+  message: Setting an anchor target of `_blank` without the `noopener` or `noreferrer` attribute allows reverse tabnabbing on Internet Explorer, Opera, and Android Webview.
   languages:
   - generic
   severity: WARNING
@@ -61,3 +60,8 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 50
+    confidence_score: 80
+    exploitability_score: 80
+    risk_score: 66
+    risk_justification: target=_blank sin rel=noopener/noreferrer en link_to; patrón sintáctico bastante preciso.

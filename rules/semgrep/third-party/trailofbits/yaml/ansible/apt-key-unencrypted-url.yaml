@@ -13,6 +13,11 @@ rules:
       impact: HIGH
       references:
         - https://docs.ansible.com/ansible/latest/collections/ansible/builtin/apt_key_module.html#parameter-url
+      severity_score: "87.5"
+      confidence_score: 100
+      exploitability_score: 100
+      risk_score: 94
+      risk_justification: Descarga sin cifrar de clave de firma apt; MITM puede sustituir clave y habilitar paquetes maliciosos confiados. Requiere posición de red.
     patterns:
       - pattern-inside: |
           $APTKEY:

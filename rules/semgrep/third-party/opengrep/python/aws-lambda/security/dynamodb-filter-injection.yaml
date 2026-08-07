@@ -19,6 +19,11 @@ rules:
     impact: MEDIUM
     likelihood: MEDIUM
     confidence: MEDIUM
+    severity_score: 75
+    confidence_score: 60
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: NoSQL/filtro injection en DynamoDB Scan/QueryFilter vía event.
   message: >-
     Detected DynamoDB query filter that is tainted by `$EVENT` object. This could lead to NoSQL injection
     if the variable is user-controlled

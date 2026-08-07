@@ -17,6 +17,11 @@ rules:
       references:
         - https://github.blog/2024-06-20-execute-commands-by-sending-json-learn-how-unsafe-deserialization-vulnerabilities-work-in-ruby-projects/
         - https://github.com/GitHubSecurityLab/ruby-unsafe-deserialization/blob/main/marshal/3.4-rc/marshal-rce-ruby-3.4-rc.rb
+      severity_score: 25
+      confidence_score: 100
+      exploitability_score: 40
+      risk_score: 51
+      risk_justification: Reconocimiento de hook marshal_load; requiere Marshal.load sobre dato no confiable en otra parte del código.
     patterns:
       - pattern-inside: |
           class $CLS

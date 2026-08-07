@@ -19,6 +19,11 @@ rules:
       references:
         - https://www.apollographql.com/docs/apollo-server/v3/security/cors/#preventing-cross-site-request-forgery-csrf
 
+      severity_score: 75
+      confidence_score: 100
+      exploitability_score: 80
+      risk_score: 84
+      risk_justification: Falta csrfPrevention, que es false por defecto en v3; check exacto de ausencia del literal true.
     patterns:
       - pattern: new ApolloServer({...})
       - pattern-not: |

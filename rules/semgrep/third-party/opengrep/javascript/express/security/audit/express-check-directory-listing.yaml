@@ -1,8 +1,6 @@
 rules:
 - id: express-check-directory-listing
-  message: Directory listing/indexing is enabled, which may lead to disclosure of sensitive directories
-    and files. It is recommended to disable directory listing unless it is a public resource. If you need
-    directory listing, ensure that sensitive files are inaccessible when querying the resource.
+  message: Directory listing/indexing is enabled, which may lead to disclosure of sensitive directories and files. It is recommended to disable directory listing unless it is a public resource. If you need directory listing, ensure that sensitive files are inaccessible when querying the resource.
   options:
     interfile: true
   metadata:
@@ -23,6 +21,11 @@ rules:
     likelihood: HIGH
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 75
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 84
+    risk_justification: 'FALTA DATO: no se sabe si el directorio servido tiene ficheros sensibles; asumo que sí (conservador). Llamada serve-index exacta y sin ambigüedad.'
   languages:
   - javascript
   - typescript

@@ -13,10 +13,8 @@ rules:
     - pattern-either:
       - pattern: $LOOP.subprocess_exec($PROTOCOL, $CMD, ...)
       - pattern: $LOOP.subprocess_exec($PROTOCOL, [$CMD, ...], ...)
-      - pattern: $LOOP.subprocess_exec($PROTOCOL, "=~/(sh|bash|ksh|csh|tcsh|zsh)/", "-c", $CMD,
-          ...)
-      - pattern: $LOOP.subprocess_exec($PROTOCOL, ["=~/(sh|bash|ksh|csh|tcsh|zsh)/", "-c", $CMD,
-          ...], ...)
+      - pattern: $LOOP.subprocess_exec($PROTOCOL, "=~/(sh|bash|ksh|csh|tcsh|zsh)/", "-c", $CMD, ...)
+      - pattern: $LOOP.subprocess_exec($PROTOCOL, ["=~/(sh|bash|ksh|csh|tcsh|zsh)/", "-c", $CMD, ...], ...)
   message: >-
     Detected subprocess function '$LOOP.subprocess_exec' with argument tainted by `event` object.
     If this data can be controlled by a malicious actor, it may be an
@@ -49,6 +47,11 @@ rules:
     likelihood: HIGH
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 100
+    confidence_score: 60
+    exploitability_score: 80
+    risk_score: 83
+    risk_justification: Command injection via asyncio.subprocess_exec con event de Lambda; taint sin exclusión de literales.
   languages:
   - python
   severity: ERROR

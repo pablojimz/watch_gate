@@ -23,6 +23,11 @@ rules:
     - vuln
     likelihood: HIGH
     impact: LOW
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: CipherSuite debil listado explicitamente en config TLS; constantes exactas.
   languages: [go]
   severity: WARNING
   pattern-either:

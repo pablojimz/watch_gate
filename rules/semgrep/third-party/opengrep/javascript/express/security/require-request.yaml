@@ -22,6 +22,11 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 100
+    confidence_score: 80
+    exploitability_score: 40
+    risk_score: 79
+    risk_justification: Taint req.*->require(), requiere que exista fichero cargable por el atacante.
   languages:
   - javascript
   - typescript

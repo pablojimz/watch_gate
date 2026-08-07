@@ -17,6 +17,11 @@ rules:
       references:
         - https://scikit-learn.org/stable/model_persistence.html
 
+      severity_score: 100
+      confidence_score: 60
+      exploitability_score: 40
+      risk_score: 73
+      risk_justification: joblib.load usa pickle (RCE); excluye solo literal, requiere archivo no confiable.
     patterns:
       - pattern: joblib.load(...)
       - pattern-not: joblib.load("...")

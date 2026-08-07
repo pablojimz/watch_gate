@@ -18,6 +18,11 @@ rules:
     likelihood: HIGH
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 75
+    confidence_score: 30
+    exploitability_score: 80
+    risk_score: 63
+    risk_justification: Net::FTP.$X sin restringir nombre de método; matchea también llamadas benignas como .new.
   message: >-
     Using user input when accessing files is potentially dangerous. A malicious actor could use this to
     modify or access files

@@ -9,8 +9,7 @@ rules:
       params[...]
   - pattern-inside: |
       render :file => ...
-  message: Found request parameters in a call to `render` in a dynamic context. This can allow end users
-    to request arbitrary local files which may result in leaking sensitive information persisted on disk.
+  message: Found request parameters in a call to `render` in a dynamic context. This can allow end users to request arbitrary local files which may result in leaking sensitive information persisted on disk.
   languages:
   - generic
   severity: WARNING
@@ -35,3 +34,8 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 100
+    confidence_score: 60
+    exploitability_score: 80
+    risk_score: 83
+    risk_justification: LFI vía render :file; co-ocurrencia de params[...] dentro del contexto, no dataflow real.

@@ -2,15 +2,14 @@ rules:
 - id: insufficient-rsa-key-size
   patterns:
   - pattern-either:
-    - pattern: cryptography.hazmat.primitives.asymmetric.rsa.generate_private_key(..., key_size=$SIZE,
-        ...)
+    - pattern: cryptography.hazmat.primitives.asymmetric.rsa.generate_private_key(..., key_size=$SIZE, ...)
     - pattern: cryptography.hazmat.primitives.asymmetric.rsa.generate_private_key($EXP, $SIZE, ...)
   - metavariable-comparison:
       metavariable: $SIZE
       comparison: $SIZE < 2048
   - focus-metavariable: $SIZE
-  fix : |
-      2048
+  fix: |
+    2048
   message: >-
     Detected an insufficient key size for RSA. NIST recommends
     a key size of 2048 or higher.
@@ -34,5 +33,10 @@ rules:
     confidence: MEDIUM
     functional-categories:
     - crypto::search::key-length::cryptography
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: key_size<2048 comparación numérica exacta para RSA.
   languages: [python]
   severity: WARNING

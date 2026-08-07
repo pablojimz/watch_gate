@@ -79,6 +79,11 @@ rules:
     - vuln
     likelihood: MEDIUM
     impact: HIGH
+    severity_score: 100
+    confidence_score: 60
+    exploitability_score: 10
+    risk_score: 66
+    risk_justification: Sink es API interna de test de CPython (_testcapi/test.support), prácticamente inalcanzable en código de producción.
   severity: WARNING
   languages:
   - python

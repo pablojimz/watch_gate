@@ -48,5 +48,10 @@ rules:
     likelihood: MEDIUM
     impact: HIGH
     confidence: MEDIUM
+    severity_score: 100
+    confidence_score: 30
+    exploitability_score: 80
+    risk_score: 74
+    risk_justification: Comando OS; fuente incluye CUALQUIER argumento de método (no solo externo), heurística muy amplia.
   severity: WARNING
   languages: [ruby]

@@ -14,6 +14,11 @@ rules:
       technology: [saml]
       references:
         - https://github.com/SAML-Toolkits/ruby-saml/blob/v1.16.0/lib/onelogin/ruby-saml/response.rb
+      severity_score: 100
+      confidence_score: 100
+      exploitability_score: 80
+      risk_score: 95
+      risk_justification: Desactiva validaciones de respuesta SAML; permite forjar/replay de aserciones, bypass de autenticación equivalente a RCE de auth.
     pattern-either:
       - pattern: "OneLogin::RubySaml::Response.new($RESPONSE, {..., skip_audience: true, ...})"
       - pattern: "OneLogin::RubySaml::Response.new($RESPONSE, {..., skip_authnstatement: true, ...})"

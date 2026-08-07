@@ -23,6 +23,11 @@ rules:
     likelihood: LOW
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 50
+    confidence_score: 60
+    exploitability_score: 80
+    risk_score: 60
+    risk_justification: Cipher con CBC/CTR/CFB/OFB sin HMAC inmediato después; puede haber autenticación por otra vía no detectada.
   patterns:
   - pattern-either:
     - patterns:

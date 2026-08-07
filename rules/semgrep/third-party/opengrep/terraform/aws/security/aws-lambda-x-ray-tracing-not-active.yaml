@@ -15,10 +15,7 @@ rules:
         }
         ...
       }
-  message: The AWS Lambda function does not have active X-Ray tracing enabled. X-Ray
-    tracing enables end-to-end debugging and analysis of all function activity. This
-    makes it easier to trace the flow of logs and identify bottlenecks, slow downs
-    and timeouts.
+  message: The AWS Lambda function does not have active X-Ray tracing enabled. X-Ray tracing enables end-to-end debugging and analysis of all function activity. This makes it easier to trace the flow of logs and identify bottlenecks, slow downs and timeouts.
   languages:
   - hcl
   severity: INFO
@@ -40,3 +37,8 @@ rules:
     likelihood: LOW
     impact: LOW
     confidence: MEDIUM
+    severity_score: 25
+    confidence_score: 100
+    exploitability_score: 100
+    risk_score: 66
+    risk_justification: X-Ray tracing inactivo; observabilidad, sin via de explotacion, campo exacto.

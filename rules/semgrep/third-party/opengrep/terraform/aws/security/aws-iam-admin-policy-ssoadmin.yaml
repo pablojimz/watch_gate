@@ -40,5 +40,10 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 75
+    confidence_score: 80
+    exploitability_score: 100
+    risk_score: 83
+    risk_justification: Policy de SSO Admin con Action=* Resource=*; sobre-privilegio severo si se asigna.
   languages: [hcl]
   severity: ERROR

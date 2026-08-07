@@ -22,6 +22,11 @@ rules:
     likelihood: HIGH
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 75
+    confidence_score: 60
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: Taint req.*->concat HTML con sanitizador heurístico basado en nombre de función.
   languages:
   - javascript
   - typescript
@@ -64,14 +69,14 @@ rules:
   - label: CLEAN
     by-side-effect: true
     patterns:
-      - pattern-either:
-          - pattern: $A($SOURCE)
-          - pattern: $SANITIZE. ... .$A($SOURCE)
-          - pattern: $A. ... .$SANITIZE($SOURCE)
-      - focus-metavariable: $SOURCE
-      - metavariable-regex:
-          metavariable: $A
-          regex: (?i)(.*valid|.*sanitiz)
+    - pattern-either:
+      - pattern: $A($SOURCE)
+      - pattern: $SANITIZE. ... .$A($SOURCE)
+      - pattern: $A. ... .$SANITIZE($SOURCE)
+    - focus-metavariable: $SOURCE
+    - metavariable-regex:
+        metavariable: $A
+        regex: (?i)(.*valid|.*sanitiz)
   pattern-sinks:
   - requires: (EXPRESS and not CLEAN) or (EXPRESSTS and not CLEAN)
     patterns:

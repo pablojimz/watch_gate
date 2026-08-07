@@ -31,6 +31,11 @@ rules:
     impact: MEDIUM
     likelihood: MEDIUM
     confidence: MEDIUM
+    severity_score: 75
+    confidence_score: 60
+    exploitability_score: 40
+    risk_score: 62
+    risk_justification: SSRF; solo detecta construcción de URL con host tainted, no confirma uso en llamada de red.
   mode: taint
   pattern-sources:
   - patterns:

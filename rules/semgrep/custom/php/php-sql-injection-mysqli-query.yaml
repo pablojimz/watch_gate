@@ -17,6 +17,11 @@ rules:
         - https://cwe.mitre.org/data/definitions/89.html
         - https://www.php.net/manual/en/mysqli.quickstart.prepared-statements.php
         - https://owasp.org/www-community/attacks/SQL_Injection
+      severity_score: 75
+      confidence_score: 60
+      exploitability_score: 80
+      risk_score: 72
+      risk_justification: "Query concatenada en mysqli/PDO permite SQLi; sin taint tracking, solo excluye literal; ejecucion normal."
     patterns:
       - pattern-either:
           - pattern: mysqli_query($CONN, $QUERY)

@@ -28,5 +28,10 @@ rules:
     likelihood: LOW
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 75
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 84
+    risk_justification: 'FALTA DATO: no se puede verificar contexto web del template; asumo exposición (E alto). Ausencia total de autoescape, detección exacta.'
   languages: [python]
   severity: WARNING

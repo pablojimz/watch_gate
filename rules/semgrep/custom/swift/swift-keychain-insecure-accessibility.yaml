@@ -19,6 +19,11 @@ rules:
       references:
         - https://cwe.mitre.org/data/definitions/522.html
         - https://developer.apple.com/documentation/security/ksecattraccessiblealways
+      severity_score: 50
+      confidence_score: 100
+      exploitability_score: 80
+      risk_score: 72
+      risk_justification: "Nivel de accesibilidad debil del Keychain permite lectura con dispositivo bloqueado o en backups sin cifrar (candado roto); constantes exactas, sin ambiguedad (HIGH); ejecucion normal."
     patterns:
       - pattern-either:
           - pattern: kSecAttrAccessibleAlways

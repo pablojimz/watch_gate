@@ -30,5 +30,10 @@ rules:
     likelihood: LOW
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 25
+    confidence_score: 30
+    exploitability_score: 100
+    risk_score: 45
+    risk_justification: Falta doble cifrado de infraestructura; MySQL ya cifra en reposo por defecto, heuristica amplia.
   languages: [hcl]
   severity: WARNING

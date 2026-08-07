@@ -51,3 +51,8 @@ rules:
     impact: HIGH
     confidence: MEDIUM
 
+    severity_score: 75
+    confidence_score: 100
+    exploitability_score: 40
+    risk_score: 74
+    risk_justification: IMDSv1 habilitado; pivote clasico via SSRF para robar credenciales, requiere cadena adicional (SSRF).

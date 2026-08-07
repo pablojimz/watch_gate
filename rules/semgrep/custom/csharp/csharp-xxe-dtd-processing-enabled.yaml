@@ -19,5 +19,10 @@ rules:
         - https://cwe.mitre.org/data/definitions/611.html
         - https://learn.microsoft.com/en-us/dotnet/standard/data/xml/xml-denial-of-service
         - https://owasp.org/www-community/vulnerabilities/XML_External_Entity_(XXE)_Processing
+      severity_score: 100
+      confidence_score: 100
+      exploitability_score: 80
+      risk_score: 95
+      risk_justification: "DTD habilitado permite lectura arbitraria de archivos/SSRF/DoS (roba dato); patron exacto sobre la constante Parse; ejecucion normal al parsear XML no confiable."
     patterns:
       - pattern: $X.DtdProcessing = DtdProcessing.Parse;

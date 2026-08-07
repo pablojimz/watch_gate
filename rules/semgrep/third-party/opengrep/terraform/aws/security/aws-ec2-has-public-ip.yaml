@@ -39,5 +39,10 @@ rules:
     likelihood: LOW
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 100
+    risk_score: 78
+    risk_justification: IP publica en instancia/launch template; aumenta superficie de exposicion, literal exacto.
   languages: [hcl]
   severity: WARNING

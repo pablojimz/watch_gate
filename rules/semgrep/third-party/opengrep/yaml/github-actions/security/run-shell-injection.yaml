@@ -2,11 +2,7 @@ rules:
 - id: run-shell-injection
   languages:
   - yaml
-  message: 'Using variable interpolation `${{...}}` with `github` context data in a `run:` step could
-    allow an attacker to inject their own code into the runner. This would allow them to steal secrets
-    and code. `github` context data can have arbitrary user input and should be treated as untrusted.
-    Instead, use an intermediate environment variable with `env:` to store the data and use the environment
-    variable in the `run:` script. Be sure to use double-quotes the environment variable, like this: "$ENVVAR".'
+  message: 'Using variable interpolation `${{...}}` with `github` context data in a `run:` step could allow an attacker to inject their own code into the runner. This would allow them to steal secrets and code. `github` context data can have arbitrary user input and should be treated as untrusted. Instead, use an intermediate environment variable with `env:` to store the data and use the environment variable in the `run:` script. Be sure to use double-quotes the environment variable, like this: "$ENVVAR".'
   metadata:
     category: security
     cwe:
@@ -26,6 +22,11 @@ rules:
     likelihood: HIGH
     impact: HIGH
     confidence: HIGH
+    severity_score: 100
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 95
+    risk_justification: Contexto github no confiable interpolado directamente en run:; command injection en runner, patron muy documentado.
   patterns:
   - pattern-inside: 'steps: [...]'
   - pattern-inside: |

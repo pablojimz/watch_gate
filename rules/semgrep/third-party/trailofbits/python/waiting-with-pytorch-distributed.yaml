@@ -15,6 +15,11 @@ rules:
       references:
         - https://pytorch.org/docs/stable/distributed.html#torch.distributed.isend
 
+      severity_score: 25
+      confidence_score: 45
+      exploitability_score: 80
+      risk_score: 45
+      risk_justification: isend/irecv sin wait() es undefined behavior interno en entrenamiento distribuido; no explotable por atacante externo.
     patterns:
       - pattern-either:
           - pattern: $REQ = torch.distributed.irecv(...)

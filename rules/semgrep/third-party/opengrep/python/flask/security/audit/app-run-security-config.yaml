@@ -8,8 +8,7 @@ rules:
       def $X(...):
         ...
   - pattern: app.run(...)
-  message: top-level app.run(...) is ignored by flask. Consider putting app.run(...) behind a guard, like
-    inside a function
+  message: top-level app.run(...) is ignored by flask. Consider putting app.run(...) behind a guard, like inside a function
   metadata:
     cwe:
     - 'CWE-668: Exposure of Resource to Wrong Sphere'
@@ -25,5 +24,10 @@ rules:
     likelihood: LOW
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 25
+    confidence_score: 60
+    exploitability_score: 40
+    risk_score: 39
+    risk_justification: app.run top-level sin guardia; el propio mensaje indica que Flask lo ignora al ejecutar vía CLI, más higiene que vulnerabilidad.
   languages: [python]
   severity: WARNING

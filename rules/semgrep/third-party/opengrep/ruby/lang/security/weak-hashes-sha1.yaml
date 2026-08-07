@@ -21,6 +21,11 @@ rules:
     likelihood: LOW
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 50
+    confidence_score: 30
+    exploitability_score: 80
+    risk_score: 52
+    risk_justification: Uso de SHA1; mismo razonamiento que MD5, uso mayoritario no relacionado con seguridad.
   languages:
   - ruby
   severity: WARNING

@@ -56,3 +56,8 @@ rules:
     likelihood: LOW
     impact: HIGH
     confidence: MEDIUM
+    severity_score: 75
+    confidence_score: 30
+    exploitability_score: 40
+    risk_score: 53
+    risk_justification: Coincidencia sintáctica de parámetro de función reutilizado en query.$SQLFUNC(...), sin taint real ni anclaje a fuente HTTP; más débil que la versión pyramid del mismo patrón.

@@ -28,6 +28,11 @@ rules:
     impact: MEDIUM
     likelihood: MEDIUM
     confidence: MEDIUM
+    severity_score: 75
+    confidence_score: 60
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: Taint request->URL construida con scheme://; SSRF por construcción manual de host.
   mode: taint
   pattern-sinks:
   - patterns:

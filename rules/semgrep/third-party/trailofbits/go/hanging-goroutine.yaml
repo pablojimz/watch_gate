@@ -16,6 +16,11 @@ rules:
       references:
         - https://blog.trailofbits.com/2021/11/08/discovering-goroutine-leaks-with-semgrep
 
+      severity_score: 25
+      confidence_score: 60
+      exploitability_score: 80
+      risk_score: 49
+      risk_justification: Fuga de goroutine/DoS interno; patrón estructural con exclusiones, sin explotación externa demostrada.
     patterns:
       - pattern-either:
           - pattern: |

@@ -20,5 +20,10 @@ rules:
       references:
         - https://cwe.mitre.org/data/definitions/798.html
         - https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_access-keys.html
+      severity_score: 75
+      confidence_score: 100
+      exploitability_score: 100
+      risk_score: 89
+      risk_justification: "Clave de acceso AWS comprometida en cuanto se commitea (secreto se escapa); formato AKIA/ABIA/ACCA/ASIA+16 alfanumericos es practicamente unico (HIGH); exposicion inmediata y permanente."
     patterns:
       - pattern-regex: \b(AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16}\b

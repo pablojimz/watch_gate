@@ -21,6 +21,11 @@ rules:
     likelihood: HIGH
     impact: MEDIUM
     confidence: HIGH
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: Tamaño de clave RSA <2048 vía comparación numérica exacta; debilita cifrado.
   patterns:
   - pattern-either:
     - pattern: OpenSSL::PKey::RSA.generate($SIZE,...)

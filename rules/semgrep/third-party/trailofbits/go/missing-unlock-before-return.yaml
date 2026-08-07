@@ -1,8 +1,7 @@
 rules:
   - id: missing-unlock-before-return
     message: >-
-      Missing mutex unlock (`$T` variable) before returning from a function. 
-      This could result in panics resulting from double lock operations
+      Missing mutex unlock (`$T` variable) before returning from a function.  This could result in panics resulting from double lock operations
     languages: [go]
     severity: ERROR
     metadata:
@@ -18,6 +17,11 @@ rules:
         - https://pkg.go.dev/sync#Mutex
         - https://blog.trailofbits.com/2020/06/09/how-to-check-if-a-mutex-is-locked-in-go/
 
+      severity_score: 25
+      confidence_score: 60
+      exploitability_score: 80
+      risk_score: 49
+      risk_justification: Doble lock/deadlock potencial; bug de fiabilidad, sin RCE.
     patterns:
       - pattern-either:
           - pattern: panic(...)

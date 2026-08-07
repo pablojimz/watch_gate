@@ -19,6 +19,11 @@ rules:
       references:
         - https://lwn.net/Articles/507319/
         - https://g.co/kgs/PCHQjJ
+      severity_score: 75
+      confidence_score: 30
+      exploitability_score: 40
+      risk_score: 53
+      risk_justification: Capturar el retorno de strlcpy/strlcat es justo el patrón recomendado para detectar truncamiento; heurística muy amplia.
     message: >-
       The strlcpy() and strlcat() functions return the total length of the
       string they tried to create. For strlcpy() that means the length of

@@ -25,6 +25,11 @@ rules:
     likelihood: LOW
     impact: MEDIUM
     confidence: HIGH
+    severity_score: 75
+    confidence_score: 100
+    exploitability_score: 100
+    risk_score: 89
+    risk_justification: Secreto HMAC literal sin ambiguedad; expuesto en cada build del codigo fuente.
   languages: [java]
   severity: WARNING
   patterns:

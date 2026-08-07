@@ -19,6 +19,11 @@ rules:
     likelihood: LOW
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 50
+    confidence_score: 60
+    exploitability_score: 40
+    risk_score: 50
+    risk_justification: chmod con bits de grupo/otros write/exec; expone el archivo solo si es sensible y accesible, condición no garantizada.
   message: >-
     These permissions `$BITS` are widely permissive and grant access
     to more people than may be necessary. A good default is `0o644` which

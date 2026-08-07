@@ -2,12 +2,7 @@ rules:
 - id: csv-writer-injection
   languages:
   - python
-  message: Detected user input into a generated CSV file using the built-in `csv` module. If user data
-    is used to generate the data in this file, it is possible that an attacker could inject a formula
-    when the CSV is imported into a spreadsheet application that runs an attacker script, which could
-    steal data from the importing user or, at worst, install malware on the user's computer. `defusedcsv`
-    is a drop-in replacement with the same API that will attempt to mitigate formula injection attempts.
-    You can use `defusedcsv` instead of `csv` to safely generate CSVs.
+  message: Detected user input into a generated CSV file using the built-in `csv` module. If user data is used to generate the data in this file, it is possible that an attacker could inject a formula when the CSV is imported into a spreadsheet application that runs an attacker script, which could steal data from the importing user or, at worst, install malware on the user's computer. `defusedcsv` is a drop-in replacement with the same API that will attempt to mitigate formula injection attempts. You can use `defusedcsv` instead of `csv` to safely generate CSVs.
   metadata:
     category: security
     confidence: MEDIUM
@@ -27,6 +22,11 @@ rules:
     - vuln
     impact: MEDIUM
     likelihood: MEDIUM
+    severity_score: 75
+    confidence_score: 60
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: Formula/CSV injection vía datos de formulario Flask hacia csv.writer.
   mode: taint
   pattern-sinks:
   - patterns:

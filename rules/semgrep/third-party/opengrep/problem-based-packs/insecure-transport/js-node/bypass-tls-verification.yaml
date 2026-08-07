@@ -23,6 +23,11 @@ rules:
     technology:
     - node.js
     vulnerability: Insecure Transport
+    severity_score: 50
+    confidence_score: 60
+    exploitability_score: 80
+    risk_score: 60
+    risk_justification: Env var exacta es precisa, pero alternativa {rejectUnauthorized:false} es objeto suelto sin confirmar uso real en peticion TLS.
   languages:
   - javascript
   - typescript

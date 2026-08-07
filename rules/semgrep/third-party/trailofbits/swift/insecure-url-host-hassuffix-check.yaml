@@ -1,8 +1,7 @@
 rules:
   - id: insecure-url-host-hassuffix-check
     message: >
-      Potentially insecure URL host suffix check. Using hasSuffix("domain.com") without 
-      a leading dot can match unintended domains like "fakedomain.com"
+      Potentially insecure URL host suffix check. Using hasSuffix("domain.com") without  a leading dot can match unintended domains like "fakedomain.com"
     languages: [swift]
     severity: WARNING
     metadata:
@@ -16,6 +15,11 @@ rules:
       references:
         - https://developer.apple.com/documentation/foundation/url/host(percentencoded:)
         - https://developer.apple.com/documentation/foundation/nsstring/hassuffix(_:)
+      severity_score: 50
+      confidence_score: 80
+      exploitability_score: 40
+      risk_score: 56
+      risk_justification: 'FALTA DATO: no se sabe si el check de host protege una decisión de seguridad; se asume que sí. hasSuffix sin punto permite bypass de allowlist de dominio.'
     pattern-either:
       # Pattern 1: Any .host property followed by hasSuffix
       - patterns:

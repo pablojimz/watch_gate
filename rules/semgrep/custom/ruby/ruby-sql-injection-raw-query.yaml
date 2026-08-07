@@ -18,6 +18,11 @@ rules:
         - https://cwe.mitre.org/data/definitions/89.html
         - https://guides.rubyonrails.org/security.html#sql-injection
         - https://rails-sqli.org/
+      severity_score: 75
+      confidence_score: 60
+      exploitability_score: 80
+      risk_score: 72
+      risk_justification: "Interpolacion en metodos raw de ActiveRecord permite SQLi; deteccion sintactica sin taint tracking; ejecucion normal."
     patterns:
       - pattern-either:
           - pattern: $MODEL.where("...#{$X}...")

@@ -21,10 +21,13 @@ rules:
         - https://www.sei.cmu.edu/downloads/sei-cert-c-coding-standard-2016-v01.pdf
         - https://docs.microsoft.com/en-us/cpp/sanitizers/asan-error-examples
         - https://dustri.org/b/playing-with-weggli.html
+      severity_score: 100
+      confidence_score: 60
+      exploitability_score: 80
+      risk_score: 83
+      risk_justification: free() duplicado sin reasignación intermedia; corrupción de memoria clásica y explotable.
     message: >-
-      The software calls free() twice on the same memory address, potentially 
-      leading to memory corruption. This corruption can cause the program to 
-      crash or cause two later calls to malloc() to return the same pointer.
+      The software calls free() twice on the same memory address, potentially  leading to memory corruption. This corruption can cause the program to  crash or cause two later calls to malloc() to return the same pointer.
     severity: ERROR
     languages:
       - c

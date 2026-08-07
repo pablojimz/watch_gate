@@ -28,5 +28,10 @@ rules:
     likelihood: LOW
     impact: MEDIUM
     confidence: HIGH
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 100
+    risk_score: 78
+    risk_justification: min_tls_version distinto de 1.2 explicito; exclusion de literal exacta.
   languages: [hcl]
   severity: ERROR

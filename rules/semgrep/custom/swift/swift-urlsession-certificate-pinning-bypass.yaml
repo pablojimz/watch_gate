@@ -21,5 +21,10 @@ rules:
         - https://cwe.mitre.org/data/definitions/295.html
         - https://developer.apple.com/documentation/foundation/urlsessiondelegate/urlsession(_:didreceive:completionhandler:)
         - https://owasp.org/www-community/controls/Certificate_and_Public_Key_Pinning
+      severity_score: 50
+      confidence_score: 60
+      exploitability_score: 80
+      risk_score: 60
+      risk_justification: "Confianza incondicional en el certificado del servidor permite MITM (TLS apagado); patron literal muy especifico, variantes de bypass no capturadas (MEDIUM); ejecucion normal."
     patterns:
       - pattern: 'completionHandler(.useCredential, URLCredential(trust: challenge.protectionSpace.serverTrust!))'

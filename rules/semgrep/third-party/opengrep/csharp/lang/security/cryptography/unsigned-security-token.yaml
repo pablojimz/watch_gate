@@ -7,8 +7,7 @@ rules:
         ...
       }
   fix: RequireSignedTokens = true
-  message: Accepting unsigned security tokens as valid security tokens allows an attacker to remove its
-    signature and potentially forge an identity. As a fix, set RequireSignedTokens to be true.
+  message: Accepting unsigned security tokens as valid security tokens allows an attacker to remove its signature and potentially forge an identity. As a fix, set RequireSignedTokens to be true.
   metadata:
     category: security
     technology:
@@ -26,6 +25,11 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 100
+    confidence_score: 100
+    exploitability_score: 100
+    risk_score: 100
+    risk_justification: Acepta tokens sin firma; permite forjar identidad/admin arbitrariamente, literal exacto.
   languages:
   - csharp
   severity: ERROR

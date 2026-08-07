@@ -18,6 +18,11 @@ rules:
       references:
         - https://cwe.mitre.org/data/definitions/1022.html
         - https://developer.mozilla.org/en-US/docs/Web/HTML/Attributes/rel/noopener
+      severity_score: 50
+      confidence_score: 60
+      exploitability_score: 80
+      risk_score: 60
+      risk_justification: "Reverse tabnabbing habilita phishing manipulando la pestana origen; no filtra si el enlace es realmente externo/no confiable; se activa con cada click en ejecucion normal."
     patterns:
       - pattern: <a ... target="_blank" ... ></a>
       - pattern-not: <a ... rel="noopener noreferrer" ... ></a>

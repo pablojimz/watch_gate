@@ -19,6 +19,11 @@ rules:
       references:
         - https://cwe.mitre.org/data/definitions/330.html
         - https://learn.microsoft.com/en-us/dotnet/api/system.security.cryptography.randomnumbergenerator
+      severity_score: 50
+      confidence_score: 60
+      exploitability_score: 80
+      risk_score: 60
+      risk_justification: "System.Random es predecible para tokens de seguridad (candado debil); heuristica de nombre de variable via regex; se usa en ejecucion normal."
     patterns:
       - pattern-either:
           - pattern: $TYPE $TOKEN = new Random(...).Next(...);

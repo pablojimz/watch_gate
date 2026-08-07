@@ -8,8 +8,7 @@ rules:
       or DELETE. The risk of a user selecting the 'Always Allow' button is that
       the agent could perform unintended actions on behalf of the user. When
       working with sensitive functionality, it is always best to include a Human
-      In The Loop (HITL) type of control. Consider the trade-off between security 
-      and user friction and then make a risk-based decision about this function.
+      In The Loop (HITL) type of control. Consider the trade-off between security  and user friction and then make a risk-based decision about this function.
     severity: WARNING
     pattern-either:
       - pattern-inside: |
@@ -46,3 +45,8 @@ rules:
         - https://platform.openai.com/docs/actions/consequential-flag
         - https://owasp.org/Top10/A04_2021-Insecure_Design/
         - https://owasp.org/www-project-top-10-for-large-language-model-applications/assets/PDF/OWASP-Top-10-for-LLMs-2023-v1_1.pdf
+      severity_score: 50
+      confidence_score: 100
+      exploitability_score: 100
+      risk_score: 78
+      risk_justification: x-openai-isConsequential:false literal en metodo mutante (POST/PUT/PATCH/DELETE); debilita control humano, no es explotacion en si misma.

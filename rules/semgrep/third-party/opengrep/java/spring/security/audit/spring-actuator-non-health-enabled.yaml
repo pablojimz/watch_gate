@@ -5,8 +5,7 @@ rules:
   - metavariable-comparison:
       metavariable: $...ACTUATORS
       comparison: not str($...ACTUATORS) in ["health","*"]
-  message: Spring Boot Actuators "$...ACTUATORS" are enabled. Depending on the actuators, this can pose
-    a significant security risk. Please double-check if the actuators are needed and properly secured.
+  message: Spring Boot Actuators "$...ACTUATORS" are enabled. Depending on the actuators, this can pose a significant security risk. Please double-check if the actuators are needed and properly secured.
   severity: WARNING
   languages:
   - generic
@@ -31,3 +30,8 @@ rules:
     likelihood: MEDIUM
     impact: HIGH
     confidence: MEDIUM
+    severity_score: "62.5"
+    confidence_score: 30
+    exploitability_score: 100
+    risk_score: 62
+    risk_justification: Mismo caso que variante yaml; mezcla endpoints leves y graves. FALTA DATO proteccion adicional, asumo ausente.

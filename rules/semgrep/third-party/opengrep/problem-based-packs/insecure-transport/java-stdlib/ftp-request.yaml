@@ -19,6 +19,11 @@ rules:
     technology:
     - java
     vulnerability: Insecure Transport
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: Uso de FTPClient.connect (clase dedicada a FTP) o URL literal ftp://.
   languages:
   - java
   fix-regex:

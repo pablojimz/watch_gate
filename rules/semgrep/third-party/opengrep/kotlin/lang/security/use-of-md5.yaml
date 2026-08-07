@@ -1,7 +1,6 @@
 rules:
 - id: use-of-md5
-  message: Detected MD5 hash algorithm which is considered insecure. MD5 is not collision resistant and
-    is therefore not suitable as a cryptographic signature. Use SHA256 or SHA3 instead.
+  message: Detected MD5 hash algorithm which is considered insecure. MD5 is not collision resistant and is therefore not suitable as a cryptographic signature. Use SHA256 or SHA3 instead.
   languages:
   - kt
   severity: WARNING
@@ -23,6 +22,11 @@ rules:
     likelihood: LOW
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: Algoritmo MD5 por nombre exacto.
   pattern-either:
   - pattern: |
       $VAR = $MD.getInstance("MD5")

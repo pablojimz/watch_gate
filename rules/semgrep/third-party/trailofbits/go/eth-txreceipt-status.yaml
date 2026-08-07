@@ -1,8 +1,7 @@
 rules:
   - id: eth-txreceipt-status
     message: >-
-      A transaction receipt's status is inspected using `$RECEIVER.Status()`. For bridges and exchanges, this is a high-risk pattern because even though the transaction was successful, calls within the transaction may have failed. Review the related code to ensure the following properties: 
-      1. The receipt's success is not being used as a verification measure.
+      A transaction receipt's status is inspected using `$RECEIVER.Status()`. For bridges and exchanges, this is a high-risk pattern because even though the transaction was successful, calls within the transaction may have failed. Review the related code to ensure the following properties:  1. The receipt's success is not being used as a verification measure.
       2. The transaction being inspected is from a finalized block.
     severity: WARNING
     languages: [go]
@@ -18,6 +17,11 @@ rules:
       references:
         - https://blog.trailofbits.com/2023/08/23/the-engineers-guide-to-blockchain-finality/
 
+      severity_score: 25
+      confidence_score: 30
+      exploitability_score: 40
+      risk_score: 30
+      risk_justification: Solo detecta lectura de campo Status; requiere uso posterior inseguro no verificado por el patrón.
     patterns:
       - pattern-inside: |
           import "github.com/ethereum/go-ethereum/core/types"

@@ -2,40 +2,37 @@ rules:
 - id: avoid-sqlalchemy-text
   mode: taint
   pattern-sinks:
-    - pattern: |
-        sqlalchemy.text(...)
+  - pattern: |
+      sqlalchemy.text(...)
   pattern-sources:
-    - patterns:
-        - pattern: |
-            $X + $Y
-        - metavariable-type:
-            metavariable: $X
-            type: string
-    - patterns:
-        - pattern: |
-            $X + $Y
-        - metavariable-type:
-            metavariable: $Y
-            type: string
-    - patterns:
-        - pattern: |
-            f"..."
-    - patterns:
-        - pattern: |
-            $X.format(...)
-        - metavariable-type:
-            metavariable: $X
-            type: string
-    - patterns:
-        - pattern: |
-            $X % $Y
-        - metavariable-type:
-            metavariable: $X
-            type: string
-  message: sqlalchemy.text passes the constructed SQL statement to the database mostly unchanged. This
-    means that the usual SQL injection protections are not applied and this function is vulnerable to
-    SQL injection if user input can reach here. Use normal SQLAlchemy operators (such as or_, and_, etc.)
-    to construct SQL.
+  - patterns:
+    - pattern: |
+        $X + $Y
+    - metavariable-type:
+        metavariable: $X
+        type: string
+  - patterns:
+    - pattern: |
+        $X + $Y
+    - metavariable-type:
+        metavariable: $Y
+        type: string
+  - patterns:
+    - pattern: |
+        f"..."
+  - patterns:
+    - pattern: |
+        $X.format(...)
+    - metavariable-type:
+        metavariable: $X
+        type: string
+  - patterns:
+    - pattern: |
+        $X % $Y
+    - metavariable-type:
+        metavariable: $X
+        type: string
+  message: sqlalchemy.text passes the constructed SQL statement to the database mostly unchanged. This means that the usual SQL injection protections are not applied and this function is vulnerable to SQL injection if user input can reach here. Use normal SQLAlchemy operators (such as or_, and_, etc.) to construct SQL.
   metadata:
     owasp:
     - A01:2017 - Injection
@@ -54,6 +51,11 @@ rules:
     - audit
     likelihood: LOW
     impact: LOW
+    severity_score: 75
+    confidence_score: 30
+    exploitability_score: 80
+    risk_score: 63
+    risk_justification: Cualquier concatenación/f-string/format hacia sqlalchemy.text, sin relación con fuente externa real (no es taint desde request).
   languages:
   - python
   severity: ERROR

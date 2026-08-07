@@ -20,6 +20,11 @@ rules:
         - https://cwe.mitre.org/data/definitions/502.html
         - https://learn.microsoft.com/en-us/dotnet/standard/serialization/binaryformatter-security-guide
         - https://learn.microsoft.com/en-us/dotnet/fundamentals/runtime-libraries/system-runtime-serialization-formatters-binary-binaryformatter
+      severity_score: 100
+      confidence_score: 100
+      exploitability_score: 80
+      risk_score: 95
+      risk_justification: "BinaryFormatter.Deserialize es peligroso por diseno, sin caso de uso seguro (MS lo elimino); patron inequivoco; ejecucion normal."
     patterns:
       - pattern-either:
           - pattern: new BinaryFormatter(...).Deserialize(...)

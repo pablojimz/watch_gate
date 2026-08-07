@@ -37,5 +37,10 @@ rules:
     - vuln
     likelihood: MEDIUM
     impact: MEDIUM
+    severity_score: 100
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 95
+    risk_justification: assert() con input real de $_GET/POST/etc equivale a eval; sink exacto sin literal.
   languages: [php]
   severity: ERROR

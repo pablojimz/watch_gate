@@ -13,4 +13,9 @@ rules:
       impact: HIGH
       references:
         - https://www.mongodb.com/docs/drivers/java/sync/current/fundamentals/connection/tls/#disable-hostname-verification
+      severity_score: 50
+      confidence_score: 100
+      exploitability_score: 80
+      risk_score: 72
+      risk_justification: invalidHostNameAllowed(true) deshabilita verificación TLS de host; función y literal exactos.
     pattern: $SETTINGS.invalidHostNameAllowed(true)

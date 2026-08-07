@@ -126,6 +126,11 @@ rules:
     - vuln
     likelihood: MEDIUM
     impact: HIGH
+    severity_score: 100
+    confidence_score: 60
+    exploitability_score: 10
+    risk_score: 66
+    risk_justification: _xxsubinterpreters interno de test, prácticamente inalcanzable en apps reales.
   severity: WARNING
   languages:
   - python

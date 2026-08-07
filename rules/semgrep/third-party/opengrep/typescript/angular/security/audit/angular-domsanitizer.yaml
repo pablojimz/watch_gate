@@ -27,18 +27,23 @@ rules:
     - vuln
     likelihood: LOW
     impact: MEDIUM
+    severity_score: 75
+    confidence_score: 30
+    exploitability_score: 40
+    risk_score: 53
+    risk_justification: 'Fuente: cualquier parámetro string de función, no necesariamente input no confiable.'
   languages:
   - typescript
   severity: WARNING
   mode: taint
   pattern-sources:
-    - patterns:
-        - pattern-either:
-            - pattern-inside: |
-                function ...({..., $X: string, ...}) { ... }
-            - pattern-inside: |
-                function ...(..., $X: string, ...) { ... }
-        - focus-metavariable: $X
+  - patterns:
+    - pattern-either:
+      - pattern-inside: |
+          function ...({..., $X: string, ...}) { ... }
+      - pattern-inside: |
+          function ...(..., $X: string, ...) { ... }
+    - focus-metavariable: $X
   pattern-sinks:
   - patterns:
     - pattern-either:

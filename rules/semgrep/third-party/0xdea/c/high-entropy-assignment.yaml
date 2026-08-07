@@ -19,6 +19,11 @@ rules:
       references:
         - https://semgrep.dev/docs/writing-rules/metavariable-analysis
         - https://github.com/semgrep/semgrep/pull/4672
+      severity_score: 75
+      confidence_score: 30
+      exploitability_score: 100
+      risk_score: 68
+      risk_justification: Heurística de entropía sobre cualquier literal; secreto hardcodeado queda expuesto en fuente permanentemente.
     message: >-
       Entropy, or randomness, is a common approach for detecting secret
       strings. If an assignment has high entropy, it might involve a

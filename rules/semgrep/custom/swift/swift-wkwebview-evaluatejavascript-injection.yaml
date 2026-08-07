@@ -20,6 +20,11 @@ rules:
         - https://cwe.mitre.org/data/definitions/79.html
         - https://developer.apple.com/documentation/webkit/wkwebview/evaluatejavascript(_:completionhandler:)
         - https://owasp.org/www-community/attacks/xss/
+      severity_score: 75
+      confidence_score: 60
+      exploitability_score: 80
+      risk_score: 72
+      risk_justification: "Interpolacion en evaluateJavaScript permite inyeccion de JS en el contexto de la pagina, exfiltracion de cookies/tokens o llamada a bridges nativos; sin taint tracking, solo excluye literal; ejecucion normal."
     patterns:
       - pattern: $WEBVIEW.evaluateJavaScript($SCRIPT, ...)
       - pattern-not: $WEBVIEW.evaluateJavaScript("...", ...)

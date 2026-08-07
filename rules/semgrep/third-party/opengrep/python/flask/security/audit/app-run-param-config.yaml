@@ -16,6 +16,11 @@ rules:
     likelihood: HIGH
     impact: MEDIUM
     confidence: HIGH
+    severity_score: 50
+    confidence_score: 30
+    exploitability_score: 80
+    risk_score: 52
+    risk_justification: 'FALTA DATO: no se sabe si el entorno de despliegue expone la red; asumo exposición (E alto). host=0.0.0.0 es patrón común y legítimo en contenedores, baja confianza de que sea un fallo real.'
   languages: [python]
   severity: WARNING
   pattern-either:

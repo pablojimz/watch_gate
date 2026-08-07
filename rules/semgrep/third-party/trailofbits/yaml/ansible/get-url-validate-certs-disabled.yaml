@@ -14,6 +14,11 @@ rules:
       references:
         - https://docs.ansible.com/ansible/latest/collections/ansible/builtin/get_url_module.html#parameter-validate_certs
         - https://docs.ansible.com/ansible/latest/collections/ansible/windows/win_get_url_module.html#parameter-validate_certs
+      severity_score: 75
+      confidence_score: 100
+      exploitability_score: 100
+      risk_score: 89
+      risk_justification: TLS no verificado en descarga genérica sin checksum; mismo razonamiento que unencrypted-url.
     patterns:
       - pattern-inside: |
           $GETURL:

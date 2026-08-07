@@ -18,6 +18,11 @@ rules:
       references:
         - https://cwe.mitre.org/data/definitions/98.html
         - https://owasp.org/www-community/vulnerabilities/PHP_File_Inclusion
+      severity_score: 100
+      confidence_score: 60
+      exploitability_score: 80
+      risk_score: 83
+      risk_justification: "include/require con ruta no literal permite LFI/RFI y RCE; sin taint tracking, solo excluye literal; ejecucion normal."
     patterns:
       - pattern-either:
           - pattern: include $PATH;

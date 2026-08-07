@@ -25,6 +25,11 @@ rules:
     likelihood: LOW
     impact: LOW
     confidence: MEDIUM
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: check_origin==False exacto, deshabilitado por vista.
   severity: WARNING
   languages:
   - python

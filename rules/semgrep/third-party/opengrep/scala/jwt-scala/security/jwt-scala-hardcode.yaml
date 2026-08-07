@@ -81,3 +81,8 @@ rules:
     - vuln
     likelihood: MEDIUM
     impact: MEDIUM
+    severity_score: 75
+    confidence_score: 100
+    exploitability_score: 100
+    risk_score: 89
+    risk_justification: Secreto/clave JWT hardcodeado literal; excluye claves dinámicas, expuesto en código fuente siempre.

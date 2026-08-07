@@ -1,23 +1,27 @@
 rules:
- -
-    id: erc777-reentrancy
+  - id: erc777-reentrancy
     message: ERC777 tokensReceived() reentrancy
     metadata:
-        category: security
-        technology:
-          - solidity
-        cwe: "CWE-841: Improper Enforcement of Behavioral Workflow"
-        confidence: HIGH
-        likelihood: LOW
-        impact: HIGH
-        subcategory:
-            - vuln
-        references:
+      category: security
+      technology:
+        - solidity
+      cwe: "CWE-841: Improper Enforcement of Behavioral Workflow"
+      confidence: HIGH
+      likelihood: LOW
+      impact: HIGH
+      subcategory:
+        - vuln
+      references:
         - https://mirror.xyz/baconcoin.eth/LHaPiX38mnx8eJ2RVKNXHttHfweQMKNGmEnX4KUksk0
         - https://etherscan.io/address/0xf53f00f844b381963a47fde3325011566870b31f
+      severity_score: 100
+      confidence_score: 30
+      exploitability_score: 80
+      risk_score: 74
+      risk_justification: Solo detecta llamada a tokensReceived sin verificar orden CEI; heurística muy amplia, coincide con uso normal.
     patterns:
-    - pattern: $X.tokensReceived(...);
-    languages: 
-    - solidity
+      - pattern: $X.tokensReceived(...);
+    languages:
+      - solidity
     severity: WARNING
 

@@ -18,6 +18,11 @@ rules:
     confidence: MEDIUM
     references:
     - https://owasp.org/Top10/A08_2021-Software_and_Data_Integrity_Failures
+    severity_score: 75
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 84
+    risk_justification: postMessage(...,'*') literal exacto, expone datos a cualquier origen.
   languages:
   - javascript
   - typescript

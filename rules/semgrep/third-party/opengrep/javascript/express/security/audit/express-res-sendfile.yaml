@@ -1,9 +1,6 @@
 rules:
 - id: express-res-sendfile
-  message: The application processes user-input, this is passed to res.sendFile which can allow an attacker
-    to arbitrarily read files on the system through path traversal. It is recommended to perform input
-    validation in addition to canonicalizing the path. This allows you to validate the path against the
-    intended directory it should be accessing.
+  message: The application processes user-input, this is passed to res.sendFile which can allow an attacker to arbitrarily read files on the system through path traversal. It is recommended to perform input validation in addition to canonicalizing the path. This allows you to validate the path against the intended directory it should be accessing.
   metadata:
     references:
     - https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html
@@ -19,6 +16,11 @@ rules:
     likelihood: HIGH
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 100
+    confidence_score: 80
+    exploitability_score: 80
+    risk_score: 89
+    risk_justification: Taint req.*->res.sendFile sin opciones de restricción de root, LFI.
   languages:
   - javascript
   - typescript

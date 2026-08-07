@@ -6,29 +6,34 @@ rules:
     message: Visualforce Pages must use API version 55 or higher for required use of the cspHeader attribute set to true.
     metadata:
       cwe:
-      - "CWE-79: Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')"
+        - "CWE-79: Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')"
       owasp:
-      - A07:2017 - Cross-Site Scripting (XSS)
-      - A03:2021 - Injection
+        - A07:2017 - Cross-Site Scripting (XSS)
+        - A03:2021 - Injection
       references:
-      - https://developer.salesforce.com/docs/atlas.en-us.api_meta.meta/api_meta/meta_pages.htm
+        - https://developer.salesforce.com/docs/atlas.en-us.api_meta.meta/api_meta/meta_pages.htm
       category: security
       subcategory:
-      - vuln
+        - vuln
       technology:
-      - salesforce
-      - visualforce
+        - salesforce
+        - visualforce
       cwe2022-top25: true
       cwe2021-top25: true
       likelihood: HIGH
       impact: MEDIUM
       confidence: HIGH
+      severity_score: 25
+      confidence_score: 100
+      exploitability_score: 100
+      risk_score: 66
+      risk_justification: API version <55 impide usar cspHeader; hallazgo de config/higiene, regex numérica exacta.
     patterns:
       - pattern-inside: <apiVersion.../apiVersion>
       - pattern-either:
-        - pattern-regex: '[>][0-9].[0-9][<]'
-        - pattern-regex: '[>][1-4][0-9].[0-9][<]'
-        - pattern-regex: '[>][5][0-4].[0-9][<]'
+          - pattern-regex: '[>][0-9].[0-9][<]'
+          - pattern-regex: '[>][1-4][0-9].[0-9][<]'
+          - pattern-regex: '[>][5][0-4].[0-9][<]'
     paths:
       include:
         - "*.page-meta.xml"

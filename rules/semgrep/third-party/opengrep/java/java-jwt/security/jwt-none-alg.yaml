@@ -23,6 +23,11 @@ rules:
     - vuln
     likelihood: HIGH
     impact: MEDIUM
+    severity_score: 100
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 95
+    risk_justification: Algorithm.none() es forja total de token, funcion exacta sin uso legitimo.
   languages: [java]
   severity: ERROR
   pattern-either:

@@ -107,5 +107,10 @@ rules:
     - vuln
     likelihood: MEDIUM
     impact: HIGH
+    severity_score: 100
+    confidence_score: 60
+    exploitability_score: 40
+    risk_score: 73
+    risk_justification: Taint env/argv->os.spawn*; RCE, misma reserva sobre el origen del dato.
   languages: [python]
   severity: ERROR

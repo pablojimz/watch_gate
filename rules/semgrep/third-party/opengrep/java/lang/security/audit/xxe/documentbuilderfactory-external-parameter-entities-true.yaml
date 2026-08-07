@@ -27,6 +27,11 @@ rules:
     likelihood: LOW
     impact: HIGH
     confidence: HIGH
+    severity_score: 100
+    confidence_score: 100
+    exploitability_score: 40
+    risk_score: 85
+    risk_justification: setFeature(...,true) literal explicito; requiere XML externo no confiable.
   message: >-
     External entities are allowed for $DBFACTORY.
     This is vulnerable to XML external entity attacks. Disable this by setting the feature "http://xml.org/sax/features/external-parameter-entities"

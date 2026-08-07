@@ -24,6 +24,11 @@ rules:
     technology:
     - ios
     - macos
+    severity_score: 50
+    confidence_score: 30
+    exploitability_score: 80
+    risk_score: 52
+    risk_justification: Heurística por nombre de variable/clave (password, apikey, etc.), no confirma sensibilidad real del valor.
   languages:
   - swift
   options:

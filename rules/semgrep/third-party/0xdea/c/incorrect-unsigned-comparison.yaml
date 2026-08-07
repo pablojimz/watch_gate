@@ -18,6 +18,11 @@ rules:
         - A10:2025 - Mishandling of Exceptional Conditions
       references:
         - https://g.co/kgs/PCHQjJ
+      severity_score: 25
+      confidence_score: 100
+      exploitability_score: 80
+      risk_score: 61
+      risk_justification: Comparación siempre falsa/verdadera en tipo unsigned; bug lógico sin vía de explotación, patrón exacto.
     message: >-
       Checking if an unsigned variable is negative makes no sense and is
       usually a good indication that something is probably wrong with the

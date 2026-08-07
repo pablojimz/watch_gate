@@ -21,6 +21,11 @@ rules:
         - https://cwe.mitre.org/data/definitions/502.html
         - https://owasp.org/www-community/vulnerabilities/PHP_Object_Injection
         - https://www.php.net/manual/en/function.unserialize.php
+      severity_score: 100
+      confidence_score: 60
+      exploitability_score: 80
+      risk_score: 83
+      risk_justification: "unserialize() sobre dato no literal permite RCE via POP chain si hay gadget class autoloadable; sin verificar origen del dato ni presencia real de gadgets; ejecucion normal."
     patterns:
       - pattern: unserialize($DATA)
       - pattern-not: unserialize("...")

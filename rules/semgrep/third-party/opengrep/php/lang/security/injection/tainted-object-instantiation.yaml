@@ -3,8 +3,7 @@ rules:
   languages:
   - php
   severity: WARNING
-  message: <- A new object is created where the class name is based on user input. This could lead to
-    remote code execution, as it allows to instantiate any class in the application.
+  message: <- A new object is created where the class name is based on user input. This could lead to remote code execution, as it allows to instantiate any class in the application.
   metadata:
     cwe:
     - "CWE-470: Use of Externally-Controlled Input to Select Classes or Code ('Unsafe Reflection')"
@@ -20,6 +19,11 @@ rules:
     impact: MEDIUM
     likelihood: MEDIUM
     confidence: MEDIUM
+    severity_score: "87.5"
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 89
+    risk_justification: Clase instanciada con nombre controlado por atacante; RCE si existe gadget disponible.
   mode: taint
   pattern-sources:
   - patterns:

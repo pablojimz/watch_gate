@@ -22,11 +22,13 @@ rules:
         - https://dustri.org/b/playing-with-weggli.html
         - https://mastodon.gamedev.place/@amonakov/111577826195014479
         - https://github.com/semgrep/semgrep/issues/11327
+      severity_score: 75
+      confidence_score: 60
+      exploitability_score: 80
+      risk_score: 72
+      risk_justification: sizeof sobre puntero da wordsize; posible cálculo erróneo de tamaño de buffer, no confirma uso en alloc/copy.
     message: >-
-      The code calls sizeof() on a pointer type, which always returns 
-      the wordsize (8 on 64-bit architectures). This can produce an 
-      unexpected result if the programmer intended to determine how 
-      much memory has been allocated.
+      The code calls sizeof() on a pointer type, which always returns  the wordsize (8 on 64-bit architectures). This can produce an  unexpected result if the programmer intended to determine how  much memory has been allocated.
     severity: WARNING
     languages:
       - c

@@ -17,6 +17,11 @@ rules:
         - https://securitylabs.datadoghq.com/articles/exploring-github-to-aws-keyless-authentication-flaws/
         - https://www.rezonate.io/blog/github-misconfigurations-put-gcp-aws-in-account-takeover-risk
         - https://github.com/Rezonate-io/github-oidc-checker/
+      severity_score: 100
+      confidence_score: 100
+      exploitability_score: 100
+      risk_score: 100
+      risk_justification: Falta condición `sub`; cualquier repo GitHub puede asumir el rol AWS, bypass total de autorización.
     patterns:
       - pattern-inside: |
           {

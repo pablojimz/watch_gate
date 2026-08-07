@@ -18,6 +18,11 @@ rules:
         - A08:2025 - Software or Data Integrity Failures
       references:
         - https://github.com/googleprojectzero/weggli
+      severity_score: 25
+      confidence_score: 30
+      exploitability_score: 80
+      risk_score: 40
+      risk_justification: Enumeración amplia de escrituras a buffers de pila (subcategory audit, severity INFO); no vulnerabilidad confirmada.
     message: >-
       The software directly writes into a stack buffer. This might lead to
       a stack-based buffer overflow.

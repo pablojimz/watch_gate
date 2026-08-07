@@ -14,14 +14,14 @@ rules:
     pattern-sinks:
       - patterns:
           - pattern-either:
-            - patterns:
-              - pattern: |
-                  new $PATTERN($CMD,...)
-              - focus-metavariable: $CMD
-            - patterns:
-              - pattern: |
-                  $CMD.$PATTERN = $VALUE;
-              - focus-metavariable: $VALUE
+              - patterns:
+                  - pattern: |
+                      new $PATTERN($CMD,...)
+                  - focus-metavariable: $CMD
+              - patterns:
+                  - pattern: |
+                      $CMD.$PATTERN = $VALUE;
+                  - focus-metavariable: $VALUE
           - metavariable-regex:
               metavariable: $PATTERN
               regex: ^(SqlCommand|CommandText|OleDbCommand|OdbcCommand|OracleCommand)$
@@ -32,10 +32,7 @@ rules:
           - pattern: |
               $CMD.Parameters[$IDX] = ...
         by-side-effect: true
-    message: Detected a formatted string in a SQL statement. This could lead to SQL
-      injection if variables in the SQL statement are not properly sanitized.
-      Use a prepared statements instead. You can obtain a PreparedStatement
-      using 'SqlCommand' and 'SqlParameter'.
+    message: Detected a formatted string in a SQL statement. This could lead to SQL injection if variables in the SQL statement are not properly sanitized. Use a prepared statements instead. You can obtain a PreparedStatement using 'SqlCommand' and 'SqlParameter'.
     metadata:
       category: security
       technology:
@@ -44,8 +41,7 @@ rules:
         - A01:2017 - Injection
         - A03:2021 - Injection
       cwe:
-        - "CWE-89: Improper Neutralization of Special Elements used in an SQL
-          Command ('SQL Injection')"
+        - "CWE-89: Improper Neutralization of Special Elements used in an SQL Command ('SQL Injection')"
       confidence: MEDIUM
       references:
         - https://owasp.org/Top10/A03_2021-Injection
@@ -55,6 +51,11 @@ rules:
         - audit
       likelihood: LOW
       impact: HIGH
+      severity_score: 75
+      confidence_score: 60
+      exploitability_score: 40
+      risk_score: 62
+      risk_justification: Taint hacia SqlCommand/CommandText; fuente es cualquier string param, sin taint real a HTTP.
     languages:
       - csharp
     severity: ERROR

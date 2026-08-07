@@ -30,6 +30,11 @@ rules:
     - audit
     likelihood: LOW
     impact: MEDIUM
+    severity_score: 75
+    confidence_score: 30
+    exploitability_score: 40
+    risk_score: 53
+    risk_justification: proxy_pass con host dinámico; heurística amplia sobre cualquier variable nginx, no distingue variables internas seguras.
   pattern-either:
   - pattern: proxy_pass $SCHEME://$$HOST ...;
   - pattern: proxy_pass $$SCHEME://$$HOST ...;

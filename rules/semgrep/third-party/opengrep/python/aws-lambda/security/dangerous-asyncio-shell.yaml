@@ -46,6 +46,11 @@ rules:
     likelihood: HIGH
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 100
+    confidence_score: 60
+    exploitability_score: 80
+    risk_score: 83
+    risk_justification: Shell injection asyncio con event; mismo patrón taint genérico sin sanitizers.
   languages:
   - python
   severity: ERROR

@@ -4,8 +4,7 @@ rules:
     User controllable data `$REQ` enters `$RES.render(...)` this can lead to the loading
     of other HTML/templating pages that they may not be authorized to render. An attacker
     may attempt to use directory traversal techniques e.g. `../folder/index` to access other
-    HTML pages on the file system. Where possible, do not allow users to define what should be 
-    loaded in $RES.render or use an allow list for the existing application.
+    HTML pages on the file system. Where possible, do not allow users to define what should be  loaded in $RES.render or use an allow list for the existing application.
   options:
     interfile: true
   metadata:
@@ -24,6 +23,11 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 100
+    confidence_score: 80
+    exploitability_score: 80
+    risk_score: 89
+    risk_justification: Taint req.*->res.render nombre de plantilla, path traversal a ficheros locales.
   languages:
   - javascript
   - typescript

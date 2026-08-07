@@ -15,6 +15,11 @@ rules:
       references:
         - https://blog.trailofbits.com/2019/11/07/attacking-go-vr-ttps/
 
+      severity_score: 25
+      confidence_score: 45
+      exploitability_score: 80
+      risk_score: 45
+      risk_justification: Heurística genérica de nil-check tras llamada; posible panic, patrón amplio ($FOO.$BAR cualquiera).
     patterns:
       - pattern-either:
           - pattern: |

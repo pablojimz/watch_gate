@@ -26,6 +26,11 @@ rules:
     likelihood: HIGH
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 75
+    confidence_score: 60
+    exploitability_score: 60
+    risk_score: 67
+    risk_justification: 'Fuente mixta: HttpServletRequest (externa) o cualquier parametro anotado (no confirmado externo); punto medio.'
   options:
     taint_assume_safe_numbers: true
     taint_assume_safe_booleans: true
@@ -61,12 +66,12 @@ rules:
     label: CONCAT
     requires: INPUT
   pattern-propagators:
-    - pattern: (StringBuffer $S).append($X)
-      from: $X
-      to: $S
-    - pattern: (StringBuilder $S).append($X)
-      from: $X
-      to: $S
+  - pattern: (StringBuffer $S).append($X)
+    from: $X
+    to: $S
+  - pattern: (StringBuilder $S).append($X)
+    from: $X
+    to: $S
   pattern-sinks:
   - patterns:
     - pattern-not: $S.$SQLFUNC(<... "=~/.*TABLE *$/" ...>)

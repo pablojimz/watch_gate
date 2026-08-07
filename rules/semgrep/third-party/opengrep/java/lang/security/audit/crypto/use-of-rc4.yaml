@@ -1,9 +1,9 @@
 rules:
-- id: use-of-rc4 
-  pattern: $CIPHER.getInstance("RC4") 
+- id: use-of-rc4
+  pattern: $CIPHER.getInstance("RC4")
   metadata:
     functional-categories:
-      - 'crypto::search::symmetric-algorithm::javax.crypto'
+    - 'crypto::search::symmetric-algorithm::javax.crypto'
     cwe:
     - 'CWE-327: Use of a Broken or Risky Cryptographic Algorithm'
     owasp:
@@ -20,6 +20,11 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: HIGH
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: Literal RC4 exacto.
   message: >-
     Use of RC4 was detected. RC4 is vulnerable to several attacks, including
     stream cipher attacks and bit flipping attacks. Instead, use a strong,

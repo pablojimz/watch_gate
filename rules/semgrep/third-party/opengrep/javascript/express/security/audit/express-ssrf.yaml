@@ -24,6 +24,11 @@ rules:
       likelihood: MEDIUM
       impact: HIGH
       confidence: MEDIUM
+      severity_score: 75
+      confidence_score: 80
+      exploitability_score: 80
+      risk_score: 78
+      risk_justification: Taint req.*->request lib con host/URL controlado, SSRF directo.
     languages:
       - javascript
       - typescript
@@ -157,25 +162,25 @@ rules:
                   ... 
               # Direct usage with req.body with http|https|// from assign
               - patterns:
-                - pattern-either:
-                    - pattern-inside: |
-                            $ASSIGN = "$HTTP"+ $REQ. ... .$VALUE
-                            ...
-                    - pattern-inside: |
-                            $ASSIGN = "$HTTP"+$REQ. ... .$VALUE + $...A
-                            ...
-                    - pattern-inside: |
-                            $ASSIGN = "$HTTP"+$REQ.$VALUE[...]
-                            ...
-                    - pattern-inside: |
-                            $ASSIGN = "$HTTP"+$REQ.$VALUE[...] + $...A
-                            ...
-                    - pattern-inside: |
-                            $ASSIGN = `$HTTP${$REQ.$VALUE[...]}...`
-                            ...
-                - metavariable-regex:
-                    metavariable: $HTTP
-                    regex: ^(https?:\/\/|//)$                   
+                  - pattern-either:
+                      - pattern-inside: |
+                          $ASSIGN = "$HTTP"+ $REQ. ... .$VALUE
+                          ...
+                      - pattern-inside: |
+                          $ASSIGN = "$HTTP"+$REQ. ... .$VALUE + $...A
+                          ...
+                      - pattern-inside: |
+                          $ASSIGN = "$HTTP"+$REQ.$VALUE[...]
+                          ...
+                      - pattern-inside: |
+                          $ASSIGN = "$HTTP"+$REQ.$VALUE[...] + $...A
+                          ...
+                      - pattern-inside: |
+                          $ASSIGN = `$HTTP${$REQ.$VALUE[...]}...`
+                          ...
+                  - metavariable-regex:
+                      metavariable: $HTTP
+                      regex: ^(https?:\/\/|//)$
           - pattern-either:
               - pattern: $REQUEST.$METHOD($ASSIGN,...)
               - pattern: $REQUEST.$METHOD($ASSIGN + $...FOO,...)

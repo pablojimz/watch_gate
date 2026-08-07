@@ -19,6 +19,11 @@ rules:
     technology:
     - sling
     vulnerability: Insecure Transport
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: Cliente sling con URL literal http://, verbos restringidos.
   languages: [go]
   pattern-either:
   - patterns:

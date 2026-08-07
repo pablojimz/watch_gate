@@ -17,8 +17,7 @@ rules:
   - metavariable-comparison:
       metavariable: $ACTUATOR
       comparison: not str($ACTUATOR) in ["health","*"]
-  message: Spring Boot Actuator "$ACTUATOR" is enabled. Depending on the actuator, this can pose a significant
-    security risk. Please double-check if the actuator is needed and properly secured.
+  message: Spring Boot Actuator "$ACTUATOR" is enabled. Depending on the actuator, this can pose a significant security risk. Please double-check if the actuator is needed and properly secured.
   severity: WARNING
   languages:
   - yaml
@@ -40,3 +39,8 @@ rules:
     likelihood: MEDIUM
     impact: HIGH
     confidence: MEDIUM
+    severity_score: "62.5"
+    confidence_score: 30
+    exploitability_score: 100
+    risk_score: 62
+    risk_justification: Regla admite marcar tambien actuators de bajo riesgo (info/metrics); punto medio de impacto. FALTA DATO proteccion adicional, asumo ausente.

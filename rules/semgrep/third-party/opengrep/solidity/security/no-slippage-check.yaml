@@ -10,9 +10,14 @@ rules:
       likelihood: HIGH
       impact: MEDIUM
       subcategory:
-          - vuln
+        - vuln
       references:
         - https://uniswapv3book.com/docs/milestone_3/slippage-protection/
+      severity_score: 75
+      confidence_score: 80
+      exploitability_score: 80
+      risk_score: 78
+      risk_justification: Swap Uniswap V2/V3 con amountOutMin en 0/max; permite sandwich/front-running, firmas de función precisas.
     patterns:
       - pattern-either:
           - pattern: $X.swapExactTokensForTokens($A, $LIMIT, $B, $C, $D)
@@ -41,16 +46,16 @@ rules:
                 ...
               }
           - pattern: >
-                $X.exactInputSingle($SWAPROUTER.ExactInputSingleParams({
-                  tokenIn: $A,
-                  tokenOut: $B,
-                  fee: $C,
-                  recipient: $D,
-                  deadline: $E,
-                  amountIn: $F,
-                  amountOutMinimum: $LIMIT,
-                  sqrtPriceLimitX96: 0
-                }));
+              $X.exactInputSingle($SWAPROUTER.ExactInputSingleParams({
+                tokenIn: $A,
+                tokenOut: $B,
+                fee: $C,
+                recipient: $D,
+                deadline: $E,
+                amountIn: $F,
+                amountOutMinimum: $LIMIT,
+                sqrtPriceLimitX96: 0
+              }));
           - pattern: >
               function $FUNC(...) {
                 ...
@@ -69,16 +74,16 @@ rules:
                 ...
               }
           - pattern: >
-                $X.exactOutputSingle($SWAPROUTER.ExactOutputSingleParams({
-                  tokenIn: $A,
-                  tokenOut: $B,
-                  fee: $C,
-                  recipient: $D,
-                  deadline: $E,
-                  amountOut: $F,
-                  amountInMaximum: $LIMIT,
-                  sqrtPriceLimitX96: 0
-                }));
+              $X.exactOutputSingle($SWAPROUTER.ExactOutputSingleParams({
+                tokenIn: $A,
+                tokenOut: $B,
+                fee: $C,
+                recipient: $D,
+                deadline: $E,
+                amountOut: $F,
+                amountInMaximum: $LIMIT,
+                sqrtPriceLimitX96: 0
+              }));
           - pattern: $X.swap($RECIPIENT, $ZEROFORONE, $AMOUNTIN, $LIMIT, $DATA)
       - metavariable-regex:
           metavariable: $LIMIT

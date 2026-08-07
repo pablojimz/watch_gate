@@ -15,6 +15,11 @@ rules:
     - vuln
     likelihood: MEDIUM
     impact: MEDIUM
+    severity_score: 25
+    confidence_score: 60
+    exploitability_score: 40
+    risk_score: 39
+    risk_justification: División por 0 literal en código; bug de fiabilidad más que vulnerabilidad, poco explotable por input.
   languages:
   - ruby
   severity: WARNING

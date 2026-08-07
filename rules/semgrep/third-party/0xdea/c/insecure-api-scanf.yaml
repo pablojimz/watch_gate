@@ -20,6 +20,11 @@ rules:
         - A10:2025 - Mishandling of Exceptional Conditions
       references:
         - https://g.co/kgs/PCHQjJ
+      severity_score: 100
+      confidence_score: 60
+      exploitability_score: 80
+      risk_score: 83
+      risk_justification: scanf sin ancho límite; regex de FMT admite identificador dinámico, ambigüedad moderada.
     message: >-
       A buffer overflow condition exists when a program attempts to put
       more data in a buffer than it can hold, or when a program attempts to

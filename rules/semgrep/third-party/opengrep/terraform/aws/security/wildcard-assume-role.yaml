@@ -34,5 +34,10 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 75
+    confidence_score: 100
+    exploitability_score: 100
+    risk_score: 89
+    risk_justification: sts:AssumeRole con Principal AWS=*; cualquiera con el account ID puede asumir el rol, literal exacto.
   languages: [hcl]
   severity: ERROR

@@ -2,7 +2,7 @@ rules:
 - id: gcm-nonce-reuse
   metadata:
     functional-categories:
-      - 'crypto::search::randomness::javax.crypto'
+    - 'crypto::search::randomness::javax.crypto'
     cwe:
     - 'CWE-323: Reusing a Nonce, Key Pair in Encryption'
     category: security
@@ -18,6 +18,11 @@ rules:
     likelihood: MEDIUM
     impact: MEDIUM
     confidence: HIGH
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: Nonce GCM construido desde literal string, deteccion inequivoca.
   languages:
   - java
   message: 'GCM IV/nonce is reused: encryption can be totally useless'

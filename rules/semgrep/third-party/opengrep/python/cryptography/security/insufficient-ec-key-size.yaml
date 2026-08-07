@@ -1,15 +1,15 @@
 rules:
 - id: insufficient-ec-key-size
   patterns:
-    - pattern-inside: cryptography.hazmat.primitives.asymmetric.ec.generate_private_key(...)
-    - pattern: cryptography.hazmat.primitives.asymmetric.ec.$SIZE
-    - metavariable-pattern:
-        metavariable: $SIZE
-        pattern-either:
-           - pattern: SECP192R1
-           - pattern: SECT163K1
-           - pattern: SECT163R2
-    - focus-metavariable: $SIZE
+  - pattern-inside: cryptography.hazmat.primitives.asymmetric.ec.generate_private_key(...)
+  - pattern: cryptography.hazmat.primitives.asymmetric.ec.$SIZE
+  - metavariable-pattern:
+      metavariable: $SIZE
+      pattern-either:
+      - pattern: SECP192R1
+      - pattern: SECT163K1
+      - pattern: SECT163R2
+  - focus-metavariable: $SIZE
   fix: |
     SECP256R1
   message: >-
@@ -35,5 +35,10 @@ rules:
     confidence: MEDIUM
     functional-categories:
     - crypto::search::key-length::cryptography
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 80
+    risk_score: 72
+    risk_justification: Curvas EC débiles enumeradas de forma exacta (SECP192R1, SECT163K1, SECT163R2).
   languages: [python]
   severity: WARNING

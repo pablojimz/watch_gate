@@ -130,6 +130,11 @@ rules:
     - vuln
     likelihood: HIGH
     impact: HIGH
+    severity_score: 100
+    confidence_score: 60
+    exploitability_score: 10
+    risk_score: 66
+    risk_justification: _testcapi/test.support son módulos internos de test de CPython, código prácticamente inalcanzable en apps reales.
   severity: WARNING
   languages:
   - python

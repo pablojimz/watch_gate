@@ -11,9 +11,7 @@ rules:
         encryption_key = ...
         ...
       }
-  message: The AWS CodeBuild Project is unencrypted. The AWS KMS encryption key protects projects in the
-    CodeBuild. To create your own, create a aws_kms_key resource or use the ARN string of a key in your
-    account.
+  message: The AWS CodeBuild Project is unencrypted. The AWS KMS encryption key protects projects in the CodeBuild. To create your own, create a aws_kms_key resource or use the ARN string of a key in your account.
   languages: [hcl]
   severity: WARNING
   metadata:
@@ -32,3 +30,8 @@ rules:
     likelihood: LOW
     impact: MEDIUM
     confidence: MEDIUM
+    severity_score: 50
+    confidence_score: 100
+    exploitability_score: 100
+    risk_score: 78
+    risk_justification: Falta encryption_key en CodeBuild; debilita control de cifrado, check exacto.

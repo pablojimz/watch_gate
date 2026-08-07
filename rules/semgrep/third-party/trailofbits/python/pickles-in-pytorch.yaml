@@ -1,8 +1,7 @@
 rules:
   - id: pickles-in-pytorch
     message: >-
-      Functions reliant on pickle can result in arbitrary code execution. 
-      Consider loading from `state_dict`, using fickling, or switching to a safer serialization method like ONNX
+      Functions reliant on pickle can result in arbitrary code execution.  Consider loading from `state_dict`, using fickling, or switching to a safer serialization method like ONNX
     languages: [python]
     severity: ERROR
     metadata:
@@ -17,6 +16,11 @@ rules:
       references:
         - https://blog.trailofbits.com/2021/03/15/never-a-dill-moment-exploiting-machine-learning-pickle-files/
 
+      severity_score: 100
+      confidence_score: 60
+      exploitability_score: 40
+      risk_score: 73
+      risk_justification: torch.load/save con pickle (RCE en load); buenas exclusiones mezclando save/load de distinto riesgo.
     patterns:
       - pattern-either:
           - pattern: torch.save(...)
