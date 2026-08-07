@@ -78,6 +78,17 @@ def _run_git(args: list[str], cwd: Path, mask: str | None = None) -> None:
 
 
 def _checkout_rule_folders(repo: str, ref: str, token: str, dest: Path, patterns: list[str]) -> None:
+    """Construye la URL autenticada del repo de reglas y delega en
+    `_checkout_from_url` (ver ahí el detalle de la mecánica de sparse-checkout
+    + Git LFS). Separado en dos funciones para poder testear la mecánica
+    real de git+LFS contra un repo local (file://) sin necesitar un token
+    real ni red -- ver tests/unit/test_sync_rules_git_lfs.py.
+    """
+    url = f"https://x-access-token:{token}@github.com/{repo}.git"
+    _checkout_from_url(url, ref, dest, patterns, mask=token)
+
+
+def _checkout_from_url(url: str, ref: str, dest: Path, patterns: list[str], mask: str | None = None) -> None:
     """Checkout disperso (sparse-checkout, cone mode) de las carpetas de
     reglas necesarias, fijado EXACTAMENTE al `ref` recibido, con Git LFS
     habilitado. manifest.json NO se lee de aquí -- es un asset de Release,
@@ -96,11 +107,10 @@ def _checkout_rule_folders(repo: str, ref: str, token: str, dest: Path, patterns
     que sí pedimos. config.yaml se queda como puntero sin resolver, nunca
     se descarga ni se toca -- justo lo que pide la spec del proyecto.
     """
-    url = f"https://x-access-token:{token}@github.com/{repo}.git"
     _run_git(
         ["clone", "--no-checkout", "--filter=blob:none", "--depth", "1", "--branch", ref, url, str(dest)],
         cwd=dest.parent,
-        mask=token,
+        mask=mask,
     )
     _run_git(["sparse-checkout", "init", "--cone"], cwd=dest)
     _run_git(["lfs", "install", "--local", "--skip-smudge"], cwd=dest)
