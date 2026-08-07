@@ -47,14 +47,17 @@ Adicionalmente, se han completado los siguientes hitos de infraestructura, API S
 | 2026-08-05 | Inclusión de subcomando `rag reindex` invocando `build_index` | Integración del mantenimiento del corpus RAG local | Pablo Ayllón García |
 | 2026-08-06 | Pruebas de integración E2E en `scripts/test_cli_deps_integration.py` y `tests/unit/test_cli.py` | Verificación de comportamiento en entornos CI/CD reales | Pablo Ayllón García |
 | 2026-08-06 | Refactorización para delegar la ejecución en `run_full_analysis` de `watchgate.core.pipeline` | Compartir la lógica de orquestación con la GitHub Action evitando duplicación de código | Javier Martín Jurado / Pablo Ayllón |
+| 2026-08-07 | Implementación de mejoras CLI (rich TTY DX, ingesta stdin segura con búfer 10MB, SARIF v2.1.0, GitHub Annotations en stderr, overrides dinámicos --weight/--threshold, autocompletado argcomplete y exit codes 0-3) | Modernización y robustecimiento de la CLI según especificación auditada (`docs/planificacion/mejoras_cli.md`) | Pablo Ayllón García |
 
 ### Estado actual
 
 - **Funcionalidades implementadas**:
-  - Subcomando `watchgate analyze`: Parsea argumentos Git (`--base`, `--head`, `--repo-path`), ruta de configuración (`--config`), metadatos de la PR (`--pr-id`, `--repo`, `--author-login`), formato de salida (`--format comment|json`) y exportación a fichero (`--output`).
+  - Subcomando `watchgate analyze`: Parsea argumentos Git (`--base`, `--head`, `--repo-path`), ingesta de parches por `stdin` (`--diff-stdin` / `--base -`) con control de TTY y límite de 10 MB, ruta de configuración (`--config`), metadatos (`--pr-id`, `--repo`, `--author-login`, `--author-email`), formato de salida (`--format comment|json|sarif`), anotaciones CI/CD (`--github-annotations` aisladas en `stderr`), overrides dinámicos de pesos/umbrales (`--weight`, `--threshold`), verbosidad (`-v`, `--debug`, `-q`) y exportación a fichero (`--output`).
   - Subcomando `watchgate rag reindex`: Reconstrucción del índice vectorial ChromaDB a través del parámetro `--index-path`.
+  - Módulo de formateadores (`watchgate/formatters/`): Estrategias de renderizado independientes para consola TTY interactiva con `rich` (`console.py`), reporte estandarizado SARIF v2.1.0 (`sarif.py`) y comandos de flujo de trabajo de GitHub Actions (`github.py`).
+  - Autocompletado de Shell: Integrado mediante `argcomplete`.
   - Integración transparente con `run_full_analysis()` de `watchgate.core.pipeline`: Ejecuta la evaluación de cortocircuito, instanciación del control de costes, orquestación concurrente y agregación final.
-  - Código de retorno dinámico: Devuelve exit code `1` cuando `config.block_on_red` está activo y el veredicto global es `Semaforo.ROJO`; devuelve `0` en cualquier otro caso.
+  - Códigos de retorno estandarizados: Devuelve exit code `0` (aprobado/éxito), `1` (bloqueo por semáforo rojo con `block_on_red: true`), `2` (error de configuración, flags o parche inválido/stdin) y `3` (error de infraestructura/API).
 - **Funcionalidades pendientes**: Ninguna en el núcleo de la CLI.
 - **Partes completas**: Parseo de flags CLI, invocación del pipeline, formateo Markdown y JSON, volcado a archivo y códigos de salida para CI/CD.
 - **Limitaciones conocidas**: Ninguna. La gestión de excepciones aislada mediante `safe_analyze` garantiza que fallos en proveedores externos o de red no interrumpan de forma abrupta el proceso.
@@ -63,14 +66,15 @@ Adicionalmente, se han completado los siguientes hitos de infraestructura, API S
 
 - **Responsabilidad del componente**: Punto de entrada de línea de comandos para ejecuciones locales o invocaciones en scripts de automatización.
 - **Módulos con los que interactúa**:
-  - `watchgate.config`: Carga de configuración desde `.watchgate.yml`.
-  - `watchgate.core.diffparser`: Extracción del objeto `NormalizedDiff`.
+  - `watchgate.config`: Carga de configuración desde `.watchgate.yml` y overrides CLI (`apply_cli_overrides`).
+  - `watchgate.core.diffparser`: Extracción del objeto `NormalizedDiff` desde Git o parches `stdin` (`parse_diff_from_text`).
   - `watchgate.core.pipeline`: Invocación de `run_full_analysis`.
+  - `watchgate.formatters`: Estrategias de salida (`render_console`, `render_sarif`, `render_github_annotations`).
   - `watchgate.core.comment_template`: Formateo Markdown con Jinja2.
   - `watchgate.core.rag.indexer`: Reindexado de embeddings con ChromaDB.
 - **Dependencias**:
-  - Internas: `watchgate.config`, `watchgate.core.diffparser`, `watchgate.core.pipeline`, `watchgate.core.comment_template`, `watchgate.core.models`, `watchgate.core.rag.indexer`.
-  - Externas: `argparse`, `sys`, `pathlib`.
+  - Internas: `watchgate.config`, `watchgate.core.diffparser`, `watchgate.core.pipeline`, `watchgate.formatters`, `watchgate.core.comment_template`, `watchgate.core.models`, `watchgate.core.rag.indexer`.
+  - Externas: `argparse`, `sys`, `pathlib`, `rich`, `argcomplete`.
 - **Flujo de comunicación**: La CLI intercepta argumentos de la consola, construye un `NormalizedDiff` y un diccionario de metadatos, transfiere la ejecución a `run_full_analysis()` y emite el resultado formateado por `stdout` o archivo.
 - **Entradas y salidas**:
   - Entradas: Argumentos de terminal (`sys.argv`).
