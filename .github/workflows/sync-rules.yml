@@ -54,13 +54,15 @@ jobs:
       #      en LFS; sin esto se hashearían punteros de 3 líneas, no las
       #      reglas reales).
       #   2. Trae solo: los lenguajes en `languages_changed`, las entradas
-      #      "<vendor>/<carpeta>" de `third_party_changed`, TODAS las
+      #      "<vendor>/<carpeta>" de `third_party_changed`, y TODAS las
       #      categorías YARA publicadas (el análisis YARA usa siempre el
-      #      catálogo completo, no una selección parcial) y manifest.json.
-      #   3. Verifica el hash de cada clave descargada de forma
-      #      INDEPENDIENTE contra manifest.json (leído del propio checkout
-      #      fijado al tag, no del payload del evento, para que la
-      #      verificación esté atada al commit exacto que se descarga).
+      #      catálogo completo, no una selección parcial).
+      #   3. manifest.json NO vive en el árbol git (se publica como asset
+      #      adjunto a la Release) -- se descarga aparte vía la Releases
+      #      API, pidiendo explícitamente el release de ese mismo tag
+      #      exacto (nunca el payload del evento, ni "latest"), y contra
+      #      ESE manifest se verifica el hash de cada clave descargada,
+      #      de forma INDEPENDIENTE.
       #   4. Si TODAS las claves coinciden: copia el contenido verificado
       #      al árbol de este repo y actualiza rules/.rules-state.json
       #      (versión activa + hash verificado por clave).

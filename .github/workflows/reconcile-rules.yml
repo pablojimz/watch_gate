@@ -41,17 +41,19 @@ jobs:
       - name: Instalar dependencias mínimas del script de sincronización
         run: pip install httpx
 
-      # Paso barato y rápido: SOLO descarga manifest.json de la rama main
-      # del repo de reglas vía la API de contenidos de GitHub. No hace
-      # checkout completo ni necesita `lfs: true` -- manifest.json no está
-      # gestionado por Git LFS (solo rules/semgrep/**/*.yaml lo está).
+      # Paso barato y rápido: SOLO descarga manifest.json de la ÚLTIMA
+      # Release publicada del repo de reglas. manifest.json no es un
+      # fichero commiteado en el árbol git (ni en main ni en el tag): se
+      # publica como ASSET adjunto a cada Release, así que se obtiene vía
+      # la Releases API (--ref latest), no vía checkout ni Contents API.
+      # No hace falta `lfs: true` -- no hay checkout de por medio.
       - name: Descargar manifest.json remoto (solo metadatos)
         env:
           RULES_REPO_TOKEN: ${{ secrets.RULES_REPO_TOKEN }}
         run: |
           python scripts/sync_rules.py fetch-manifest \
             --rules-repo pablojimz/Repo-reglas-SEMGREP-y-YARA \
-            --ref main \
+            --ref latest \
             --out /tmp/remote-manifest.json
 
       # Compara version + TODOS los hashes (semgrep.custom, semgrep.third_party,
