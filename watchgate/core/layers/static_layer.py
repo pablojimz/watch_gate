@@ -1,13 +1,26 @@
 """Capa de análisis estático (spec §4).
 
 Ejecuta Semgrep sobre los parches de código modificados (`diff_hunk`),
-cargando reglas Semgrep específicas para el lenguaje del archivo.
+cargando reglas Semgrep específicas para el lenguaje del archivo: las
+propias (`rules/semgrep/custom/<lenguaje>`), las de terceros relevantes
+para ese lenguaje (`rules/semgrep/third-party/<vendor>/<carpeta>`) y las
+reglas de patrones genéricos (`rules/semgrep/custom/regex`, secretos
+hardcodeados etc.), que se aplican siempre con independencia del lenguaje.
 
-Sincronización inteligente de reglas:
-1. Reutilización directa con 0 ms de sobrecoste si la caché local en
-   .watchgate/rules_cache/ ha sido verificada en las últimas 24 horas.
-2. Comprobación ultra-ligera por commit hash (`git ls-remote`) tras 24h.
-3. Fallback transparente a la caché local si no hay red o hay timeout.
+Resolución del directorio de reglas (`_get_rules_dir`), en orden:
+1. Override explícito por parámetro de constructor.
+2. Variable de entorno WATCHGATE_SEMGREP_RULES_DIR.
+3. Directorio local del proyecto `rules/semgrep/` -- esta es la ruta que
+   pueblan y verifican por hash .github/workflows/sync-rules.yml y
+   reconcile-rules.yml (ver docs/integracion_repo_reglas.md); en este
+   propio repo SIEMPRE debería resolverse aquí.
+4. Caché local persistente en .watchgate/rules_cache/ (TTL 24h, clon
+   directo de GitHub sin ninguna verificación de hash). Es un ÚLTIMO
+   RECURSO pensado para un consumidor externo que instale `watchgate`
+   como paquete sin el checkout de reglas ya sincronizado -- nunca
+   debería alcanzarse en el análisis de PRs de este propio repo, y si se
+   alcanza, se loggea como warning explícito porque implica ejecutar
+   reglas sin pasar por la verificación de integridad.
 """
 
 from __future__ import annotations
@@ -50,6 +63,44 @@ SEVERITY_SCORE: dict[str, int] = {
 # Tiempo TTL (24 horas) para verificación de actualización del repo de reglas
 _CACHE_TTL_SECONDS = 86400
 _GIT_TIMEOUT_SECONDS = 5.0
+
+# Categoría de reglas custom/ que se aplica SIEMPRE, con independencia del
+# lenguaje detectado (patrones de secretos hardcodeados, cadenas de
+# conexión, etc. -- no son específicos de un lenguaje).
+_ALWAYS_ON_CUSTOM_CATEGORY = "regex"
+
+# Mapeo EXPLÍCITO (a mano, nunca adivinado por coincidencia de nombre) de
+# lenguaje detectado -> carpetas de third-party relevantes. El repo de
+# reglas deja claro que <carpeta> de third-party es un namespace
+# independiente que NO siempre coincide con el nombre del lenguaje (p. ej.
+# trailofbits/rs son reglas de Rust) -- por eso esta tabla se mantiene a
+# mano en vez de intentar `carpeta == language`. Se excluyen a propósito
+# los paquetes que no son de un lenguaje concreto (opengrep/generic,
+# opengrep/problem-based-packs, trailofbits/generic, 0xdea/noisy): este
+# análisis es por-fichero, y esos paquetes no están pensados para eso.
+THIRD_PARTY_LANGUAGE_MAP: dict[str, list[tuple[str, str]]] = {
+    "python": [("trailofbits", "python"), ("opengrep", "python")],
+    "javascript": [("trailofbits", "javascript"), ("opengrep", "javascript")],
+    "typescript": [("opengrep", "typescript")],
+    "java": [("opengrep", "java"), ("trailofbits", "jvm")],
+    "c": [("0xdea", "c")],
+    "go": [("elttam", "go"), ("opengrep", "go"), ("trailofbits", "go")],
+    "bash": [("opengrep", "bash")],
+    "yaml": [("elttam", "yaml"), ("opengrep", "yaml"), ("trailofbits", "yaml")],
+    "html": [("opengrep", "html")],
+    "ruby": [("opengrep", "ruby"), ("trailofbits", "ruby")],
+    "csharp": [("opengrep", "csharp")],
+    "clojure": [("opengrep", "clojure")],
+    "ocaml": [("opengrep", "ocaml")],
+    "php": [("opengrep", "php")],
+    "json": [("opengrep", "json")],
+    "rust": [("trailofbits", "rs")],
+    "swift": [("opengrep", "swift"), ("trailofbits", "swift")],
+    "kotlin": [("opengrep", "kotlin")],
+    "scala": [("opengrep", "scala")],
+    "solidity": [("opengrep", "solidity")],
+    "terraform": [("opengrep", "terraform"), ("trailofbits", "hcl")],
+}
 
 
 def _infer_threat_nature_from_semgrep(finding_extra: dict[str, Any], rule_id: str) -> ThreatNature:
@@ -140,7 +191,20 @@ class StaticLayer(AnalysisLayer):
         if local_rules_dir.exists() and any(local_rules_dir.iterdir()):
             return Path(".")
 
-        # 4. Caché persistente en .watchgate/rules_cache/
+        # 4. Caché persistente en .watchgate/rules_cache/ -- ÚLTIMO RECURSO.
+        # A partir de aquí se clona el repo de reglas directamente por su
+        # cuenta, SIN pasar por la verificación de integridad por hash de
+        # sync-rules.yml / reconcile-rules.yml (ver docs/integracion_repo_reglas.md).
+        # En este propio repo nunca debería alcanzarse (el paso 3 siempre
+        # encuentra rules/semgrep/ ya poblado y verificado) -- si se
+        # alcanza, es una señal de que algo no está bien (checkout
+        # incompleto, o un consumidor externo del paquete sin ese
+        # checkout), así que se deja constancia explícita en el log.
+        logger.warning(
+            "rules/semgrep/ no está disponible localmente -- cayendo al fallback de "
+            "clonar el repo de reglas directamente, SIN la verificación de integridad "
+            "por hash de sync-rules.yml/reconcile-rules.yml (ver docs/integracion_repo_reglas.md)."
+        )
         cache_base = Path.home() / ".watchgate" / "rules_cache"
         repo_name = "Repo-reglas-SEMGREP-y-YARA"
         cached_repo_dir = cache_base / repo_name
@@ -207,7 +271,18 @@ class StaticLayer(AnalysisLayer):
             return None
 
     def _detect_language(self, file_path: str) -> str | None:
-        """Infiere el lenguaje del archivo para mapearlo contra las reglas Semgrep."""
+        """Infiere el lenguaje del archivo para mapearlo contra las reglas Semgrep.
+
+        Cubre los 17 lenguajes de rules/semgrep/custom/ más los que solo
+        tienen reglas de terceros (kotlin, scala, solidity, terraform) --
+        ver THIRD_PARTY_LANGUAGE_MAP.
+        """
+        basename = os.path.basename(file_path).lower()
+        # Dockerfile no sigue convención de extensión: puede ser
+        # literalmente "Dockerfile", "Dockerfile.prod", o "algo.dockerfile".
+        if basename == "dockerfile" or basename.startswith("dockerfile.") or basename.endswith(".dockerfile"):
+            return "dockerfile"
+
         extension = os.path.splitext(file_path)[1].lower()
         language_map = {
             ".py": "python",
@@ -226,6 +301,24 @@ class StaticLayer(AnalysisLayer):
             ".yml": "yaml",
             ".html": "html",
             ".rb": "ruby",
+            ".cs": "csharp",
+            ".clj": "clojure",
+            ".cljs": "clojure",
+            ".cljc": "clojure",
+            ".ml": "ocaml",
+            ".mli": "ocaml",
+            ".php": "php",
+            ".ps1": "powershell",
+            ".psm1": "powershell",
+            ".json": "json",
+            ".rs": "rust",
+            ".swift": "swift",
+            ".kt": "kotlin",
+            ".kts": "kotlin",
+            ".scala": "scala",
+            ".sol": "solidity",
+            ".tf": "terraform",
+            ".hcl": "terraform",
         }
         return language_map.get(extension)
 
@@ -237,15 +330,31 @@ class StaticLayer(AnalysisLayer):
 
         # Buscar subdirectorio de reglas por lenguaje dentro del repo de reglas
         # Estrategia 1: rules/semgrep/custom/<language>
+        # Estrategia 1b: rules/semgrep/custom/regex (patrones genéricos,
+        #   siempre se aplican con independencia del lenguaje)
+        # Estrategia 1c: rules/semgrep/third-party/<vendor>/<carpeta>
+        #   relevantes para <language> (ver THIRD_PARTY_LANGUAGE_MAP)
         # Estrategia 2: rules/semgrep/watchgate.yml
-        # Estrategia 3: raiz del directorio de reglas
+        # Estrategia 3: raiz del directorio de reglas (si nada de lo
+        #   anterior existe -- último recurso, escanea todo)
         config_paths: list[str] = []
+        semgrep_root = rules_dir / "rules" / "semgrep"
 
-        custom_lang_dir = rules_dir / "rules" / "semgrep" / "custom" / language
-        watchgate_yml = rules_dir / "rules" / "semgrep" / "watchgate.yml"
-
+        custom_lang_dir = semgrep_root / "custom" / language
         if custom_lang_dir.exists():
             config_paths.append(f"--config={custom_lang_dir}")
+
+        if language != _ALWAYS_ON_CUSTOM_CATEGORY:
+            custom_regex_dir = semgrep_root / "custom" / _ALWAYS_ON_CUSTOM_CATEGORY
+            if custom_regex_dir.exists():
+                config_paths.append(f"--config={custom_regex_dir}")
+
+        for vendor, carpeta in THIRD_PARTY_LANGUAGE_MAP.get(language, []):
+            third_party_dir = semgrep_root / "third-party" / vendor / carpeta
+            if third_party_dir.exists():
+                config_paths.append(f"--config={third_party_dir}")
+
+        watchgate_yml = semgrep_root / "watchgate.yml"
         if watchgate_yml.exists():
             config_paths.append(f"--config={watchgate_yml}")
 
