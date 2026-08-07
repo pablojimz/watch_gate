@@ -158,3 +158,33 @@ Reconstruye el índice vectorial de ChromaDB escaneando el corpus local de patro
 ```bash
 watchgate rag reindex --index-path .watchgate/rag_index
 ```
+
+---
+
+# 9. Solución de Problemas Frecuentes (FAQ / Troubleshooting)
+
+### Q1: ¿Por qué la capa semántica (LLM) muestra `skipped: True` o score 0?
+**Causa:** No se configuró una API Key para el proveedor de LLM (`ANTHROPIC_API_KEY` o `GEMINI_API_KEY`) o se agotó el presupuesto de tokens.
+**Solución:** Exporta tu clave en el entorno antes de ejecutar el análisis:
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."
+# O para Gemini:
+export WATCHGATE_LLM_PROVIDER="gemini"
+export GEMINI_API_KEY="AIzaSy..."
+```
+WatchGate utiliza *degradación controlada*: si el LLM no está configurado, la capa semántica se omite sin detener el análisis de las capas estática, dependencias y reputación.
+
+### Q2: ¿Por qué la salida por `stdin` da error de "sin datos canalizados"?
+**Causa:** Invocaste `--diff-stdin` en una terminal TTY interactiva sin enviar un parche por tubería (`|`).
+**Solución:** Asegúrate de canalizar un parche de Git mediante un pipe Unix:
+```bash
+git diff main..HEAD | watchgate analyze --diff-stdin
+```
+
+### Q3: ¿Cómo silenciar las advertencias de telemetría de ChromaDB?
+**Causa:** ChromaDB intenta enviar telemetría anónima en segundo plano.
+**Solución:** Desactiva la telemetría configurando la variable de entorno:
+```bash
+export ANONYMIZED_TELEMETRY=False
+```
+
