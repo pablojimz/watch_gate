@@ -22,13 +22,12 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Literal
 
-import chromadb
-
 from watchgate.core.rag.indexer import (
     DEFAULT_INDEX_PATH,
     EMBEDDING_MODEL_NAME,
     FEEDBACK_COLLECTION_NAME,
     chunk_document,
+    get_chroma_client,
 )
 
 DEFAULT_FEEDBACK_DIR = ".watchgate/rag_feedback"
@@ -98,7 +97,7 @@ def add_confirmed_case(
         for _ in chunks
     ]
 
-    client = chromadb.PersistentClient(path=index_path)
+    client = get_chroma_client(index_path=index_path)
     try:
         collection = client.get_collection(FEEDBACK_COLLECTION_NAME)
     except Exception:  # noqa: BLE001 - todavía no existe esta colección
