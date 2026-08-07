@@ -1,0 +1,111 @@
+# Red de seguridad diaria para la sincronización de reglas Semgrep/YARA.
+#
+# El flujo normal (.github/workflows/sync-rules.yml) depende de que el
+# `repository_dispatch` "rules-updated" llegue correctamente. Si por lo que
+# sea se pierde (secret caducado, incidencia de red, el evento se dispara
+# antes de que este repo esté listo para recibirlo...), este workflow
+# comprueba UNA VEZ AL DÍA si la versión activa aquí sigue coincidiendo con
+# la última publicada, y si no, ejecuta la misma sincronización y
+# verificación por clave que sync-rules.yml (misma lógica, reutilizada
+# desde scripts/sync_rules.py, en modo "full" en vez de "changed" porque
+# aquí no tenemos una lista de "qué cambió" fiable -- se reconcilia todo).
+name: Reconciliar reglas (red de seguridad diaria)
+
+on:
+  schedule:
+    # 03:00 UTC todos los días -- fuera de horario de desarrollo activo,
+    # para no competir por runners con el análisis de PRs.
+    - cron: "0 3 * * *"
+  # Permite forzar una reconciliación manual desde la pestaña Actions sin
+  # esperar al cron, útil para depurar o para el día de la demo/entrega.
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rules-sync
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout de watch_gate (este repo)
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependencias mínimas del script de sincronización
+        run: pip install httpx
+
+      # Paso barato y rápido: SOLO descarga manifest.json de la rama main
+      # del repo de reglas vía la API de contenidos de GitHub. No hace
+      # checkout completo ni necesita `lfs: true` -- manifest.json no está
+      # gestionado por Git LFS (solo rules/semgrep/**/*.yaml lo está).
+      - name: Descargar manifest.json remoto (solo metadatos)
+        env:
+          RULES_REPO_TOKEN: ${{ secrets.RULES_REPO_TOKEN }}
+        run: |
+          python scripts/sync_rules.py fetch-manifest \
+            --rules-repo pablojimz/Repo-reglas-SEMGREP-y-YARA \
+            --ref main \
+            --out /tmp/remote-manifest.json
+
+      # Compara version + TODOS los hashes (semgrep.custom, semgrep.third_party,
+      # yara) del manifest remoto contra rules/.rules-state.json (lo que este
+      # repo tiene activo ahora mismo). Expone status=in_sync|out_of_sync y
+      # remote_version como outputs para los steps siguientes.
+      - name: Comparar versión/hashes remotos vs. activos
+        id: check
+        run: |
+          python scripts/sync_rules.py check \
+            --manifest-file /tmp/remote-manifest.json \
+            --state-file rules/.rules-state.json
+
+      # Solo si hay desalineación: repite EXACTAMENTE el mismo proceso de
+      # checkout disperso + Git LFS + verificación por clave que
+      # sync-rules.yml, pero con --scope full (reconcilia TODO lo publicado,
+      # no solo un delta, porque aquí no partimos de un languages_changed /
+      # third_party_changed fiable). Si una sola clave no verifica, este
+      # step termina en error y el job se marca en rojo -- no se activa nada.
+      - name: Sincronizar y verificar TODAS las claves (fuera de sincronía)
+        if: steps.check.outputs.status == 'out_of_sync'
+        env:
+          RULES_REPO_TOKEN: ${{ secrets.RULES_REPO_TOKEN }}
+        run: |
+          python scripts/sync_rules.py sync \
+            --rules-repo pablojimz/Repo-reglas-SEMGREP-y-YARA \
+            --ref "${{ steps.check.outputs.remote_version }}" \
+            --scope full \
+            --target-root "${{ github.workspace }}" \
+            --state-file rules/.rules-state.json \
+            --triggered-by reconcile-rules.yml
+
+      - name: Comitear reglas reconciliadas como versión activa
+        if: steps.check.outputs.status == 'out_of_sync' && success()
+        run: |
+          git config user.name "watchgate-rules-bot"
+          git config user.email "actions@github.com"
+          git add rules/
+          if git diff --cached --quiet; then
+            echo "No hay cambios de contenido tras la reconciliación; nada que comitear."
+          else
+            git commit -m "reconcile(rules): activar reglas verificadas ${{ steps.check.outputs.remote_version }}"
+            git push
+          fi
+
+      # Última red de seguridad: si tras sincronizar seguimos sin coincidir
+      # con lo publicado (p. ej. porque la sincronización falló por una
+      # clave corrupta y el step anterior no llegó a comitear nada), se
+      # marca el workflow como fallido EXPLÍCITAMENTE. Una reconciliación
+      # que no reconcilió nada no debe quedar en verde.
+      - name: Verificar que la reconciliación dejó las versiones alineadas
+        if: steps.check.outputs.status == 'out_of_sync'
+        run: |
+          python scripts/sync_rules.py check \
+            --manifest-file /tmp/remote-manifest.json \
+            --state-file rules/.rules-state.json \
+            --fail-if-out-of-sync
