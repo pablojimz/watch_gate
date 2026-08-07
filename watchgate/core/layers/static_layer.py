@@ -88,10 +88,20 @@ class StaticLayer(AnalysisLayer):
             if env_path.exists():
                 return env_path
 
-        # 3. Directorio local del proyecto
+        # 3. Directorio local del proyecto. `_run_semgrep_on_file` espera
+        # recibir una ruta "raíz de repo" y compone rules_dir/"rules"/
+        # "semgrep"/... (la misma convención que el repo externo clonado en
+        # el caso 4) -- devolver directamente `rules/semgrep` aquí duplicaba
+        # el segmento (`rules/semgrep/rules/semgrep/custom/<lenguaje>`, que
+        # nunca existe) y hacía que el checkout local siempre cayera al
+        # fallback de escanear el directorio entero con todas las reglas de
+        # terceros en vez de solo las del lenguaje del fichero. Verificado:
+        # `Path("rules/semgrep")` existe pero
+        # `Path("rules/semgrep") / "rules" / "semgrep" / "custom" / "python"`
+        # no.
         local_rules_dir = Path("rules/semgrep")
         if local_rules_dir.exists() and any(local_rules_dir.iterdir()):
-            return local_rules_dir
+            return Path(".")
 
         # 4. Caché persistente en .watchgate/rules_cache/
         cache_base = Path.home() / ".watchgate" / "rules_cache"
