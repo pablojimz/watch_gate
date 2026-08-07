@@ -17,12 +17,15 @@ de `.watchgate.yml` y los valores por defecto de `thresholds`/`weights`.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
 import yaml
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger("watchgate.config")
 
 # Pesos por defecto: iguales a los usados en el ejemplo de regresión de la
 # memoria (spec §10) para las 4 capas conocidas hasta ahora.
@@ -97,3 +100,72 @@ def load_config(yaml_path: str = ".watchgate.yml") -> WatchGateConfig:
     """
     yaml_data = _read_yaml(yaml_path)
     return WatchGateConfig(**yaml_data)
+
+
+def apply_cli_overrides(
+    config: WatchGateConfig,
+    weight_overrides: list[str] | None = None,
+    threshold_overrides: list[str] | None = None,
+) -> WatchGateConfig:
+    """Aplica overrides recibidos desde la CLI sobre la instancia de configuración.
+
+    Si los pesos modificados no suman 1.0, se re-normalizan automáticamente
+    y se emite una advertencia en el logger.
+    """
+    weights = dict(config.weights)
+    thresholds = dict(config.thresholds)
+
+    if weight_overrides:
+        for override in weight_overrides:
+            if "=" not in override:
+                raise ValueError(
+                    f"Formato de override de peso inválido: '{override}'. Usar 'capa=valor'"
+                )
+            key, val_str = override.split("=", 1)
+            key = key.strip().lower()
+            if key == "deps":
+                key = "dependencies"
+            try:
+                val = float(val_str.strip())
+            except ValueError as err:
+                raise ValueError(
+                    f"Valor de peso inválido para '{key}': '{val_str}'"
+                ) from err
+            weights[key] = val
+
+        # Normalización
+        total_weight = sum(weights.values())
+        if total_weight <= 0:
+            raise ValueError("La suma de pesos debe ser mayor a 0")
+        if abs(total_weight - 1.0) > 1e-4:
+            logger.warning(
+                "La suma de pesos CLI (%.2f) difiere de 1.0. Re-normalizando automáticamente.",
+                total_weight,
+            )
+            weights = {k: round(v / total_weight, 4) for k, v in weights.items()}
+
+    if threshold_overrides:
+        for override in threshold_overrides:
+            if "=" not in override:
+                raise ValueError(
+                    f"Formato de override de umbral inválido: '{override}'. Usar 'nivel=valor'"
+                )
+            key, val_str = override.split("=", 1)
+            key = key.strip().lower()
+            try:
+                val = int(val_str.strip())
+            except ValueError as err:
+                raise ValueError(
+                    f"Valor de umbral inválido para '{key}': '{val_str}'"
+                ) from err
+            thresholds[key] = val
+
+    return WatchGateConfig(
+        weights=weights,
+        thresholds=thresholds,
+        max_diff_tokens=config.max_diff_tokens,
+        monthly_budget_tokens=config.monthly_budget_tokens,
+        max_dependency_checks=config.max_dependency_checks,
+        block_on_red=config.block_on_red,
+        shortcircuit_enabled=config.shortcircuit_enabled,
+    )
