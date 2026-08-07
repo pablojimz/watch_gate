@@ -39,6 +39,16 @@ def render_console(aggregated: AggregatedResult) -> str:
         header_text.append(
             f"Puntuación Global de Riesgo: {aggregated.score}/100\n", style="bold"
         )
+        if aggregated.threat_summary:
+            m_cnt = aggregated.threat_summary.get("malicioso", 0)
+            v_cnt = aggregated.threat_summary.get("vulnerabilidad", 0)
+            u_cnt = aggregated.threat_summary.get("incertidumbre", 0)
+            if m_cnt > 0 or v_cnt > 0 or u_cnt > 0:
+                header_text.append(
+                    f"Amenazas: 🚨 {m_cnt} Maliciosa(s) | "
+                    f"⚠️ {v_cnt} Vulnerabilidad(es) | "
+                    f"❓ {u_cnt} Incertidumbre(s)\n"
+                )
         header_text.append(f"PR ID: {aggregated.pr_id or 'N/A'} | Repo: {aggregated.repo or 'N/A'}")
 
         console.print(

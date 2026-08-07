@@ -12,6 +12,7 @@ from watchgate.core.models import (
     NormalizedDiff,
     RiskCategory,
     Semaforo,
+    ThreatNature,
 )
 
 # Umbrales por defecto (score >= red -> ROJO, score >= yellow -> AMARILLO).
@@ -85,6 +86,42 @@ def _semaforo(score: int, thresholds: dict[str, int]) -> Semaforo:
     return Semaforo.VERDE
 
 
+def _apply_malicious_and_uncertain_policy(
+    score: int,
+    results: dict[str, LayerResult],
+    diff: NormalizedDiff | None,
+    thresholds: dict[str, int],
+) -> tuple[int, Semaforo]:
+    has_high_confidence_malicious = False
+    has_medium_confidence_malicious = False
+
+    for layer_res in results.values():
+        if layer_res.skipped:
+            continue
+        if layer_res.threat_nature == ThreatNature.MALICIOUS:
+            if layer_res.confidence == Confidence.ALTA or layer_res.risk_score >= thresholds["red"]:
+                has_high_confidence_malicious = True
+            elif layer_res.confidence == Confidence.MEDIA or layer_res.risk_score >= 50:
+                has_medium_confidence_malicious = True
+
+    if has_high_confidence_malicious:
+        return 100, Semaforo.ROJO
+
+    if has_medium_confidence_malicious:
+        score = max(score, thresholds["red"])
+
+    if diff and diff.files:
+        from watchgate.core.layers._semantic.prompting import UNVERIFIED_CONTENT_MARKER
+
+        uncertain_files_count = sum(
+            1 for fc in diff.files if UNVERIFIED_CONTENT_MARKER in fc.diff_hunk
+        )
+        if uncertain_files_count / len(diff.files) > 0.5 and score < thresholds["yellow"]:
+            score = thresholds["yellow"]
+
+    return score, _semaforo(score, thresholds)
+
+
 def aggregate(
     results: dict[str, LayerResult],
     weights: dict[str, float],
@@ -104,7 +141,20 @@ def aggregate(
     thresholds = thresholds or DEFAULT_THRESHOLDS
     score = round(weighted_average(results, weights))
     score = _apply_high_confidence_semantic_floor(score, results, thresholds)
-    semaforo = _semaforo(score, thresholds)
+    score, semaforo = _apply_malicious_and_uncertain_policy(score, results, diff, thresholds)
+
+    threat_summary = {
+        ThreatNature.MALICIOUS.value: 0,
+        ThreatNature.VULNERABILITY.value: 0,
+        ThreatNature.UNCERTAIN.value: 0,
+    }
+    for layer_res in results.values():
+        if layer_res.skipped:
+            continue
+        for f in layer_res.findings:
+            t_val = f.threat_nature.value
+            threat_summary[t_val] = threat_summary.get(t_val, 0) + 1
+
     return AggregatedResult(
         score=score,
         semaforo=semaforo,
@@ -113,4 +163,5 @@ def aggregate(
         pr_id=pr_id,
         repo=repo,
         timestamp=datetime.now(UTC).isoformat(),
+        threat_summary=threat_summary,
     )

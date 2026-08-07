@@ -4,7 +4,14 @@ from __future__ import annotations
 
 from watchgate.core.aggregator import aggregate
 from watchgate.core.comment_template import render_comment
-from watchgate.core.models import Confidence, LayerResult, RiskCategory, Semaforo
+from watchgate.core.models import (
+    Confidence,
+    Finding,
+    LayerResult,
+    RiskCategory,
+    Semaforo,
+    ThreatNature,
+)
 
 
 def _result(
@@ -194,3 +201,32 @@ def test_semantic_floor_never_lowers_a_score_that_was_already_higher():
 
     assert out.score == 92  # media ponderada real, sin que el suelo la baje
     assert out.semaforo == Semaforo.ROJO
+
+
+def test_malicious_threat_forces_red_semaforo():
+    finding = Finding(
+        file_path="setup.py",
+        rule_id="postinstall-script",
+        message="Exfiltración en script",
+        threat_nature=ThreatNature.MALICIOUS,
+        severity="error",
+    )
+    deps_layer = LayerResult(
+        layer_name="deps",
+        risk_score=80,
+        justification="Script malicioso",
+        findings=[finding],
+        confidence=Confidence.ALTA,
+        threat_nature=ThreatNature.MALICIOUS,
+    )
+    results = {
+        "reputation": _result("reputation", 0),
+        "deps": deps_layer,
+    }
+    weights = {"reputation": 0.5, "deps": 0.5}
+
+    out = aggregate(results, weights, diff=None, pr_id="1", repo="org/repo")
+
+    assert out.score == 100
+    assert out.semaforo == Semaforo.ROJO
+    assert out.threat_summary["malicioso"] == 1

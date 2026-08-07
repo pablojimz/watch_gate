@@ -20,10 +20,10 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from watchgate.core.layers._semantic.tools import FORCE_FINAL_ANSWER_MESSAGE, ToolCallBudget
-from watchgate.core.models import Confidence, RiskCategory
+from watchgate.core.models import Confidence, RiskCategory, ThreatNature
 
 ToolExecutor = Callable[[str, dict[str, Any]], Any]
 
@@ -34,9 +34,32 @@ class SemanticOutput(BaseModel):
     """Esquema exacto de §7.1."""
 
     risk_score: int = Field(ge=0, le=100)
+    threat_nature: ThreatNature = ThreatNature.VULNERABILITY
     category: RiskCategory
     justification: str
     confidence: Confidence
+
+    @field_validator("threat_nature", mode="before")
+    @classmethod
+    def normalize_threat_nature(cls, v: Any) -> ThreatNature:
+        if isinstance(v, ThreatNature):
+            return v
+        s = str(v).lower().strip()
+        if s in (
+            "malicioso",
+            "malicious",
+            "malware",
+            "backdoor",
+            "exfiltracion",
+            "trojan",
+            "ataque",
+        ):
+            return ThreatNature.MALICIOUS
+        if s in ("vulnerabilidad", "vulnerability", "cve", "bug", "defect", "cwe"):
+            return ThreatNature.VULNERABILITY
+        if s in ("incertidumbre", "uncertain", "desconocido", "unknown"):
+            return ThreatNature.UNCERTAIN
+        return ThreatNature.UNCERTAIN
 
 
 class SemanticParsingError(Exception):
