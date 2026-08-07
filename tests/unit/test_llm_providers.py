@@ -145,6 +145,38 @@ def test_gemini_retries_once_on_invalid_json_then_succeeds():
     assert output.risk_score == 20
 
 
+def test_gemini_raises_clear_error_instead_of_indexerror_when_candidates_empty():
+    """Gemini puede devolver `candidates` vacío (p. ej. respuesta bloqueada
+    por sus propios filtros de seguridad) -- antes de este fix,
+    `response.candidates[0]` reventaba con IndexError sin contexto útil."""
+    from google.genai import types
+
+    fake = _FakeGenaiClient([types.GenerateContentResponse(candidates=[])])
+    client = GeminiClient(client=fake)
+
+    with pytest.raises(SemanticParsingError, match="no devolvió ningún candidate"):
+        client.complete_structured(
+            "sys", "user", tools=[], tool_executor=lambda n, i: None, max_tool_calls=3
+        )
+
+
+def test_gemini_raises_clear_error_when_candidates_empty_on_retry():
+    from google.genai import types
+
+    fake = _FakeGenaiClient(
+        [
+            _gemini_text_response("no json"),
+            types.GenerateContentResponse(candidates=[]),
+        ]
+    )
+    client = GeminiClient(client=fake)
+
+    with pytest.raises(SemanticParsingError, match="no devolvió ningún candidate en el reintento"):
+        client.complete_structured(
+            "sys", "user", tools=[], tool_executor=lambda n, i: None, max_tool_calls=3
+        )
+
+
 def test_gemini_raises_semantic_parsing_error_after_two_invalid_json_attempts():
     fake = _FakeGenaiClient(
         [_gemini_text_response("no json"), _gemini_text_response("sigue sin ser json")]
