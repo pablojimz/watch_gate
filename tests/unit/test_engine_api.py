@@ -26,12 +26,11 @@ def test_db_session(tmp_path):
 
 @pytest.fixture
 def api_client(test_db_session):
-    session, engine = test_db_session
+    session, _engine = test_db_session
 
     app.dependency_overrides[get_db_session] = lambda: session
-    with patch("watchgate.api.routers.analyze.default_engine", engine):
-        client = TestClient(app)
-        yield client, session
+    client = TestClient(app)
+    yield client, session
     app.dependency_overrides.clear()
 
 

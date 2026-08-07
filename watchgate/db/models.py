@@ -19,6 +19,7 @@ class Organization(SQLModel, table=True):
     name: str
     plan_tier: str = Field(default="starter")  # "starter" | "pro" | "enterprise"
     monthly_token_quota: int = Field(default=1_000_000)
+    policy_json: str | None = Field(default=None)  # Overrides corporativos de gobernanza
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
