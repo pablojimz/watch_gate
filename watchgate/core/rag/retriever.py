@@ -12,6 +12,7 @@ from watchgate.core.rag.indexer import (
     DEFAULT_INDEX_PATH,
     EMBEDDING_MODEL_NAME,
     FEEDBACK_COLLECTION_NAME,
+    get_chroma_client,
 )
 
 if TYPE_CHECKING:
@@ -88,9 +89,7 @@ def retrieve_relevant_context(
 
     Devuelve lista vacía si no existe ningún índice todavía (no se ha
     ejecutado `watchgate rag reindex` ni hay ningún caso de feedback)."""
-    import chromadb
-
-    client = chromadb.PersistentClient(path=index_path)
+    client = get_chroma_client(index_path=index_path)
     model = _get_embedding_model()
     query_embedding = model.encode([diff_summary]).tolist()
 

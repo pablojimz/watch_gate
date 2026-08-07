@@ -8,8 +8,11 @@ persiste en una colección ChromaDB local. Este indexado se ejecuta una vez
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
+from urllib.parse import urlparse
 
 import chromadb
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -30,6 +33,23 @@ EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
 # con un tamaño en caracteres (~4 caracteres/token de media en inglés/español).
 _CHUNK_SIZE_CHARS = 1000
 _CHUNK_OVERLAP_CHARS = 100
+
+
+def get_chroma_client(index_path: str = DEFAULT_INDEX_PATH) -> Any:
+    """Retorna un cliente de ChromaDB.
+
+    Si la variable de entorno `WATCHGATE_CHROMA_URL` (o `CHROMA_URL`) está definida,
+    instancia un `chromadb.HttpClient` para RAG distribuido en la nube / VPC.
+    En caso contrario, utiliza `chromadb.PersistentClient(path=index_path)`.
+    """
+    chroma_url = os.environ.get("WATCHGATE_CHROMA_URL") or os.environ.get("CHROMA_URL")
+    if chroma_url:
+        parsed = urlparse(chroma_url)
+        host = parsed.hostname or chroma_url
+        port = parsed.port or (443 if parsed.scheme == "https" else 8000)
+        ssl = parsed.scheme == "https"
+        return chromadb.HttpClient(host=host, port=port, ssl=ssl)
+    return chromadb.PersistentClient(path=index_path)
 
 
 def load_corpus_documents(corpus_dir: Path = CORPUS_DIR) -> list[tuple[str, str]]:
@@ -69,7 +89,7 @@ def build_index(corpus_dir: Path = CORPUS_DIR, index_path: str = DEFAULT_INDEX_P
     model = SentenceTransformer(EMBEDDING_MODEL_NAME)
     embeddings = model.encode(texts).tolist()
 
-    client = chromadb.PersistentClient(path=index_path)
+    client = get_chroma_client(index_path=index_path)
     # Reindex limpio: si un documento encoge entre dos ejecuciones, sus
     # fragmentos sobrantes no deben quedar huérfanos en la colección.
     try:
