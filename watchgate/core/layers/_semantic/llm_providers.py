@@ -74,6 +74,17 @@ class GeminiClient(LLMClient):
                     tools=gemini_tools if not budget.exhausted else [],
                 ),
             )
+            # A diferencia de AnthropicClient (itera response.content, que si
+            # llega vacío da una lista vacía, no un error), Gemini puede
+            # devolver `candidates` vacío -- p. ej. si sus propios filtros de
+            # seguridad bloquean la respuesta. Indexar [0] a pelo ahí
+            # reventaba con IndexError, que safe_analyze() sí captura, pero
+            # como una excepción genérica sin contexto útil en skip_reason.
+            if not response.candidates:
+                block_reason = getattr(response, "prompt_feedback", None)
+                raise SemanticParsingError(
+                    f"Gemini no devolvió ningún candidate (prompt_feedback={block_reason!r})."
+                )
             parts = response.candidates[0].content.parts
             function_calls = [p for p in parts if getattr(p, "function_call", None)]
 
@@ -139,6 +150,12 @@ class GeminiClient(LLMClient):
             contents=retry_contents,
             config=types.GenerateContentConfig(system_instruction=system_prompt),
         )
+        if not retry_response.candidates:
+            block_reason = getattr(retry_response, "prompt_feedback", None)
+            raise SemanticParsingError(
+                f"Gemini no devolvió ningún candidate en el reintento "
+                f"(prompt_feedback={block_reason!r})."
+            )
         retry_parts = retry_response.candidates[0].content.parts
         retry_text = "".join(p.text for p in retry_parts if getattr(p, "text", None))
         try:

@@ -106,6 +106,16 @@ def test_save_pr_score() -> None:
     assert pr_record.score == 47
     assert pr_record.semaforo == "amarillo"
 
+    # layer_results_json/weights_used_json deben ser JSON de verdad (no
+    # str(dict) de Python, que usa comillas simples y True/False/None en vez
+    # de true/false/null -- json.loads() sobre eso falla).
+    import json
+
+    parsed_layers = json.loads(pr_record.layer_results_json)
+    assert parsed_layers["static"]["risk_score"] == 20
+    parsed_weights = json.loads(pr_record.weights_used_json)
+    assert parsed_weights == {"static": 0.5, "semantic": 0.5}
+
 
 def test_semantic_cache_operations() -> None:
     session = _get_memory_session()
