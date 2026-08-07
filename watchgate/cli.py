@@ -154,6 +154,7 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
             config, weight_overrides=args.weight, threshold_overrides=args.threshold
         )
     except Exception as exc:  # noqa: BLE001
+        logger.debug("Fallo cargando/aplicando configuración", exc_info=True)
         if not args.quiet:
             msg = f"[Error de Configuración] No se pudo cargar/aplicar config: {exc}"
             print(msg, file=sys.stderr)
@@ -183,6 +184,7 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
                     print(msg, file=sys.stderr)
                 return 2
         except Exception as exc:  # noqa: BLE001
+            logger.debug("Fallo leyendo stdin", exc_info=True)
             if not args.quiet:
                 msg = f"[Error Ingesta] No se pudo leer la entrada estándar: {exc}"
                 print(msg, file=sys.stderr)
@@ -196,6 +198,7 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
         try:
             diff = parse_diff_from_text(diff_text, authors=[author])
         except Exception as exc:  # noqa: BLE001
+            logger.debug("Fallo parseando el diff de stdin", exc_info=True)
             if not args.quiet:
                 msg = f"[Error de Parseo] Sintaxis de diff no válida en stdin: {exc}"
                 print(msg, file=sys.stderr)
@@ -204,6 +207,7 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
         try:
             diff = parse_diff(args.repo_path, args.base, args.head)
         except Exception as exc:  # noqa: BLE001
+            logger.debug("Fallo extrayendo el diff con git", exc_info=True)
             if not args.quiet:
                 msg = f"[Error de Git] No se pudo extraer el diff de '{args.repo_path}': {exc}"
                 print(msg, file=sys.stderr)
@@ -219,6 +223,7 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
     try:
         aggregated = run_full_analysis(diff, metadata, config)
     except Exception as exc:  # noqa: BLE001
+        logger.debug("Fallo en el pipeline de análisis", exc_info=True)
         if not args.quiet:
             print(f"[Error de Ejecución] Fallo en el pipeline de análisis: {exc}", file=sys.stderr)
         return 3
@@ -249,6 +254,7 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
             out_path.parent.mkdir(parents=True, exist_ok=True)
             out_path.write_text(output_text, encoding="utf-8")
         except Exception as exc:  # noqa: BLE001
+            logger.debug("Fallo escribiendo el archivo de salida", exc_info=True)
             if not args.quiet:
                 msg = f"[Error de Escritura] No se pudo guardar en '{args.output}': {exc}"
                 print(msg, file=sys.stderr)

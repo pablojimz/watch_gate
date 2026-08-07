@@ -131,7 +131,7 @@ def render_sarif(aggregated: AggregatedResult) -> str:
                     "driver": {
                         "name": "WatchGate",
                         "version": "0.1.0",
-                        "informationUri": "https://github.com/pabloayllong/watch_gate",
+                        "informationUri": "https://github.com/pablojimz/watch_gate",
                         "rules": list(rules_dict.values()),
                     }
                 },
