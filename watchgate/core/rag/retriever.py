@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import threading
 from typing import TYPE_CHECKING, Any
 
@@ -17,6 +18,8 @@ from watchgate.core.rag.indexer import (
 
 if TYPE_CHECKING:
     from sentence_transformers import SentenceTransformer
+
+logger = logging.getLogger("watchgate.core.rag.retriever")
 
 # Cachea el modelo de embeddings en vez de instanciarlo en cada llamada: cargarlo
 # de cero en cada análisis es un coste real evitable, y bajo llamadas concurrentes
@@ -55,7 +58,20 @@ def _query_collection(
 ) -> tuple[list[str], list[dict[str, Any]]]:
     try:
         collection = client.get_collection(collection_name)
-    except Exception:  # noqa: BLE001 - la colección puede no existir todavía
+    except Exception as exc:  # noqa: BLE001 - "no existe todavía" y un fallo
+        # real de conectividad (p. ej. contra `WATCHGATE_CHROMA_URL` remoto)
+        # levantan la misma excepción genérica del cliente de ChromaDB -- sin
+        # este log, un problema de red real se ve exactamente igual que
+        # "todavía no se ha corrido `watchgate rag reindex`": contexto RAG
+        # descartado en silencio en cada análisis, sin ninguna pista de por
+        # qué. `debug`, no `warning`: en uso normal de un solo tenant sin
+        # feedback aún registrado, esto es un estado legítimo y frecuente.
+        logger.debug(
+            "No se pudo obtener la colección %r de ChromaDB (¿todavía no existe, o fallo de "
+            "conectividad?): %r",
+            collection_name,
+            exc,
+        )
         return [], []
 
     count = collection.count()

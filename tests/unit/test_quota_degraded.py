@@ -153,6 +153,44 @@ def test_quota_service_degraded_mode() -> None:
     assert current_usage == 1500
 
 
+def test_analyze_with_quota_overrides_client_supplied_org_id(monkeypatch) -> None:
+    """Caso real encontrado en revisión: `metadata` llega de un payload HTTP
+    sin validar (`AnalyzeRequest.metadata: dict[str, Any]`) y antes solo se
+    inyectaba `org_id` si la clave no estaba ya presente -- un cliente
+    autenticado como la Org A podía mandar `metadata={"org_id": "org-b"}` y
+    la capa semántica filtraba el RAG distribuido por el feedback humano de
+    la Org B (fuga cross-tenant), o vaciaba el filtro por completo con
+    `org_id=None`/"" para ver el de TODAS las orgs mezclado. El `org_id`
+    real -- el que resuelve la autenticación -- debe ganar siempre."""
+    session = _get_memory_session()
+    org_a = create_organization(session, name="Org A", monthly_token_quota=100_000)
+    user = create_user(session, email="a@example.com", name="User A", org_id=org_a.id)
+
+    captured_metadata: dict[str, object] = {}
+
+    def _capturing_full_analysis(diff, metadata, config):  # noqa: ANN001, ARG001
+        captured_metadata.update(metadata)
+        return _fake_full_analysis(diff, metadata, config)
+
+    monkeypatch.setattr(quota_module, "run_full_analysis", _capturing_full_analysis)
+
+    diff = parse_diff_from_text(
+        diff_text="--- a/main.py\n+++ b/main.py\n@@ -1 +1 @@\n-x = 1\n+x = 2",
+        base_sha="0000000",
+        head_sha="1111111",
+    )
+    quota_service = QuotaService(session)
+    quota_service.analyze_with_quota(
+        diff=diff,
+        metadata={"pr_id": "1", "repo": "test/repo", "org_id": "org-b"},
+        config=WatchGateConfig(),
+        org_id=org_a.id,
+        user_id=user.id,
+    )
+
+    assert captured_metadata["org_id"] == org_a.id
+
+
 def _fake_full_analysis(diff, metadata, config):  # noqa: ANN001, ARG001
     """Doble rápido de `run_full_analysis`: simula una llamada real al LLM
     (con su latencia) sin red ni coste, para poder probar concurrencia."""
