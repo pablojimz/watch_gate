@@ -105,9 +105,19 @@ Decisión que se mantuvo sin cambios: el hash se compara **por clave** (idioma c
 - `_detect_language` ampliado de 11 a 28 extensiones/patrones: cubre los 17 lenguajes de `custom/` y los que solo tienen reglas third-party (kotlin, scala, solidity, terraform); Dockerfile se detecta por nombre de fichero, no por extensión.
 - El fallback sin verificación (paso 4 de `_get_rules_dir`) ahora deja constancia explícita con `logger.warning` si se alcanza — sigue existiendo (es necesario para un consumidor externo del paquete sin el checkout ya sincronizado), pero nunca en silencio.
 
-## 8. Pendiente / gaps conocidos
+## 8. Capa YARA (cerrado)
+
+Per spec §4, YARA no es una capa nueva ni independiente: es la MISMA capa `static` que Semgrep, combinada con `max()` (nunca sumar), bajo el mismo peso `static: 0.25` de `.watchgate.yml` — confirmado por el propio comentario del fichero de ejemplo (`# Semgrep / YARA sobre el código modificado`). Se implementó así, no como un quinto `@register_layer` aparte:
+
+- `_get_compiled_yara_rules`: compila **todas** las categorías publicadas en `rules/yara/<categoria>/`, siempre (nunca selección parcial), con caché de proceso (compilar ~700 reglas no es gratis; se compila una vez por ejecución de `watchgate`, no por fichero).
+- `_run_yara_on_text`: ejecuta el catálogo compilado sobre el mismo contenido que ve Semgrep (el `diff_hunk`), pero **sin filtrar por lenguaje** — a diferencia de Semgrep, que necesita `_detect_language` para elegir configuración. Un webshell puede llevar cualquier extensión, o ninguna; filtrar YARA por lenguaje habría anulado buena parte de su propósito.
+- El `risk_score` de cada hallazgo se lee de los metadatos que la propia regla ya trae (`meta.risk_score`, calculado en el repo de reglas como `0.45*severity + 0.30*confidence + 0.25*exploitability`) — no se reinventa una tabla de severidad aparte como la de Semgrep. `threat_nature` es siempre `MALICIOUS` (el catálogo YARA aquí es enteramente de detección de malware/webshells/anti-análisis).
+- `analyze()` combina los hallazgos de Semgrep y YARA en la misma lista y aplica el `max()` ya existente sobre el conjunto — verificado explícitamente que Semgrep(30) + YARA(83) da 83, nunca 113.
+
+Verificado con reglas reales del repo (compilación de las 9 reglas ya sincronizadas + match real contra un webshell ASP legítimo, extrayendo `risk_score=83` de sus propios metadatos) y con tests unitarios que fijan el caso clave: un fichero `.asp` (extensión que Semgrep no reconoce) sigue detectándose vía YARA.
+
+## 9. Pendiente / gaps conocidos
 
 - **`sync-rules.yml` (el disparo real por `repository_dispatch`) todavía no se ha probado de punta a punta** — sí se validó `reconcile-rules.yml`, que comparte toda la lógica de sincronización, pero el disparo por evento en sí queda por confirmar (simulando el evento o publicando una release real desde el repo de reglas).
-- **No existe ninguna capa YARA** en el código Python de `watchgate` todavía. `rules/yara/<categoria>/` queda poblado y verificado por este flujo, listo para cuando se implemente esa capa, pero hoy no lo usa nadie.
 
-Estos dos puntos son candidatos naturales para una siguiente iteración, no bugs de lo entregado aquí.
+Este es el único punto pendiente de una siguiente iteración; no es un bug de lo entregado aquí.
