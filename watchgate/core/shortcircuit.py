@@ -33,7 +33,7 @@ from collections.abc import Callable
 
 from watchgate.core.aggregator import weighted_average
 from watchgate.core.layers._shared import DEPENDENCY_MANIFEST_FILENAMES
-from watchgate.core.models import LayerResult, NormalizedDiff, Semaforo, ThreatNature
+from watchgate.core.models import Confidence, LayerResult, NormalizedDiff, Semaforo, ThreatNature
 
 FORCING_PATTERNS: list[str] = [r"PKGBUILD$", r"^\.github/workflows/", r"Makefile$", r"Dockerfile$"]
 
@@ -88,13 +88,22 @@ def evaluate_shortcircuit(
     """
     partial_score = weighted_average(partial_results, weights, layer_names=_PARTIAL_LAYER_NAMES)
 
-    # Si alguna capa determinista encontró un hallazgo MALICIOUS con alto riesgo (>= red threshold),
-    # cortocircuitar directamente a ROJO sin gastar tokens en el LLM.
+    # Si alguna capa determinista encontró un hallazgo MALICIOUS de
+    # confianza ALTA de verdad, cortocircuitar directamente a ROJO sin
+    # gastar tokens en el LLM. Antes bastaba con `risk_score >= red
+    # threshold` (sin mirar confidence en absoluto) -- mismo problema que
+    # ya se corrigió hoy en `aggregator.py::_apply_malicious_and_uncertain_
+    # policy`: `deps_layer.py` nunca rellena `confidence` y puntúa 75-80
+    # para patrones habituales y a menudo legítimos (dependencia pinneada a
+    # una URL de git, script postinstall con chmod +x), así que esto podía
+    # cortocircuitar a ROJO -- sin darle nunca la oportunidad a la capa
+    # semántica de matizarlo -- un PR benigno con `shortcircuit_enabled`
+    # activo (opt-in, no es el default).
     for layer_res in partial_results.values():
         if (
             not layer_res.skipped
             and layer_res.threat_nature == ThreatNature.MALICIOUS
-            and layer_res.risk_score >= thresholds["red"]
+            and layer_res.confidence == Confidence.ALTA
         ):
             return Semaforo.ROJO
 

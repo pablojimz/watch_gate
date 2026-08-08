@@ -86,6 +86,45 @@ def test_render_github_annotations_stream() -> None:
     assert stream.getvalue() == output + "\n"
 
 
+def test_render_github_annotations_escapes_colon_and_comma_in_properties() -> None:
+    """Caso real encontrado en revisión: `file_path` es contenido controlado
+    por el autor del PR. Sin escapar `:`/`,` en los VALORES DE PROPIEDAD
+    (delimitadores de la sintaxis `key=val,key=val`), un nombre de fichero
+    con esos caracteres podía inyectar propiedades falsas o incluso un
+    `::error ...::` completo, corrompiendo la anotación."""
+    finding = Finding(
+        file_path="src/utils,line=999,title=FAKE INJECTED::error title=Pwned",
+        rule_id="typosquat",
+        message="typosquatting sospechoso",
+        severity="warning",
+    )
+    deps_res = LayerResult(
+        layer_name="dependencies",
+        risk_score=80,
+        justification="x",
+        findings=[finding],
+    )
+    agg = AggregatedResult(
+        score=80,
+        semaforo=Semaforo.ROJO,
+        layer_results={"dependencies": deps_res},
+        weights_used={"dependencies": 1.0},
+        pr_id="1",
+        repo="org/repo",
+        timestamp="2026-08-07T12:00:00Z",
+    )
+
+    output = render_github_annotations(agg)
+
+    # Ninguna línea de la salida debe contener una segunda secuencia "::"
+    # inyectada a mitad de los props -- el `file_path` malicioso debe
+    # quedar contenido dentro de un único valor `file=...` escapado.
+    for line in output.splitlines():
+        assert line.count("::") == 2, f"posible inyección de comando de workflow: {line!r}"
+    assert "line=999" not in output.split("::")[1]  # no se coló como prop real
+    assert "%3A%3Aerror" in output  # el "::" del payload quedó escapado, no ejecutado
+
+
 def test_render_console_contains_panels() -> None:
     agg = _make_dummy_aggregated()
     console_out = render_console(agg)

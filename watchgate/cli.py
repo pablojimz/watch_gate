@@ -258,6 +258,12 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
             if not args.quiet:
                 msg = f"[Error de Escritura] No se pudo guardar en '{args.output}': {exc}"
                 print(msg, file=sys.stderr)
+            # Exit code propio, no el 0/1 de abajo (que solo refleja el
+            # semáforo) -- un pipeline de CI que dependa del artefacto en
+            # disco (p. ej. `upload-sarif` sobre `--output results.sarif`)
+            # debe ver un fallo real, no un 0 silencioso solo porque el
+            # contenido también fue a stdout.
+            return 3
 
     # 7. Exit Codes estandarizados
     if config.block_on_red and aggregated.semaforo == Semaforo.ROJO:

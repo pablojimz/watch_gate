@@ -8,7 +8,26 @@ from watchgate.core.models import AggregatedResult, Semaforo
 
 
 def _escape_property(val: str) -> str:
-    return val.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+    """Escapa un valor de propiedad (`title=`, `file=`, ...) para un comando
+    de workflow de GitHub Actions.
+
+    A diferencia de `_escape_data` (el mensaje, que va después del último
+    `::`), los VALORES DE PROPIEDAD viven dentro de una lista separada por
+    `,` (`::warning key=val,key=val::mensaje`), así que además de `%`/`\\r`/
+    `\\n` hay que escapar `:` y `,` -- son los delimitadores de esa sintaxis.
+    Sin esto, un `file_path` con esos caracteres (contenido controlado por
+    el autor del PR, p. ej. un nombre de fichero) puede inyectar
+    propiedades falsas (`line=999,title=FAKE`) o incluso un `::error ...::`
+    completo, corrompiendo la anotación real. Ver
+    https://github.com/actions/toolkit/blob/main/docs/commands.md
+    """
+    return (
+        val.replace("%", "%25")
+        .replace("\r", "%0D")
+        .replace("\n", "%0A")
+        .replace(":", "%3A")
+        .replace(",", "%2C")
+    )
 
 
 def _escape_data(val: str) -> str:

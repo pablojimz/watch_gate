@@ -919,12 +919,26 @@ def upsert_user(
     conn.commit()
 
 
+# Hash de relleno con el mismo coste (120.000 iteraciones PBKDF2) que un
+# hash real, para que `authenticate_user` tarde lo mismo tanto si el login
+# existe como si no -- ver el comentario dentro de la función.
+_DUMMY_PASSWORD_HASH = hash_password("watchgate-dummy-timing-safe-password")
+
+
 def authenticate_user(conn: DBConnection, login: str, password: str) -> bool:
+    """Antes, un login inexistente devolvía `False` de inmediato, mientras
+    que uno existente calculaba un PBKDF2 de 120.000 iteraciones (lento a
+    propósito) antes de comparar -- la diferencia de tiempo es medible y
+    permite enumerar logins válidos contra `/api/auth/login`, más aún sin
+    ningún rate limiting delante. Ahora siempre se ejecuta un PBKDF2 de
+    verdad, exista o no el usuario, comparando contra un hash de relleno
+    fijo cuando no existe."""
     row = conn.execute(
         "SELECT password_hash FROM dashboard_users WHERE login = ?",
         (normalize_login(login),),
     ).fetchone()
     if row is None:
+        verify_password(password, _DUMMY_PASSWORD_HASH)
         return False
     return verify_password(password, row["password_hash"])
 

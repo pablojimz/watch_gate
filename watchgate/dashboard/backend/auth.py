@@ -83,10 +83,24 @@ def ensure_safe_startup_config() -> None:
             "WATCHGATE_DASHBOARD_SECRET no está configurado (sigue en el valor "
             "por defecto inseguro)"
         )
+    elif len(_secret()) < 32:
+        # Solo se comprobaba el valor exacto por defecto -- un secreto
+        # propio pero corto/débil (p. ej. "x") pasaba el check libremente.
+        # 32 caracteres es un mínimo razonable para una clave HMAC-SHA256.
+        problems.append(
+            f"WATCHGATE_DASHBOARD_SECRET es demasiado corto ({len(_secret())} caracteres, "
+            "mínimo 32) para firmar sesiones de forma segura"
+        )
     if _ingest_token() is None:
         problems.append(
             "WATCHGATE_DASHBOARD_INGEST_TOKEN no está configurado "
             "(POST /api/scores quedaría sin autenticar)"
+        )
+    if os.environ.get("WATCHGATE_DASHBOARD_SECURE_COOKIE", "0") != "1":
+        problems.append(
+            "WATCHGATE_DASHBOARD_SECURE_COOKIE no está activado (la cookie de sesión, que "
+            "puede llevar embebido un token de acceso de GitHub, viajaría sin el flag "
+            "Secure)"
         )
     if problems:
         raise RuntimeError(
@@ -194,8 +208,8 @@ def resolve_role(user_login: str, repo: str, github_token: str | None = None) ->
     if github_token and "/" in repo:
         owner, name = repo.split("/", 1)
         permission = _fetch_github_permission(github_token, owner, name, user_login)
-        if permission is not None:
-            mapped = _map_github_permission(permission)
+        mapped = _map_github_permission(permission) if permission is not None else None
+        if mapped is not None:
             with database.db_session() as conn:
                 database.upsert_role(conn, user_login, repo, mapped)
             return mapped
@@ -206,10 +220,23 @@ def resolve_role(user_login: str, repo: str, github_token: str | None = None) ->
     )
 
 
-def _map_github_permission(permission: str) -> RoleName:
+def _map_github_permission(permission: str) -> RoleName | None:
+    """Allowlist explícita, denegar por defecto -- no al revés.
+
+    La API de Collaborators de GitHub puede devolver `"none"` (colaborador
+    listado sin acceso efectivo) o valores nuevos que no existían cuando se
+    escribió esto. Antes, cualquier valor que no fuera exactamente
+    `admin`/`maintain`/`write` caía en `revisor` por defecto -- incluido
+    `"none"` -- concediendo (y PERSISTIENDO vía `upsert_role`) acceso de
+    lectura a alguien sin ningún permiso real en el repo. Ahora un valor no
+    reconocido no concede nada: `resolve_role` sigue al 403 de "sin rol
+    asignado" en vez de fabricar uno.
+    """
     if permission in {"admin", "maintain", "write"}:
         return "mantenedor"
-    return "revisor"
+    if permission in {"read", "triage"}:
+        return "revisor"
+    return None
 
 
 def _fetch_github_permission(token: str, owner: str, repo: str, user_login: str) -> str | None:
@@ -248,8 +275,11 @@ def require_role(
     return role
 
 
+_OAUTH_STATE_COOKIE = "watchgate_oauth_state"
+
+
 @router.get("/github/login")
-def github_login() -> Response:
+def github_login(response: Response) -> Response:
     client_id = _github_client_id()
     if not client_id:
         raise HTTPException(
@@ -260,15 +290,37 @@ def github_login() -> Response:
         "WATCHGATE_GITHUB_REDIRECT_URI",
         "http://localhost:8000/api/auth/github/callback",
     )
+    # Protección CSRF del flujo OAuth: sin `state`, un atacante puede
+    # iniciar el flujo con SU PROPIA cuenta de GitHub, capturar el `code`, y
+    # hacer que la víctima visite el callback con ese código -- el navegador
+    # de la víctima termina con una sesión de WatchGate vinculada a la
+    # identidad GitHub del atacante (login CSRF). `state` aleatorio,
+    # guardado en una cookie de corta vida propia (no en la sesión, que
+    # todavía no existe en este punto del flujo) y comparado en el callback
+    # con `secrets.compare_digest`, cierra esto -- mismo mecanismo que ya
+    # usa el flujo OIDC vía `authlib`.
+    state = secrets.token_urlsafe(32)
+    response.set_cookie(
+        key=_OAUTH_STATE_COOKIE,
+        value=state,
+        httponly=True,
+        samesite="lax",
+        secure=os.environ.get("WATCHGATE_DASHBOARD_SECURE_COOKIE", "0") == "1",
+        max_age=600,
+        path="/api/auth/github",
+    )
     url = (
         "https://github.com/login/oauth/authorize"
         f"?client_id={client_id}&scope=read:org,repo&redirect_uri={redirect_uri}"
+        f"&state={state}"
     )
-    return Response(status_code=status.HTTP_307_TEMPORARY_REDIRECT, headers={"Location": url})
+    response.status_code = status.HTTP_307_TEMPORARY_REDIRECT
+    response.headers["Location"] = url
+    return response
 
 
 @router.get("/github/callback")
-def github_callback(code: str, response: Response) -> Response:
+def github_callback(code: str, state: str, request: Request, response: Response) -> Response:
     client_id = _github_client_id()
     client_secret = _github_client_secret()
     if not client_id or not client_secret:
@@ -276,6 +328,14 @@ def github_callback(code: str, response: Response) -> Response:
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
             detail="Credenciales GitHub OAuth no configuradas",
         )
+
+    expected_state = request.cookies.get(_OAUTH_STATE_COOKIE)
+    if not expected_state or not secrets.compare_digest(state, expected_state):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Parámetro state inválido o ausente -- posible CSRF del flujo OAuth.",
+        )
+    response.delete_cookie(_OAUTH_STATE_COOKIE, path="/api/auth/github")
 
     token_resp = httpx.post(
         "https://github.com/login/oauth/access_token",
