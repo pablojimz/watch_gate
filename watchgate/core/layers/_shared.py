@@ -112,9 +112,7 @@ def parse_package_json(diff_hunk: str) -> list[DependencyChange]:
 
 
 _REQ_EGG_REGEX = re.compile(r"#egg=([A-Za-z0-9._-]+)")
-_REQ_AT_REGEX = re.compile(
-    r"^\+\s*([A-Za-z0-9._-]+)\s*@\s*(https?://|git\+|file://|http://)"
-)
+_REQ_AT_REGEX = re.compile(r"^\+\s*([A-Za-z0-9._-]+)\s*@\s*(https?://|git\+|file://|http://)")
 _REQ_LINE_REGEX = re.compile(
     r"^\+\s*([A-Za-z0-9][A-Za-z0-9._-]*)\s*(?:==|>=|<=|~=|!=|>|<)?\s*([A-Za-z0-9._-]*)?"
 )
@@ -208,9 +206,7 @@ def parse_pkgbuild(diff_hunk: str) -> list[DependencyChange]:
     return changes
 
 
-_CARGO_DEP_REGEX = re.compile(
-    r'^\+\s*([A-Za-z0-9._-]+)\s*=\s*(?:"([^"]+)"|\{\s*(.*?)\s*\})'
-)
+_CARGO_DEP_REGEX = re.compile(r'^\+\s*([A-Za-z0-9._-]+)\s*=\s*(?:"([^"]+)"|\{\s*(.*?)\s*\})')
 
 
 def parse_cargo_toml(diff_hunk: str) -> list[DependencyChange]:
@@ -246,6 +242,7 @@ def parse_cargo_toml(diff_hunk: str) -> list[DependencyChange]:
                 )
             )
     return changes
+
 
 _SUSPICIOUS_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"curl\s+[^|\n]+\|\s*(sh|bash)", re.IGNORECASE), "curl_pipe_shell"),
@@ -300,9 +297,7 @@ _IGNORE_INSTRUCTIONS_RE = re.compile(
     r"ignor[ae]\w*.{0,30}(previous|prior|above|anterior)",
     re.IGNORECASE,
 )
-_DISREGARD_RE = re.compile(
-    r"disregard\s+(all |any |the )?(previous|prior|above)", re.IGNORECASE
-)
+_DISREGARD_RE = re.compile(r"disregard\s+(all |any |the )?(previous|prior|above)", re.IGNORECASE)
 _FAKE_ROLE_MARKER_RE = re.compile(
     r"^\s*(system|assistant|user)\s*:\s*", re.IGNORECASE | re.MULTILINE
 )
@@ -360,4 +355,3 @@ def find_suspicious_lines(text: str) -> list[int]:
     return [
         i for i, line in enumerate(lines) if any(p.search(line) for p, _ in _SUSPICIOUS_PATTERNS)
     ]
-

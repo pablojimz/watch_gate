@@ -62,10 +62,14 @@ def rules_repo_fixture():
     _run(["git", "lfs", "install", "--local"], source)
 
     (source / "rules/semgrep").mkdir(parents=True)
-    (source / "rules/semgrep/config.yaml").write_text("litellm: config no relacionada\n", encoding="utf-8")
+    (source / "rules/semgrep/config.yaml").write_text(
+        "litellm: config no relacionada\n", encoding="utf-8"
+    )
 
     (source / "rules/semgrep/custom/python").mkdir(parents=True)
-    (source / "rules/semgrep/custom/python/rule1.yaml").write_text("regla-python-real", encoding="utf-8")
+    (source / "rules/semgrep/custom/python/rule1.yaml").write_text(
+        "regla-python-real", encoding="utf-8"
+    )
 
     (source / "dist/yara_scored/webshells").mkdir(parents=True)
     (source / "dist/yara_scored/webshells/w.yar").write_text("rule webshell {}", encoding="utf-8")
@@ -112,7 +116,9 @@ def test_checkout_computed_hash_matches_hash_of_original_content(rules_repo_fixt
     expected_hash = compute_dir_hash(rules_repo_fixture / "rules/semgrep/custom/python")
 
     dest = tmp_path / "dest"
-    sr._checkout_from_url(rules_repo_fixture.as_posix(), "v-test", dest, ["rules/semgrep/custom/python"])
+    sr._checkout_from_url(
+        rules_repo_fixture.as_posix(), "v-test", dest, ["rules/semgrep/custom/python"]
+    )
 
     assert compute_dir_hash(dest / "rules/semgrep/custom/python") == expected_hash
 
@@ -124,13 +130,17 @@ def test_cone_mode_leaks_ancestor_file_but_it_stays_unresolved(rules_repo_fixtur
     resolver -- nunca se descarga ni se toca -- y el checkout no debe
     fallar por ello (antes fallaba con 'Resource not accessible')."""
     dest = tmp_path / "dest"
-    sr._checkout_from_url(rules_repo_fixture.as_posix(), "v-test", dest, ["rules/semgrep/custom/python"])
+    sr._checkout_from_url(
+        rules_repo_fixture.as_posix(), "v-test", dest, ["rules/semgrep/custom/python"]
+    )
 
     leaked = dest / "rules/semgrep/config.yaml"
-    assert leaked.exists(), "cone mode debería colar config.yaml (si no, el test ya no es representativo)"
-    assert b"version https://git-lfs.github.com/spec" in leaked.read_bytes()[:200], (
-        "config.yaml debería seguir siendo un puntero LFS sin resolver, nunca contenido real"
-    )
+    assert (
+        leaked.exists()
+    ), "cone mode debería colar config.yaml (si no, el test ya no es representativo)"
+    assert (
+        b"version https://git-lfs.github.com/spec" in leaked.read_bytes()[:200]
+    ), "config.yaml debería seguir siendo un puntero LFS sin resolver, nunca contenido real"
 
 
 def test_assert_no_lfs_pointers_raises_on_unresolved_pointer(rules_repo_fixture, tmp_path):
@@ -138,7 +148,9 @@ def test_assert_no_lfs_pointers_raises_on_unresolved_pointer(rules_repo_fixture,
     producción NUNCA hace -- solo mira las carpetas exactas por clave),
     `_assert_no_lfs_pointers` sí debe detectar el puntero sin resolver."""
     dest = tmp_path / "dest"
-    sr._checkout_from_url(rules_repo_fixture.as_posix(), "v-test", dest, ["rules/semgrep/custom/python"])
+    sr._checkout_from_url(
+        rules_repo_fixture.as_posix(), "v-test", dest, ["rules/semgrep/custom/python"]
+    )
 
     with pytest.raises(RuntimeError, match="PUNTERO de Git LFS sin resolver"):
         sr._assert_no_lfs_pointers(dest / "rules/semgrep")

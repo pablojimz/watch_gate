@@ -182,8 +182,7 @@ class DepsLayer(AnalysisLayer):
                 layer_name=self.name,
                 risk_score=0,
                 justification=(
-                    "Se modificaron manifiestos pero no se añadieron ni "
-                    "cambiaron dependencias."
+                    "Se modificaron manifiestos pero no se añadieron ni " "cambiaron dependencias."
                 ),
             )
 
@@ -203,9 +202,7 @@ class DepsLayer(AnalysisLayer):
             )
             if is_typosquat:
                 pkg_score = max(pkg_score, 75)
-                pkg_notes.append(
-                    f"Posible typosquatting: '{change.name}' imita a '{ref_pkg}'"
-                )
+                pkg_notes.append(f"Posible typosquatting: '{change.name}' imita a '{ref_pkg}'")
                 pkg_nature = ThreatNature.MALICIOUS
 
             # B. Script de instalación
@@ -213,9 +210,7 @@ class DepsLayer(AnalysisLayer):
                 findings = analyze_install_script_text(change.install_script)
                 if findings:
                     pkg_score = max(pkg_score, 80)
-                    pkg_notes.append(
-                        f"Script de instalación sospechoso ({', '.join(findings)})"
-                    )
+                    pkg_notes.append(f"Script de instalación sospechoso ({', '.join(findings)})")
                     pkg_nature = ThreatNature.MALICIOUS
 
             # C. Instalación directa por URL/Git

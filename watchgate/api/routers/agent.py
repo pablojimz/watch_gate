@@ -38,15 +38,14 @@ def _apply_config_override_or_400(
     except ClientConfigOverrideError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
+
 router = APIRouter(prefix="/api/v1/agent", tags=["Agent"])
 
 
 @router.post("/precheck", response_model=AggregatedResult)
 def agent_precheck(
     request: AnalyzeRequest,
-    auth: tuple[UserAPIKey, User, Organization] = Depends(
-        require_scope("analysis:write")
-    ),  # noqa: B008
+    auth: tuple[UserAPIKey, User, Organization] = Depends(require_scope("analysis:write")),  # noqa: B008
     session: Session = Depends(get_db_session),  # noqa: B008
 ) -> AggregatedResult:
     """Evaluación ultrarrápida (<100ms) utilizando únicamente capas deterministas.
@@ -103,9 +102,7 @@ def agent_precheck(
 @router.post("/analyze", response_model=AgentAnalyzeResponse)
 def agent_analyze(
     request: AnalyzeRequest,
-    auth: tuple[UserAPIKey, User, Organization] = Depends(
-        require_scope("analysis:write")
-    ),  # noqa: B008
+    auth: tuple[UserAPIKey, User, Organization] = Depends(require_scope("analysis:write")),  # noqa: B008
     session: Session = Depends(get_db_session),  # noqa: B008
 ) -> AgentAnalyzeResponse:
     """Análisis completo para agentes de IA con guía estructurada `AgentGuidance`."""
@@ -140,9 +137,7 @@ def agent_analyze(
 @router.post("/verify-fix", response_model=VerifyFixResponse)
 def agent_verify_fix(
     request: VerifyFixRequest,
-    auth: tuple[UserAPIKey, User, Organization] = Depends(
-        require_scope("analysis:write")
-    ),  # noqa: B008
+    auth: tuple[UserAPIKey, User, Organization] = Depends(require_scope("analysis:write")),  # noqa: B008
     session: Session = Depends(get_db_session),  # noqa: B008
 ) -> VerifyFixResponse:
     """Compara un diff original vs un diff candidato corregido por el agente.
@@ -205,13 +200,9 @@ def agent_verify_fix(
             cand_signatures.add(sig)
             remaining_findings.append(f)
 
-    resolved_findings = [
-        f for sig, f in orig_findings.items() if sig not in cand_signatures
-    ]
+    resolved_findings = [f for sig, f in orig_findings.items() if sig not in cand_signatures]
 
-    risk_reduced = (
-        cand_res.score < orig_res.score or len(resolved_findings) > 0
-    )
+    risk_reduced = cand_res.score < orig_res.score or len(resolved_findings) > 0
 
     return VerifyFixResponse(
         risk_reduced=risk_reduced,
@@ -224,9 +215,7 @@ def agent_verify_fix(
 
 @router.get("/policy", response_model=AgentPolicyResponse)
 def get_agent_policy(
-    auth: tuple[UserAPIKey, User, Organization] = Depends(
-        require_scope("scores:read")
-    ),  # noqa: B008
+    auth: tuple[UserAPIKey, User, Organization] = Depends(require_scope("scores:read")),  # noqa: B008
     session: Session = Depends(get_db_session),  # noqa: B008
 ) -> AgentPolicyResponse:
     """Devuelve las políticas corporativas y el estado de cuota restante de la organización."""

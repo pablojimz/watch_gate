@@ -89,9 +89,7 @@ def test_run_posts_comment_and_check_run_with_pr_context_from_event(tmp_path):
     fake_client.get_reputation_metadata.return_value = MagicMock()
 
     with (
-        patch(
-            "watchgate.adapters.github_action.main.GitHubClient", return_value=fake_client
-        ),
+        patch("watchgate.adapters.github_action.main.GitHubClient", return_value=fake_client),
         patch("watchgate.adapters.github_action.main.parse_diff", return_value=_fake_diff()),
         patch(
             "watchgate.adapters.github_action.main.run_full_analysis",
@@ -121,9 +119,7 @@ def test_run_returns_failure_exit_code_when_red_and_block_on_red(tmp_path):
     fake_client.get_pr_diff_shas.return_value = ("base" * 10, "head" * 10)
 
     with (
-        patch(
-            "watchgate.adapters.github_action.main.GitHubClient", return_value=fake_client
-        ),
+        patch("watchgate.adapters.github_action.main.GitHubClient", return_value=fake_client),
         patch("watchgate.adapters.github_action.main.parse_diff", return_value=_fake_diff()),
         patch(
             "watchgate.adapters.github_action.main.run_full_analysis",
@@ -144,9 +140,7 @@ def test_run_persists_result_to_dashboard(tmp_path):
     result = _fake_result(Semaforo.VERDE, 5)
 
     with (
-        patch(
-            "watchgate.adapters.github_action.main.GitHubClient", return_value=fake_client
-        ),
+        patch("watchgate.adapters.github_action.main.GitHubClient", return_value=fake_client),
         patch("watchgate.adapters.github_action.main.parse_diff", return_value=_fake_diff()),
         patch(
             "watchgate.adapters.github_action.main.run_full_analysis",
@@ -169,9 +163,7 @@ def test_run_applies_dashboard_config_before_analysis(tmp_path):
     config_from_dashboard = object()  # sentinel distinto del config de load_config()
 
     with (
-        patch(
-            "watchgate.adapters.github_action.main.GitHubClient", return_value=fake_client
-        ),
+        patch("watchgate.adapters.github_action.main.GitHubClient", return_value=fake_client),
         patch("watchgate.adapters.github_action.main.parse_diff", return_value=_fake_diff()),
         patch(
             "watchgate.adapters.github_action.main.run_full_analysis", return_value=result
@@ -234,5 +226,3 @@ def test_api_key_never_appears_in_output(tmp_path, capsys):
     # el token sí debe haberse usado para construir el cliente -- no es que
     # simplemente no se use, es que no debe imprimirse
     mock_client_cls.assert_called_once_with(token=secret_github_token)
-
-

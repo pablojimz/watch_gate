@@ -119,9 +119,7 @@ def test_record_token_usage_atomic_under_concurrency(tmp_path) -> None:
     import threading
 
     db_path = tmp_path / "concurrency.db"
-    test_engine = create_engine(
-        f"sqlite:///{db_path}", connect_args={"check_same_thread": False}
-    )
+    test_engine = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False})
     init_db(test_engine)
 
     n_threads = 20

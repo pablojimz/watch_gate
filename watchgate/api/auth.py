@@ -69,9 +69,7 @@ def get_current_user_from_api_key(
         # la encuentra de verdad -- cuota y gobernanza vuelven a aplicar,
         # aunque sea sobre un cubo compartido para claves sin organización
         # propia (caso legado, ver `_FALLBACK_ORG_ID`).
-        org = create_organization(
-            session, name="Default Organization", org_id=_FALLBACK_ORG_ID
-        )
+        org = create_organization(session, name="Default Organization", org_id=_FALLBACK_ORG_ID)
     return api_key, user, org
 
 

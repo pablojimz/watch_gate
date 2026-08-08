@@ -266,9 +266,7 @@ class OpenAICompatibleClient(LLMClient):
             "una respuesta final; se corta para evitar un bucle sin fin."
         )
 
-    def _chat(
-        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
-    ) -> dict[str, Any]:
+    def _chat(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> dict[str, Any]:
         payload: dict[str, Any] = {"model": self._model, "messages": messages}
         if tools:
             payload["tools"] = tools

@@ -40,12 +40,11 @@ import subprocess
 import sys
 import tempfile
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import httpx
-
 from rules_hash import compute_dir_hash, hashes_match
 
 # Rutas dentro del repo de reglas (ver estructura documentada por el
@@ -79,7 +78,9 @@ def _run_git(args: list[str], cwd: Path, mask: str | None = None) -> None:
         raise RuntimeError(f"Fallo `git {printable}`: {stderr.strip()}")
 
 
-def _checkout_rule_folders(repo: str, ref: str, token: str, dest: Path, patterns: list[str]) -> None:
+def _checkout_rule_folders(
+    repo: str, ref: str, token: str, dest: Path, patterns: list[str]
+) -> None:
     """Construye la URL autenticada del repo de reglas y delega en
     `_checkout_from_url` (ver ahí el detalle de la mecánica de sparse-checkout
     + Git LFS). Separado en dos funciones para poder testear la mecánica
@@ -90,7 +91,9 @@ def _checkout_rule_folders(repo: str, ref: str, token: str, dest: Path, patterns
     _checkout_from_url(url, ref, dest, patterns, mask=token)
 
 
-def _checkout_from_url(url: str, ref: str, dest: Path, patterns: list[str], mask: str | None = None) -> None:
+def _checkout_from_url(
+    url: str, ref: str, dest: Path, patterns: list[str], mask: str | None = None
+) -> None:
     """Checkout disperso (sparse-checkout, cone mode) de las carpetas de
     reglas necesarias, fijado EXACTAMENTE al `ref` recibido, con Git LFS
     habilitado. manifest.json NO se lee de aquí -- es un asset de Release,
@@ -110,7 +113,17 @@ def _checkout_from_url(url: str, ref: str, dest: Path, patterns: list[str], mask
     se descarga ni se toca -- justo lo que pide la spec del proyecto.
     """
     _run_git(
-        ["clone", "--no-checkout", "--filter=blob:none", "--depth", "1", "--branch", ref, url, str(dest)],
+        [
+            "clone",
+            "--no-checkout",
+            "--filter=blob:none",
+            "--depth",
+            "1",
+            "--branch",
+            ref,
+            url,
+            str(dest),
+        ],
         cwd=dest.parent,
         mask=mask,
     )
@@ -175,7 +188,9 @@ def _get_release(repo: str, ref: str, token: str) -> dict[str, Any]:
         url = f"https://api.github.com/repos/{repo}/releases/latest"
     else:
         url = f"https://api.github.com/repos/{repo}/releases/tags/{ref}"
-    response = httpx.get(url, headers=_github_headers(token, "application/vnd.github+json"), timeout=15.0)
+    response = httpx.get(
+        url, headers=_github_headers(token, "application/vnd.github+json"), timeout=15.0
+    )
     if response.status_code == 404:
         raise RuntimeError(
             f"No existe una Release '{ref}' en {repo} (o el token no tiene acceso a ella)."
@@ -184,7 +199,9 @@ def _get_release(repo: str, ref: str, token: str) -> dict[str, Any]:
     return response.json()
 
 
-def _download_release_asset(repo: str, release: dict[str, Any], asset_name: str, token: str) -> bytes:
+def _download_release_asset(
+    repo: str, release: dict[str, Any], asset_name: str, token: str
+) -> bytes:
     """Descarga el CONTENIDO de un asset de Release por su nombre.
 
     Los assets de Release no son ficheros del árbol git: se descargan vía
@@ -241,9 +258,7 @@ def fetch_release_manifest(
 
 def _flatten_third_party(third_party_hashes: dict[str, dict[str, str]]) -> list[tuple[str, str]]:
     return [
-        (vendor, carpeta)
-        for vendor, carpetas in third_party_hashes.items()
-        for carpeta in carpetas
+        (vendor, carpeta) for vendor, carpetas in third_party_hashes.items() for carpeta in carpetas
     ]
 
 
@@ -256,7 +271,6 @@ def _parse_third_party_entries(entries: list[str]) -> list[tuple[str, str]]:
         vendor, carpeta = entry.split("/", 1)
         parsed.append((vendor, carpeta))
     return parsed
-
 
 
 # Charset seguro para cualquier segmento de ruta derivado de datos NO
@@ -305,9 +319,7 @@ def _resolve_scope_keys(
     semgrep_hashes = hashes.get("semgrep", {})
     yara_hashes = hashes.get("yara", {})
 
-    yara_categories = sorted(
-        _validate_key_segment(c, "Categoría YARA") for c in yara_hashes
-    )
+    yara_categories = sorted(_validate_key_segment(c, "Categoría YARA") for c in yara_hashes)
 
     if scope == "full":
         languages = sorted(
@@ -323,9 +335,7 @@ def _resolve_scope_keys(
         return languages, third_party, yara_categories
 
     if scope == "changed":
-        languages = sorted(
-            {_validate_key_segment(lang, "Idioma") for lang in languages_changed}
-        )
+        languages = sorted({_validate_key_segment(lang, "Idioma") for lang in languages_changed})
         third_party = sorted(
             {
                 (
@@ -454,7 +464,10 @@ def _apply_verified_content(
 
 def _load_state(state_file: Path) -> dict[str, Any]:
     if not state_file.exists():
-        return {"version": None, "hashes": {"semgrep": {"custom": {}, "third_party": {}}, "yara": {}}}
+        return {
+            "version": None,
+            "hashes": {"semgrep": {"custom": {}, "third_party": {}}, "yara": {}},
+        }
     return json.loads(state_file.read_text(encoding="utf-8"))
 
 
@@ -482,13 +495,15 @@ def _write_state(
             state["hashes"]["semgrep"]["custom"][parts[2]] = computed_hash
         elif parts[0] == "semgrep" and parts[1] == "third_party":
             vendor, carpeta = parts[2], parts[3]
-            state["hashes"]["semgrep"]["third_party"].setdefault(vendor, {})[carpeta] = computed_hash
+            state["hashes"]["semgrep"]["third_party"].setdefault(vendor, {})[carpeta] = (
+                computed_hash
+            )
         elif parts[0] == "yara":
             state["hashes"]["yara"][parts[1]] = computed_hash
 
     state["version"] = manifest.get("version")
     state["generated_at"] = manifest.get("generated_at")
-    state["verified_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    state["verified_at"] = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     state["verified_by_workflow"] = triggered_by
 
     state_file.parent.mkdir(parents=True, exist_ok=True)
@@ -579,7 +594,9 @@ def cmd_sync(args: argparse.Namespace) -> int:
             _write_github_output(status="failed", version=args.ref, failed_keys=",".join(failed))
             return 1
 
-        print(f"\n-> Todas las claves verificadas ({len(verified)}). Activando versión {args.ref}...")
+        print(
+            f"\n-> Todas las claves verificadas ({len(verified)}). Activando versión {args.ref}..."
+        )
         target_root = Path(args.target_root)
         state_file = target_root / args.state_file
         _apply_verified_content(
@@ -609,8 +626,12 @@ def cmd_fetch_manifest(args: argparse.Namespace) -> int:
         print("ERROR: falta la variable de entorno RULES_REPO_TOKEN.", file=sys.stderr)
         return 2
 
-    print(f"-> Descargando '{args.manifest_asset}' de la Release '{args.ref}' de {args.rules_repo}...")
-    tag_name, raw, _manifest = fetch_release_manifest(args.rules_repo, args.ref, token, args.manifest_asset)
+    print(
+        f"-> Descargando '{args.manifest_asset}' de la Release '{args.ref}' de {args.rules_repo}..."
+    )
+    tag_name, raw, _manifest = fetch_release_manifest(
+        args.rules_repo, args.ref, token, args.manifest_asset
+    )
 
     out_path = Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -650,7 +671,9 @@ def cmd_check(args: argparse.Namespace) -> int:
     diffs = _diff_hash_trees(remote_manifest, local_state)
 
     if version_matches and not diffs:
-        print(f"IN_SYNC: la versión activa ({local_state.get('version')}) ya coincide con la remota.")
+        print(
+            f"IN_SYNC: la versión activa ({local_state.get('version')}) ya coincide con la remota."
+        )
         _write_github_output(status="in_sync", remote_version=str(remote_version))
         return 0
 
@@ -677,18 +700,36 @@ def main() -> int:
     p_sync.add_argument("--rules-repo", required=True)
     p_sync.add_argument("--ref", required=True, help="Tag exacto a fijar (nunca 'main').")
     p_sync.add_argument("--scope", choices=["changed", "full"], required=True)
-    p_sync.add_argument("--languages-changed", default="[]", help="JSON array (solo scope=changed).")
-    p_sync.add_argument("--third-party-changed", default="[]", help="JSON array 'vendor/carpeta' (solo scope=changed).")
-    p_sync.add_argument("--manifest-asset", default=DEFAULT_MANIFEST_ASSET, help="Nombre del asset de Release.")
-    p_sync.add_argument("--target-root", required=True, help="Raíz de watch_gate donde activar el contenido.")
-    p_sync.add_argument("--state-file", default="rules/.rules-state.json", help="Relativo a --target-root.")
+    p_sync.add_argument(
+        "--languages-changed", default="[]", help="JSON array (solo scope=changed)."
+    )
+    p_sync.add_argument(
+        "--third-party-changed",
+        default="[]",
+        help="JSON array 'vendor/carpeta' (solo scope=changed).",
+    )
+    p_sync.add_argument(
+        "--manifest-asset", default=DEFAULT_MANIFEST_ASSET, help="Nombre del asset de Release."
+    )
+    p_sync.add_argument(
+        "--target-root", required=True, help="Raíz de watch_gate donde activar el contenido."
+    )
+    p_sync.add_argument(
+        "--state-file", default="rules/.rules-state.json", help="Relativo a --target-root."
+    )
     p_sync.add_argument("--triggered-by", default="sync_rules.py")
     p_sync.set_defaults(func=cmd_sync)
 
-    p_fetch = sub.add_parser("fetch-manifest", help="Descarga solo manifest.json (asset de Release, sin checkout/LFS).")
+    p_fetch = sub.add_parser(
+        "fetch-manifest", help="Descarga solo manifest.json (asset de Release, sin checkout/LFS)."
+    )
     p_fetch.add_argument("--rules-repo", required=True)
-    p_fetch.add_argument("--ref", default="latest", help="Tag exacto, o 'latest' para la última Release publicada.")
-    p_fetch.add_argument("--manifest-asset", default=DEFAULT_MANIFEST_ASSET, help="Nombre del asset de Release.")
+    p_fetch.add_argument(
+        "--ref", default="latest", help="Tag exacto, o 'latest' para la última Release publicada."
+    )
+    p_fetch.add_argument(
+        "--manifest-asset", default=DEFAULT_MANIFEST_ASSET, help="Nombre del asset de Release."
+    )
     p_fetch.add_argument("--out", required=True)
     p_fetch.set_defaults(func=cmd_fetch_manifest)
 

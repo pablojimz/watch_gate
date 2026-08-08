@@ -36,9 +36,7 @@ def render_console(aggregated: AggregatedResult) -> str:
 
         header_text = Text()
         header_text.append(f"{badge}\n", style=f"bold {color}")
-        header_text.append(
-            f"Puntuación Global de Riesgo: {aggregated.score}/100\n", style="bold"
-        )
+        header_text.append(f"Puntuación Global de Riesgo: {aggregated.score}/100\n", style="bold")
         if aggregated.threat_summary:
             m_cnt = aggregated.threat_summary.get("malicioso", 0)
             v_cnt = aggregated.threat_summary.get("vulnerabilidad", 0)

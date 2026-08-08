@@ -190,9 +190,7 @@ def test_gemini_raises_semantic_parsing_error_after_two_invalid_json_attempts():
 
 
 def test_gemini_raises_instead_of_looping_forever_if_model_keeps_requesting_tools():
-    fake = _FakeGenaiClient(
-        [_gemini_function_call_response("t", {}, f"c{i}") for i in range(20)]
-    )
+    fake = _FakeGenaiClient([_gemini_function_call_response("t", {}, f"c{i}") for i in range(20)])
     client = GeminiClient(client=fake)
 
     with pytest.raises(SemanticParsingError, match="siguió pidiendo tool calls"):

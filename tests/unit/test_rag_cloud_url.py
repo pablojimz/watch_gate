@@ -26,7 +26,5 @@ def test_get_chroma_client_cloud_url():
 
             client = get_chroma_client()
 
-            mock_http_client.assert_called_once_with(
-                host="chroma.internal", port=8000, ssl=False
-            )
+            mock_http_client.assert_called_once_with(host="chroma.internal", port=8000, ssl=False)
             assert client is not None

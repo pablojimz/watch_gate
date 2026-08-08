@@ -39,7 +39,7 @@ _TEMPLATE_SOURCE = (
     "{% endfor %}\n"
     "{%- if 'semantic' in layer_results and not layer_results['semantic'].skipped %}\n"
     "Justificación (capa semántica):\n"
-    '"{{ layer_results[\'semantic\'].justification }}"\n'
+    "\"{{ layer_results['semantic'].justification }}\"\n"
     "{% endif %}\n"
     "-> {{ recomendacion }}\n"
 )
