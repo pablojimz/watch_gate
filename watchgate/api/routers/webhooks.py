@@ -57,9 +57,7 @@ def _verify_github_signature(
     return hmac.compare_digest(computed_signature, expected_signature)
 
 
-def _verify_gitlab_token(
-    token_header: str | None, secret: str
-) -> bool:
+def _verify_gitlab_token(token_header: str | None, secret: str) -> bool:
     """Verifica el token de secreto enviado en la cabecera X-Gitlab-Token."""
     if not token_header or not secret:
         return False

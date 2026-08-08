@@ -30,9 +30,7 @@ class AnalyzeRequest(BaseModel):
     commit_messages: list[str] = Field(
         default_factory=list, description="Lista de mensajes de commit"
     )
-    authors: list[CommitAuthor] = Field(
-        default_factory=list, description="Autores de los commits"
-    )
+    authors: list[CommitAuthor] = Field(default_factory=list, description="Autores de los commits")
     metadata: dict[str, Any] = Field(
         default_factory=dict, description="Metadatos contextuales de la PR"
     )
@@ -44,9 +42,7 @@ class AnalyzeRequest(BaseModel):
 @router.post("/analyze", response_model=AggregatedResult)
 def analyze_pr(
     request: AnalyzeRequest,
-    auth: tuple[UserAPIKey, User, Organization] = Depends(
-        require_scope("analysis:write")
-    ),  # noqa: B008
+    auth: tuple[UserAPIKey, User, Organization] = Depends(require_scope("analysis:write")),  # noqa: B008
     session: Session = Depends(get_db_session),  # noqa: B008
 ) -> AggregatedResult:
     """Ejecuta el análisis completo de la PR enviada en texto plano respetando cuotas."""

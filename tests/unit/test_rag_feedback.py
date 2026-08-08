@@ -91,9 +91,7 @@ def test_add_confirmed_case_updating_same_case_id_drops_stale_fragments(tmp_path
 
     from watchgate.core.rag.indexer import FEEDBACK_COLLECTION_NAME
 
-    collection = chromadb.PersistentClient(path=index_path).get_collection(
-        FEEDBACK_COLLECTION_NAME
-    )
+    collection = chromadb.PersistentClient(path=index_path).get_collection(FEEDBACK_COLLECTION_NAME)
     remaining = collection.get(where={"case_id": "pr-99"})
     assert len(remaining["ids"]) == 1
 

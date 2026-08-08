@@ -149,7 +149,9 @@ def test_verify_keys_detects_tampered_content(tmp_dir):
     original_hash = compute_dir_hash(tmp_dir / "rules/semgrep/custom/python")
     _write(tmp_dir, "rules/semgrep/custom/python/r.yaml", "MANIPULADO")
 
-    manifest = {"hashes": {"semgrep": {"custom": {"python": original_hash}, "third_party": {}}, "yara": {}}}
+    manifest = {
+        "hashes": {"semgrep": {"custom": {"python": original_hash}, "third_party": {}}, "yara": {}}
+    }
     verified, failed = sr._verify_keys(tmp_dir, manifest, ["python"], [], [])
     assert failed == ["semgrep.custom.python"]
     assert verified == {}
@@ -183,7 +185,12 @@ def test_verify_keys_fails_when_manifest_has_no_hash_for_key(tmp_dir):
 
 
 def test_verify_keys_fails_when_local_folder_missing(tmp_dir):
-    manifest = {"hashes": {"semgrep": {"custom": {"python": "sha256:" + "a" * 64}, "third_party": {}}, "yara": {}}}
+    manifest = {
+        "hashes": {
+            "semgrep": {"custom": {"python": "sha256:" + "a" * 64}, "third_party": {}},
+            "yara": {},
+        }
+    }
     verified, failed = sr._verify_keys(tmp_dir, manifest, ["python"], [], [])
     assert failed == ["semgrep.custom.python"]
 
@@ -205,11 +212,15 @@ def test_apply_verified_content_copies_and_remaps_yara(tmp_dir):
     )
 
     assert (target / "rules/semgrep/custom/python/r.yaml").read_text(encoding="utf-8") == "regla"
-    assert (target / "rules/semgrep/third-party/trailofbits/rs/r.yaml").read_text(encoding="utf-8") == "regla-rs"
+    assert (target / "rules/semgrep/third-party/trailofbits/rs/r.yaml").read_text(
+        encoding="utf-8"
+    ) == "regla-rs"
     # dist/yara_scored/<cat> del repo de reglas -> rules/yara/<cat> aquí.
     assert (target / "rules/yara/webshells/w.yar").read_text(encoding="utf-8") == "rule w {}"
     assert not (target / "dist").exists()
-    assert json.loads((target / "rules/manifest.json").read_text(encoding="utf-8")) == {"version": "v0.0.2"}
+    assert json.loads((target / "rules/manifest.json").read_text(encoding="utf-8")) == {
+        "version": "v0.0.2"
+    }
 
 
 def test_apply_verified_content_overwrites_stale_previous_content(tmp_dir):
@@ -308,8 +319,12 @@ def test_cmd_check_reports_in_sync(tmp_dir, monkeypatch, capsys):
         {
             "semgrep.custom.python": MANIFEST_SAMPLE["hashes"]["semgrep"]["custom"]["python"],
             "semgrep.custom.bash": MANIFEST_SAMPLE["hashes"]["semgrep"]["custom"]["bash"],
-            "semgrep.third_party.trailofbits.rs": MANIFEST_SAMPLE["hashes"]["semgrep"]["third_party"]["trailofbits"]["rs"],
-            "semgrep.third_party.opengrep.generic": MANIFEST_SAMPLE["hashes"]["semgrep"]["third_party"]["opengrep"]["generic"],
+            "semgrep.third_party.trailofbits.rs": MANIFEST_SAMPLE["hashes"]["semgrep"][
+                "third_party"
+            ]["trailofbits"]["rs"],
+            "semgrep.third_party.opengrep.generic": MANIFEST_SAMPLE["hashes"]["semgrep"][
+                "third_party"
+            ]["opengrep"]["generic"],
             "yara.webshells": MANIFEST_SAMPLE["hashes"]["yara"]["webshells"],
             "yara.antidebug_antivm": MANIFEST_SAMPLE["hashes"]["yara"]["antidebug_antivm"],
         },
@@ -405,7 +420,10 @@ def fake_releases_api(monkeypatch):
     release = {
         "tag_name": "v0.0.2",
         "assets": [
-            {"name": "manifest.json", "url": f"https://api.github.com/repos/{repo}/releases/assets/111"},
+            {
+                "name": "manifest.json",
+                "url": f"https://api.github.com/repos/{repo}/releases/assets/111",
+            },
             {"name": "otro.txt", "url": f"https://api.github.com/repos/{repo}/releases/assets/222"},
         ],
     }
@@ -446,7 +464,9 @@ def test_fetch_release_manifest_latest_resolves_to_real_tag(fake_releases_api):
 
 def test_fetch_release_manifest_missing_tag_raises_clear_error(fake_releases_api):
     with pytest.raises(RuntimeError, match="No existe una Release"):
-        sr.fetch_release_manifest(fake_releases_api["repo"], "v9.9.9", "fake-token", "manifest.json")
+        sr.fetch_release_manifest(
+            fake_releases_api["repo"], "v9.9.9", "fake-token", "manifest.json"
+        )
 
 
 def test_fetch_release_manifest_missing_asset_lists_available_ones(fake_releases_api):
@@ -474,7 +494,9 @@ def _fake_checkout_that_materializes(dest_contents: dict[str, str]):
     return _fake
 
 
-def test_cmd_sync_happy_path_verifies_applies_and_writes_state(tmp_dir, monkeypatch, fake_releases_api):
+def test_cmd_sync_happy_path_verifies_applies_and_writes_state(
+    tmp_dir, monkeypatch, fake_releases_api
+):
     monkeypatch.setenv("RULES_REPO_TOKEN", "fake-token")
     monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
 
@@ -495,7 +517,10 @@ def test_cmd_sync_happy_path_verifies_applies_and_writes_state(tmp_dir, monkeypa
             b'{"version": "v0.0.2"}',
             {
                 "version": "v0.0.2",
-                "hashes": {"semgrep": {"custom": {"python": real_hash}, "third_party": {}}, "yara": {}},
+                "hashes": {
+                    "semgrep": {"custom": {"python": real_hash}, "third_party": {}},
+                    "yara": {},
+                },
             },
         ),
     )
@@ -520,7 +545,9 @@ def test_cmd_sync_happy_path_verifies_applies_and_writes_state(tmp_dir, monkeypa
     )
 
     assert sr.cmd_sync(args) == 0
-    assert (target_root / "rules/semgrep/custom/python/r.yaml").read_text(encoding="utf-8") == "regla-python"
+    assert (target_root / "rules/semgrep/custom/python/r.yaml").read_text(
+        encoding="utf-8"
+    ) == "regla-python"
     state = json.loads((target_root / "rules/.rules-state.json").read_text(encoding="utf-8"))
     assert state["version"] == "v0.0.2"
     assert state["hashes"]["semgrep"]["custom"]["python"] == real_hash
@@ -555,7 +582,9 @@ def test_cmd_sync_does_not_activate_anything_when_a_key_is_tampered(tmp_dir, mon
     monkeypatch.setattr(
         sr,
         "_checkout_rule_folders",
-        _fake_checkout_that_materializes({"rules/semgrep/custom/python/r.yaml": "contenido-no-esperado"}),
+        _fake_checkout_that_materializes(
+            {"rules/semgrep/custom/python/r.yaml": "contenido-no-esperado"}
+        ),
     )
 
     target_root = tmp_dir / "watch_gate"

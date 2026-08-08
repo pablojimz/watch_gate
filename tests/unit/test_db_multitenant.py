@@ -81,9 +81,7 @@ def test_create_user_fills_in_missing_org_id() -> None:
 def test_user_and_api_key_with_organization() -> None:
     session = _get_memory_session()
     org = create_organization(session, name="CyberSec Org")
-    user = create_user(
-        session, email="sec@cybersec.com", name="Sec Lead", org_id=org.id
-    )
+    user = create_user(session, email="sec@cybersec.com", name="Sec Lead", org_id=org.id)
 
     assert user.org_id == org.id
 

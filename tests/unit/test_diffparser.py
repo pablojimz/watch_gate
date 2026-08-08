@@ -151,9 +151,7 @@ def test_merge_commit_uses_first_parent_only(tmp_repo):
     repo.head.reset(index=True, working_tree=True)
     _write(repo_dir, "feature.py", "feature work\n")
     repo.index.add(["feature.py"])
-    repo.index.commit(
-        "work on feature", author=git.Actor("Carol", "carol@example.com")
-    )
+    repo.index.commit("work on feature", author=git.Actor("Carol", "carol@example.com"))
 
     # Volvemos a main y hacemos un commit propio + el merge.
     main = repo.heads.master if hasattr(repo.heads, "master") else repo.heads.main
@@ -229,4 +227,3 @@ def test_parse_diff_from_text_empty_and_invalid() -> None:
 
     diff_invalid = parse_diff_from_text("not a valid git diff text")
     assert diff_invalid.files == []
-

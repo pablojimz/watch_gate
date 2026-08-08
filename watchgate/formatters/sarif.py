@@ -57,9 +57,7 @@ def render_sarif(aggregated: AggregatedResult) -> str:
                             "text": f"WatchGate [{layer_name}]: {finding.rule_id}"
                         },
                         "fullDescription": {"text": finding.message},
-                        "defaultConfiguration": {
-                            "level": _severity_to_level(finding.severity)
-                        },
+                        "defaultConfiguration": {"level": _severity_to_level(finding.severity)},
                         "properties": {"tags": tags},
                     }
 

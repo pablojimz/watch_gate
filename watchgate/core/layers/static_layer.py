@@ -289,7 +289,11 @@ class StaticLayer(AnalysisLayer):
         basename = os.path.basename(file_path).lower()
         # Dockerfile no sigue convención de extensión: puede ser
         # literalmente "Dockerfile", "Dockerfile.prod", o "algo.dockerfile".
-        if basename == "dockerfile" or basename.startswith("dockerfile.") or basename.endswith(".dockerfile"):
+        if (
+            basename == "dockerfile"
+            or basename.startswith("dockerfile.")
+            or basename.endswith(".dockerfile")
+        ):
             return "dockerfile"
 
         extension = os.path.splitext(file_path)[1].lower()

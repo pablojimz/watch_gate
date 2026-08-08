@@ -59,7 +59,15 @@ target-version = "py311"
 # tests/cases/ contiene fixtures reales bajados tal cual de otros proyectos
 # (click, jinja, requests...) para la suite de aceptación §14 -- no es código
 # propio, no se lintea.
-extend-exclude = ["docs", "tests/cases"]
+# rules/ es el árbol de reglas Semgrep/YARA sincronizado desde el repo
+# privado de reglas (ver docs/integracion_repo_reglas.md) -- incluye
+# fixtures de test de terceros con sintaxis de patrón Semgrep (no Python
+# real, aunque tengan extensión .py), que sin excluir producían ~840 falsos
+# positivos de "nombre no definido" y ahogaban cualquier señal real de
+# `ruff check .` sobre el código propio del proyecto.
+# scratchpad/ es un script de verificación manual suelto, no parte del
+# paquete ni de la suite de tests.
+extend-exclude = ["docs", "tests/cases", "rules", "scratchpad"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

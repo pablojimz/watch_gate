@@ -91,9 +91,7 @@ class OSVCache:
 
     def _init_db(self) -> None:
         try:
-            self._conn = sqlite3.connect(
-                self.db_path, check_same_thread=False, timeout=30.0
-            )
+            self._conn = sqlite3.connect(self.db_path, check_same_thread=False, timeout=30.0)
             with self._lock:
                 self._conn.execute(
                     """
@@ -280,9 +278,7 @@ class VulnerabilitiesLayer(AnalysisLayer):
         queries = []
         for idx in to_fetch_indices:
             change = changes[idx]
-            q: dict[str, Any] = {
-                "package": {"name": change.name, "ecosystem": change.ecosystem}
-            }
+            q: dict[str, Any] = {"package": {"name": change.name, "ecosystem": change.ecosystem}}
             if change.new_version and not change.is_direct_url:
                 q["version"] = change.new_version
             queries.append(q)
@@ -322,9 +318,7 @@ class VulnerabilitiesLayer(AnalysisLayer):
         if cached is not None:
             return cached, None
 
-        body: dict[str, Any] = {
-            "package": {"name": change.name, "ecosystem": change.ecosystem}
-        }
+        body: dict[str, Any] = {"package": {"name": change.name, "ecosystem": change.ecosystem}}
         if change.new_version and not change.is_direct_url:
             body["version"] = change.new_version
 

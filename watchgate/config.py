@@ -134,9 +134,7 @@ def apply_cli_overrides(
             try:
                 val = float(val_str.strip())
             except ValueError as err:
-                raise ValueError(
-                    f"Valor de peso inválido para '{key}': '{val_str}'"
-                ) from err
+                raise ValueError(f"Valor de peso inválido para '{key}': '{val_str}'") from err
             weights[key] = val
 
         # Normalización
@@ -161,9 +159,7 @@ def apply_cli_overrides(
             try:
                 val = int(val_str.strip())
             except ValueError as err:
-                raise ValueError(
-                    f"Valor de umbral inválido para '{key}': '{val_str}'"
-                ) from err
+                raise ValueError(f"Valor de umbral inválido para '{key}': '{val_str}'") from err
             thresholds[key] = val
 
     return WatchGateConfig(

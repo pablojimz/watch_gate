@@ -180,9 +180,7 @@ patrón es una señal para investigar con cuidado, no un veredicto por sí solo.
 def _render_dependency_findings(findings: list[dict[str, Any]]) -> str:
     if not findings:
         return ""
-    lines = "\n".join(
-        f"- {f['name']} ({f['ecosystem']}): {f['vulns_summary']}" for f in findings
-    )
+    lines = "\n".join(f"- {f['name']} ({f['ecosystem']}): {f['vulns_summary']}" for f in findings)
     return (
         "\n\nVulnerabilidades conocidas en dependencias nuevas de este PR "
         f"(consulta automática a OSV, no una tool pedida por ti):\n{lines}\n"
@@ -282,8 +280,7 @@ def _excerpt_around_matches(diff_hunk: str, match_lines: list[int]) -> str:
 
 def _fetch_tool_hint(file_change: FileChange, head_sha: str) -> str:
     return (
-        f'fetch_referenced_file(path="{file_change.path}", ref="{head_sha}") '
-        "para leerlo entero"
+        f'fetch_referenced_file(path="{file_change.path}", ref="{head_sha}") ' "para leerlo entero"
     )
 
 

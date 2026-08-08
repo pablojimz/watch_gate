@@ -175,12 +175,8 @@ def _init_db_postgres(conn: PostgresConnection) -> None:
     # A diferencia de SQLite, Postgres soporta IF NOT EXISTS en ADD COLUMN de
     # forma nativa -- no hace falta el sondeo vía PRAGMA table_info de abajo.
     conn.execute("ALTER TABLE pr_scores ADD COLUMN IF NOT EXISTS author_login TEXT")
-    conn.execute(
-        "ALTER TABLE pr_scores ADD COLUMN IF NOT EXISTS vulnerabilities_score INTEGER"
-    )
-    conn.execute(
-        "ALTER TABLE pr_scores ADD COLUMN IF NOT EXISTS vulnerabilities_skipped BOOLEAN"
-    )
+    conn.execute("ALTER TABLE pr_scores ADD COLUMN IF NOT EXISTS vulnerabilities_score INTEGER")
+    conn.execute("ALTER TABLE pr_scores ADD COLUMN IF NOT EXISTS vulnerabilities_skipped BOOLEAN")
     conn.execute(
         "ALTER TABLE repo_settings ADD COLUMN IF NOT EXISTS "
         "layers_enabled_json TEXT NOT NULL DEFAULT '{}'"
@@ -250,6 +246,7 @@ def init_db(conn: DBConnection) -> None:
     ensure_org_settings(conn)
     ensure_llm_settings(conn)
     ensure_ui_settings(conn)
+
 
 @contextmanager
 def db_session(db_path: Path | None = None) -> Iterator[DBConnection]:
@@ -396,9 +393,7 @@ def get_score(conn: DBConnection, score_id: int) -> ScoreOut | None:
     return None if row is None else _row_to_score_out(row)
 
 
-def set_feedback(
-    conn: DBConnection, score_id: int, feedback: FeedbackValue
-) -> ScoreOut | None:
+def set_feedback(conn: DBConnection, score_id: int, feedback: FeedbackValue) -> ScoreOut | None:
     cur = conn.execute(
         "UPDATE pr_scores SET human_feedback = ? WHERE id = ?",
         (feedback, score_id),
@@ -506,9 +501,7 @@ def ensure_org_settings(conn: DBConnection) -> None:
     conn.commit()
 
 
-def _settings_from_row(
-    row: Row | None, *, source: Literal["default", "repo"]
-) -> RepoSettings:
+def _settings_from_row(row: Row | None, *, source: Literal["default", "repo"]) -> RepoSettings:
     if row is None:
         return RepoSettings(
             weights=dict(DEFAULT_WEIGHTS),
@@ -532,9 +525,7 @@ def _settings_from_row(
         risk_colors=merged_colors,
         block_on_high=bool(row["block_on_high"]) if "block_on_high" in keys else True,
         require_feedback_on_high=(
-            bool(row["require_feedback_on_high"])
-            if "require_feedback_on_high" in keys
-            else False
+            bool(row["require_feedback_on_high"]) if "require_feedback_on_high" in keys else False
         ),
         source=source,
     )
@@ -846,9 +837,7 @@ def compute_org_metrics(conn: DBConnection, repos: list[str]) -> OrgMetrics:
         day = str(r["timestamp"])[:10]
         by_day.setdefault(day, []).append(int(r["score"]))
 
-    layer_avg = {
-        k: round(sum(v) / len(v), 1) if v else 0.0 for k, v in layer_sums.items()
-    }
+    layer_avg = {k: round(sum(v) / len(v), 1) if v else 0.0 for k, v in layer_sums.items()}
     by_repo = [
         RepoMetricRow(
             repo=repo,
@@ -883,6 +872,7 @@ def compute_org_metrics(conn: DBConnection, repos: list[str]) -> OrgMetrics:
         trend=trend,
     )
 
+
 def hash_password(password: str, salt: str | None = None) -> str:
     """Hash PBKDF2-SHA256 con sal. Formato: ``pbkdf2$iters$salt$digest``."""
     salt_hex = salt or secrets.token_hex(16)
@@ -903,9 +893,7 @@ def verify_password(password: str, stored: str) -> bool:
     return secrets.compare_digest(digest, expected)
 
 
-def upsert_user(
-    conn: DBConnection, login: str, password: str, display_name: str
-) -> None:
+def upsert_user(conn: DBConnection, login: str, password: str, display_name: str) -> None:
     conn.execute(
         """
         INSERT INTO dashboard_users (login, password_hash, display_name)
@@ -1156,9 +1144,7 @@ def seed_demo(conn: DBConnection) -> None:
         ),
     ]
 
-    for i, (repo, pr, semaforo, layer_map, justification, author, feedback) in enumerate(
-        samples
-    ):
+    for i, (repo, pr, semaforo, layer_map, justification, author, feedback) in enumerate(samples):
         ts = (now - timedelta(days=len(samples) - i)).isoformat()
         _insert_sample(
             conn,

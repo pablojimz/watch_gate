@@ -64,9 +64,10 @@ def test_github_callback_accepts_matching_state_and_completes_login(client: Test
     login_resp = client.get("/api/auth/github/login", follow_redirects=False)
     state = login_resp.cookies[_OAUTH_STATE_COOKIE]
 
-    with patch("watchgate.dashboard.backend.auth.httpx.post") as mock_post, patch(
-        "watchgate.dashboard.backend.auth.httpx.get"
-    ) as mock_get:
+    with (
+        patch("watchgate.dashboard.backend.auth.httpx.post") as mock_post,
+        patch("watchgate.dashboard.backend.auth.httpx.get") as mock_get,
+    ):
         mock_post.return_value.raise_for_status = lambda: None
         mock_post.return_value.json.return_value = {"access_token": "gho_faketoken"}
         mock_get.return_value.raise_for_status = lambda: None

@@ -42,9 +42,7 @@ def compute_dir_hash(directory: Path) -> str:
     # contenido real e inmutable del tag que se está sincronizando -- rompe
     # la garantía central de este mecanismo. Se rechaza explícitamente en
     # vez de seguirlo o ignorarlo en silencio.
-    all_entries = sorted(
-        directory.rglob("*"), key=lambda p: p.relative_to(directory).as_posix()
-    )
+    all_entries = sorted(directory.rglob("*"), key=lambda p: p.relative_to(directory).as_posix())
     for entry in all_entries:
         if entry.is_symlink():
             raise ValueError(

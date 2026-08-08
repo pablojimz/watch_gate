@@ -289,8 +289,9 @@ def test_cli_analyze_stdin_valid_patch(capsys):
         "+print('hello world')\n"
     )
 
-    with patch("sys.stdin.isatty", return_value=False), patch(
-        "sys.stdin.read", return_value=sample_patch
+    with (
+        patch("sys.stdin.isatty", return_value=False),
+        patch("sys.stdin.read", return_value=sample_patch),
     ):
         code = main(["analyze", "--diff-stdin", "--format", "json"])
 
@@ -329,4 +330,3 @@ def test_cli_github_annotations_isolated_to_stderr(tmp_git_repo, capsys):
         or "::warning" in captured.err
         or "::error" in captured.err
     )
-

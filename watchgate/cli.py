@@ -79,9 +79,7 @@ def _build_parser() -> argparse.ArgumentParser:
     analyze_parser.add_argument(
         "--author-login", default="", help="Login del autor del PR en GitHub/GitLab"
     )
-    analyze_parser.add_argument(
-        "--author-email", default="", help="Email del autor del commit"
-    )
+    analyze_parser.add_argument("--author-email", default="", help="Email del autor del commit")
     analyze_parser.add_argument(
         "--weight",
         action="append",

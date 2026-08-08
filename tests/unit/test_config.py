@@ -31,9 +31,7 @@ def test_defaults_when_no_yaml_and_no_env(monkeypatch):
 def test_yaml_overrides_defaults():
     tmp_dir = tempfile.mkdtemp()
     yaml_path = Path(tmp_dir) / ".watchgate.yml"
-    yaml_path.write_text(
-        "weights:\n  static: 0.5\n  deps: 0.5\nmax_diff_tokens: 1234\n"
-    )
+    yaml_path.write_text("weights:\n  static: 0.5\n  deps: 0.5\nmax_diff_tokens: 1234\n")
 
     config = load_config(yaml_path=str(yaml_path))
 

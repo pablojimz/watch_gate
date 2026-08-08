@@ -178,13 +178,10 @@ def run_pre_receive(
             sys.stderr.write(f"\n❌ [WatchGate] PUSH RECHAZADO EN SERVIDOR GIT ({ref_name})\n")
             sys.stderr.write(f"   Puntuación de riesgo: {result.score}/100 [SEMÁFORO ROJO]\n")
             for layer_name, layer_res in result.layer_results.items():
-                if (
-                    not layer_res.skipped
-                    and layer_res.risk_score >= config.thresholds.get("red", 70)
+                if not layer_res.skipped and layer_res.risk_score >= config.thresholds.get(
+                    "red", 70
                 ):
-                    sys.stderr.write(
-                        f"   - {layer_name.upper()}: {layer_res.justification}\n"
-                    )
+                    sys.stderr.write(f"   - {layer_name.upper()}: {layer_res.justification}\n")
             sys.stderr.write(
                 "   Corrija los hallazgos de seguridad antes de reintentar el git push.\n\n"
             )
@@ -205,9 +202,7 @@ def main() -> int:
         "yes",
     )
     try:
-        timeout_env = float(
-            os.environ.get("WATCHGATE_TIMEOUT", str(DEFAULT_TIMEOUT_SECONDS))
-        )
+        timeout_env = float(os.environ.get("WATCHGATE_TIMEOUT", str(DEFAULT_TIMEOUT_SECONDS)))
     except ValueError:
         timeout_env = DEFAULT_TIMEOUT_SECONDS
 

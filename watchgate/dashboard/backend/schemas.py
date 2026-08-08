@@ -224,6 +224,7 @@ class LlmSettingsIn(BaseModel):
     monthly_budget_tokens: int | None = 2_000_000
     max_diff_tokens: int | None = 80_000
 
+
 # Cap del logo como data: URL embebida directamente en ui_settings (nunca un
 # fichero en disco/objeto en la nube -- no hay almacenamiento de assets en
 # el dashboard todavía). ~400_000 caracteres de base64 son ~290 KB reales,
