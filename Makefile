@@ -1,4 +1,4 @@
-.PHONY: install lint test run-demo dashboard-backend dashboard-frontend dashboard-install
+.PHONY: install lint test run-demo dashboard-backend dashboard-frontend dashboard-install docker-up docker-down
 
 install:
 	poetry install
@@ -27,3 +27,11 @@ dashboard-backend:
 
 dashboard-frontend:
 	cd watchgate/dashboard/frontend && npm run dev
+
+# Stack completo (Engine API + Dashboard backend/frontend + Postgres real)
+# vía Docker Compose -- ver docs/despliegue.md.
+docker-up:
+	docker compose up --build
+
+docker-down:
+	docker compose down

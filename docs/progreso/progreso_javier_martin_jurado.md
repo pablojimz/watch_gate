@@ -152,18 +152,44 @@ Los tres hallazgos que dejé documentados sin tocar por necesitar una decisión 
 
 Los tres con test de regresión (incluida una prueba de aislamiento cruzado real: dos orgs, cada una con su caso de feedback, confirmando que ninguna ve el caso de la otra). 445 tests en verde tras esto.
 
+## 19. CI que no existía, y repo lint-limpio (8 agosto)
+
+El proyecto tenía `make lint` (ruff + mypy + import-linter) y tests, pero ningún workflow de GitHub Actions los corría nunca -- un PR con la suite en rojo o con violaciones de arquitectura se podía fusionar sin que nada lo señalase. Añadí `.github/workflows/ci.yml` con dos jobs: `backend` (poetry install cacheado, `ruff check`/`ruff format --check`/`mypy`/`lint-imports`, `pytest --cov`) y `frontend` (`npm ci && npm run build`), en `push` a `main` y en cada PR.
+
+Correr `ruff check .` de verdad por primera vez destapó 888 errores -- casi todos en `rules/` (fixtures Semgrep/YARA de terceros, vendorizadas, no son Python real del proyecto) que nunca se habían excluido del linter. Añadí `rules` y `scratchpad` a `extend-exclude` en `pyproject.toml`; lo que quedó tras eso fueron 42 ficheros con diferencias mecánicas de formato (`ruff format .`) y un único cambio real: `isinstance(v, (int, float))` -> `isinstance(v, int | float)` en `policy.py` (sintaxis moderna, `ruff` lo marca como upgrade automático). Cero cambios de comportamiento.
+
+## 20. Contenedores Docker + Compose con Postgres real, y un bug de arquitectura que solo salió al desplegar de verdad (8 agosto)
+
+Con CI cubriendo tests y lint, lo que le faltaba al repo para ser desplegable de verdad eran imágenes. Añadí `docker/engine-api.Dockerfile` y `docker/dashboard-backend.Dockerfile` (build multi-stage: `python:3.11-slim` builder con `poetry install`, runtime sin toolchain de compilación, usuario no-root, healthcheck contra `/health`), `watchgate/dashboard/frontend/Dockerfile` (`node:20-slim` build -> `nginx:1.27-alpine` sirviendo el estático, con `envsubst` de nginx para inyectar `BACKEND_ORIGIN` en el proxy de `/api/*` sin hornear la URL del backend en la imagen) y `docker-compose.yml` orquestando los 4 servicios (Postgres incluido).
+
+No me fié de que "el Dockerfile compila" significase "el contenedor funciona" -- construí y arranqué cada imagen de verdad, y eso encontró dos bugs reales que una revisión de código no hubiera visto:
+
+- **`ImportError: Bad git executable`** en el Engine API al arrancar: GitPython (dependencia transitiva, la usa `diffparser`) necesita el binario `git` en tiempo de ejecución, no solo durante el build -- lo tenía instalado solo en la etapa `builder`. Añadido a la etapa `runtime` de ambos Dockerfiles Python.
+- **`sqlite3.OperationalError: unable to open database file`**: el usuario no-root del contenedor no tenía permisos de escritura en `.watchgate/` (donde cae el SQLite/cache por defecto si no se configura Postgres). Añadido `mkdir + chown` antes de `USER watchgate`.
+
+El bug más serio lo encontré probando el `docker-compose.yml` completo contra un Postgres real: **`watchgate/dashboard/backend/db.py`** (esquema propio del Dashboard, SQL crudo) y **`watchgate/db/models.py::PRScore`** (esquema SQLModel de la Fase 1, compartido con el Engine API) definen ambos una tabla llamada `pr_scores`, con columnas completamente distintas. Mi primer `docker-compose.yml` apuntaba `WATCHGATE_DATABASE_URL` y `WATCHGATE_DASHBOARD_DATABASE_URL` a la misma base de datos de Postgres -- el Dashboard backend crea primero la tabla `pr_scores` del esquema SQLModel (vía `init_api_keys_db()`), y cuando el esquema propio del Dashboard intenta crear la suya con ese nombre, Postgres ve una tabla ya existente con columnas que no coinciden. Lo detectó en el momento mi propio `_check_schema_matches_models()` (añadido en el punto 17) con un `SchemaOutOfDateError` listando columnas "faltantes" que en realidad pertenecían al otro esquema -- exactamente el tipo de fallo silencioso que ese chequeo se diseñó para atrapar, solo que esta vez el "esquema desactualizado" real era "esquema equivocado".
+
+Arreglado sin tocar código de ninguno de los dos esquemas: `docker/postgres-init/01-create-dashboard-db.sql` (montado en `/docker-entrypoint-initdb.d/` del contenedor de Postgres, se ejecuta una sola vez al crear el volumen) provisiona una segunda base de datos, `watchgate_dashboard`, separada de `watchgate`. Cada esquema vive en su propia base de datos dentro del mismo servidor Postgres.
+
+Verificación real, no solo "debería funcionar": recreé el escenario con contenedores manuales (Postgres + init script + Dashboard backend apuntando a las dos bases separadas) y confirmé que el `SchemaOutOfDateError` desaparece y ambas tablas `pr_scores` se crean con sus columnas correctas (columna por columna, con `\d pr_scores` en cada base). Después corrí `docker compose up --build` de principio a fin: los 4 servicios arrancan `healthy`, los tres endpoints HTTP (`GET /health` del Engine API, `GET /api/health` del Dashboard backend, `GET /` del frontend) responden 200, y un login de desarrollo a través del proxy nginx del frontend (`POST /api/auth/dev-login` -> `GET /api/auth/me` con la cookie de sesión) confirma que la cadena completa nginx -> Dashboard backend -> Postgres funciona de extremo a extremo, no solo cada pieza por separado. 445 tests siguen en verde tras todo esto.
+
+Documentado en `docs/despliegue.md` (los 4 servicios, cómo levantar el stack, el porqué de las dos bases de datos, checklist de producción, limitaciones honestas) y `README.md` (sección "Despliegue" enlazando ahí). Añadidos `make docker-up`/`make docker-down`.
+
 ## Estado global
 
-**445 tests** en verde (`python -m pytest`, suite completa salvo la de aceptación real marcada `integration`). **180/193 (93%)** en la suite de aceptación real con las 5 capas reales (sin cambios desde el punto 16 -- los fixes de los puntos 17/18 no se han vuelto a correr contra esa suite todavía). Todo lo listado arriba está en producción salvo estos matices honestos:
+**445 tests** en verde (`python -m pytest`, suite completa salvo la de aceptación real marcada `integration`), ahora corridos en CI (`.github/workflows/ci.yml`) en cada push/PR, no solo en local. **180/193 (93%)** en la suite de aceptación real con las 5 capas reales (sin cambios desde el punto 16 -- los fixes de los puntos 17/18 no se han vuelto a correr contra esa suite todavía). El stack completo (Engine API + Dashboard backend/frontend + Postgres real, dos bases de datos separadas) se levanta con `docker compose up --build` y está verificado de extremo a extremo (ver punto 20). Todo lo listado arriba está en producción salvo estos matices honestos:
 
-- El soporte Postgres está validado a mano contra una instancia real, pero no hay un Postgres provisionado en el CI del proyecto.
+- Postgres está validado de extremo a extremo vía `docker compose up`, pero no hay un Postgres provisionado en el propio pipeline de CI (`ci.yml` corre los tests contra SQLite, más rápido y sin infraestructura extra en cada push).
 - La detección de inyección de prompt es un heurístico de texto (regex); un atacante que ofusque el contenido (Unicode, base64) podría evadirlo.
 - El rate limiting del login es en memoria de proceso -- no protege entre réplicas si algún día el dashboard se despliega con más de un worker.
+- Sin migraciones automáticas de esquema (Alembic o equivalente) -- `init_db()` falla alto y claro si detecta columnas que faltan, pero aplicar el `ALTER TABLE` sigue siendo manual.
+- Engine API y Dashboard backend empaquetan las mismas dependencias pesadas (torch/semgrep/chromadb) en su imagen Docker aunque el Dashboard backend no las use en runtime -- no se ha separado el empaquetado por extras de Poetry todavía.
 
 ## Pendiente
 
-- Provisionar Postgres en el CI para cobertura automática de extremo a extremo.
+- Provisionar Postgres en el CI para cobertura automática de extremo a extremo (hoy solo vía `docker compose up` manual).
 - Regenerar `docs/validation_report.md` contra la API real para reflejar los fixes de los puntos 17/18 (especialmente el de `_apply_malicious_and_uncertain_policy`, que debería mejorar `malicious medium/hard`).
 - Si el dashboard pasa alguna vez a desplegarse con varias réplicas: mover el rate limiting de login a un almacén compartido.
+- Evaluar Alembic (o equivalente) si el esquema empieza a cambiar con frecuencia -- hoy el chequeo estricto de arranque es suficiente para un proyecto de este tamaño.
 - Publicar el paquete en PyPI (fuera de alcance por decisión explícita).
 - Ampliar la detección de inyección de prompt si se observan variantes ofuscadas en producción.

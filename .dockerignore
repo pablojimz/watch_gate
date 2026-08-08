@@ -1,0 +1,26 @@
+# Aplica al contexto de build de docker/engine-api.Dockerfile y
+# docker/dashboard-backend.Dockerfile (contexto = raíz del repo). Ninguno
+# de los dos hace `COPY . .` -- copian watchgate/, README.md, pyproject.toml
+# y poetry.lock explícitamente -- pero sin esto, Docker igualmente empaqueta
+# y envía TODO el contexto al daemon antes de filtrar, incluidos .venv/,
+# node_modules/ y el histórico de git, ralentizando cada build sin motivo.
+# Nunca debe llegar .env al daemon de Docker, ni por accidente.
+.env
+.env.*
+!.env.example
+.git
+.venv
+.watchgate
+__pycache__
+*.pyc
+.pytest_cache
+.mypy_cache
+.ruff_cache
+htmlcov
+.coverage
+node_modules
+watchgate/dashboard/frontend/dist
+scratchpad
+docs
+tests/cases
+rules
