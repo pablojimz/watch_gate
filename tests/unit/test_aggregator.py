@@ -262,3 +262,36 @@ def test_malicious_threat_forces_red_semaforo():
     assert out.score == 100
     assert out.semaforo == Semaforo.ROJO
     assert out.threat_summary["malicioso"] == 1
+
+
+def test_malicious_without_stated_confidence_does_not_force_red():
+    """Caso real encontrado en revisión: `deps_layer.py` NUNCA rellena
+    `confidence` (siempre None) y puntúa 75-80 para patrones habituales y a
+    menudo legítimos (dependencia pinneada a una URL de git, script
+    postinstall con chmod +x) con `threat_nature=MALICIOUS`. Antes, `or
+    risk_score >= thresholds["red"]` trataba ese risk_score alto como si
+    fuera lo mismo que alta confianza y forzaba el combinado a 100/ROJO --
+    reproducido en vivo con un `package.json` que pinnea "left-pad" a un
+    commit de git (patrón legítimo: fijar un hotfix aún no publicado), que
+    con la config por defecto daba 100/ROJO pese a que la media ponderada
+    real fuera ~10/100. Ahora, sin `confidence` declarada, esa capa cuenta
+    solo por su peso normal en la media ponderada."""
+    deps_layer = LayerResult(
+        layer_name="dependencies",
+        risk_score=75,
+        justification="Instalación directa desde URL/Git",
+        threat_nature=ThreatNature.MALICIOUS,
+        confidence=None,
+    )
+    results = {
+        "static": _result("static", 0),
+        "dependencies": deps_layer,
+        "reputation": _result("reputation", 5),
+        "semantic": _result("semantic", 5),
+    }
+    weights = {"static": 0.25, "dependencies": 0.10, "reputation": 0.15, "semantic": 0.40}
+
+    out = aggregate(results, weights, diff=None, pr_id="1", repo="org/repo")
+
+    assert out.semaforo != Semaforo.ROJO
+    assert out.score < 20

@@ -116,9 +116,25 @@ def _apply_malicious_and_uncertain_policy(
         if layer_res.skipped:
             continue
         if layer_res.threat_nature == ThreatNature.MALICIOUS:
-            if layer_res.confidence == Confidence.ALTA or layer_res.risk_score >= thresholds["red"]:
+            # Exigir `confidence` explícita (no "o risk_score >= umbral")
+            # -- ese `or` trataba un risk_score alto como si fuera lo mismo
+            # que alta confianza, pero no lo es: `deps_layer.py` nunca
+            # rellena `confidence` (siempre None) y puntúa 75-80 para
+            # patrones habituales y a menudo legítimos (pinnear una
+            # dependencia a un commit/fix vía URL de git, un script
+            # postinstall con chmod +x). Con la config por defecto, eso
+            # forzaba el combinado a 100/ROJO pese a que la media ponderada
+            # real diera ~10/100 -- un solo heurístico mecánico, sin
+            # corroboración de ninguna otra capa y sin que se haya
+            # establecido alta confianza en ningún sitio, tenía veto
+            # absoluto sobre el resultado agregado. Reproducido en vivo
+            # fijando "left-pad": "git+https://.../left-pad.git#v1.3.1-
+            # hotfix" en package.json. Ahora solo una capa que declare
+            # `confidence` de verdad (hoy, únicamente la semántica) puede
+            # disparar esta escalada.
+            if layer_res.confidence == Confidence.ALTA:
                 has_high_confidence_malicious = True
-            elif layer_res.confidence == Confidence.MEDIA or layer_res.risk_score >= 50:
+            elif layer_res.confidence == Confidence.MEDIA:
                 has_medium_confidence_malicious = True
 
     if has_high_confidence_malicious:

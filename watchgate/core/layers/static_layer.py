@@ -28,6 +28,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -130,8 +131,16 @@ def _infer_threat_nature_from_semgrep(finding_extra: dict[str, Any], rule_id: st
         return ThreatNature.VULNERABILITY
 
     rule_lower = rule_id.lower()
-    if any(kw in cat or kw in subcategory for kw in malicious_keywords) or any(
-        kw in rule_lower for kw in malicious_keywords
+    # Coincidencia por palabra completa, no por substring: "c2" es lo
+    # bastante corto para matchear por accidente dentro de un id/categoría
+    # de regla que no tenga nada que ver (p. ej. algo con "c2c" o "src2").
+    keyword_pattern = re.compile(
+        r"\b(?:" + "|".join(re.escape(kw) for kw in malicious_keywords) + r")\b"
+    )
+    if (
+        keyword_pattern.search(cat)
+        or keyword_pattern.search(subcategory)
+        or keyword_pattern.search(rule_lower)
     ):
         return ThreatNature.MALICIOUS
 

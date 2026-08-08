@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
-from watchgate.core.models import FileChange, FileStatus, LayerResult, NormalizedDiff, Semaforo
+from watchgate.core.models import (
+    Confidence,
+    FileChange,
+    FileStatus,
+    LayerResult,
+    NormalizedDiff,
+    Semaforo,
+    ThreatNature,
+)
 from watchgate.core.shortcircuit import (
     _has_new_dependencies,
     _has_new_network_calls,
@@ -230,3 +238,54 @@ def test_shortcircuit_rounding_boundary():
     # Min possible = 69.6 / 1.00 = 69.6 -> round(69.6) = 70 >= 70 -> ROJO
     result_over = evaluate_shortcircuit(partial, weights_over, diff, _THRESHOLDS, rng=lambda: 0.99)
     assert result_over == Semaforo.ROJO
+
+
+def test_malicious_without_stated_confidence_does_not_shortcircuit_to_rojo():
+    """Caso real encontrado en revisión: `deps_layer.py` nunca rellena
+    `confidence` (siempre None) y puntúa 75-80 para patrones habituales y a
+    menudo legítimos con `threat_nature=MALICIOUS`. Antes bastaba
+    `risk_score >= red threshold` (sin mirar confidence) para cortocircuitar
+    directo a ROJO, sin darle nunca a la capa semántica la oportunidad de
+    matizarlo -- reproducido con una dependencia pinneada a una URL de git
+    (patrón legítimo). Con `shortcircuit_enabled` (opt-in) esto bloqueaba un
+    PR benigno antes incluso de llamar al LLM."""
+    weights = {"static": 0.25, "deps": 0.20, "reputation": 0.15, "semantic": 0.40}
+    partial = {
+        "static": _lr("static", 0),
+        "deps": LayerResult(
+            layer_name="deps",
+            risk_score=75,
+            justification="Instalación directa desde URL/Git",
+            threat_nature=ThreatNature.MALICIOUS,
+            confidence=None,
+        ),
+        "reputation": _lr("reputation", 5),
+    }
+    diff = _diff_with_paths(("a.py", "+ x = 1"))
+
+    result = evaluate_shortcircuit(partial, weights, diff, _THRESHOLDS, rng=lambda: 0.99)
+
+    assert result != Semaforo.ROJO
+
+
+def test_malicious_with_high_confidence_still_shortcircuits_to_rojo():
+    """Caso simétrico al anterior: una capa que SÍ declara `confidence=ALTA`
+    de verdad debe seguir cortocircuitando a ROJO -- el fix no elimina la
+    protección, solo exige que la confianza sea real."""
+    weights = {"static": 0.25, "deps": 0.20, "reputation": 0.15, "semantic": 0.40}
+    partial = {
+        "static": _lr("static", 0),
+        "deps": LayerResult(
+            layer_name="deps",
+            risk_score=75,
+            justification="Script de instalación con exfiltración confirmada",
+            threat_nature=ThreatNature.MALICIOUS,
+            confidence=Confidence.ALTA,
+        ),
+        "reputation": _lr("reputation", 5),
+    }
+    diff = _diff_with_paths(("a.py", "+ x = 1"))
+
+    result = evaluate_shortcircuit(partial, weights, diff, _THRESHOLDS, rng=lambda: 0.99)
+
+    assert result == Semaforo.ROJO

@@ -109,17 +109,59 @@ Con ambos arreglos, la regeneración final da **180/193 (93%)**, 0 errores de ej
 
 Fusioné además `origin/main` (trabajo de Pablo: clasificación `ThreatNature`/`threat_summary`, sincronización de reglas Semgrep/YARA, CLI con Rich/SARIF/stdin) -- único conflicto real en `deps_layer.py`, porque su rama todavía tenía la consulta a OSV inline (de antes de esta separación). Resuelto a favor de la arquitectura separada; sus cambios de `ThreatNature` en `aggregator.py`/`models.py`/formatters se fusionaron limpios.
 
+## 17. Revisión de seguridad multi-agente de todo lo fusionado de Pablo, y 25 fixes reales (8 agosto)
+
+Tras la fusión del punto 16, lancé una revisión de seguridad sistemática (5 agentes en paralelo, uno por bloque: sync de reglas, Fases 1-4 del plan SaaS multi-tenant, Engine API + Postgres + gestión de keys, CLI moderna + `ThreatNature`) sobre todo el trabajo de Pablo que nunca se había auditado con este nivel de detalle. Cada hallazgo lo verifiqué yo mismo leyendo o reproduciendo el código real antes de tocarlo -- no me fié de lo que reportaba cada agente a ciegas. Arreglé 25 hallazgos reales en total, todos con test de regresión:
+
+**Críticos (bloqueaban producción o eran RCE/bypass de autenticación):**
+- Inyección de comandos en CI (`sync-rules.yml`/`reconcile-rules.yml`): `${{ github.event.client_payload.* }}` interpolado sin escapar dentro de `run:` bash -- un repo de reglas comprometido podía ejecutar comandos arbitrarios en un runner con `contents: write`.
+- Path traversal en `sync_rules.py`: nombres de idioma/vendor del manifest sin validar, podían escribir fuera de `rules/` en el checkout.
+- `config_override` en los endpoints de agente de IA (`/precheck`, `/analyze`, `/verify-fix`) permitía a un cliente HTTP neutralizar `thresholds`/`weights`/`block_on_red` -- el mismo agente que genera un PR malicioso podía autoaprobarlo.
+- `init_db()` sin migración real: desplegar contra cualquier BD con datos previos rompía todo. Lo confirmé de verdad contra mi propio `.watchgate/app.db` local (quedó bloqueado hasta que lo até y recreé).
+- **`_apply_malicious_and_uncertain_policy`/`shortcircuit.py` (encontrado en la segunda pasada, no en la primera)**: el `or risk_score >= thresholds["red"]` trataba un risk_score alto como si fuera lo mismo que alta confianza. `deps_layer.py` nunca rellena `confidence` (siempre `None`) y puntúa 75-80 para patrones habituales y a menudo legítimos (dependencia pinneada a una URL de git, script postinstall con `chmod +x`) -- con la config **por defecto**, cualquier hallazgo así forzaba el combinado a 100/ROJO pese a que la media ponderada real diera ~10/100. Reproducido con un caso concreto (pinnear `left-pad` a un commit de git). El único test que cubría esta ruta fijaba `confidence=ALTA` a mano, un valor que `deps_layer.py` nunca produce en la práctica -- el verde de CI no probaba nada del caso real. Esto también explica (parcialmente) los "falsos positivos" que anoté en el punto 16 como pendientes de revisar con Pablo -- aunque el caso concreto que motivó esa nota (`real_pallets_jinja_2105`) resultó ser la capa semántica equivocándose con confianza real, no este bug.
+- Login OAuth de GitHub del Dashboard sin protección CSRF (`state`): un atacante podía capturar su propio `code` e inducir a la víctima a completar el callback, dejando su sesión vinculada a la identidad GitHub del atacante.
+
+**Altos:**
+- `record_token_usage` no atómico -> UPSERT atómico (verificado con 20 hilos concurrentes, 0 pérdidas); TOCTOU en `analyze_with_quota` cerrado con reserva atómica antes de llamar al LLM.
+- Verificación de firma de webhook obligatoria en GitHub/GitLab/Bitbucket (antes: sin secreto configurado, se aceptaba cualquier payload).
+- `pre_receive` ya no traga excepciones de `git diff` (fail-closed real) y el timeout se aplica de verdad vía `SIGALRM` (antes, un análisis colgado bloqueaba `git push` indefinidamente).
+- Token de acceso de GitHub embebido en la cookie de sesión del Dashboard: el JWT está firmado pero no cifrado, así que cualquiera que lea el valor de la cookie (fuera de la red, ej. un HAR compartido) puede decodificarlo en base64 sin el secreto y obtener un token vivo con scope `repo,read:org`. **No lo he arreglado** -- necesita una decisión de diseño (cifrar el JWT con JWE, o mover a un almacén de sesión en servidor) que no me correspondía tomar sin hablarlo.
+
+**Medios:**
+- `$GITHUB_OUTPUT` con delimitador multilínea seguro; symlinks rechazados en hash/copia de reglas de `sync_rules.py`.
+- `default-org` del Dashboard ahora es una Organización real y persistida (una por usuario, o el fallback compartido persistido de verdad) -- antes se fabricaba en memoria y nunca existía de verdad, así que cuota/gobernanza se saltaban en silencio.
+- `scopes` de API key comprobados de verdad (`require_scope`); `create_user` ya no reasigna `org_id` de un usuario existente en silencio; `PolicyService` valida rangos y no tumba el análisis de una org con un `policy_json` malformado.
+- Mapeo de permisos de GitHub (`_map_github_permission`) invertido de "conceder por defecto" a "denegar por defecto" -- un valor no reconocido (incluido `"none"`) ya no concedía `revisor`.
+- `WATCHGATE_DASHBOARD_SECURE_COOKIE` y un secreto de sesión demasiado corto ahora bloquean el arranque en producción, igual que ya hacía el secreto por defecto.
+- Canal lateral de tiempo en el login por contraseña (usuario inexistente respondía instantáneo, uno existente tardaba un PBKDF2 de 120k iteraciones) -- permitía enumerar logins válidos.
+- Escapado incompleto en las anotaciones de GitHub Actions (`github.py`): un `file_path` con `:`/`,` podía inyectar propiedades falsas o un `::error::` completo en la anotación.
+
+**Bajos:** fallo al escribir `--output` de la CLI no afectaba el exit code (ahora exit 3); keyword matching de `_infer_threat_nature_from_semgrep` sin límite de palabra (`"c2"` podía matchear por substring accidental).
+
+**Encontrado pero explícitamente NO arreglado, a la espera de una decisión (mía o de Pablo), documentado para no perderlo:**
+- Token de GitHub en la cookie de sesión sin cifrar (ver arriba) -- necesita JWE o sesión en servidor.
+- Sin rate limiting en `/api/auth/login`/`/api/auth/dev-login` -- necesita decidir si un limitador en memoria (single-process) es aceptable o hace falta algo compartido entre procesos.
+- RAG distribuido (`feedback_cases` en ChromaDB) sin aislamiento por tenant si varios despliegues comparten el mismo Chroma -- hoy no explotable porque `add_confirmed_case` no está conectada a ningún endpoint vivo, pero hay que cerrarlo antes de conectar el bucle de feedback humano de verdad.
+- Cobertura de test de Postgres sigue sin ser end-to-end automática (mismo pendiente del punto 14).
+
+Verificación funcional real, no solo tests: arranqué el Engine API y el Dashboard de verdad (`TestClient` con lifespan completo) y confirmé que levantan limpios; corrí la CLI contra un diff real de este propio repo; invoqué el hook `pre-receive` como proceso real vía stdin. De paso, el nuevo chequeo estricto de `init_db()` destapó que `tests/integration/test_dashboard_roles.py` no aislaba su base de datos (tocaba el `.watchgate/app.db` real compartido, no un fixture) -- lo arreglé aplicando el mismo patrón que ya usaba `test_dashboard_api_keys.py`.
+
 ## Estado global
 
-**321/321 tests** unitarios e integración en verde (tras la fusión). **180/193 (93%)** en la suite de aceptación real con las 5 capas reales y 0 errores de ejecución. Todo lo listado arriba está en producción salvo estos matices honestos:
+**437 tests** en verde (`python -m pytest`, suite completa salvo la de aceptación real marcada `integration`). **180/193 (93%)** en la suite de aceptación real con las 5 capas reales (sin cambios desde el punto 16 -- los fixes de este punto no se han vuelto a correr contra esa suite todavía). Todo lo listado arriba está en producción salvo estos matices honestos:
 
-- El soporte Postgres está validado a mano contra una instancia real, pero no hay un Postgres provisionado en el CI del proyecto, así que no hay un test automático de extremo a extremo en cada push.
+- El soporte Postgres está validado a mano contra una instancia real, pero no hay un Postgres provisionado en el CI del proyecto.
 - La detección de inyección de prompt es un heurístico de texto (regex); un atacante que ofusque el contenido (Unicode, base64) podría evadirlo.
-- Dos falsos positivos nuevos en `benign hard` (`real_pallets_jinja_2098`/`_2105`, ambos rojo por categoría backdoor) que no estaban antes de fusionar el trabajo de Pablo -- su `_apply_malicious_and_uncertain_policy` fuerza 100/rojo ante cualquier hallazgo `MALICIOUS` de confianza alta sin más matiz. No lo he tocado (no es mi código ni parte de lo que se me pidió), pero merece una revisión conjunta.
+- Token de acceso de GitHub sin cifrar dentro de la cookie de sesión del Dashboard (ver punto 17) -- pendiente de decisión de diseño.
+- Sin rate limiting en el login del Dashboard (ver punto 17).
+- RAG distribuido sin aislamiento por tenant a nivel de colección (ver punto 17) -- hoy no explotable, sí antes de conectar feedback humano de verdad.
 
 ## Pendiente
 
+- Decidir y aplicar el arreglo del token de GitHub en la cookie de sesión (JWE vs sesión en servidor) -- punto 17.
+- Rate limiting en `/api/auth/login`/`/api/auth/dev-login` -- punto 17.
+- Aislamiento por tenant en las colecciones de ChromaDB del RAG distribuido, antes de conectar `add_confirmed_case` a un endpoint real -- punto 17.
 - Provisionar Postgres en el CI para cobertura automática de extremo a extremo.
-- Revisar con Pablo los dos falsos positivos nuevos de `_apply_malicious_and_uncertain_policy` en `benign hard` (ver arriba).
+- Regenerar `docs/validation_report.md` contra la API real para reflejar los fixes del punto 17 (especialmente el de `_apply_malicious_and_uncertain_policy`, que debería mejorar `malicious medium/hard`).
 - Publicar el paquete en PyPI (fuera de alcance por decisión explícita).
 - Ampliar la detección de inyección de prompt si se observan variantes ofuscadas en producción.
