@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import json
+import threading
+import time
 from datetime import UTC, datetime
 
 from sqlmodel import Session, create_engine, select
 
+import watchgate.service.quota as quota_module
 from watchgate.config import WatchGateConfig
 from watchgate.core.diffparser import parse_diff_from_text
+from watchgate.core.models import AggregatedResult, LayerResult, Semaforo
 from watchgate.db.connection import init_db
 from watchgate.db.models import PRScore
 from watchgate.db.repository import (
@@ -147,3 +151,87 @@ def test_quota_service_degraded_mode() -> None:
     # Verificar que no se sumaron tokens adicionales durante la ejecución degradada
     current_usage = get_token_usage(session, month=current_month, org_id=org.id)
     assert current_usage == 1500
+
+
+def _fake_full_analysis(diff, metadata, config):  # noqa: ANN001, ARG001
+    """Doble rápido de `run_full_analysis`: simula una llamada real al LLM
+    (con su latencia) sin red ni coste, para poder probar concurrencia."""
+    time.sleep(0.05)
+    return AggregatedResult(
+        score=10,
+        semaforo=Semaforo.VERDE,
+        layer_results={
+            "semantic": LayerResult(
+                layer_name="semantic",
+                risk_score=10,
+                justification="ok",
+                tool_calls_made=0,
+            )
+        },
+        weights_used=config.weights,
+        pr_id=str(metadata.get("pr_id", "")),
+        repo=str(metadata.get("repo", "")),
+        timestamp="2026-01-01T00:00:00Z",
+    )
+
+
+def test_analyze_with_quota_closes_toctou_window_under_concurrency(monkeypatch, tmp_path) -> None:
+    """Caso real encontrado en revisión: la comprobación de cuota
+    (`get_org_quota_status`) ocurría ANTES de la llamada al LLM (que tarda
+    segundos) y el consumo se contabilizaba DESPUÉS -- peticiones
+    concurrentes dentro de esa ventana leían todas "cuota no superada" y
+    todas acababan llamando al LLM, permitiendo sobrepasar la cuota
+    proporcionalmente a la concurrencia. Con una cuota de exactamente una
+    "reserva" (3000 tokens) y 5 peticiones concurrentes, como mucho UNA
+    puede completarse en modo estándar -- el resto debe degradarse, sin
+    importar el orden de entrelazado de los hilos."""
+    monkeypatch.setattr(quota_module, "run_full_analysis", _fake_full_analysis)
+
+    # Fichero real en disco, no `:memory:` -- necesitamos una conexión
+    # independiente y genuinamente concurrente por hilo (como en producción,
+    # ver `connection.py::build_engine`); una única conexión compartida
+    # (`StaticPool`) no soporta transacciones concurrentes de verdad y no
+    # ejercitaría la condición de carrera real.
+    db_path = tmp_path / "toctou.db"
+    test_engine = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False})
+    init_db(test_engine)
+
+    session = Session(test_engine)
+    org = create_organization(session, name="Race Org", monthly_token_quota=3000)
+    user = create_user(session, email="race@example.com", name="Race User", org_id=org.id)
+    session.commit()
+
+    diff = parse_diff_from_text(
+        diff_text="--- a/main.py\n+++ b/main.py\n@@ -1 +1 @@\n-x = 1\n+x = 2",
+        base_sha="0000000",
+        head_sha="1111111",
+    )
+
+    results: list[bool] = []
+    lock = threading.Lock()
+
+    def worker() -> None:
+        thread_session = Session(test_engine)
+        quota_service = QuotaService(thread_session)
+        _result, is_degraded = quota_service.analyze_with_quota(
+            diff=diff,
+            metadata={"pr_id": "race", "repo": "test/race"},
+            config=WatchGateConfig(),
+            org_id=org.id,
+            user_id=user.id,
+        )
+        with lock:
+            results.append(is_degraded)
+        thread_session.close()
+
+    threads = [threading.Thread(target=worker) for _ in range(5)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    n_standard = results.count(False)
+    assert n_standard <= 1, (
+        f"{n_standard} peticiones completaron en modo estándar con una cuota que solo "
+        "debería permitir 1 -- la ventana TOCTOU no está cerrada."
+    )

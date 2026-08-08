@@ -34,10 +34,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -136,9 +138,14 @@ def _assert_no_lfs_pointers(directory: Path) -> None:
     """
     pointer_signature = b"version https://git-lfs.github.com/spec"
     for file_path in directory.rglob("*"):
-        if not file_path.is_file():
+        if file_path.is_symlink() or not file_path.is_file():
             continue
-        head = file_path.read_bytes()[:200]
+        # Lee solo los primeros 200 bytes de verdad (no todo el fichero
+        # para luego cortar en memoria) -- este chequeo corre ANTES de la
+        # verificación de hash, así que un fichero enorme en un repo de
+        # reglas comprometido no debe poder agotar memoria aquí.
+        with file_path.open("rb") as fh:
+            head = fh.read(200)
         if pointer_signature in head:
             raise RuntimeError(
                 f"'{file_path}' es un PUNTERO de Git LFS sin resolver, no el contenido "
@@ -194,6 +201,13 @@ def _download_release_asset(repo: str, release: dict[str, Any], asset_name: str,
             f"La Release '{release.get('tag_name')}' de {repo} no tiene un asset llamado "
             f"'{asset_name}'. Assets disponibles: {available}."
         )
+    # `manifest.json` es un manifiesto de hashes -- unos pocos KB en la
+    # práctica. Un asset anormalmente grande servido por un repo de reglas
+    # comprometido no debe poder agotar memoria: se rechaza por
+    # Content-Length declarado (barato, no requiere descargar nada) y,
+    # como red de seguridad si el servidor mintiese en esa cabecera, por el
+    # tamaño real recibido.
+    max_bytes = 5 * 1024 * 1024
     response = httpx.get(
         match["url"],
         headers=_github_headers(token, "application/octet-stream"),
@@ -201,6 +215,17 @@ def _download_release_asset(repo: str, release: dict[str, Any], asset_name: str,
         follow_redirects=True,
     )
     response.raise_for_status()
+    declared_length = response.headers.get("content-length")
+    if declared_length is not None and int(declared_length) > max_bytes:
+        raise RuntimeError(
+            f"El asset '{asset_name}' de la Release '{release.get('tag_name')}' declara "
+            f"{declared_length} bytes, por encima del límite de {max_bytes} -- descarga rechazada."
+        )
+    if len(response.content) > max_bytes:
+        raise RuntimeError(
+            f"El asset '{asset_name}' de la Release '{release.get('tag_name')}' supera el "
+            f"límite de {max_bytes} bytes -- descarga rechazada."
+        )
     return response.content
 
 
@@ -233,6 +258,30 @@ def _parse_third_party_entries(entries: list[str]) -> list[tuple[str, str]]:
     return parsed
 
 
+
+# Charset seguro para cualquier segmento de ruta derivado de datos NO
+# confiables: nombre de idioma/vendor/carpeta/categoría YARA. Estas claves
+# vienen o bien del payload del `repository_dispatch` (scope=changed) o
+# directamente de las claves de `manifest.json` descargado del repo de
+# reglas (scope=full) -- en ambos casos, contenido controlado en última
+# instancia por ese repo externo. `_copy_dir` construye rutas de destino
+# tipo `target_root / "custom" / lang` y hace `shutil.rmtree` + `copytree`
+# sobre ellas: sin esta validación, una clave como "../../../.github/
+# workflows" pasaría la verificación de hash igualmente (el atacante
+# controla ambos lados: el contenido publicado y el hash que publica para
+# él) y escribiría/borraría fuera de `rules/` en el checkout del runner.
+_SAFE_KEY_SEGMENT = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def _validate_key_segment(value: str, what: str) -> str:
+    if not _SAFE_KEY_SEGMENT.match(value):
+        raise ValueError(
+            f"{what} inválido: {value!r} -- solo se permiten letras, números, "
+            "'_' y '-' (nada de '/', '..' ni espacios)."
+        )
+    return value
+
+
 def _resolve_scope_keys(
     manifest: dict[str, Any],
     scope: str,
@@ -246,21 +295,46 @@ def _resolve_scope_keys(
         * "full": TODO lo que el manifest declara (reconciliación completa).
     - yara: SIEMPRE todas las categorías publicadas, en ambos modos, porque
       el análisis YARA usa el catálogo completo (nunca selección parcial).
+
+    Cada nombre de idioma/vendor/carpeta/categoría se valida contra un
+    charset seguro antes de devolverse -- ver `_SAFE_KEY_SEGMENT` -- para
+    que ningún llamador aguas abajo pueda construir una ruta de destino que
+    escape de `rules/` a partir de datos no confiables.
     """
     hashes = manifest.get("hashes", {})
     semgrep_hashes = hashes.get("semgrep", {})
     yara_hashes = hashes.get("yara", {})
 
-    yara_categories = sorted(yara_hashes.keys())
+    yara_categories = sorted(
+        _validate_key_segment(c, "Categoría YARA") for c in yara_hashes
+    )
 
     if scope == "full":
-        languages = sorted(semgrep_hashes.get("custom", {}).keys())
-        third_party = sorted(_flatten_third_party(semgrep_hashes.get("third_party", {})))
+        languages = sorted(
+            _validate_key_segment(lang, "Idioma") for lang in semgrep_hashes.get("custom", {})
+        )
+        third_party = sorted(
+            (
+                _validate_key_segment(vendor, "Vendor third-party"),
+                _validate_key_segment(carpeta, "Carpeta third-party"),
+            )
+            for vendor, carpeta in _flatten_third_party(semgrep_hashes.get("third_party", {}))
+        )
         return languages, third_party, yara_categories
 
     if scope == "changed":
-        languages = sorted(set(languages_changed))
-        third_party = sorted(set(_parse_third_party_entries(third_party_changed)))
+        languages = sorted(
+            {_validate_key_segment(lang, "Idioma") for lang in languages_changed}
+        )
+        third_party = sorted(
+            {
+                (
+                    _validate_key_segment(vendor, "Vendor third-party"),
+                    _validate_key_segment(carpeta, "Carpeta third-party"),
+                )
+                for vendor, carpeta in _parse_third_party_entries(third_party_changed)
+            }
+        )
         return languages, third_party, yara_categories
 
     raise ValueError(f"scope desconocido: {scope!r}")
@@ -303,7 +377,7 @@ def _verify_keys(
             return
         try:
             computed = compute_dir_hash(local_dir)
-        except FileNotFoundError as exc:
+        except (FileNotFoundError, ValueError) as exc:
             failed.append(key_label)
             print(f"    [FALLO] {key_label}: {exc}")
             return
@@ -349,7 +423,12 @@ def _apply_verified_content(
         if dst.exists():
             shutil.rmtree(dst)
         dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(src, dst)
+        # symlinks=True: si por lo que sea llegase un symlink hasta aquí,
+        # se copia como symlink (dentro del árbol destino) en vez de
+        # resolverse y materializar contenido ajeno al repo de reglas --
+        # defensa en profundidad, `compute_dir_hash` ya los rechaza antes
+        # de que una clave pueda llegar a verificarse.
+        shutil.copytree(src, dst, symlinks=True)
 
     for lang in languages:
         _copy_dir(dest / CUSTOM_PREFIX / lang, target_root / CUSTOM_PREFIX / lang)
@@ -422,12 +501,25 @@ def _write_state(
 
 
 def _write_github_output(**kwargs: str) -> None:
+    """Escribe pares clave=valor en `$GITHUB_OUTPUT` usando SIEMPRE el
+    delimitador multilínea que exige el formato de GitHub Actions
+    (`key<<DELIM` / valor / `DELIM`), con un delimitador aleatorio distinto
+    en cada llamada.
+
+    Los valores que se escriben aquí (`args.ref`, `remote_version` leído de
+    un manifest.json descargado, etc.) NO son de confianza -- si se
+    escribieran como `f"{key}={value}\\n"` a secas, un valor con un salto de
+    línea permitiría inyectar pares `key=value` arbitrarios adicionales en
+    el fichero de outputs (falsificar `status=in_sync`, por ejemplo), que
+    luego consume el resto del workflow.
+    """
     output_path = os.environ.get("GITHUB_OUTPUT")
     if not output_path:
         return
     with open(output_path, "a", encoding="utf-8") as fh:
         for key, value in kwargs.items():
-            fh.write(f"{key}={value}\n")
+            delimiter = f"ghadelim_{uuid.uuid4().hex}"
+            fh.write(f"{key}<<{delimiter}\n{value}\n{delimiter}\n")
 
 
 def cmd_sync(args: argparse.Namespace) -> int:

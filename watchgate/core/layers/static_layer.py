@@ -358,8 +358,19 @@ class StaticLayer(AnalysisLayer):
         if watchgate_yml.exists():
             config_paths.append(f"--config={watchgate_yml}")
 
-        if not config_paths and rules_dir.exists():
-            config_paths.append(f"--config={rules_dir}")
+        if not config_paths:
+            # Último recurso: si el árbol `rules/semgrep` existe pero ninguna
+            # subcarpeta concreta aplicó (p. ej. un checkout a medio
+            # sincronizar al que solo le falta `custom/regex`), acotar el
+            # escaneo a ese árbol -- nunca a `rules_dir` a secas, que en el
+            # caso 3 de `_get_rules_dir` es literalmente `Path(".")` (la
+            # raíz del repo completo) y escanearía con Semgrep cualquier
+            # YAML con forma de regla en todo el proyecto, no solo las
+            # reglas de WatchGate.
+            if semgrep_root.exists():
+                config_paths.append(f"--config={semgrep_root}")
+            elif rules_dir.exists():
+                config_paths.append(f"--config={rules_dir}")
 
         if not config_paths:
             return results

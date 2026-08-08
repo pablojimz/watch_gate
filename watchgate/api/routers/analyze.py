@@ -4,16 +4,17 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlmodel import Session
 
-from watchgate.api.auth import get_current_user_from_api_key
+from watchgate.api.auth import require_scope
 from watchgate.api.dependencies import get_db_session
-from watchgate.config import WatchGateConfig, load_config
+from watchgate.config import load_config
 from watchgate.core.diffparser import parse_diff_from_text
 from watchgate.core.models import AggregatedResult, CommitAuthor
 from watchgate.db.models import Organization, User, UserAPIKey
+from watchgate.service.policy import ClientConfigOverrideError, apply_client_config_override
 from watchgate.service.quota import QuotaService
 
 router = APIRouter(prefix="/api/v1", tags=["Analysis"])
@@ -44,7 +45,7 @@ class AnalyzeRequest(BaseModel):
 def analyze_pr(
     request: AnalyzeRequest,
     auth: tuple[UserAPIKey, User, Organization] = Depends(
-        get_current_user_from_api_key
+        require_scope("analysis:write")
     ),  # noqa: B008
     session: Session = Depends(get_db_session),  # noqa: B008
 ) -> AggregatedResult:
@@ -60,14 +61,16 @@ def analyze_pr(
         authors=request.authors,
     )
 
-    # Carga de configuración base + overrides opcionales de la petición
+    # Carga de configuración base + overrides opcionales de la petición.
+    # `apply_client_config_override` rechaza (400) cualquier intento de
+    # tocar thresholds/weights/block_on_red/shortcircuit_enabled -- esos
+    # solo los puede fijar la gobernanza de organización, nunca la propia
+    # petición HTTP (ver watchgate/service/policy.py).
     base_config = load_config()
-    if request.config_override:
-        cfg_dict = base_config.model_dump()
-        cfg_dict.update(request.config_override)
-        config = WatchGateConfig(**cfg_dict)
-    else:
-        config = base_config
+    try:
+        config = apply_client_config_override(base_config, request.config_override)
+    except ClientConfigOverrideError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     quota_service = QuotaService(session)
     result, _is_degraded = quota_service.analyze_with_quota(

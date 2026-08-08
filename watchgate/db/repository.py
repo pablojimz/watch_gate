@@ -8,6 +8,7 @@ import secrets
 import uuid
 from datetime import UTC, datetime
 
+from sqlalchemy import func
 from sqlmodel import Session, select
 
 from watchgate.core.models import AggregatedResult
@@ -86,11 +87,23 @@ def create_user(
     custom_llm_api_key: str | None = None,
     org_id: str | None = None,
 ) -> User:
-    """Crea o recupera un usuario de la plataforma."""
+    """Crea o recupera un usuario de la plataforma.
+
+    Si el usuario ya existe (mismo email) y ya tiene un `org_id` propio,
+    un `org_id` distinto en esta llamada se IGNORA -- nunca se reasigna en
+    silencio. Antes, pasar un `org_id` distinto al de un usuario existente
+    lo reescribía sin ninguna comprobación de autorización; con `email`
+    único a nivel global, esto era una vía para que un segundo tenant
+    "robara" silenciosamente la afiliación de organización de un usuario ya
+    existente (ej. un email genérico o compartido) con solo llamar a esta
+    función con su email y un `org_id` distinto. Solo se rellena `org_id`
+    si el usuario existente todavía no tenía uno (caso legítimo de
+    completar un dato que faltaba, no de sobrescribir uno ya asignado).
+    """
     stmt = select(User).where(User.email == email)
     existing = session.exec(stmt).first()
     if existing:
-        if org_id and existing.org_id != org_id:
+        if org_id and not existing.org_id:
             existing.org_id = org_id
             session.add(existing)
             session.commit()
@@ -186,28 +199,59 @@ def record_token_usage(
     month: str | None = None,
     org_id: str | None = None,
 ) -> UserTokenUsage:
-    """Registra o incrementa el consumo de tokens mensual para un usuario u organización."""
+    """Registra o incrementa, de forma ATÓMICA, el consumo de tokens mensual
+    de un usuario/organización.
+
+    Antes esto era un SELECT -> incrementar en Python -> UPDATE/INSERT, no
+    atómico: peticiones concurrentes del mismo user_id/mes (el caso de uso
+    central de un agente de IA lanzando varias llamadas en paralelo)
+    perdían incrementos por *lost update*, o lanzaban `IntegrityError` sin
+    capturar si ambas intentaban el INSERT inicial a la vez -- reproducido
+    con 20 hilos concurrentes: de 2000 tokens esperados, la base de datos
+    terminaba con 200-600. Como `QuotaService` usa esta cifra para cortar
+    el servicio al llegar a la cuota, era un bypass de cuota real bajo
+    concurrencia. Ahora es un único `INSERT ... ON CONFLICT DO UPDATE
+    SET tokens_used = tokens_used + <incremento>`, atómico a nivel de fila
+    tanto en SQLite (>= 3.24) como en Postgres -- sin ventana entre leer y
+    escribir.
+    """
     month_key = month or datetime.now(UTC).strftime("%Y-%m")
-    stmt = select(UserTokenUsage).where(
-        UserTokenUsage.user_id == user_id, UserTokenUsage.month == month_key
-    )
-    usage = session.exec(stmt).first()
+    dialect = session.get_bind().dialect.name
 
-    if not usage:
-        usage = UserTokenUsage(
-            user_id=user_id, month=month_key, org_id=org_id, tokens_used=tokens_used
-        )
-        session.add(usage)
-        session.commit()
-        session.refresh(usage)
+    if dialect == "postgresql":
+        from sqlalchemy.dialects.postgresql import insert as _insert
     else:
-        usage.tokens_used += tokens_used
-        if org_id and not usage.org_id:
-            usage.org_id = org_id
-        session.add(usage)
-        session.commit()
-        session.refresh(usage)
+        # SQLite es el único otro dialecto soportado (ver connection.py);
+        # su sintaxis `INSERT ... ON CONFLICT` es compatible con la misma
+        # API `on_conflict_do_update` de SQLAlchemy. mypy no puede unificar
+        # los dos tipos de retorno (uno por dialecto) de esta importación
+        # condicional -- es el mismo patrón dialect-aware que el resto del
+        # módulo, correcto en tiempo de ejecución (cubierto por tests de
+        # concurrencia reales contra SQLite).
+        from sqlalchemy.dialects.sqlite import insert as _insert  # type: ignore[assignment]
 
+    table = UserTokenUsage.__table__  # type: ignore[attr-defined]
+    stmt = _insert(table).values(
+        user_id=user_id, month=month_key, org_id=org_id, tokens_used=tokens_used
+    )
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[table.c.user_id, table.c.month],
+        set_={
+            "tokens_used": table.c.tokens_used + stmt.excluded.tokens_used,
+            # Solo rellena org_id si la fila existente no tenía uno --
+            # mismo comportamiento que la versión anterior no atómica.
+            "org_id": func.coalesce(table.c.org_id, stmt.excluded.org_id),
+        },
+    )
+    session.exec(stmt)
+    session.commit()
+
+    usage = session.exec(
+        select(UserTokenUsage).where(
+            UserTokenUsage.user_id == user_id, UserTokenUsage.month == month_key
+        )
+    ).first()
+    assert usage is not None  # noqa: S101 -- se acaba de upsertar en esta misma transacción
     return usage
 
 

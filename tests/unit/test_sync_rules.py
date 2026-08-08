@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import sys
 import tempfile
@@ -362,8 +363,12 @@ def test_cmd_check_writes_github_output_when_env_present(tmp_dir, monkeypatch):
     sr.cmd_check(args)
 
     content = output_file.read_text(encoding="utf-8")
-    assert "status=out_of_sync" in content  # no existía state previo -> primera vez siempre desalineado
-    assert "remote_version=v0.0.2" in content
+    # Formato multilínea real de $GITHUB_OUTPUT (key<<DELIM / valor / DELIM),
+    # no "key=value" a secas -- ver el comentario de seguridad en
+    # _write_github_output (un salto de línea en el valor permitiría
+    # inyectar pares clave=valor arbitrarios con el formato simple).
+    assert re.search(r"status<<\w+\nout_of_sync\n\w+\n", content)
+    assert re.search(r"remote_version<<\w+\nv0\.0\.2\n\w+\n", content)
 
 
 # --------------------------------------------------------------------------
@@ -372,10 +377,17 @@ def test_cmd_check_writes_github_output_when_env_present(tmp_dir, monkeypatch):
 
 
 class _FakeResponse:
-    def __init__(self, status_code: int, json_body: object = None, content: bytes = b""):
+    def __init__(
+        self,
+        status_code: int,
+        json_body: object = None,
+        content: bytes = b"",
+        headers: dict[str, str] | None = None,
+    ):
         self.status_code = status_code
         self._json = json_body
         self.content = content
+        self.headers = headers or {}
 
     def json(self):
         return self._json
