@@ -89,7 +89,12 @@ index 0000000..e69de29
     assert data["repo"] == "acme/backend"
 
 
-def test_webhook_no_secret(api_client):
+def test_webhook_no_secret_fails_closed(api_client):
+    """Antes: sin secreto configurado, el endpoint no verificaba nada y
+    aceptaba cualquier payload como legítimo (200). Eso era fail-open --
+    cualquiera en internet podía mandar un webhook falso. Ahora la ausencia
+    del secreto es en sí misma un error de configuración del servidor
+    (503), no una vía libre."""
     client, _ = api_client
     headers = {"X-GitHub-Event": "pull_request"}
     payload = {
@@ -101,10 +106,7 @@ def test_webhook_no_secret(api_client):
 
     with patch.dict(os.environ, {}, clear=True):
         response = client.post("/api/v1/webhooks/github", headers=headers, json=payload)
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "accepted"
-        assert data["pr_id"] == "10"
+        assert response.status_code == 503
 
 
 def test_webhook_hmac_verification(api_client):

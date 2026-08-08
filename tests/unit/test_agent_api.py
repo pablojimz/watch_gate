@@ -150,6 +150,77 @@ index 0000000..e69de29
     assert len(data["resolved_findings"]) > 0
 
 
+def test_agent_analyze_rejects_key_without_analysis_write_scope(api_client):
+    """Caso real encontrado en revisión: `UserAPIKey.scopes` se define y se
+    persiste pero no se comprobaba en ningún punto de la autenticación --
+    cualquier API key válida, sea cual sea el scope con el que se emitió,
+    podía llamar a cualquier endpoint. Una clave emitida solo con
+    'scores:read' no debe poder disparar un análisis (consume presupuesto
+    de tokens LLM)."""
+    client, session = api_client
+    org = create_organization(session, name="Agent Org")
+    user = create_user(session, email="readonly@corp.com", name="Readonly Agent", org_id=org.id)
+    _, raw_token = create_api_key(session, user_id=user.id, org_id=org.id, scopes="scores:read")
+
+    headers = {"Authorization": f"Bearer {raw_token}"}
+    payload = {"diff_text": "diff --git a/app.py b/app.py\n"}
+
+    response = client.post("/api/v1/agent/analyze", headers=headers, json=payload)
+    assert response.status_code == 403
+
+
+def test_agent_policy_endpoint_rejects_key_without_scores_read_scope(api_client):
+    client, session = api_client
+    org = create_organization(session, name="Agent Org")
+    user = create_user(session, email="writeonly@corp.com", name="Writeonly Agent", org_id=org.id)
+    _, raw_token = create_api_key(
+        session, user_id=user.id, org_id=org.id, scopes="analysis:write"
+    )
+
+    headers = {"Authorization": f"Bearer {raw_token}"}
+    response = client.get("/api/v1/agent/policy", headers=headers)
+    assert response.status_code == 403
+
+
+def test_agent_precheck_rejects_config_override_of_thresholds(api_client):
+    """Caso real que motivó el fix: antes de esto, un agente de IA podía
+    mandar config_override: {"thresholds": {"yellow": 999, "red": 999}} y
+    el precheck siempre daba verde, con independencia de lo que detectaran
+    las capas -- el mismo agente que generó el PR se autoaprobaba. Ahora
+    debe rechazarse con 400 antes de llegar a analizar nada."""
+    client, session = api_client
+    org = create_organization(session, name="Agent Org")
+    user = create_user(session, email="agent2@corp.com", name="Agent User", org_id=org.id)
+    _, raw_token = create_api_key(session, user_id=user.id, org_id=org.id)
+
+    headers = {"Authorization": f"Bearer {raw_token}"}
+    payload = {
+        "diff_text": "diff --git a/app.py b/app.py\n",
+        "config_override": {"thresholds": {"yellow": 999, "red": 999}},
+    }
+
+    response = client.post("/api/v1/agent/precheck", headers=headers, json=payload)
+    assert response.status_code == 400
+    assert "thresholds" in response.json()["detail"]
+
+
+def test_agent_analyze_rejects_config_override_of_weights(api_client):
+    client, session = api_client
+    org = create_organization(session, name="Agent Org")
+    user = create_user(session, email="agent3@corp.com", name="Agent User", org_id=org.id)
+    _, raw_token = create_api_key(session, user_id=user.id, org_id=org.id)
+
+    headers = {"Authorization": f"Bearer {raw_token}"}
+    payload = {
+        "diff_text": "diff --git a/app.py b/app.py\n",
+        "config_override": {"weights": {"semantic": 0.0}},
+    }
+
+    response = client.post("/api/v1/agent/analyze", headers=headers, json=payload)
+    assert response.status_code == 400
+    assert "weights" in response.json()["detail"]
+
+
 def test_agent_policy_endpoint(api_client):
     client, session = api_client
     org = create_organization(

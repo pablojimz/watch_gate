@@ -11,10 +11,15 @@ import os
 from collections.abc import Generator
 from typing import Any
 
-from sqlalchemy import engine, event
+from sqlalchemy import engine, event, inspect
 from sqlmodel import Session, SQLModel, create_engine
 
 _DEFAULT_SQLITE_URL = "sqlite:///.watchgate/app.db"
+
+
+class SchemaOutOfDateError(RuntimeError):
+    """La base de datos ya existe pero le faltan columnas que el código
+    actual espera -- ver `_check_schema_matches_models` para el porqué."""
 
 
 def get_database_url() -> str:
@@ -49,9 +54,65 @@ def build_engine(database_url: str | None = None) -> engine.Engine:
 default_engine = build_engine()
 
 
+def _check_schema_matches_models(target_engine: engine.Engine) -> None:
+    """Aborta con un mensaje claro si una tabla YA EXISTE en la base de
+    datos pero le faltan columnas que los modelos de SQLModel actuales
+    esperan.
+
+    `SQLModel.metadata.create_all()` (más abajo) solo crea tablas que no
+    existen -- nunca añade columnas nuevas a una tabla ya existente. No hay
+    ningún script de migración real (Alembic o equivalente) en este
+    proyecto todavía. Sin este chequeo, desplegar una versión del código
+    que añade columnas (como `org_id` en la Fase 1 multi-tenant) contra
+    cualquier base de datos con esas tablas ya creadas produce un apagón
+    confuso: `OperationalError: no such column` mucho más tarde, en medio
+    de `create_api_key`/`save_pr_score`, sin relación aparente con el
+    despliegue que lo causó. Se prefiere fallar aquí, en el arranque, con
+    un mensaje que dice exactamente qué falta y qué hacer.
+
+    No intenta migrar nada por su cuenta -- una columna nueva puede
+    necesitar backfill, un `NOT NULL` puede necesitar un valor por
+    defecto pensado, y un cambio de primary key (como el de
+    `semantic_cache` en esa misma fase) no es ni siquiera un `ALTER TABLE
+    ADD COLUMN`. Eso requiere una migración real, no un parche automático
+    en el arranque.
+    """
+    inspector = inspect(target_engine)
+    existing_tables = set(inspector.get_table_names())
+
+    problems: list[str] = []
+    for table_name, table in SQLModel.metadata.tables.items():
+        if table_name not in existing_tables:
+            continue  # create_all() la creará entera y correcta más abajo.
+        existing_columns = {col["name"] for col in inspector.get_columns(table_name)}
+        expected_columns = {col.name for col in table.columns}
+        missing = sorted(expected_columns - existing_columns)
+        if missing:
+            problems.append(f"  - tabla '{table_name}': faltan columnas {missing}")
+
+    if problems:
+        raise SchemaOutOfDateError(
+            "La base de datos existente no coincide con el esquema actual de "
+            "WatchGate -- faltan columnas que el código espera:\n"
+            + "\n".join(problems)
+            + "\nEste proyecto todavía no tiene migraciones automáticas (Alembic o "
+            "equivalente). Aplica manualmente los `ALTER TABLE` necesarios (o, si es "
+            "un entorno de desarrollo sin datos que conservar, borra/recrea la base "
+            "de datos) antes de arrancar esta versión."
+        )
+
+
 def init_db(db_engine: engine.Engine | None = None) -> None:
-    """Crea todas las tablas definidas en SQLModel si no existen."""
+    """Crea todas las tablas definidas en SQLModel si no existen.
+
+    Antes de crear nada, comprueba que las tablas que YA existen tengan
+    todas las columnas que el código actual espera -- ver
+    `_check_schema_matches_models`. `create_all()` por sí solo nunca migra
+    una tabla existente, así que sin este chequeo el desajuste se
+    descubriría mucho más tarde, a mitad de una petición cualquiera.
+    """
     target_engine = db_engine or default_engine
+    _check_schema_matches_models(target_engine)
     SQLModel.metadata.create_all(target_engine)
 
 

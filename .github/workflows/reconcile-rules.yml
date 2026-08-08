@@ -73,14 +73,21 @@ jobs:
       # no solo un delta, porque aquí no partimos de un languages_changed /
       # third_party_changed fiable). Si una sola clave no verifica, este
       # step termina en error y el job se marca en rojo -- no se activa nada.
+      # IMPORTANTE (seguridad): `remote_version` sale de manifest.json
+      # descargado del repo de reglas -- texto no verificado hasta que
+      # sync_rules.py lo valide. Se pasa vía `env:` y se lee con `"$VAR"`,
+      # nunca interpolado con `${{ }}` directamente en `run:` (ver el mismo
+      # comentario en sync-rules.yml -- interpolar ahí sería inyección de
+      # comandos en un runner con `contents: write`).
       - name: Sincronizar y verificar TODAS las claves (fuera de sincronía)
         if: steps.check.outputs.status == 'out_of_sync'
         env:
           RULES_REPO_TOKEN: ${{ secrets.RULES_REPO_TOKEN }}
+          REMOTE_VERSION: ${{ steps.check.outputs.remote_version }}
         run: |
           python scripts/sync_rules.py sync \
             --rules-repo pablojimz/Repo-reglas-SEMGREP-y-YARA \
-            --ref "${{ steps.check.outputs.remote_version }}" \
+            --ref "$REMOTE_VERSION" \
             --scope full \
             --target-root "${{ github.workspace }}" \
             --state-file rules/.rules-state.json \
@@ -88,6 +95,8 @@ jobs:
 
       - name: Comitear reglas reconciliadas como versión activa
         if: steps.check.outputs.status == 'out_of_sync' && success()
+        env:
+          REMOTE_VERSION: ${{ steps.check.outputs.remote_version }}
         run: |
           git config user.name "watchgate-rules-bot"
           git config user.email "actions@github.com"
@@ -95,7 +104,7 @@ jobs:
           if git diff --cached --quiet; then
             echo "No hay cambios de contenido tras la reconciliación; nada que comitear."
           else
-            git commit -m "reconcile(rules): activar reglas verificadas ${{ steps.check.outputs.remote_version }}"
+            git commit -m "reconcile(rules): activar reglas verificadas $REMOTE_VERSION"
             git push
           fi
 

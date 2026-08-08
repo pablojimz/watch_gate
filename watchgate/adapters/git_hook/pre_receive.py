@@ -7,6 +7,7 @@ Gitolite, Gerrit, repos Bare SSH) antes de fusionar código a producción.
 from __future__ import annotations
 
 import os
+import signal
 import subprocess
 import sys
 from typing import Any
@@ -21,13 +22,25 @@ EMPTY_TREE_SHA = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 DEFAULT_TIMEOUT_SECONDS = 8.0
 
 
+class PreReceiveTimeout(Exception):
+    """Se superó `timeout_seconds` analizando un ref -- ver `run_pre_receive`."""
+
+
 def extract_diff_from_shas(
-    old_sha: str, new_sha: str, repo_path: str = "."
+    old_sha: str, new_sha: str, repo_path: str = ".", timeout: float | None = None
 ) -> str:
     """Extrae el parche unificado git diff entre dos referencias, manejando el SHA nulo.
 
     Si `old_sha` es `00*40` (push inicial de repositorio o creación de rama/tag),
     compara contra el árbol vacío de Git (`4b825dc...`) para extraer el diff completo.
+
+    Los fallos (git falla, timeout, el diff no se puede decodificar como
+    texto) se PROPAGAN -- antes se atrapaban con un `except Exception`
+    genérico que devolvía `""`, y el llamador trataba cadena vacía igual
+    que "sin cambios que analizar", dejando pasar el push SIN analizar
+    (fail-open) justo en el punto donde un hook `pre-receive` debe ser
+    fail-closed. Ahora el llamador es quien decide qué hacer con el fallo
+    (política `fail_closed`), no esta función en silencio.
     """
     if old_sha.replace("0", "") == "":
         base_ref = EMPTY_TREE_SHA
@@ -38,16 +51,10 @@ def extract_diff_from_shas(
         return ""
 
     cmd = ["git", "diff", f"{base_ref}..{new_sha}"]
-    try:
-        proc = subprocess.run(
-            cmd, cwd=repo_path, capture_output=True, text=True, check=True
-        )
-        return proc.stdout
-    except Exception as err:
-        sys.stderr.write(
-            f"[WatchGate pre-receive] Error al extraer diff git {base_ref}..{new_sha}: {err}\n"
-        )
-        return ""
+    proc = subprocess.run(
+        cmd, cwd=repo_path, capture_output=True, text=True, check=True, timeout=timeout
+    )
+    return proc.stdout
 
 
 def parse_pre_receive_input(stdin_text: str) -> list[tuple[str, str, str]]:
@@ -75,7 +82,22 @@ def run_pre_receive(
 
     Lee `stdin`, extrae los diffs, ejecuta la evaluación de riesgo de WatchGate
     y rechaza el push (retornando exit 1) si el semáforo es ROJO y la política exige bloqueo.
+
+    `api_url`/`api_key` se aceptan para una futura delegación a un Engine
+    API central (gobernanza/cuota compartida entre varios servidores Git),
+    pero TODAVÍA NO ESTÁ IMPLEMENTADA -- el análisis siempre corre en local,
+    con la config `.watchgate.yml` de este repo únicamente. Se avisa en vez
+    de aceptarlos en silencio para que un administrador que los configure
+    esperando supervisión centralizada no asuma que la tiene.
     """
+    if api_url or api_key:
+        sys.stderr.write(
+            "[WatchGate pre-receive] AVISO: WATCHGATE_SERVER_URL/WATCHGATE_API_KEY están "
+            "configurados pero la delegación a un Engine API central todavía no está "
+            "implementada en este hook -- el análisis se ejecuta en LOCAL, sin la "
+            "gobernanza/cuota centralizada que esa configuración sugiere.\n"
+        )
+
     if stdin_text is None:
         stdin_text = sys.stdin.read()
 
@@ -86,22 +108,30 @@ def run_pre_receive(
 
     overall_blocked = False
     config = load_config()
+    # SIGALRM (POSIX -- ver docstring del módulo) es lo único que puede
+    # interrumpir de verdad `run_full_analysis` si se cuelga (p. ej. la
+    # capa semántica esperando una respuesta del LLM que nunca llega):
+    # `timeout_seconds` se aceptaba como parámetro pero nunca se usaba en
+    # ningún sitio, así que un `git diff`/análisis colgado bloqueaba
+    # `git push` INDEFINIDAMENTE para cualquier cliente del servidor Git
+    # -- un DoS trivial sobre el flujo de push corporativo. Con la alarma,
+    # el timeout se aplica al ref completo (extracción de diff + análisis)
+    # y, al expirar, se trata igual que cualquier otro fallo de la política
+    # `fail_closed` de abajo.
+    supports_alarm = hasattr(signal, "SIGALRM")
+    if not supports_alarm:
+        sys.stderr.write(
+            "[WatchGate pre-receive] signal.SIGALRM no disponible en esta plataforma -- "
+            "el timeout no puede aplicarse a un análisis colgado (solo al propio `git diff`).\n"
+        )
+
+    def _on_alarm(signum: int, frame: Any) -> None:  # noqa: ARG001
+        raise PreReceiveTimeout(f"Timeout de {timeout_seconds}s excedido")
 
     for old_sha, new_sha, ref_name in ref_tuples:
         if new_sha.replace("0", "") == "":
             # Eliminación de rama o tag: no requiere análisis de código
             continue
-
-        diff_text = extract_diff_from_shas(old_sha, new_sha, repo_path=repo_path)
-        if not diff_text.strip():
-            continue
-
-        diff = parse_diff_from_text(
-            diff_text=diff_text,
-            base_sha=old_sha if old_sha.replace("0", "") != "" else EMPTY_TREE_SHA,
-            head_sha=new_sha,
-            repo_path=repo_path,
-        )
 
         metadata: dict[str, Any] = {
             "ref_name": ref_name,
@@ -109,7 +139,23 @@ def run_pre_receive(
             "pr_id": ref_name.split("/")[-1],
         }
 
+        previous_handler = None
+        if supports_alarm:
+            previous_handler = signal.signal(signal.SIGALRM, _on_alarm)
+            signal.setitimer(signal.ITIMER_REAL, timeout_seconds)
         try:
+            diff_text = extract_diff_from_shas(
+                old_sha, new_sha, repo_path=repo_path, timeout=timeout_seconds
+            )
+            if not diff_text.strip():
+                continue
+
+            diff = parse_diff_from_text(
+                diff_text=diff_text,
+                base_sha=old_sha if old_sha.replace("0", "") != "" else EMPTY_TREE_SHA,
+                head_sha=new_sha,
+                repo_path=repo_path,
+            )
             result = run_full_analysis(diff=diff, metadata=metadata, config=config)
         except Exception as err:
             sys.stderr.write(
@@ -122,6 +168,10 @@ def run_pre_receive(
                 )
                 return 1
             continue
+        finally:
+            if supports_alarm:
+                signal.setitimer(signal.ITIMER_REAL, 0)
+                signal.signal(signal.SIGALRM, previous_handler)
 
         if result.semaforo == Semaforo.ROJO and config.block_on_red:
             overall_blocked = True

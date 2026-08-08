@@ -125,6 +125,59 @@ def test_run_semgrep_on_file_includes_custom_regex_and_relevant_third_party(tmp_
     assert not any("opengrep" in c for c in config_args)
 
 
+def test_run_semgrep_on_file_fallback_scopes_to_semgrep_root_not_whole_rules_dir(
+    tmp_path,
+) -> None:
+    """Si `rules/semgrep` existe pero ninguna subcarpeta concreta aplicó
+    para el lenguaje (checkout a medio sincronizar), el último recurso debe
+    acotarse a `rules/semgrep`, nunca a `rules_dir` completo -- en el caso 3
+    de `_get_rules_dir`, `rules_dir` es `Path(".")` (la raíz del repo), y
+    `--config=.` escanearía con Semgrep cualquier YAML con forma de regla
+    en todo el proyecto, no solo las reglas de WatchGate."""
+    semgrep_root = tmp_path / "rules" / "semgrep"
+    semgrep_root.mkdir(parents=True)  # existe, pero vacío: nada que matchee
+
+    layer = StaticLayer()
+    captured: list[list[str]] = []
+
+    def fake_run(command, **kwargs):
+        captured.append(command)
+        result = MagicMock()
+        result.returncode = 0
+        result.stdout = "{}"
+        result.stderr = ""
+        return result
+
+    with patch("watchgate.core.layers.static_layer.subprocess.run", side_effect=fake_run):
+        layer._run_semgrep_on_file("dummy.cpp", "cpp", tmp_path)
+
+    config_args = [a for a in captured[0] if a.startswith("--config=")]
+    assert config_args == [f"--config={semgrep_root}"]
+
+
+def test_run_semgrep_on_file_fallback_uses_rules_dir_when_no_semgrep_root(tmp_path) -> None:
+    """Si ni siquiera existe `rules/semgrep` bajo `rules_dir` (p. ej. un
+    clon del repo externo de reglas con otra convención de carpetas), el
+    último recurso sigue siendo `rules_dir` a secas -- sin regresión
+    respecto al comportamiento anterior para ese caso."""
+    layer = StaticLayer()
+    captured: list[list[str]] = []
+
+    def fake_run(command, **kwargs):
+        captured.append(command)
+        result = MagicMock()
+        result.returncode = 0
+        result.stdout = "{}"
+        result.stderr = ""
+        return result
+
+    with patch("watchgate.core.layers.static_layer.subprocess.run", side_effect=fake_run):
+        layer._run_semgrep_on_file("dummy.cpp", "cpp", tmp_path)
+
+    config_args = [a for a in captured[0] if a.startswith("--config=")]
+    assert config_args == [f"--config={tmp_path}"]
+
+
 def test_run_semgrep_on_file_regex_category_does_not_duplicate_itself() -> None:
     """Si el 'lenguaje' detectado fuera justo 'regex', no debe añadirse
     dos veces el mismo --config=.../custom/regex."""

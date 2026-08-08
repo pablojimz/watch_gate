@@ -13,7 +13,7 @@ from watchgate.dashboard.backend.schemas import normalize_login
 from watchgate.db.connection import get_db_session
 from watchgate.db.models import User as DBUser
 from watchgate.db.models import UserAPIKey
-from watchgate.db.repository import create_api_key, create_user
+from watchgate.db.repository import create_api_key, create_organization, create_user
 
 DBSession = Annotated[Session, Depends(get_db_session)]
 
@@ -46,17 +46,41 @@ class CreatedKeyResponse(KeyResponse):
 
 
 def _get_or_create_db_user(session: Session, user_login: str) -> DBUser:
-    """Asegura que el usuario autenticado del Dashboard exista en el esquema SQLModel DB.
+    """Asegura que el usuario autenticado del Dashboard exista en el esquema SQLModel DB,
+    con una Organización PERSISTIDA propia (multi-tenant real).
 
     `current_user.login` ya llega normalizado desde la cookie de sesión
     (`create_session_token`), pero se normaliza también aquí -- este email
     sintético es la clave de identidad de un esquema de usuarios aparte
     (watchgate/db/, el de la Engine API), y no debería depender de que la
     normalización de la sesión nunca cambie para seguir siendo correcto.
+
+    Antes, este era el ÚNICO punto real que crea usuarios/API keys desde el
+    Dashboard y nunca pasaba `org_id` -- `verify_api_key` (auth.py) caía
+    entonces a un `Organization(id="default-org", ...)` fabricado EN
+    MEMORIA (nunca persistido). Resultado: todas las claves creadas desde
+    el Dashboard compartían el mismo cubo sintético "default-org" --
+    consumo de tokens de un cliente contando contra la cuota de todos los
+    demás, y la gobernanza corporativa (`policy_json`) nunca aplicándose
+    (`PolicyService.apply_policy_overrides` se salta si `org` es `None`,
+    que es justo lo que devolvía `get_organization("default-org")` al no
+    existir esa fila). Ahora cada usuario obtiene su propia Organización
+    real, con `org_id` determinista (`personal-<user_id>`) para que
+    llamadas repetidas sean idempotentes y no creen duplicados.
     """
     normalized = normalize_login(user_login)
     email = f"{normalized}@watchgate.internal"
-    return create_user(session, email=email, name=normalized)
+    user = create_user(session, email=email, name=normalized)
+
+    if not user.org_id:
+        personal_org_id = f"personal-{user.id}"
+        org = create_organization(session, name=f"{normalized} (personal)", org_id=personal_org_id)
+        user.org_id = org.id
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+
+    return user
 
 
 @router.post("", response_model=CreatedKeyResponse, status_code=status.HTTP_201_CREATED)
@@ -74,6 +98,7 @@ def create_key(
         name=body.name,
         scopes=body.scopes,
         is_test=body.is_test,
+        org_id=db_user.org_id,
     )
 
     return {
