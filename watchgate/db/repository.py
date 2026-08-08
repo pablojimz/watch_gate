@@ -288,9 +288,7 @@ def save_pr_score(
     agent_id: str | None = None,
 ) -> PRScore:
     """Guarda un resultado de análisis de PR en el histórico pr_scores."""
-    layer_json = {
-        k: v.model_dump() for k, v in aggregated_result.layer_results.items()
-    }
+    layer_json = {k: v.model_dump() for k, v in aggregated_result.layer_results.items()}
     score_record = PRScore(
         id=str(uuid.uuid4()),
         repo=aggregated_result.repo,

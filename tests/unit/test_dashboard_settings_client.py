@@ -37,9 +37,7 @@ def _fake_ci_config_response(**overrides: object) -> MagicMock:
 def test_does_nothing_when_dashboard_url_not_configured(monkeypatch) -> None:
     monkeypatch.delenv("WATCHGATE_DASHBOARD_URL", raising=False)
     config = WatchGateConfig()
-    with patch(
-        "watchgate.adapters.github_action.dashboard_settings_client.httpx.get"
-    ) as mock_get:
+    with patch("watchgate.adapters.github_action.dashboard_settings_client.httpx.get") as mock_get:
         result = apply_dashboard_config(config, "acme/payments-api")
     mock_get.assert_not_called()
     assert result is config

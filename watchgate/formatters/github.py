@@ -34,9 +34,7 @@ def _escape_data(val: str) -> str:
     return val.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
 
 
-def render_github_annotations(
-    aggregated: AggregatedResult, stream: TextIO | None = None
-) -> str:
+def render_github_annotations(aggregated: AggregatedResult, stream: TextIO | None = None) -> str:
     """Genera comandos de flujo de trabajo de GitHub Actions (`::error::`, `::warning::`).
 
     Rule 1: Si se especifica un stream (ej. `sys.stderr`), emite las anotaciones

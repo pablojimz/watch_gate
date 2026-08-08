@@ -173,9 +173,7 @@ def test_agent_policy_endpoint_rejects_key_without_scores_read_scope(api_client)
     client, session = api_client
     org = create_organization(session, name="Agent Org")
     user = create_user(session, email="writeonly@corp.com", name="Writeonly Agent", org_id=org.id)
-    _, raw_token = create_api_key(
-        session, user_id=user.id, org_id=org.id, scopes="analysis:write"
-    )
+    _, raw_token = create_api_key(session, user_id=user.id, org_id=org.id, scopes="analysis:write")
 
     headers = {"Authorization": f"Bearer {raw_token}"}
     response = client.get("/api/v1/agent/policy", headers=headers)
@@ -223,9 +221,7 @@ def test_agent_analyze_rejects_config_override_of_weights(api_client):
 
 def test_agent_policy_endpoint(api_client):
     client, session = api_client
-    org = create_organization(
-        session, name="Policy Org", monthly_token_quota=500_000
-    )
+    org = create_organization(session, name="Policy Org", monthly_token_quota=500_000)
     user = create_user(session, email="pol@corp.com", name="Policy User", org_id=org.id)
     _, raw_token = create_api_key(session, user_id=user.id, org_id=org.id)
 

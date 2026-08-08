@@ -1,0 +1,82 @@
+name: CI
+
+# Hasta ahora no había ningún workflow que corriera la suite de tests/lint
+# en cada push/PR -- watchgate.yml analiza PRs de este propio repo con la
+# herramienta (dogfooding), sync-rules.yml/reconcile-rules.yml sincronizan
+# el árbol de reglas Semgrep/YARA, pero nada verificaba que el código
+# propio compilase, pasara lint o tests antes de fusionarse. Este workflow
+# cierra ese hueco: espejo exacto de `make lint`/`make test` (ver
+# Makefile), para que un fallo local siempre se reproduzca aquí y
+# viceversa.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Instalar Poetry
+        run: pip install poetry
+
+      - name: Cachear el entorno virtual de Poetry
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: poetry-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
+
+      - name: Instalar dependencias (poetry install)
+        run: |
+          poetry config virtualenvs.in-project true
+          poetry install --no-interaction
+
+      # Espejo exacto de `make lint` -- si esto pasa en local, pasa aquí, y
+      # viceversa. No incluye la suite de aceptación real (tests/integration/
+      # test_cases.py, marcada `integration`): llama a la API real de Gemini,
+      # cuesta dinero y tiempo, y ya está deseleccionada por defecto en
+      # pyproject.toml (`addopts = "-m 'not integration'"`) -- se ejecuta
+      # aparte, a mano, no en cada push.
+      - name: Lint (ruff check + ruff format --check + mypy + import-linter)
+        run: |
+          poetry run ruff check .
+          poetry run ruff format --check .
+          poetry run mypy
+          poetry run lint-imports
+
+      - name: Tests (pytest --cov)
+        run: poetry run python -m pytest --cov --cov-report=term-missing
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: watchgate/dashboard/frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: watchgate/dashboard/frontend/package-lock.json
+
+      - run: npm ci
+
+      # No hay tests unitarios de frontend todavía (ver package.json) --
+      # `build` sí ejercita `tsc -b` (typecheck estricto) + el build real de
+      # Vite, así que como mínimo detecta errores de tipos/compilación antes
+      # de fusionar.
+      - run: npm run build

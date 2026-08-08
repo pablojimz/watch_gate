@@ -37,13 +37,11 @@ class CryptographicLogFilter(logging.Filter):
         if record.args:
             if isinstance(record.args, dict):
                 record.args = {
-                    k: self.redact(v) if isinstance(v, str) else v
-                    for k, v in record.args.items()
+                    k: self.redact(v) if isinstance(v, str) else v for k, v in record.args.items()
                 }
             elif isinstance(record.args, tuple):
                 record.args = tuple(
-                    self.redact(arg) if isinstance(arg, str) else arg
-                    for arg in record.args
+                    self.redact(arg) if isinstance(arg, str) else arg for arg in record.args
                 )
         return True
 

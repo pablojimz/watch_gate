@@ -366,9 +366,7 @@ def test_ingest_score_open_when_no_token_configured(client: TestClient) -> None:
     assert resp.json()["repo"] == "acme/payments-api"
 
 
-def test_ingest_score_requires_bearer_token_when_configured(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_ingest_score_requires_bearer_token_when_configured(monkeypatch, tmp_path: Path) -> None:
     _isolate_db_connection_engine(monkeypatch, tmp_path)
     db_path = tmp_path / "ingest.db"
     monkeypatch.setenv("WATCHGATE_DASHBOARD_DB", str(db_path))

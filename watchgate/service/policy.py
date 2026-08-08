@@ -75,7 +75,7 @@ class PolicyService:
         if "weights" in overrides and isinstance(overrides["weights"], dict):
             new_weights = dict(cfg_dict.get("weights", {}))
             for k, v in overrides["weights"].items():
-                if isinstance(v, (int, float)) and _MIN_WEIGHT <= v <= _MAX_WEIGHT:
+                if isinstance(v, int | float) and _MIN_WEIGHT <= v <= _MAX_WEIGHT:
                     old = new_weights.get(str(k))
                     new_weights[str(k)] = float(v)
                     changes.append(f"weights.{k}: {old!r} -> {v!r}")

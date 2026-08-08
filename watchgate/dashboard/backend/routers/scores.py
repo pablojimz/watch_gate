@@ -103,9 +103,7 @@ def get_ci_config(repo: str) -> CiConfigOut:
 def ingest_score(body: IngestScoreIn) -> ScoreOut:
     """Persistencia desde el adaptador CI (sin cookie de usuario)."""
     with database.db_session() as conn:
-        score_id = database.insert_aggregated(
-            conn, body.result, author_login=body.author_login
-        )
+        score_id = database.insert_aggregated(conn, body.result, author_login=body.author_login)
         out = database.get_score(conn, score_id)
     if out is None:
         raise HTTPException(status_code=500, detail="No se pudo leer el score insertado")

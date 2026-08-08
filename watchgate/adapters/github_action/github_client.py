@@ -126,9 +126,7 @@ class GitHubClient:
 
         repo_has_history_of_signed_commits = False
         try:
-            repo_has_history_of_signed_commits = self._repo_has_signed_commit_history(
-                owner, repo
-            )
+            repo_has_history_of_signed_commits = self._repo_has_signed_commit_history(owner, repo)
         except httpx.HTTPError:
             pass
 
