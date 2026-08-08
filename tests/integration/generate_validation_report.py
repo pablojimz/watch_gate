@@ -24,10 +24,32 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from tests.integration.pipeline_runner import discover_cases, run_full_pipeline
+from watchgate.core.models import AggregatedResult, ThreatNature
 
 REPORT_PATH = Path(__file__).resolve().parents[2] / "docs" / "validation_report.md"
 RAW_RESULTS_PATH = Path(__file__).resolve().parents[2] / "docs" / "validation_report_raw.json"
 _MAX_WORKERS = 6
+
+# Naturaleza dominante de la amenaza detectada, para el desglose "vulnerabilidad
+# vs ataque" del informe -- mismo `threat_summary` que ya usa el comentario de
+# PR real (`comment_template.py`: "Amenazas: 🚨 X Maliciosa(s) | ⚠️ Y
+# Vulnerabilidad(es) | ❓ Z Incertidumbre(s)"), no una clasificación nueva e
+# inconsistente inventada solo para este informe. `threat_summary` cuenta
+# findings por naturaleza a través de TODAS las capas activas; aquí solo nos
+# interesa cuál domina para poder agrupar, no el conteo exacto.
+_THREAT_NATURE_LABELS: dict[str, str] = {
+    ThreatNature.MALICIOUS.value: "ataque",
+    ThreatNature.VULNERABILITY.value: "vulnerabilidad",
+    ThreatNature.UNCERTAIN.value: "incertidumbre",
+}
+
+
+def _dominant_threat_nature(result: AggregatedResult) -> str:
+    summary = result.threat_summary
+    dominant = max(summary, key=lambda k: summary[k], default=None)
+    if dominant is None or summary[dominant] == 0:
+        return "-"
+    return _THREAT_NATURE_LABELS.get(dominant, dominant)
 
 
 def _acceptable_semaforos(expected: dict[str, object]) -> set[str]:
@@ -55,6 +77,7 @@ def _run_one(case_dir: Path) -> dict[str, object]:
             "score": None,
             "cumple": "ERROR",
             "categoria": "-",
+            "naturaleza": "-",
             "justificacion": f"{type(exc).__name__}: {exc}"[:200],
         }
     acceptable = _acceptable_semaforos(expected)
@@ -69,6 +92,7 @@ def _run_one(case_dir: Path) -> dict[str, object]:
         "score": result.score,
         "cumple": "OK" if ok else "DIVERGE",
         "categoria": semantic.category.value if semantic and semantic.category else "-",
+        "naturaleza": _dominant_threat_nature(result),
         "justificacion": (semantic.justification if semantic else "")[:220],
     }
 
@@ -84,6 +108,30 @@ def _summary_table(rows: list[dict[str, object]]) -> list[str]:
         n = len(group)
         n_ok = sum(1 for r in group if r["cumple"] == "OK")
         lines.append(f"| {clase} | {dificultad} | {n} | {n_ok} | {100 * n_ok // n}% |")
+    return lines
+
+
+def _threat_nature_table(rows: list[dict[str, object]]) -> list[str]:
+    """Desglose de los casos `class=malicious` por la naturaleza de amenaza
+    que el propio sistema les asignó (`threat_summary`, el mismo campo que
+    ya usa el comentario de PR real) -- no por el nombre del caso. Distingue
+    si el sistema acierta igual de bien detectando ataques (código
+    malicioso/backdoors) que vulnerabilidades (dependencias con CVEs
+    conocidos), en vez de una sola cifra "malicious" que mezcla ambas
+    naturalezas."""
+    malicious_rows = [r for r in rows if r["clase"] == "malicious" and r["cumple"] != "ERROR"]
+    groups: dict[str, list[dict[str, object]]] = {}
+    for r in malicious_rows:
+        groups.setdefault(str(r["naturaleza"]), []).append(r)
+
+    lines = [
+        "| Naturaleza detectada | N | OK | % OK |",
+        "|---|---:|---:|---:|",
+    ]
+    for naturaleza, group in sorted(groups.items(), key=lambda kv: -len(kv[1])):
+        n = len(group)
+        n_ok = sum(1 for r in group if r["cumple"] == "OK")
+        lines.append(f"| {naturaleza} | {n} | {n_ok} | {100 * n_ok // n}% |")
     return lines
 
 
@@ -137,15 +185,28 @@ def main() -> None:
         "",
         *_summary_table(rows),
         "",
+        "## Resumen de casos maliciosos por naturaleza de amenaza detectada",
+        "",
+        "Desglose de los casos `class=malicious` (mezclan ataques -- código "
+        "malicioso/backdoors -- y vulnerabilidades -- dependencias con CVEs "
+        "conocidos -- bajo una sola etiqueta) por la naturaleza que el propio "
+        "sistema les asignó realmente (`threat_summary`, el mismo campo que ya "
+        "usa el comentario de PR real). `-` significa que ninguna capa activa "
+        "reportó un `Finding` con `threat_nature` -- típicamente un falso "
+        "negativo total, no solo una naturaleza mal clasificada.",
+        "",
+        *_threat_nature_table(rows),
+        "",
         f"## Casos que divergen de lo esperado ({len(diverging)})",
         "",
-        "| Caso | Esperado | Obtenido | Categoría | Justificación (semántica) |",
-        "|---|---|---|---|---|",
+        "| Caso | Esperado | Obtenido | Naturaleza | Categoría | Justificación (semántica) |",
+        "|---|---|---|---|---|---|",
     ]
     for r in diverging:
         just = str(r["justificacion"]).replace("|", "\\|").replace("\n", " ")
         lines.append(
-            f"| `{r['caso']}` | {r['esperado']} | {r['obtenido']} | {r['categoria']} | {just} |"
+            f"| `{r['caso']}` | {r['esperado']} | {r['obtenido']} | {r['naturaleza']} | "
+            f"{r['categoria']} | {just} |"
         )
 
     REPORT_PATH.write_text("\n".join(lines) + "\n")
