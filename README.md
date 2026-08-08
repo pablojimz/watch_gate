@@ -185,6 +185,15 @@ block_on_red: true
 shortcircuit_enabled: false
 ```
 
+## Despliegue
+
+Guía completa (checklist de producción, variables de entorno, limitaciones conocidas) en [`docs/despliegue.md`](docs/despliegue.md). Arranque rápido del stack completo (Engine API + Dashboard backend/frontend + Postgres) con Docker Compose:
+
+```bash
+cp .env.example .env   # rellena al menos WATCHGATE_LLM_API_KEY
+docker compose up --build
+```
+
 ## Pruebas y Calidad de Código
 
 Para ejecutar la batería de pruebas y las herramientas de análisis estático:

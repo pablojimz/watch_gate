@@ -1,0 +1,25 @@
+-- Ejecutado automáticamente por la imagen oficial de Postgres al arrancar
+-- con un volumen de datos vacío (todo *.sql/*.sh en /docker-entrypoint-
+-- initdb.d/ se corre una vez, en orden alfabético).
+--
+-- Por qué DOS bases de datos en el mismo servidor Postgres, no una:
+-- `watchgate/dashboard/backend/db.py` (esquema propio del Dashboard, SQL
+-- crudo) y `watchgate/db/models.py` (esquema SQLModel de la Fase 1
+-- multi-tenant, compartido entre Engine API y Dashboard backend para la
+-- gestión de API keys) definen AMBOS una tabla llamada `pr_scores`, con
+-- columnas completamente distintas e incompatibles. Apuntar
+-- WATCHGATE_DASHBOARD_DATABASE_URL y WATCHGATE_DATABASE_URL a la MISMA
+-- base de datos hace que la segunda tabla `pr_scores` que se intenta crear
+-- choque con la primera -- reproducido en vivo: `init_db()` (el chequeo de
+-- esquema añadido para detectar justo este tipo de desajuste) aborta con
+-- "faltan columnas ['agent_id', 'org_id', ...]" porque la tabla que
+-- encuentra es la del OTRO esquema, no la suya.
+--
+-- POSTGRES_DB (variable de entorno del propio docker-compose.yml) crea la
+-- base de datos "watchgate" para el esquema SQLModel (compartida por
+-- Engine API y Dashboard backend, es la intencionada -- las API keys
+-- creadas desde el Dashboard deben servir contra el Engine API). Este
+-- script añade una segunda base de datos, "watchgate_dashboard", aparte,
+-- solo para el esquema propio del Dashboard (scores/roles/settings/login
+-- local) -- cero cambios de código en ninguno de los dos esquemas.
+CREATE DATABASE watchgate_dashboard;

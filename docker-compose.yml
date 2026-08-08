@@ -1,0 +1,83 @@
+# Orquestación local de los 4 servicios desplegables (Engine API, backend
+# y frontend del Dashboard, Postgres) -- pensado para probar un despliegue
+# "de verdad" en local, incluido Postgres real (el soporte estaba validado
+# a mano contra una instancia real, pero nunca se había provisionado ni en
+# CI ni en un entorno reproducible -- esto no sustituye tenerlo en CI, pero
+# sí da un `docker compose up` con el que cualquiera puede reproducirlo).
+#
+# Uso:
+#   cp .env.example .env   # y rellena WATCHGATE_LLM_API_KEY como mínimo
+#   docker compose up --build
+#
+# Dashboard: http://localhost:5173 (nginx sirviendo el build + proxy /api)
+# Engine API: http://localhost:8080/health
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: watchgate
+      POSTGRES_PASSWORD: watchgate
+      POSTGRES_DB: watchgate
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Crea además la base "watchgate_dashboard" al arrancar con un volumen
+      # vacío -- ver docker/postgres-init/01-create-dashboard-db.sql para el
+      # porqué (el esquema del Dashboard y el esquema SQLModel compartido
+      # definen ambos una tabla `pr_scores` incompatible entre sí; no pueden
+      # convivir en la misma base de datos).
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U watchgate"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "5432:5432"
+
+  engine-api:
+    build:
+      context: .
+      dockerfile: docker/engine-api.Dockerfile
+    env_file:
+      - .env
+    environment:
+      WATCHGATE_DATABASE_URL: postgresql+psycopg://watchgate:watchgate@postgres:5432/watchgate
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+
+  dashboard-backend:
+    build:
+      context: .
+      dockerfile: docker/dashboard-backend.Dockerfile
+    env_file:
+      - .env
+    environment:
+      # Base separada de la del esquema SQLModel compartido (ver
+      # docker/postgres-init/01-create-dashboard-db.sql) -- ambos esquemas
+      # definen una tabla `pr_scores` incompatible entre sí.
+      WATCHGATE_DASHBOARD_DATABASE_URL: postgresql://watchgate:watchgate@postgres:5432/watchgate_dashboard
+      WATCHGATE_DATABASE_URL: postgresql+psycopg://watchgate:watchgate@postgres:5432/watchgate
+      WATCHGATE_DASHBOARD_CORS_ORIGINS: http://localhost:5173
+      WATCHGATE_DASHBOARD_FRONTEND_ORIGIN: http://localhost:5173
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  dashboard-frontend:
+    build:
+      context: watchgate/dashboard/frontend
+    environment:
+      BACKEND_ORIGIN: http://dashboard-backend:8000
+    depends_on:
+      - dashboard-backend
+    ports:
+      - "5173:80"
+
+volumes:
+  postgres_data:
