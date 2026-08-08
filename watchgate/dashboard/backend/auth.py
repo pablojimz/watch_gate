@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import secrets
+import time
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from jose import JWTError, jwt
+from jose import JWTError, jwe, jwt
+from jose.exceptions import JOSEError
 
 from watchgate.dashboard.backend import db as database
 from watchgate.dashboard.backend.schemas import (
@@ -58,6 +61,44 @@ def _dev_mode() -> bool:
 
 def _ingest_token() -> str | None:
     return os.environ.get("WATCHGATE_DASHBOARD_INGEST_TOKEN")
+
+
+# Rate limiting de /api/auth/login -- en memoria de proceso, sin
+# dependencias nuevas. No hay ninguna librería de rate limiting en todo el
+# backend del dashboard ni de la Engine API, y `password_login` no tenía
+# ningún límite de intentos: fuerza bruta sin bloqueo de cuenta, sin
+# backoff. Limitación honesta: esto es por proceso, no compartido entre
+# workers/réplicas -- con un solo proceso (el despliegue actual del
+# proyecto) protege de verdad; con varias réplicas detrás de un balanceador
+# habría que mover esto a un almacén compartido (Redis u otro), fuera de
+# alcance de este fix.
+_LOGIN_ATTEMPTS: dict[str, list[float]] = {}
+_LOGIN_RATE_LIMIT_WINDOW_SECONDS = 300.0
+_LOGIN_RATE_LIMIT_MAX_ATTEMPTS = 5
+
+
+def _check_login_rate_limit(login: str) -> None:
+    key = normalize_login(login)
+    now = time.monotonic()
+    recent = [t for t in _LOGIN_ATTEMPTS.get(key, []) if now - t < _LOGIN_RATE_LIMIT_WINDOW_SECONDS]
+    if recent:
+        _LOGIN_ATTEMPTS[key] = recent
+    else:
+        _LOGIN_ATTEMPTS.pop(key, None)
+    if len(recent) >= _LOGIN_RATE_LIMIT_MAX_ATTEMPTS:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Demasiados intentos fallidos. Espera unos minutos e inténtalo de nuevo.",
+        )
+
+
+def _record_failed_login_attempt(login: str) -> None:
+    key = normalize_login(login)
+    _LOGIN_ATTEMPTS.setdefault(key, []).append(time.monotonic())
+
+
+def _clear_login_attempts(login: str) -> None:
+    _LOGIN_ATTEMPTS.pop(normalize_login(login), None)
 
 
 def ensure_safe_startup_config() -> None:
@@ -130,6 +171,18 @@ def require_ingest_token(request: Request) -> None:
         )
 
 
+def _encryption_key() -> bytes:
+    """Deriva una clave AES-256 (32 bytes exactos) del secreto de sesión
+    vía SHA-256 -- `_secret()` es una passphrase elegida por un humano, de
+    longitud arbitraria (aunque ahora con un mínimo de 32 caracteres, ver
+    `ensure_safe_startup_config`), no directamente material de clave
+    criptográfico apto para AES-256-GCM. Reutiliza el mismo secreto que ya
+    se configura para firmar (una sola variable de entorno que gestionar),
+    con un hash aparte para no reusar literalmente los mismos bytes como
+    clave de firma y de cifrado."""
+    return hashlib.sha256(f"watchgate-session-encryption:{_secret()}".encode()).digest()
+
+
 def create_session_token(login: str, github_token: str | None = None) -> str:
     # Único punto por el que pasan las cuatro vías de login (dev, local,
     # GitHub, OIDC) -- normalizar aquí garantiza que el `sub` de la cookie
@@ -142,11 +195,24 @@ def create_session_token(login: str, github_token: str | None = None) -> str:
     }
     if github_token:
         payload["gh"] = github_token
-    return jwt.encode(payload, _secret(), algorithm="HS256")
+    signed = jwt.encode(payload, _secret(), algorithm="HS256")
+    # JWT anidado: firmar (integridad/expiración, como antes) y ENCIMA
+    # cifrar (AES-256-GCM) el JWS resultante. Un JWT firmado pero no
+    # cifrado es *legible* por cualquiera que tenga el valor de la cookie
+    # -- no hace falta el secreto, solo decodificar base64 -- y este
+    # payload puede llevar embebido un token de acceso de GitHub real
+    # (scope `repo,read:org`) en `gh`. Cifrar cierra esa lectura sin tener
+    # que mover la sesión a un almacén en servidor (cambio de arquitectura
+    # mayor, fuera de alcance de este fix).
+    encrypted = jwe.encrypt(signed, _encryption_key(), algorithm="dir", encryption="A256GCM")
+    return encrypted.decode("ascii")
 
 
 def decode_session_token(token: str) -> dict[str, object]:
-    return jwt.decode(token, _secret(), algorithms=["HS256"])
+    decrypted = jwe.decrypt(token, _encryption_key())
+    if decrypted is None:
+        raise JWTError("No se pudo descifrar el token de sesión")
+    return jwt.decode(decrypted, _secret(), algorithms=["HS256"])
 
 
 def set_session_cookie(response: Response, token: str) -> None:
@@ -171,7 +237,10 @@ def get_current_user(request: Request) -> User:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No autenticado")
     try:
         payload = decode_session_token(token)
-    except JWTError as exc:
+    except JOSEError as exc:
+        # `JOSEError` cubre tanto un JWS mal firmado/expirado (`JWTError`)
+        # como un JWE que no descifra (`JWEError`) -- ambos son "sesión
+        # inválida" desde el punto de vista de este endpoint.
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Sesión inválida"
         ) from exc
@@ -190,7 +259,7 @@ def _github_token_from_request(request: Request) -> str | None:
         return None
     try:
         payload = decode_session_token(token)
-    except JWTError:
+    except JOSEError:
         return None
     gh = payload.get("gh")
     return gh if isinstance(gh, str) else None
@@ -373,13 +442,16 @@ def github_callback(code: str, state: str, request: Request, response: Response)
 @router.post("/login")
 def password_login(body: PasswordLoginIn, response: Response) -> dict[str, str]:
     """Login local con usuario/contraseña (independiente de GitHub/GitLab)."""
+    _check_login_rate_limit(body.username)
     with database.db_session() as conn:
         ok = database.authenticate_user(conn, body.username, body.password)
     if not ok:
+        _record_failed_login_attempt(body.username)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Usuario o contraseña incorrectos",
         )
+    _clear_login_attempts(body.username)
     token = create_session_token(body.username)
     set_session_cookie(response, token)
     return {"login": body.username}

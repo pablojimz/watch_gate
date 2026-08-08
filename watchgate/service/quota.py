@@ -70,6 +70,12 @@ class QuotaService:
         """
         org = get_organization(self.session, org_id) if org_id else None
         config = PolicyService.apply_policy_overrides(config, org)
+        if org_id and "org_id" not in metadata:
+            # Propaga org_id a las capas (hoy solo lo consume SemanticLayer,
+            # para filtrar por tenant el feedback humano del RAG distribuido
+            # -- ver retriever.py) sin obligar a cada caller de
+            # analyze_with_quota a montarlo ya dentro de `metadata` a mano.
+            metadata = {**metadata, "org_id": org_id}
         effective_user_id = user_id or "system"
 
         is_degraded = False

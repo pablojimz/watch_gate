@@ -47,7 +47,11 @@ class RetrievedFragment(BaseModel):
 
 
 def _query_collection(
-    client: Any, collection_name: str, query_embedding: list[list[float]], k: int
+    client: Any,
+    collection_name: str,
+    query_embedding: list[list[float]],
+    k: int,
+    where: dict[str, Any] | None = None,
 ) -> tuple[list[str], list[dict[str, Any]]]:
     try:
         collection = client.get_collection(collection_name)
@@ -58,7 +62,10 @@ def _query_collection(
     if count == 0:
         return [], []
 
-    results = collection.query(query_embeddings=query_embedding, n_results=min(k, count))
+    query_kwargs: dict[str, Any] = {"query_embeddings": query_embedding, "n_results": min(k, count)}
+    if where is not None:
+        query_kwargs["where"] = where
+    results = collection.query(**query_kwargs)
     documents = results.get("documents") or [[]]
     metadatas = results.get("metadatas") or [[]]
     return documents[0], metadatas[0]
@@ -78,6 +85,7 @@ def retrieve_relevant_context(
     k: int = 3,
     index_path: str = DEFAULT_INDEX_PATH,
     feedback_k: int = 1,
+    org_id: str | None = None,
 ) -> list[RetrievedFragment]:
     """Consulta el corpus público (`attack_patterns`) y, aparte, la colección
     de casos confirmados por feedback humano (`feedback_cases`), y combina
@@ -87,14 +95,22 @@ def retrieve_relevant_context(
     corpus público haya crecido y gane por similitud bruta -- son colecciones
     separadas justo para evitar esa competencia.
 
+    `org_id`: en modo RAG distribuido, `FEEDBACK_COLLECTION_NAME` puede ser
+    una única colección compartida entre despliegues/tenants -- sin filtrar
+    por `org_id` (ver `feedback.py::add_confirmed_case`), el feedback de un
+    tenant se colaría en la recuperación de otro. El corpus público
+    (`COLLECTION_NAME`) NUNCA se filtra por org_id -- es intencionalmente
+    compartido (investigación pública de casos de ataque conocidos).
+
     Devuelve lista vacía si no existe ningún índice todavía (no se ha
     ejecutado `watchgate rag reindex` ni hay ningún caso de feedback)."""
     client = get_chroma_client(index_path=index_path)
     model = _get_embedding_model()
     query_embedding = model.encode([diff_summary]).tolist()
 
+    feedback_where = {"org_id": org_id} if org_id else None
     feedback_docs, feedback_metas = _query_collection(
-        client, FEEDBACK_COLLECTION_NAME, query_embedding, feedback_k
+        client, FEEDBACK_COLLECTION_NAME, query_embedding, feedback_k, where=feedback_where
     )
     corpus_docs, corpus_metas = _query_collection(client, COLLECTION_NAME, query_embedding, k)
 
