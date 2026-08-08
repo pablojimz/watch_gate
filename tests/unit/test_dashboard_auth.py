@@ -49,10 +49,38 @@ def test_refuses_to_start_without_ingest_token_and_dev_mode_off(monkeypatch) -> 
         ensure_safe_startup_config()
 
 
+def test_refuses_to_start_with_short_secret_and_dev_mode_off(monkeypatch) -> None:
+    """Antes solo se comprobaba el valor exacto por defecto -- un secreto
+    propio pero corto/débil pasaba el check libremente."""
+    monkeypatch.setenv("WATCHGATE_DASHBOARD_DEV_MODE", "0")
+    monkeypatch.setenv("WATCHGATE_DASHBOARD_INGEST_TOKEN", "some-token")
+    monkeypatch.setenv("WATCHGATE_DASHBOARD_SECURE_COOKIE", "1")
+    monkeypatch.setenv("WATCHGATE_DASHBOARD_SECRET", "corto")
+    with pytest.raises(RuntimeError, match="demasiado corto"):
+        ensure_safe_startup_config()
+
+
+def test_refuses_to_start_without_secure_cookie_and_dev_mode_off(monkeypatch) -> None:
+    """La cookie de sesión puede llevar embebido un token de acceso de
+    GitHub (ver create_session_token) -- sin el flag Secure, viaja en
+    claro sobre HTTP."""
+    monkeypatch.setenv("WATCHGATE_DASHBOARD_DEV_MODE", "0")
+    monkeypatch.setenv("WATCHGATE_DASHBOARD_INGEST_TOKEN", "some-token")
+    monkeypatch.setenv(
+        "WATCHGATE_DASHBOARD_SECRET", "un-secreto-real-de-produccion-largo-de-verdad"
+    )
+    monkeypatch.delenv("WATCHGATE_DASHBOARD_SECURE_COOKIE", raising=False)
+    with pytest.raises(RuntimeError, match="WATCHGATE_DASHBOARD_SECURE_COOKIE"):
+        ensure_safe_startup_config()
+
+
 def test_starts_with_dev_mode_off_and_real_secret_and_ingest_token(monkeypatch) -> None:
     monkeypatch.setenv("WATCHGATE_DASHBOARD_DEV_MODE", "0")
-    monkeypatch.setenv("WATCHGATE_DASHBOARD_SECRET", "un-secreto-real-de-produccion")
+    monkeypatch.setenv(
+        "WATCHGATE_DASHBOARD_SECRET", "un-secreto-real-de-produccion-largo-de-verdad"
+    )
     monkeypatch.setenv("WATCHGATE_DASHBOARD_INGEST_TOKEN", "un-token-real")
+    monkeypatch.setenv("WATCHGATE_DASHBOARD_SECURE_COOKIE", "1")
     ensure_safe_startup_config()  # no debe lanzar
 
 

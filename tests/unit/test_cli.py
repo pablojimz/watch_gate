@@ -123,6 +123,39 @@ def test_cli_analyze_saves_output_to_file(tmp_git_repo, tmp_path, capsys):
     assert "WatchGate: Riesgo" in file_content
 
 
+def test_cli_analyze_output_write_failure_returns_nonzero_exit(tmp_git_repo, tmp_path, capsys):
+    """Caso real encontrado en revisión: si falla la escritura de --output,
+    antes no había ningún `return` -- el exit code seguía dependiendo solo
+    del semáforo, así que un pipeline de CI que dependa del artefacto en
+    disco (p. ej. `upload-sarif` sobre `--output results.sarif`) podía ver
+    exit 0 aunque el fichero nunca se creara. Ahora debe ser un exit code
+    propio (3), no 0."""
+    repo_dir, base_sha, head_sha = tmp_git_repo
+    # `not_a_dir` existe como FICHERO, no como carpeta -- forzar el mkdir()
+    # del padre a fallar de verdad, sin mockear write_text.
+    blocker = tmp_path / "not_a_dir"
+    blocker.write_text("soy un fichero, no una carpeta")
+    out_file = blocker / "result.md"
+
+    code = main(
+        [
+            "analyze",
+            "--base",
+            base_sha,
+            "--head",
+            head_sha,
+            "--repo-path",
+            repo_dir,
+            "--output",
+            str(out_file),
+        ]
+    )
+
+    assert code == 3
+    captured = capsys.readouterr()
+    assert "[Error de Escritura]" in captured.err
+
+
 def test_cli_rag_reindex(tmp_path, capsys):
     index_path = str(tmp_path / "rag_index")
 
