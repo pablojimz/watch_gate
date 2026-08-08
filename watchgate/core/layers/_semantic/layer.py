@@ -232,8 +232,11 @@ class SemanticLayer(AnalysisLayer):
             return self._to_layer_result(cached, tool_calls_made=0)
 
         static_findings_paths: set[str] = set(metadata.get("static_findings_paths", set()))
+        org_id_raw = metadata.get("org_id")
         rag_context = retrieve_relevant_context(
-            _diff_summary(diff), index_path=self._rag_index_path
+            _diff_summary(diff),
+            index_path=self._rag_index_path,
+            org_id=org_id_raw if isinstance(org_id_raw, str) else None,
         )
         dependency_findings = tools.gather_dependency_findings(diff)
 

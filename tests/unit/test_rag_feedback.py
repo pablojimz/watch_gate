@@ -145,6 +145,54 @@ def test_feedback_gets_a_guaranteed_slot_alongside_full_corpus_results(tmp_path)
     assert sum(1 for f in fragments if f.origin == "corpus") == 3
 
 
+def test_feedback_is_isolated_by_org_id_in_distributed_rag(tmp_path):
+    """Caso real encontrado en revisión: en modo RAG distribuido
+    (`WATCHGATE_CHROMA_URL` apuntando a un Chroma compartido entre
+    despliegues), `feedback_cases` es una única colección compartida --
+    sin filtrar por `org_id`, el feedback de un tenant se colaría en la
+    recuperación de otro. El corpus público, en cambio, es intencionalmente
+    compartido y NUNCA debe filtrarse."""
+    index_path = str(tmp_path / "rag_index")
+    feedback_dir = str(tmp_path / "feedback")
+    narrative = "Un mantenedor confirmó que este PR intentaba instalar un backdoor via curl|bash."
+
+    add_confirmed_case(
+        case_id="pr-org-a",
+        title="Caso confirmado de la Org A",
+        narrative=narrative,
+        verdict="true_positive",
+        index_path=index_path,
+        feedback_dir=feedback_dir,
+        org_id="org-a",
+    )
+    add_confirmed_case(
+        case_id="pr-org-b",
+        title="Caso confirmado de la Org B",
+        narrative=narrative,
+        verdict="true_positive",
+        index_path=index_path,
+        feedback_dir=feedback_dir,
+        org_id="org-b",
+    )
+
+    fragments_a = retrieve_relevant_context(narrative, k=0, index_path=index_path, org_id="org-a")
+    assert all(f.case_name != "Caso confirmado de la Org B" for f in fragments_a)
+    assert any(f.case_name == "Caso confirmado de la Org A" for f in fragments_a)
+
+    fragments_b = retrieve_relevant_context(narrative, k=0, index_path=index_path, org_id="org-b")
+    assert all(f.case_name != "Caso confirmado de la Org A" for f in fragments_b)
+    assert any(f.case_name == "Caso confirmado de la Org B" for f in fragments_b)
+
+    # Sin org_id (uso de un solo tenant, el caso original), no se filtra --
+    # se ve el feedback que haya, sin más.
+    fragments_unscoped = retrieve_relevant_context(
+        narrative, k=0, feedback_k=2, index_path=index_path
+    )
+    seen_names = {f.case_name for f in fragments_unscoped}
+    assert "Caso confirmado de la Org A" in seen_names
+    assert "Caso confirmado de la Org B" in seen_names
+
+
 def test_add_confirmed_case_rejects_case_id_with_path_separator(tmp_path):
     with pytest.raises(ValueError, match="case_id inválido"):
         add_confirmed_case(

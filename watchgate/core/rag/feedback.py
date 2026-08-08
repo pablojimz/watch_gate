@@ -32,6 +32,12 @@ from watchgate.core.rag.indexer import (
 
 DEFAULT_FEEDBACK_DIR = ".watchgate/rag_feedback"
 
+# Sentinel de metadata para casos de feedback sin organización propia (uso
+# de un solo tenant, sin `WATCHGATE_CHROMA_URL` -- el caso de uso original
+# antes del RAG distribuido). En modo distribuido de verdad, cada llamador
+# debe pasar su `org_id` real.
+_SHARED_ORG_SENTINEL = "shared"
+
 Verdict = Literal["true_positive", "false_positive"]
 
 _SAFE_CASE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
@@ -54,6 +60,7 @@ def add_confirmed_case(
     verdict: Verdict,
     index_path: str = DEFAULT_INDEX_PATH,
     feedback_dir: str = DEFAULT_FEEDBACK_DIR,
+    org_id: str | None = None,
 ) -> int:
     """Añade (o actualiza, si `case_id` ya existía) un caso confirmado por un
     humano al índice RAG sin rehacer el resto de la colección. Devuelve el
@@ -63,6 +70,14 @@ def add_confirmed_case(
     y como filtro de metadata en ChromaDB: un valor con `/` o `..` podría escribir
     fuera de `feedback_dir` (inyección de ruta), así que se restringe a un
     charset seguro antes de tocar el sistema de ficheros.
+
+    `org_id`: en modo RAG distribuido (`WATCHGATE_CHROMA_URL` apuntando a un
+    Chroma compartido entre despliegues), `FEEDBACK_COLLECTION_NAME` es una
+    única colección compartida -- sin un `org_id` en la metadata de cada
+    fragmento, el feedback de un tenant se recuperaría también en el
+    análisis de otro. Se guarda en cada fragmento y `retriever.py` filtra
+    por él al consultar. Con un solo tenant (sin `WATCHGATE_CHROMA_URL`, el
+    caso de uso original), se usa un sentinel compartido.
     """
     if not _SAFE_CASE_ID_PATTERN.match(case_id):
         raise ValueError(
@@ -85,6 +100,7 @@ def add_confirmed_case(
     model = SentenceTransformer(EMBEDDING_MODEL_NAME)
     embeddings = model.encode(chunks).tolist()
 
+    effective_org_id = org_id or _SHARED_ORG_SENTINEL
     ids = [f"feedback-{case_id}-{i}" for i in range(len(chunks))]
     metadatas: list[Mapping[str, str | int | float | bool]] = [
         {
@@ -93,6 +109,7 @@ def add_confirmed_case(
             "origin": "feedback",
             "case_id": case_id,
             "verdict": str(verdict),
+            "org_id": effective_org_id,
         }
         for _ in chunks
     ]
