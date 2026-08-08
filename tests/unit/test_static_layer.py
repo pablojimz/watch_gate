@@ -7,13 +7,22 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+import watchgate.core.layers.static_layer as static_layer_module
 from watchgate.core.layers.base import LAYER_REGISTRY
 from watchgate.core.layers.static_layer import (
     SEVERITY_SCORE,
     THIRD_PARTY_LANGUAGE_MAP,
     StaticLayer,
 )
-from watchgate.core.models import CommitAuthor, FileChange, FileStatus, NormalizedDiff
+from watchgate.core.models import (
+    CommitAuthor,
+    FileChange,
+    FileStatus,
+    NormalizedDiff,
+    ThreatNature,
+)
 
 
 def _make_diff(files: list[FileChange]) -> NormalizedDiff:
@@ -288,4 +297,172 @@ def test_static_layer_skips_when_rules_unavailable() -> None:
 
     assert res.risk_score == 0
     assert res.skipped is True
-    assert "Reglas Semgrep no disponibles" in res.skip_reason
+    assert "Semgrep" in res.skip_reason
+    assert "YARA" in res.skip_reason
+
+
+# --------------------------------------------------------------------------
+# YARA: integrada en la MISMA capa que Semgrep (spec §4), combinada vía
+# max() -- nunca sumar, mismo peso "static" en .watchgate.yml.
+# --------------------------------------------------------------------------
+
+_WEBSHELL_YAR_RULE = """
+rule test_webshell_marker
+{
+    meta:
+        risk_score = 83
+        risk_justification = "Marcador de prueba de webshell -- no es una regla real."
+    strings:
+        $marker = "TOTALLY_A_WEBSHELL_MARKER_1234"
+    condition:
+        $marker
+}
+"""
+
+_NO_META_YAR_RULE = """
+rule test_rule_without_risk_score_meta
+{
+    strings:
+        $marker = "SOME_OTHER_SUSPICIOUS_MARKER_5678"
+    condition:
+        $marker
+}
+"""
+
+
+@pytest.fixture(autouse=True)
+def _clear_yara_process_cache():
+    """La caché de reglas compiladas vive a nivel de proceso (ver
+    static_layer._yara_rules_cache) -- se limpia antes/después de cada
+    test para que no haya contaminación entre tests con distintos
+    `tmp_path` (que ya son únicos por test, pero esto lo deja explícito
+    y hermético)."""
+    static_layer_module._yara_rules_cache.clear()
+    yield
+    static_layer_module._yara_rules_cache.clear()
+
+
+def _write_yara_rule(root: Path, relpath: str, content: str) -> None:
+    path = root / relpath
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
+def test_get_compiled_yara_rules_compiles_all_categories(tmp_path) -> None:
+    _write_yara_rule(tmp_path, "rules/yara/webshells/test.yar", _WEBSHELL_YAR_RULE)
+    _write_yara_rule(tmp_path, "rules/yara/antidebug_antivm/test.yar", _NO_META_YAR_RULE)
+
+    layer = StaticLayer()
+    compiled = layer._get_compiled_yara_rules(tmp_path)
+
+    assert compiled is not None
+    # Ambas categorías presentes: una regla de cada fichero coincide con su marcador.
+    assert len(compiled.match(data=b"TOTALLY_A_WEBSHELL_MARKER_1234")) == 1
+    assert len(compiled.match(data=b"SOME_OTHER_SUSPICIOUS_MARKER_5678")) == 1
+
+
+def test_get_compiled_yara_rules_caches_within_process(tmp_path) -> None:
+    _write_yara_rule(tmp_path, "rules/yara/webshells/test.yar", _WEBSHELL_YAR_RULE)
+    layer = StaticLayer()
+
+    first = layer._get_compiled_yara_rules(tmp_path)
+    second = layer._get_compiled_yara_rules(tmp_path)
+
+    assert first is second  # misma instancia -- no se recompiló
+
+
+def test_get_compiled_yara_rules_returns_none_when_yara_dir_missing(tmp_path) -> None:
+    layer = StaticLayer()
+    assert layer._get_compiled_yara_rules(tmp_path) is None
+
+
+def test_run_yara_on_text_detects_match_and_reads_risk_score_from_rule_metadata(tmp_path) -> None:
+    _write_yara_rule(tmp_path, "rules/yara/webshells/test.yar", _WEBSHELL_YAR_RULE)
+    layer = StaticLayer()
+
+    findings = layer._run_yara_on_text("prefix\nTOTALLY_A_WEBSHELL_MARKER_1234\nsuffix", tmp_path)
+
+    assert len(findings) == 1
+    finding = findings[0]
+    assert finding["tool"] == "yara"
+    assert finding["rule_id"] == "test_webshell_marker"
+    assert finding["risk_score"] == 83  # leído de meta.risk_score, no inventado
+    assert finding["threat_nature"] == ThreatNature.MALICIOUS
+    assert "Marcador de prueba" in finding["message"]
+
+
+def test_run_yara_on_text_no_match_on_benign_content(tmp_path) -> None:
+    _write_yara_rule(tmp_path, "rules/yara/webshells/test.yar", _WEBSHELL_YAR_RULE)
+    layer = StaticLayer()
+
+    findings = layer._run_yara_on_text("def hello():\n    print('hola mundo')\n", tmp_path)
+
+    assert findings == []
+
+
+def test_run_yara_on_text_falls_back_to_default_score_when_meta_missing(tmp_path) -> None:
+    _write_yara_rule(tmp_path, "rules/yara/webshells/test.yar", _NO_META_YAR_RULE)
+    layer = StaticLayer()
+
+    findings = layer._run_yara_on_text("SOME_OTHER_SUSPICIOUS_MARKER_5678", tmp_path)
+
+    assert len(findings) == 1
+    assert findings[0]["risk_score"] == static_layer_module._YARA_DEFAULT_RISK_SCORE
+
+
+def test_analyze_runs_yara_even_on_extension_semgrep_does_not_recognize(tmp_path) -> None:
+    """El caso clave del diseño: un webshell con extensión .asp (que
+    _detect_language no reconoce, así que Semgrep nunca lo tocaría) debe
+    seguir siendo detectado por YARA -- ver el comentario en analyze()."""
+    _write_yara_rule(tmp_path, "rules/yara/webshells/test.yar", _WEBSHELL_YAR_RULE)
+    layer = StaticLayer()
+
+    assert layer._detect_language("shell.asp") is None  # confirma la premisa del test
+
+    diff = _make_diff(
+        [
+            FileChange(
+                path="shell.asp",
+                status=FileStatus.MODIFIED,
+                diff_hunk="@@ -0,0 +1,1 @@\n+TOTALLY_A_WEBSHELL_MARKER_1234",
+                additions=1,
+                deletions=0,
+            )
+        ]
+    )
+
+    with patch.object(layer, "_get_rules_dir", return_value=tmp_path):
+        res = layer.analyze(diff, {})
+
+    assert res.skipped is False
+    assert res.risk_score == 83
+    assert any(f.threat_nature == ThreatNature.MALICIOUS for f in res.findings)
+
+
+def test_analyze_combines_semgrep_and_yara_via_max_never_sum(tmp_path) -> None:
+    """Semgrep y YARA son la MISMA capa: sus hallazgos se combinan con
+    max(), nunca se suman (spec §4, regla explícita)."""
+    _write_yara_rule(tmp_path, "rules/yara/webshells/test.yar", _WEBSHELL_YAR_RULE)  # risk_score=83
+    layer = StaticLayer()
+
+    diff = _make_diff(
+        [
+            FileChange(
+                path="src/app.py",
+                status=FileStatus.MODIFIED,
+                diff_hunk="@@ -0,0 +1,1 @@\n+TOTALLY_A_WEBSHELL_MARKER_1234",
+                additions=1,
+                deletions=0,
+            )
+        ]
+    )
+
+    semgrep_findings = [{"tool": "semgrep", "rule_id": "some-rule", "message": "x", "risk_score": 30}]
+    with (
+        patch.object(layer, "_get_rules_dir", return_value=tmp_path),
+        patch.object(layer, "_run_semgrep_on_file", return_value=semgrep_findings),
+    ):
+        res = layer.analyze(diff, {})
+
+    # max(30, 83) = 83, NUNCA 30 + 83 = 113
+    assert res.risk_score == 83
