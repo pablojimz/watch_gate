@@ -138,30 +138,32 @@ Tras la fusión del punto 16, lancé una revisión de seguridad sistemática (5 
 
 **Bajos:** fallo al escribir `--output` de la CLI no afectaba el exit code (ahora exit 3); keyword matching de `_infer_threat_nature_from_semgrep` sin límite de palabra (`"c2"` podía matchear por substring accidental).
 
-**Encontrado pero explícitamente NO arreglado, a la espera de una decisión (mía o de Pablo), documentado para no perderlo:**
-- Token de GitHub en la cookie de sesión sin cifrar (ver arriba) -- necesita JWE o sesión en servidor.
-- Sin rate limiting en `/api/auth/login`/`/api/auth/dev-login` -- necesita decidir si un limitador en memoria (single-process) es aceptable o hace falta algo compartido entre procesos.
-- RAG distribuido (`feedback_cases` en ChromaDB) sin aislamiento por tenant si varios despliegues comparten el mismo Chroma -- hoy no explotable porque `add_confirmed_case` no está conectada a ningún endpoint vivo, pero hay que cerrarlo antes de conectar el bucle de feedback humano de verdad.
-- Cobertura de test de Postgres sigue sin ser end-to-end automática (mismo pendiente del punto 14).
+Cobertura de test de Postgres sigue sin ser end-to-end automática (mismo pendiente del punto 14) -- eso es infraestructura de CI, no algo que se arregle en el propio código.
 
 Verificación funcional real, no solo tests: arranqué el Engine API y el Dashboard de verdad (`TestClient` con lifespan completo) y confirmé que levantan limpios; corrí la CLI contra un diff real de este propio repo; invoqué el hook `pre-receive` como proceso real vía stdin. De paso, el nuevo chequeo estricto de `init_db()` destapó que `tests/integration/test_dashboard_roles.py` no aislaba su base de datos (tocaba el `.watchgate/app.db` real compartido, no un fixture) -- lo arreglé aplicando el mismo patrón que ya usaba `test_dashboard_api_keys.py`.
 
+## 18. Cierre de los tres pendientes del punto 17 (8 agosto)
+
+Los tres hallazgos que dejé documentados sin tocar por necesitar una decisión de diseño -- la tomé yo, explicada aquí para que se pueda revisar:
+
+- **Token de GitHub sin cifrar en la cookie de sesión**: `create_session_token`/`decode_session_token` ahora hacen un JWT anidado -- se firma igual que antes (integridad/expiración) y ENCIMA se cifra con AES-256-GCM (`python-jose` ya era dependencia del proyecto, incluye `jose.jwe`). La clave de cifrado se deriva por SHA-256 del mismo `WATCHGATE_DASHBOARD_SECRET` (con un prefijo distinto al de firma, para no reusar literalmente los mismos bytes) -- una sola variable de entorno que gestionar, no hace falta añadir ninguna nueva. Descarté mover la sesión a un almacén en servidor por ser un cambio de arquitectura mucho mayor para el mismo problema.
+- **Sin rate limiting en el login**: limitador en memoria de proceso, por login normalizado (no por IP), 5 intentos fallidos por 5 minutos, se resetea en un login correcto. Documentado explícitamente como limitación de un solo proceso -- con varias réplicas detrás de un balanceador haría falta un almacén compartido (Redis u otro), que no era proporcionado añadir para un proyecto que hoy corre en un único proceso.
+- **RAG distribuido sin aislamiento por tenant**: `add_confirmed_case`/`retrieve_relevant_context` ahora aceptan `org_id` opcional; el feedback humano se guarda con `org_id` en la metadata de ChromaDB y se filtra con `where={"org_id": ...}` al consultar -- el corpus público (`attack_patterns`) sigue sin filtrar nunca, es intencionalmente compartido. `analyze_with_quota` (`service/quota.py`) inyecta `org_id` en el `metadata` que le llega a las capas, así que `SemanticLayer` ya lo lee solo sin que cada caller tenga que montarlo a mano.
+
+Los tres con test de regresión (incluida una prueba de aislamiento cruzado real: dos orgs, cada una con su caso de feedback, confirmando que ninguna ve el caso de la otra). 445 tests en verde tras esto.
+
 ## Estado global
 
-**437 tests** en verde (`python -m pytest`, suite completa salvo la de aceptación real marcada `integration`). **180/193 (93%)** en la suite de aceptación real con las 5 capas reales (sin cambios desde el punto 16 -- los fixes de este punto no se han vuelto a correr contra esa suite todavía). Todo lo listado arriba está en producción salvo estos matices honestos:
+**445 tests** en verde (`python -m pytest`, suite completa salvo la de aceptación real marcada `integration`). **180/193 (93%)** en la suite de aceptación real con las 5 capas reales (sin cambios desde el punto 16 -- los fixes de los puntos 17/18 no se han vuelto a correr contra esa suite todavía). Todo lo listado arriba está en producción salvo estos matices honestos:
 
 - El soporte Postgres está validado a mano contra una instancia real, pero no hay un Postgres provisionado en el CI del proyecto.
 - La detección de inyección de prompt es un heurístico de texto (regex); un atacante que ofusque el contenido (Unicode, base64) podría evadirlo.
-- Token de acceso de GitHub sin cifrar dentro de la cookie de sesión del Dashboard (ver punto 17) -- pendiente de decisión de diseño.
-- Sin rate limiting en el login del Dashboard (ver punto 17).
-- RAG distribuido sin aislamiento por tenant a nivel de colección (ver punto 17) -- hoy no explotable, sí antes de conectar feedback humano de verdad.
+- El rate limiting del login es en memoria de proceso -- no protege entre réplicas si algún día el dashboard se despliega con más de un worker.
 
 ## Pendiente
 
-- Decidir y aplicar el arreglo del token de GitHub en la cookie de sesión (JWE vs sesión en servidor) -- punto 17.
-- Rate limiting en `/api/auth/login`/`/api/auth/dev-login` -- punto 17.
-- Aislamiento por tenant en las colecciones de ChromaDB del RAG distribuido, antes de conectar `add_confirmed_case` a un endpoint real -- punto 17.
 - Provisionar Postgres en el CI para cobertura automática de extremo a extremo.
-- Regenerar `docs/validation_report.md` contra la API real para reflejar los fixes del punto 17 (especialmente el de `_apply_malicious_and_uncertain_policy`, que debería mejorar `malicious medium/hard`).
+- Regenerar `docs/validation_report.md` contra la API real para reflejar los fixes de los puntos 17/18 (especialmente el de `_apply_malicious_and_uncertain_policy`, que debería mejorar `malicious medium/hard`).
+- Si el dashboard pasa alguna vez a desplegarse con varias réplicas: mover el rate limiting de login a un almacén compartido.
 - Publicar el paquete en PyPI (fuera de alcance por decisión explícita).
 - Ampliar la detección de inyección de prompt si se observan variantes ofuscadas en producción.
