@@ -152,14 +152,33 @@ def _resolve_git_object_spec(ref: str, path: str) -> str | None:
     return object_spec
 
 
+# A diferencia de `lookup_package_registry`/VT (`timeout=10.0` HTTP), este
+# subprocess no tenía timeout -- el LLM puede pedir cualquier ref/path del
+# propio repo analizado (no solo los tocados por el diff), así que un
+# hook/lock de git atascado bloquea la llamada a la tool indefinidamente, no
+# solo esos 10s. Mismo valor que el resto de tools por consistencia.
+_GIT_SHOW_TIMEOUT_SECONDS = 10.0
+# `capture_output=True` acumula todo el blob en memoria antes de que
+# `fetch_referenced_file` pueda truncarlo -- un blob trackeado
+# deliberadamente enorme (no hace falta que sea attacker-controlled desde
+# fuera del repo: basta con que el LLM pida leer uno ya versionado) igual
+# infla el pico de memoria del proceso, pero al menos esto acota lo que
+# acaba fluyendo al prompt del LLM después.
+_MAX_FETCHED_FILE_BYTES = 200_000
+
+
 def _git_show_bytes(object_spec: str, repo_path: str) -> bytes | None:
-    """`git show <object_spec>` local, sin red. `None` si no existe."""
-    result = subprocess.run(  # noqa: S603
-        ["git", "show", object_spec],
-        cwd=repo_path,
-        capture_output=True,
-        check=False,
-    )
+    """`git show <object_spec>` local, sin red. `None` si no existe/falla."""
+    try:
+        result = subprocess.run(  # noqa: S603
+            ["git", "show", object_spec],
+            cwd=repo_path,
+            capture_output=True,
+            check=False,
+            timeout=_GIT_SHOW_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired:
+        return None
     if result.returncode != 0:
         return None
     return result.stdout
@@ -172,7 +191,7 @@ def fetch_referenced_file(path: str, ref: str, repo_path: str) -> str:
     raw = _git_show_bytes(object_spec, repo_path)
     if raw is None:
         return ""
-    return raw.decode("utf-8", errors="replace")
+    return raw[:_MAX_FETCHED_FILE_BYTES].decode("utf-8", errors="replace")
 
 
 def check_file_reputation(path: str, ref: str, repo_path: str) -> dict[str, Any]:

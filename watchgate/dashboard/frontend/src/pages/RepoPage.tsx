@@ -26,15 +26,25 @@ export default function RepoPage() {
   const [tab, setTab] = useState<Tab>('history')
 
   useEffect(() => {
+    // Guarda de "sigue siendo la respuesta actual": sin esto, navegar rápido
+    // entre repos (p. ej. botón atrás + clic) puede dejar en pantalla el
+    // título/URL de un repo con los scores/rol de OTRO, si la petición del
+    // repo anterior resuelve después de la del actual.
+    let cancelled = false
     void Promise.all([api.listScores(repo), api.myRole(repo)])
       .then(([s, r]) => {
+        if (cancelled) return
         setScores(s)
         setRole(r.role)
       })
       .catch((err: unknown) => {
+        if (cancelled) return
         toast.error(err instanceof Error ? err.message : 'Error')
         setScores([])
       })
+    return () => {
+      cancelled = true
+    }
   }, [repo])
 
   const canFeedback = role === 'mantenedor' || role === 'admin_organizacion'

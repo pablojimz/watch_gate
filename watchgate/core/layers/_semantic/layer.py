@@ -69,11 +69,11 @@ _MIN_SCORE_WHEN_UNVERIFIED = 60
 
 
 def _apply_unverified_content_floor(
-    output: SemanticOutput, user_prompt: str, tool_calls_made: int
+    output: SemanticOutput, user_prompt: str, fetch_referenced_file_calls: int
 ) -> SemanticOutput:
     if (
         prompting.UNVERIFIED_CONTENT_MARKER not in user_prompt
-        or tool_calls_made > 0
+        or fetch_referenced_file_calls > 0
         or output.risk_score >= _MIN_SCORE_WHEN_UNVERIFIED
     ):
         return output
@@ -104,8 +104,8 @@ def _apply_unverified_content_floor(
 _PROMPT_INJECTION_FLOOR_SCORE = 100
 
 
-def _apply_prompt_injection_floor(output: SemanticOutput, user_prompt: str) -> SemanticOutput:
-    findings = find_prompt_injection_attempts(user_prompt)
+def _apply_prompt_injection_floor(output: SemanticOutput, scanned_text: str) -> SemanticOutput:
+    findings = find_prompt_injection_attempts(scanned_text)
     if not findings or output.risk_score >= _PROMPT_INJECTION_FLOOR_SCORE:
         return output
     return output.model_copy(
@@ -145,6 +145,22 @@ def compute_diff_hash(diff: NormalizedDiff) -> str:
 class _ToolCallCounter:
     def __init__(self) -> None:
         self.count = 0
+        # Contador específico de `fetch_referenced_file` (no "cualquier
+        # tool"): `_apply_unverified_content_floor` necesita saber si el
+        # contenido truncado se llegó a comprobar de verdad, no si el LLM
+        # llamó a alguna otra tool sin relación (p. ej. `lookup_package_registry`
+        # para una dependencia legítima, dejando el fichero truncado sospechoso
+        # sin leer). Hallazgo de revisión: antes se usaba `count > 0` genérico.
+        self.fetch_referenced_file_calls = 0
+        # Contenido real devuelto por `fetch_referenced_file` durante la
+        # conversación -- hay que escanearlo por intentos de inyección de
+        # prompt igual que el `user_prompt` inicial (ver comentario de
+        # `_apply_prompt_injection_floor`): un fichero truncado en el prompt
+        # inicial (sin extracto, solo el marcador de "no verificado") puede
+        # contener el texto de inyección real, que solo llega al LLM cuando
+        # éste decide leerlo con esta tool. Sin esto, ese texto nunca se
+        # escaneaba -- el suelo mecánico solo miraba `user_prompt`.
+        self.fetched_contents: list[str] = []
 
 
 def _dispatch_tool(
@@ -158,7 +174,7 @@ def _dispatch_tool(
         )
         # Mismo dato no confiable que el diff inicial, solo que llega por una
         # tool en vez de en el prompt original -- mismos delimitadores.
-        return prompting.wrap_untrusted_content(content)
+        return content, prompting.wrap_untrusted_content(content)
     if name == "check_file_reputation":
         return tools.check_file_reputation(
             path=tool_input["path"], ref=tool_input["ref"], repo_path=diff.repo_path
@@ -177,7 +193,17 @@ def _build_tool_executor(
 ) -> ToolExecutor:
     def executor(name: str, tool_input: dict[str, Any]) -> Any:
         counter.count += 1
+        if name == "fetch_referenced_file":
+            # Cuenta el INTENTO de comprobar el contenido, no si la lectura
+            # tuvo éxito -- si el LLM llamó a la tool y el fichero/ref no
+            # existía (git show fallando), sigue siendo una comprobación real
+            # hecha por su cuenta, no "nunca lo comprobó".
+            counter.fetch_referenced_file_calls += 1
         try:
+            if name == "fetch_referenced_file":
+                raw_content, wrapped_content = _dispatch_tool(name, tool_input, diff, metadata)
+                counter.fetched_contents.append(raw_content)
+                return wrapped_content
             return _dispatch_tool(name, tool_input, diff, metadata)
         except Exception as exc:  # noqa: BLE001 - un tool_call con argumentos
             # mal formados (o cualquier fallo interno de una tool) no debe
@@ -252,9 +278,7 @@ class SemanticLayer(AnalysisLayer):
         )
 
         try:
-            output, tool_calls_made = self._call_llm_once(
-                system_prompt, user_prompt, diff, metadata
-            )
+            output, counter = self._call_llm_once(system_prompt, user_prompt, diff, metadata)
         except SemanticParsingError as exc:
             return LayerResult(
                 layer_name=self.name,
@@ -268,7 +292,7 @@ class SemanticLayer(AnalysisLayer):
         if _is_borderline_score(output.risk_score):
             for _ in range(_MAX_RESAMPLES):
                 try:
-                    extra_output, extra_tool_calls = self._call_llm_once(
+                    extra_output, extra_counter = self._call_llm_once(
                         system_prompt, user_prompt, diff, metadata
                     )
                 except SemanticParsingError:
@@ -277,10 +301,15 @@ class SemanticLayer(AnalysisLayer):
                     continue
                 n_calls += 1
                 if extra_output.risk_score > output.risk_score:
-                    output, tool_calls_made = extra_output, extra_tool_calls
+                    output, counter = extra_output, extra_counter
 
-        output = _apply_prompt_injection_floor(output, user_prompt)
-        output = _apply_unverified_content_floor(output, user_prompt, tool_calls_made)
+        scanned_text = user_prompt
+        if counter.fetched_contents:
+            scanned_text = "\n".join([user_prompt, *counter.fetched_contents])
+        output = _apply_prompt_injection_floor(output, scanned_text)
+        output = _apply_unverified_content_floor(
+            output, user_prompt, counter.fetch_referenced_file_calls
+        )
         self._cost_control.store_cached(diff_hash, output)
         # Nota: esto estima el coste de la petición inicial (system + user
         # prompt) multiplicado por el número real de llamadas hechas (1, o
@@ -295,7 +324,7 @@ class SemanticLayer(AnalysisLayer):
             + self._cost_control.estimate_tokens(user_prompt)
         )
         self._cost_control.record_usage(repo, estimated_tokens)
-        return self._to_layer_result(output, tool_calls_made=tool_calls_made)
+        return self._to_layer_result(output, tool_calls_made=counter.count)
 
     def _call_llm_once(
         self,
@@ -303,7 +332,7 @@ class SemanticLayer(AnalysisLayer):
         user_prompt: str,
         diff: NormalizedDiff,
         metadata: dict[str, Any],
-    ) -> tuple[SemanticOutput, int]:
+    ) -> tuple[SemanticOutput, _ToolCallCounter]:
         counter = _ToolCallCounter()
         tool_executor = _build_tool_executor(diff, metadata, counter)
         output = self._llm_client.complete_structured(
@@ -313,7 +342,7 @@ class SemanticLayer(AnalysisLayer):
             tool_executor=tool_executor,
             max_tool_calls=_MAX_TOOL_CALLS,
         )
-        return output, counter.count
+        return output, counter
 
     def _to_layer_result(self, output: SemanticOutput, tool_calls_made: int) -> LayerResult:
         finding = Finding(

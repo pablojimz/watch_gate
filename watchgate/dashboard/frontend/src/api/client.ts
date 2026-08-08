@@ -127,13 +127,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   })
   if (!response.ok) {
     const detail = await response.text()
+    // El backend normalmente responde JSON con `{"detail": "..."}`, pero un
+    // proxy delante (502/504) o un error de framework puede devolver texto
+    // plano o HTML -- si `JSON.parse` falla ahí, no es el error real, es solo
+    // que el cuerpo no era JSON: se usa el texto crudo tal cual, no el
+    // mensaje del parser (antes se filtraba a través del mismo catch que el
+    // caso JSON válido y un `SyntaxError` como "Unexpected token <" se colaba
+    // como si fuera el mensaje de error del backend).
+    let message = detail || response.statusText
     try {
       const parsed = JSON.parse(detail) as { detail?: string }
-      throw new Error(parsed.detail || detail || response.statusText)
-    } catch (err) {
-      if (err instanceof Error && err.message !== detail) throw err
-      throw new Error(detail || response.statusText)
+      if (parsed.detail) message = parsed.detail
+    } catch {
+      // cuerpo no-JSON: se mantiene `message` tal cual.
     }
+    throw new Error(message)
   }
   if (response.status === 204) return undefined as T
   return response.json() as Promise<T>

@@ -686,49 +686,78 @@ export default function AdminPage() {
   }, [])
 
   useEffect(() => {
+    // Guarda de "sigue siendo la petición vigente": sin esto, cambiar de
+    // repo (o de "default" a "repo") rápido en el selector puede dejar
+    // aplicada la respuesta de un repo DISTINTO al que aparece seleccionado
+    // en el desplegable -- y "Guardar" mandaría entonces ese `settings`
+    // (pesos/umbrales/`block_on_high`) al repo equivocado. Hallazgo real de
+    // revisión, no hipotético: no hace falta una red lenta, basta con dos
+    // clics seguidos en el selector.
     if (tab !== 'config') return
+    let cancelled = false
     setSettings(null)
     if (configScope === 'default') {
       void api
         .getDefaultSettings()
-        .then(setSettings)
+        .then((data) => {
+          if (!cancelled) setSettings(data)
+        })
         .catch((err: unknown) => {
+          if (cancelled) return
           toast.error(err instanceof Error ? err.message : 'Error')
           setSettings(EMPTY_SETTINGS)
         })
-      return
+    } else if (selectedRepo) {
+      void api
+        .getSettings(selectedRepo)
+        .then((data) => {
+          if (!cancelled) setSettings(data)
+        })
+        .catch((err: unknown) => {
+          if (cancelled) return
+          toast.error(err instanceof Error ? err.message : 'Error')
+          setSettings(null)
+        })
     }
-    if (!selectedRepo) return
-    void api
-      .getSettings(selectedRepo)
-      .then(setSettings)
-      .catch((err: unknown) => {
-        toast.error(err instanceof Error ? err.message : 'Error')
-        setSettings(null)
-      })
+    return () => {
+      cancelled = true
+    }
   }, [tab, configScope, selectedRepo])
 
   useEffect(() => {
     if (tab !== 'llm') return
+    let cancelled = false
     setLlmSettings(null)
     void api
       .getLlmSettings()
-      .then(setLlmSettings)
-      .catch((err: unknown) => {
-        toast.error(err instanceof Error ? err.message : 'Error')
+      .then((data) => {
+        if (!cancelled) setLlmSettings(data)
       })
+      .catch((err: unknown) => {
+        if (!cancelled) toast.error(err instanceof Error ? err.message : 'Error')
+      })
+    return () => {
+      cancelled = true
+    }
   }, [tab])
 
   useEffect(() => {
     if (tab !== 'appearance') return
+    let cancelled = false
     setUiSettings(null)
     void api
       .getUiSettings()
-      .then(setUiSettings)
+      .then((data) => {
+        if (!cancelled) setUiSettings(data)
+      })
       .catch((err: unknown) => {
+        if (cancelled) return
         toast.error(err instanceof Error ? err.message : 'Error')
         setUiSettings(EMPTY_UI)
       })
+    return () => {
+      cancelled = true
+    }
   }, [tab])
 
   async function addRole() {
