@@ -70,11 +70,23 @@ class QuotaService:
         """
         org = get_organization(self.session, org_id) if org_id else None
         config = PolicyService.apply_policy_overrides(config, org)
-        if org_id and "org_id" not in metadata:
+        if org_id:
             # Propaga org_id a las capas (hoy solo lo consume SemanticLayer,
             # para filtrar por tenant el feedback humano del RAG distribuido
             # -- ver retriever.py) sin obligar a cada caller de
             # analyze_with_quota a montarlo ya dentro de `metadata` a mano.
+            #
+            # SIEMPRE se sobrescribe, nunca "solo si falta": `metadata` viene
+            # de un dict sin validar que un cliente HTTP controla por
+            # completo (`AnalyzeRequest.metadata`, `dict[str, Any]`) -- si se
+            # respetase un `org_id` ya presente en el payload, cualquier
+            # cliente autenticado podía pedir el `org_id` de OTRA
+            # organización en su propia petición y filtrar así su feedback
+            # humano del RAG distribuido (ver retriever.py), o vaciar el
+            # filtro por completo con `org_id: null`/`""` para ver el
+            # feedback de TODAS las organizaciones mezclado. El org_id real
+            # es el que resuelve la autenticación (`org_id` de este
+            # parámetro), nunca el que declare el propio cliente.
             metadata = {**metadata, "org_id": org_id}
         effective_user_id = user_id or "system"
 

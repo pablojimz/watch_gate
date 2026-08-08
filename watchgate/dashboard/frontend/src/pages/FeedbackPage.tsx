@@ -15,13 +15,23 @@ export default function FeedbackPage() {
   const [scores, setScores] = useState<ScoreOut[] | null>(null)
 
   useEffect(() => {
+    // Ver el mismo comentario en RepoPage.tsx: sin esta guarda, navegar
+    // rápido entre repos puede dejar en pantalla los scores de OTRO repo si
+    // esa petición anterior resuelve después de la del repo actual.
+    let cancelled = false
     void api
       .listScores(repo)
-      .then(setScores)
+      .then((s) => {
+        if (!cancelled) setScores(s)
+      })
       .catch((err: unknown) => {
+        if (cancelled) return
         toast.error(err instanceof Error ? err.message : 'Error')
         setScores([])
       })
+    return () => {
+      cancelled = true
+    }
   }, [repo])
 
   async function submit(scoreId: number, feedback: 'correcto' | 'falso_positivo') {
