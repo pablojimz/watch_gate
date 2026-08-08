@@ -3,16 +3,18 @@
 ## Metadatos
 
 - Responsable: Pablo Jiménez Castro
-- Última actualización: 2026-08-07
-- Estado general: Componentes funcionales y con tests unitarios propios, pero con un defecto de integración confirmado (incompatibilidad de claves `"deps"` vs `"dependencies"`) que impide que `deps_layer.py` participe en el análisis con la configuración por defecto, y que lo excluye siempre del cortocircuito. Ver §2.2, §2.3 y §3.
-- Última revisión realizada por: Pablo Jiménez Castro (análisis asistido por Claude Code, contraste directo contra el código fuente actual, no solo contra documentación previa)
-- Componentes registrados: CLI (`watchgate/cli.py`), Cortocircuito / shortcircuit (`watchgate/core/shortcircuit.py`), Capa de dependencias / deps_layer (`watchgate/core/layers/deps_layer.py`, `watchgate/core/layers/_shared.py`)
+- Última actualización: 2026-08-08
+- Estado general: Componentes funcionales y con tests unitarios propios, pero con un defecto de integración confirmado (incompatibilidad de claves `"deps"` vs `"dependencies"`) que impide que `deps_layer.py` participe en el análisis con la configuración por defecto, y que lo excluye siempre del cortocircuito. Ver §2.2, §2.3 y §3. **Adenda 2026-08-08 (§2.5):** implementada, verificada en producción real y documentada la integración consumidora del repo privado de reglas (`sync-rules.yml`, `reconcile-rules.yml`, `scripts/sync_rules.py`) y su conexión con `static_layer.py` (third-party Semgrep + YARA, antes sin usar pese a estar ya sincronizadas).
+- Última revisión realizada por: Pablo Jiménez Castro (análisis e implementación asistidos por Claude Code, contraste directo contra el código fuente actual y contra los repos reales en producción, no solo contra documentación previa)
+- Componentes registrados: CLI (`watchgate/cli.py`), Cortocircuito / shortcircuit (`watchgate/core/shortcircuit.py`), Capa de dependencias / deps_layer (`watchgate/core/layers/deps_layer.py`, `watchgate/core/layers/_shared.py`), Integración con el repo de reglas y capa estática (`.github/workflows/sync-rules.yml`, `.github/workflows/reconcile-rules.yml`, `scripts/sync_rules.py`, `scripts/rules_hash.py`, `watchgate/core/layers/static_layer.py` — §2.5)
 
 ---
 
 # 1. Resumen general
 
 Este registro cubre, con el alcance solicitado, tres componentes de WatchGate: la CLI (`cli.py`), el cortocircuito de extremo (`shortcircuit.py`) y la capa de dependencias (`deps_layer.py` + `_shared.py`). No se documentan aquí `static_layer.py`, el dashboard ni el resto de capas salvo lo estrictamente necesario para entender la integración (§2.4).
+
+**Adenda 2026-08-08:** el alcance se amplía con un componente nuevo (§2.5), fuera del reparto original de `plan_tareas_equipo.md` por ser infraestructura posterior: la integración consumidora del repo privado de reglas `pablojimz/Repo-reglas-SEMGREP-y-YARA` (workflows de sincronización + verificación de integridad) y su conexión con `static_layer.py` (que hasta este momento sí estaba fuera del alcance del documento, y ahora se documenta específicamente en lo tocado por este trabajo).
 
 **Sobre el reparto de responsabilidad:** `docs/planificacion/plan_tareas_equipo.md` registra que Pablo Ayllón García y Pablo Jiménez Castro **intercambiaron sus líneas** respecto al reparto original. En la tabla vigente de ese documento:
 
@@ -378,6 +380,110 @@ Documentado en detalle en `progreso_pablo_ayllon_garcia.md` §2.4.1. Relevante a
 
 ---
 
+## 2.5 Integración con el repo de reglas y conexión con `static_layer.py` (Adenda 2026-08-08)
+
+### Información básica
+
+- Responsable formal (plan de tareas vigente): no asignado en `plan_tareas_equipo.md` — es infraestructura nueva, posterior al reparto original de las tres líneas de la Fase 1. Implementado por Pablo Jiménez Castro con asistencia de Claude Code.
+- Ubicación en el proyecto: `.github/workflows/sync-rules.yml`, `.github/workflows/reconcile-rules.yml`, `scripts/sync_rules.py`, `scripts/rules_hash.py`, más cambios en `watchgate/core/layers/static_layer.py` (third-party Semgrep + integración de YARA). Informe de diseño dedicado: `docs/integracion_repo_reglas.md`.
+- Estado actual: Implementado, testeado (32 + 5 + 13 tests nuevos, ver "Análisis técnico") y **verificado en producción real** contra los dos repos reales (`watch_gate` y `pablojimz/Repo-reglas-SEMGREP-y-YARA`), no solo contra mocks — versión `v0.0.2` activa y verificada por hash. Un hueco confirmado y sin cerrar (ver "Problemas detectados").
+- Última revisión: 2026-08-08 (esta adenda).
+- Nivel de madurez: alto. A diferencia de los tres componentes de §2.1-§2.3 (donde el hallazgo principal es un defecto de integración nunca ejercitado en real), aquí la propia implementación se sometió a ejecución real contra los sistemas reales durante el desarrollo, y los tres fallos que aparecieron (ver Historial de cambios) se corrigieron y se re-verificaron también en real, no solo en tests.
+
+### Historial de cambios
+
+| Fecha | Cambio realizado | Motivo | Responsable (según git log) |
+|------|------------------|--------|-------------|
+| 2026-08-07 | Commit `fbd43e2`: implementación inicial de `sync-rules.yml`, `reconcile-rules.yml` y `scripts/sync_rules.py` | Consumidor del flujo de versionado de reglas (repository_dispatch + reconciliación diaria) | pablojimz (asistido por Claude Code) |
+| 2026-08-07 | Commit `c5eb9ae`: fix — `manifest.json` se publica como asset de Release, no en el árbol git (404 real contra el repo de reglas) | La Contents API (`--ref main`) no encuentra el fichero porque nunca vivió ahí | pablojimz |
+| 2026-08-07 | Commit `44f1713`: fix — evitar que Git LFS intente resolver `rules/semgrep/config.yaml` ("cone mode leak" real: sparse-checkout en modo cone cuela ficheros de carpetas ancestras sin pedirlo) | El checkout real abortaba con `Resource not accessible by personal access token` al intentar resolver un fichero nunca solicitado | pablojimz |
+| 2026-08-07 | (fuera de este repo, en el runner de Actions) Fine-grained PAT sustituido por classic PAT (`RULES_REPO_TOKEN`) tras descubrir que los fine-grained no soportan la API de Git LFS — cambio de configuración de secret, no de código, documentado en `docs/integracion_repo_reglas.md` §5.2 | `git lfs pull` fallaba con `Resource not accessible...` pese a `Contents: Read-only` correcto | pablojimz (configuración manual en GitHub) |
+| 2026-08-07 | Commit `92a9b90`: 37 tests nuevos (`tests/unit/test_sync_rules.py`, `tests/unit/test_sync_rules_git_lfs.py`) | Fijar como regresión los tres fallos reales de arriba y la lógica de verificación por clave | pablojimz |
+| 2026-08-07 | Commit `4ed07e4` (**no es mío**: lo generó el propio workflow): `reconcile(rules): activar reglas verificadas v0.0.2` | Primera ejecución real en producción de `reconcile-rules.yml`, con éxito, tras corregir los tres fallos anteriores | `watchgate-rules-bot` (identidad automática de Actions) |
+| 2026-08-07 | Commit `6616aa4`: conectar `static_layer.py` con las reglas third-party (`THIRD_PARTY_LANGUAGE_MAP`) y ampliar `_detect_language` de 11 a 28 extensiones | Las reglas third-party (4 vendors, 35 carpetas) ya se sincronizaban y verificaban por hash, pero ningún código Python las usaba | pablojimz |
+| 2026-08-07 | Commit `d5aab4b`: actualizar `docs/integracion_repo_reglas.md` | Reflejar el cierre de los gaps de third-party/mapa de lenguajes | pablojimz |
+| 2026-08-08 | Commit `5e81022`: integrar YARA en `static_layer.py` como parte de la MISMA capa `static` (spec §4), no como capa nueva | `rules/yara/<categoria>/` ya se sincronizaba y verificaba por hash, pero no existía ninguna ejecución de YARA en el código Python | pablojimz |
+
+### Estado actual
+
+- **Funcionalidades implementadas** (verificado leyendo el código y por ejecución real, no solo lectura):
+  - **`sync-rules.yml`**: disparado por `repository_dispatch` tipo `rules-updated`. Descarga `manifest.json` como asset de la Release exacta (Releases API, nunca `main`), hace checkout disperso con Git LFS solo de lo que cambió (`languages_changed`/`third_party_changed` del payload) + TODAS las categorías YARA siempre, verifica el hash de cada clave de forma independiente contra el manifest, y solo si TODAS coinciden activa el contenido (copia a `rules/` + comitea + push automático). Si una sola clave falla, no activa nada y falla el workflow explícitamente.
+  - **`reconcile-rules.yml`**: red de seguridad (cron diario 03:00 UTC + disparo manual) por si se pierde el `repository_dispatch`. Descarga solo `manifest.json` de la última Release (`--ref latest`), compara versión + todos los hashes contra el estado activo local (`rules/.rules-state.json`), y si difieren ejecuta la misma sincronización que arriba pero con `--scope full`.
+  - **`scripts/sync_rules.py`**: lógica compartida por ambos workflows — checkout disperso de un solo paso (`_checkout_from_url`), obtención del manifest vía Releases API (`fetch_release_manifest`), verificación por clave todo-o-nada (`_verify_keys`), aplicación del contenido verificado (`_apply_verified_content`, con remapeo `dist/yara_scored/<cat>` → `rules/yara/<cat>`), y estado activo acumulativo (`_write_state`).
+  - **`scripts/rules_hash.py`**: hash SHA-256 determinista de una carpeta, replicando exactamente el método del repo de reglas (`build_release_manifest.py`: listar recursivo, ordenar por ruta relativa, concatenar bytes, SHA-256).
+  - **`static_layer.py` — conexión con third-party**: `THIRD_PARTY_LANGUAGE_MAP`, tabla explícita a mano (nunca adivinada por coincidencia de nombre, respetando que `<carpeta>` de third-party es un namespace independiente — p. ej. `trailofbits/rs` son reglas de Rust) que conecta cada lenguaje con sus carpetas third-party relevantes.
+  - **`static_layer.py` — integración de YARA**: per spec §4, YARA es la MISMA capa que Semgrep (`layer_name="static"`), combinada vía `max()` — nunca sumar —, bajo el mismo peso `static: 0.25` de `.watchgate.yml`. `_get_compiled_yara_rules` compila TODAS las categorías siempre (con caché de proceso); `_run_yara_on_text` corre sobre el mismo `diff_hunk` que ve Semgrep pero **sin filtrar por lenguaje** (un webshell puede llevar cualquier extensión, o ninguna). El `risk_score` de cada hallazgo se lee de los metadatos que la propia regla ya trae (`meta.risk_score`), no se reinventa una tabla de severidad aparte.
+- **Funcionalidad pendiente / sin verificar**: el disparo real por `repository_dispatch` de `sync-rules.yml` — nunca se ha ejecutado, ni real ni simulado (ver "Problemas detectados").
+- **Partes completas**: verificación de integridad por hash (por clave, independiente, todo-o-nada), manejo de Git LFS (incluida la resolución del "cone mode leak"), conexión de `static_layer.py` con el catálogo completo de reglas ya sincronizado.
+- **Limitaciones conocidas**:
+  - `RULES_REPO_TOKEN` es un classic PAT con scope `repo` (control total sobre todos los repos privados de la cuenta), no un fine-grained de mínimo privilegio — asumido conscientemente porque los fine-grained no soportan la API de Git LFS a día de hoy. El script nunca lo usa para escribir (solo `clone`/`checkout`/`lfs pull`/lecturas de la Releases API); el `git push` hacia `watch_gate` usa el `GITHUB_TOKEN` automático de Actions, un secret distinto.
+  - Hallazgo operativo (no de código): en la máquina de desarrollo local, Windows Defender puso en cuarentena en tiempo real un fichero YARA real sincronizado (`rules/yara/webshells/WShell_THOR_Webshells.yar`, contenido de detección de webshells) y varios fixtures de `tests/cases/malreal_*`. Es puramente local (el contenido en GitHub está íntegro, y los runners de Actions corren en Linux sin Defender), pero deja constancia del riesgo de comitear una deleción por accidente en un `git add -A` sin revisar en una máquina Windows sin exclusión configurada.
+
+### Arquitectura e integración
+
+```mermaid
+graph TD
+    Rel["Repo de reglas: publica Release vX.Y.Z<br/>manifest.json como asset"] -->|repository_dispatch<br/>rules-updated| Sync["sync-rules.yml"]
+    Cron["schedule 03:00 UTC"] --> Reconcile["reconcile-rules.yml"]
+    Reconcile -->|si desalineado| SyncScript
+    Sync --> SyncScript["scripts/sync_rules.py<br/>checkout disperso + LFS + verificación por clave"]
+    SyncScript -->|todo-o-nada| Rules["rules/semgrep/, rules/yara/,<br/>rules/.rules-state.json"]
+    Rules --> Static["static_layer.py<br/>_get_rules_dir() ya prioriza rules/ local"]
+    Static -->|Semgrep: custom + third-party| Semgrep["THIRD_PARTY_LANGUAGE_MAP"]
+    Static -->|YARA: todas las categorías, sin filtro de lenguaje| Yara["_run_yara_on_text()"]
+    Semgrep --> Combine["max(Semgrep, YARA)<br/>misma capa 'static'"]
+    Yara --> Combine
+```
+
+- **Responsabilidad del componente**: mantener `watch_gate` sincronizado, con integridad verificada, con el repo privado de reglas — y que ese contenido sincronizado realmente se use en el análisis (antes de esta adenda, `static_layer.py` solo usaba `custom/<lenguaje>` por coincidencia de convenciones, no third-party ni YARA).
+- **Módulos con los que interactúa**: GitHub Actions (`repository_dispatch`, `schedule`, `workflow_dispatch`), la Releases API y la API de Contents de GitHub, Git LFS, `watchgate/core/layers/static_layer.py`.
+- **Dependencias**: `httpx` (Releases API), `git`/`git-lfs` (subprocess), `yara-python` (ya declarada en `pyproject.toml`, sin usar hasta esta adenda).
+- **Entradas y salidas**: evento `repository_dispatch`/`schedule` → commit verificado en `rules/` de este mismo repo → consumido por `static_layer.py` en cada análisis de PR.
+
+### Análisis técnico
+
+- **Ficheros principales**: `scripts/sync_rules.py` (~550 líneas), `scripts/rules_hash.py`, `watchgate/core/layers/static_layer.py` (ampliado con `THIRD_PARTY_LANGUAGE_MAP`, `_get_compiled_yara_rules`, `_run_yara_on_text`).
+- **Funciones/constantes relevantes**: `fetch_release_manifest`, `_checkout_from_url`, `_verify_keys`, `_apply_verified_content`, `_write_state` (`sync_rules.py`); `compute_dir_hash` (`rules_hash.py`); `THIRD_PARTY_LANGUAGE_MAP`, `_get_compiled_yara_rules`, `_run_yara_on_text` (`static_layer.py`).
+- **Tests**: 32 (`test_sync_rules.py`, lógica pura + Releases API mockeada) + 5 (`test_sync_rules_git_lfs.py`, git+LFS real contra repo local `file://`, reproduce los dos bugs de checkout) + 13 nuevos en `test_static_layer.py` (third-party, YARA con metadata real y fallback, combinación `max()`). **No se ha podido ejecutar `pytest` en esta máquina de análisis** (mismo motivo que el resto del documento: Python 3.10 local vs `>=3.11` requerido) — se verificó cargando cada módulo real por ruta de fichero (`importlib`, con stubs mínimos de sus dependencias) y ejecutando la lógica real contra datos reales (incluidas las 9 reglas YARA ya sincronizadas), no solo `py_compile`.
+- **Decisión de diseño clave**: verificación por hash **por clave, independiente, todo-o-nada** — si una sola clave falla, no se activa ninguna, ni siquiera las que sí verificaron. Documentado con justificación completa en `docs/integracion_repo_reglas.md` §5.
+
+### Dependencias
+
+#### Dependencias internas
+- `watchgate/core/layers/static_layer.py` ↔ `rules/` (contrato de rutas: `rules/semgrep/custom/<lenguaje>`, `rules/semgrep/third-party/<vendor>/<carpeta>`, `rules/yara/<categoria>`).
+
+#### Dependencias externas
+- `httpx`, `yara-python` (ambas ya en `pyproject.toml`), `git`/`git-lfs` (binarios del sistema, invocados vía `subprocess`).
+
+#### Interfaces utilizadas
+- Releases API de GitHub (`/repos/{repo}/releases/tags/{tag}`, `/releases/latest`, `/releases/assets/{id}`).
+- `repository_dispatch` API (`POST /repos/{repo}/dispatches`).
+
+### Problemas detectados
+
+- **[Confirmado, prioridad media] El disparo real por `repository_dispatch` de `sync-rules.yml` nunca se ha ejecutado**, ni real ni simulado. Se decidió explícitamente no perseguir esta prueba manual (requería generar un token adicional solo para el simulacro) y confiar en que, al ser un mecanismo estándar de GitHub Actions ya usado con éxito por el lado emisor (`DISPATCH_TOKEN`, "verificado funcionando" según se documentó al principio de este trabajo) y compartir toda la lógica de sincronización con `reconcile-rules.yml` (sí probado en real), el riesgo residual es bajo. Queda como pendiente confirmar en la próxima release real del repo de reglas.
+- **No es un problema de código, pero se deja constancia**: la cuarentena de Windows Defender sobre ficheros YARA/malware reales del repositorio (ver "Limitaciones conocidas") es un riesgo operativo en máquinas Windows sin la exclusión de antivirus configurada para la carpeta del repo.
+
+### Posibles mejoras
+
+- Confirmar el disparo real de `sync-rules.yml` en la próxima release del repo de reglas (o simulándolo con un token de un solo uso cuando se disponga de tiempo para ello).
+- Añadir un test de arquitectura (mismo espíritu que el propuesto en §5 para `deps`/`dependencies`) que confirme que `static_layer.py` referencia rutas (`custom/`, `third-party/`, `yara/`) consistentes con lo que efectivamente comitea `scripts/sync_rules.py` — hoy esa consistencia se mantiene por convención de nombres entre dos ficheros distintos, sin un test explícito que la ate.
+- Evaluar si `RULES_REPO_TOKEN` puede volver a un scope más estrecho si GitHub añade soporte de Git LFS a los fine-grained PAT en el futuro (limitación externa, no de este proyecto).
+
+### Estado para otros desarrolladores
+
+- **Partes estables**: la verificación por hash (por clave, todo-o-nada), el manejo de Git LFS (incluida la corrección del cone-mode leak), la conexión de `static_layer.py` con el catálogo real de reglas.
+- **Partes a revisar antes de modificar**: cualquier cambio a la estructura de carpetas del repo de reglas (`rules/semgrep/custom/`, `third-party/`, `dist/yara_scored/`) debe revisarse a la vez en `scripts/sync_rules.py` (rutas de sincronización) y `static_layer.py` (rutas de consumo) — hoy están acopladas por convención de nombre, no por un contrato compartido explícito.
+- **Conocimientos necesarios**: sparse-checkout de Git en modo cone (y su comportamiento de "ancestor leak"), Git LFS (`--skip-smudge` + `lfs pull --include`), Releases API de GitHub (distinta de la Contents API), `yara-python`.
+- **Tareas pendientes**: ver "Problemas detectados" y "Posibles mejoras".
+
+### Próximos pasos
+
+- Confirmar el disparo real de `sync-rules.yml` cuando se publique la próxima release del repo de reglas.
+- Considerar el test de arquitectura de consistencia de rutas propuesto arriba.
+
+---
+
 # 3. Relaciones entre componentes
 
 ## Flujo general de ejecución (camino feliz, sin el defecto de §2.2/§2.3)
@@ -491,3 +597,6 @@ No se ha podido ejecutar la suite de tests real en este entorno (Python 3.10 dis
   - Si existe alguna capa de traducción `"dependencies"` → `"deps"` en el camino hacia `dashboard/backend/`, o si el mismo bug se manifiesta también ahí (fuera del alcance verificado en esta revisión).
   - Recuento real de tests en verde de este subconjunto (`cli.py`, `shortcircuit.py`, `deps_layer.py`, `_shared.py`) en un entorno con Python ≥3.11 y `poetry` — no se ha podido ejecutar `pytest` en esta máquina de análisis.
 - [ ] Re-ejecutar esta revisión tras aplicar las correcciones anteriores y actualizar el "Estado general" de los metadatos en consecuencia.
+- [ ] **(Adenda 2026-08-08, §2.5)** Confirmar el disparo real de `sync-rules.yml` por `repository_dispatch` en la próxima release del repo de reglas — es el único punto de esa integración sin verificar en real.
+- [ ] **(Adenda 2026-08-08, §2.5)** Ejecutar `pytest` de verdad sobre `tests/unit/test_sync_rules.py`, `tests/unit/test_sync_rules_git_lfs.py` y los tests nuevos de `test_static_layer.py` en un entorno con Python ≥3.11 — verificados por ejecución directa del código real en esta máquina, pero no con la suite de test tal cual (mismo motivo de entorno que el resto del documento).
+- [ ] **(Adenda 2026-08-08, §2.5)** Configurar exclusión de Windows Defender para la carpeta del repo en máquinas de desarrollo Windows (ya en curso al cierre de esta adenda) — evita que se repita la cuarentena de ficheros YARA/fixtures de malware real documentada en §2.5.
