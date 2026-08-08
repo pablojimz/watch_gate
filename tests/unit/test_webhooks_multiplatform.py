@@ -39,6 +39,15 @@ def test_gitlab_webhook_success(api_client):
         assert data["repo"] == "group/project-repo"
 
 
+def test_gitlab_webhook_no_secret_fails_closed(api_client):
+    headers = {"X-Gitlab-Event": "Merge Request Hook", "X-Gitlab-Token": "anything"}
+    payload = {"object_kind": "merge_request"}
+
+    with patch.dict(os.environ, {}, clear=True):
+        response = api_client.post("/api/v1/webhooks/gitlab", headers=headers, json=payload)
+        assert response.status_code == 503
+
+
 def test_gitlab_webhook_unauthorized(api_client):
     secret = "secret_gitlab_token_123"
     headers = {
@@ -75,3 +84,14 @@ def test_bitbucket_webhook_success(api_client):
         assert data["provider"] == "bitbucket"
         assert data["pr_id"] == "42"
         assert data["repo"] == "workspace/bitbucket-repo"
+
+
+def test_bitbucket_webhook_no_secret_fails_closed(api_client):
+    body_bytes = b'{"pullrequest": {"id": 42}}'
+    headers = {"X-Event-Key": "pullrequest:created", "X-Hub-Signature": "sha256=anything"}
+
+    with patch.dict(os.environ, {}, clear=True):
+        response = api_client.post(
+            "/api/v1/webhooks/bitbucket", content=body_bytes, headers=headers
+        )
+        assert response.status_code == 503

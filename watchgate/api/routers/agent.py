@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from typing import Any
+
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session
 
-from watchgate.api.auth import get_current_user_from_api_key
+from watchgate.api.auth import require_scope
 from watchgate.api.dependencies import get_db_session
 from watchgate.api.routers.analyze import AnalyzeRequest
 from watchgate.api.schemas.agent import (
@@ -20,8 +22,21 @@ from watchgate.config import WatchGateConfig, load_config
 from watchgate.core.diffparser import parse_diff_from_text
 from watchgate.core.models import AggregatedResult, Finding, LayerResult
 from watchgate.db.models import Organization, User, UserAPIKey
-from watchgate.service.policy import PolicyService
+from watchgate.service.policy import (
+    ClientConfigOverrideError,
+    PolicyService,
+    apply_client_config_override,
+)
 from watchgate.service.quota import QuotaService
+
+
+def _apply_config_override_or_400(
+    base_config: WatchGateConfig, override: dict[str, Any] | None
+) -> WatchGateConfig:
+    try:
+        return apply_client_config_override(base_config, override)
+    except ClientConfigOverrideError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 router = APIRouter(prefix="/api/v1/agent", tags=["Agent"])
 
@@ -30,7 +45,7 @@ router = APIRouter(prefix="/api/v1/agent", tags=["Agent"])
 def agent_precheck(
     request: AnalyzeRequest,
     auth: tuple[UserAPIKey, User, Organization] = Depends(
-        get_current_user_from_api_key
+        require_scope("analysis:write")
     ),  # noqa: B008
     session: Session = Depends(get_db_session),  # noqa: B008
 ) -> AggregatedResult:
@@ -50,11 +65,12 @@ def agent_precheck(
     )
 
     base_config = load_config()
-    cfg_dict = base_config.model_dump()
-    if request.config_override:
-        cfg_dict.update(request.config_override)
+    overridden_config = _apply_config_override_or_400(base_config, request.config_override)
 
-    # Forzar desactivación de la capa semántica para precheck ultrarrápido
+    # Forzar desactivación de la capa semántica para precheck ultrarrápido --
+    # esto lo decide el propio código, no la petición (config_override ya no
+    # puede tocar "weights" en absoluto, ver _apply_config_override_or_400).
+    cfg_dict = overridden_config.model_dump()
     weights = dict(cfg_dict.get("weights", {}))
     weights["semantic"] = 0.0
     cfg_dict["weights"] = weights
@@ -88,7 +104,7 @@ def agent_precheck(
 def agent_analyze(
     request: AnalyzeRequest,
     auth: tuple[UserAPIKey, User, Organization] = Depends(
-        get_current_user_from_api_key
+        require_scope("analysis:write")
     ),  # noqa: B008
     session: Session = Depends(get_db_session),  # noqa: B008
 ) -> AgentAnalyzeResponse:
@@ -105,12 +121,7 @@ def agent_analyze(
     )
 
     base_config = load_config()
-    if request.config_override:
-        cfg_dict = base_config.model_dump()
-        cfg_dict.update(request.config_override)
-        config = WatchGateConfig(**cfg_dict)
-    else:
-        config = base_config
+    config = _apply_config_override_or_400(base_config, request.config_override)
 
     quota_service = QuotaService(session)
     result, _ = quota_service.analyze_with_quota(
@@ -130,7 +141,7 @@ def agent_analyze(
 def agent_verify_fix(
     request: VerifyFixRequest,
     auth: tuple[UserAPIKey, User, Organization] = Depends(
-        get_current_user_from_api_key
+        require_scope("analysis:write")
     ),  # noqa: B008
     session: Session = Depends(get_db_session),  # noqa: B008
 ) -> VerifyFixResponse:
@@ -140,12 +151,7 @@ def agent_verify_fix(
     """
     api_key, user, org = auth
     base_config = load_config()
-    if request.config_override:
-        cfg_dict = base_config.model_dump()
-        cfg_dict.update(request.config_override)
-        config = WatchGateConfig(**cfg_dict)
-    else:
-        config = base_config
+    config = _apply_config_override_or_400(base_config, request.config_override)
 
     quota_service = QuotaService(session)
 
@@ -219,7 +225,7 @@ def agent_verify_fix(
 @router.get("/policy", response_model=AgentPolicyResponse)
 def get_agent_policy(
     auth: tuple[UserAPIKey, User, Organization] = Depends(
-        get_current_user_from_api_key
+        require_scope("scores:read")
     ),  # noqa: B008
     session: Session = Depends(get_db_session),  # noqa: B008
 ) -> AgentPolicyResponse:

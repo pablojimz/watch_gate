@@ -35,10 +35,24 @@ def compute_dir_hash(directory: Path) -> str:
     if not directory.is_dir():
         raise FileNotFoundError(f"No existe la carpeta a hashear: {directory}")
 
-    files = sorted(
-        (p for p in directory.rglob("*") if p.is_file()),
-        key=lambda p: p.relative_to(directory).as_posix(),
+    # `Path.is_file()`/`read_bytes()` siguen symlinks por defecto: un
+    # symlink dentro de una carpeta de reglas descargada de un repo externo
+    # comprometido haría que se hasheara (y luego se copiara al activar) el
+    # contenido de un fichero AJENO del filesystem del runner, no el
+    # contenido real e inmutable del tag que se está sincronizando -- rompe
+    # la garantía central de este mecanismo. Se rechaza explícitamente en
+    # vez de seguirlo o ignorarlo en silencio.
+    all_entries = sorted(
+        directory.rglob("*"), key=lambda p: p.relative_to(directory).as_posix()
     )
+    for entry in all_entries:
+        if entry.is_symlink():
+            raise ValueError(
+                f"'{entry}' es un symlink -- no se permite dentro de una carpeta de "
+                "reglas a hashear (podría apuntar a contenido ajeno al repo de reglas "
+                "sincronizado). Verificación abortada."
+            )
+    files = [p for p in all_entries if p.is_file()]
 
     digest = hashlib.sha256()
     for file_path in files:

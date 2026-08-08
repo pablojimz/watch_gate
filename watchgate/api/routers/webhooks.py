@@ -3,12 +3,43 @@
 from __future__ import annotations
 
 import hmac
+import logging
 import os
 from typing import Any
 
 from fastapi import APIRouter, Header, HTTPException, Request, status
 
+logger = logging.getLogger("watchgate.api.webhooks")
+
 router = APIRouter(prefix="/api/v1/webhooks", tags=["Webhooks"])
+
+
+def _require_webhook_secret(secret: str | None, provider: str, env_vars: str) -> str:
+    """Exige que el secreto del webhook esté configurado -- fail CLOSED, no
+    abierto.
+
+    Antes, si la variable de entorno no estaba configurada, el endpoint
+    simplemente no verificaba nada y aceptaba cualquier payload como
+    legítimo (`if webhook_secret: verificar` / sin `else`). Un operador que
+    desplegara sin fijar el secreto exponía el endpoint a cualquiera en
+    internet, sin ningún aviso. Ahora la ausencia del secreto es en sí
+    misma un error de configuración del servidor (503), no una via libre.
+    """
+    if not secret:
+        logger.error(
+            "Webhook de %s recibido pero ninguna de las variables de entorno %s está "
+            "configurada -- el payload no se puede verificar. Rechazando (fail-closed).",
+            provider,
+            env_vars,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                f"El servidor no tiene configurado el secreto del webhook de {provider} "
+                f"({env_vars}) -- no se puede verificar la autenticidad del payload."
+            ),
+        )
+    return secret
 
 
 def _verify_github_signature(
@@ -42,18 +73,20 @@ async def handle_github_webhook(
     x_hub_signature_256: str | None = Header(default=None, alias="X-Hub-Signature-256"),
 ) -> dict[str, Any]:
     """Procesa un webhook entrante desde GitHub App con verificación de firma HMAC-SHA256."""
-    webhook_secret = os.environ.get("GITHUB_WEBHOOK_SECRET") or os.environ.get(
-        "WATCHGATE_GITHUB_WEBHOOK_SECRET"
+    webhook_secret = _require_webhook_secret(
+        os.environ.get("GITHUB_WEBHOOK_SECRET")
+        or os.environ.get("WATCHGATE_GITHUB_WEBHOOK_SECRET"),
+        provider="GitHub",
+        env_vars="GITHUB_WEBHOOK_SECRET / WATCHGATE_GITHUB_WEBHOOK_SECRET",
     )
 
     body = await request.body()
 
-    if webhook_secret:
-        if not _verify_github_signature(body, x_hub_signature_256, webhook_secret):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Firma HMAC X-Hub-Signature-256 inválida o no coincidente.",
-            )
+    if not _verify_github_signature(body, x_hub_signature_256, webhook_secret):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Firma HMAC X-Hub-Signature-256 inválida o no coincidente.",
+        )
 
     try:
         payload = await request.json()
@@ -92,16 +125,18 @@ async def handle_gitlab_webhook(
     x_gitlab_token: str | None = Header(default=None, alias="X-Gitlab-Token"),
 ) -> dict[str, Any]:
     """Procesa un webhook entrante desde GitLab con verificación de token de secreto."""
-    webhook_secret = os.environ.get("GITLAB_WEBHOOK_SECRET") or os.environ.get(
-        "WATCHGATE_GITLAB_WEBHOOK_SECRET"
+    webhook_secret = _require_webhook_secret(
+        os.environ.get("GITLAB_WEBHOOK_SECRET")
+        or os.environ.get("WATCHGATE_GITLAB_WEBHOOK_SECRET"),
+        provider="GitLab",
+        env_vars="GITLAB_WEBHOOK_SECRET / WATCHGATE_GITLAB_WEBHOOK_SECRET",
     )
 
-    if webhook_secret:
-        if not _verify_gitlab_token(x_gitlab_token, webhook_secret):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token X-Gitlab-Token inválido o no coincidente.",
-            )
+    if not _verify_gitlab_token(x_gitlab_token, webhook_secret):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token X-Gitlab-Token inválido o no coincidente.",
+        )
 
     try:
         payload = await request.json()
@@ -139,18 +174,20 @@ async def handle_bitbucket_webhook(
     x_hub_signature: str | None = Header(default=None, alias="X-Hub-Signature"),
 ) -> dict[str, Any]:
     """Procesa un webhook entrante desde Bitbucket con verificación de firma HMAC-SHA256."""
-    webhook_secret = os.environ.get("BITBUCKET_WEBHOOK_SECRET") or os.environ.get(
-        "WATCHGATE_BITBUCKET_WEBHOOK_SECRET"
+    webhook_secret = _require_webhook_secret(
+        os.environ.get("BITBUCKET_WEBHOOK_SECRET")
+        or os.environ.get("WATCHGATE_BITBUCKET_WEBHOOK_SECRET"),
+        provider="Bitbucket",
+        env_vars="BITBUCKET_WEBHOOK_SECRET / WATCHGATE_BITBUCKET_WEBHOOK_SECRET",
     )
 
     body = await request.body()
 
-    if webhook_secret:
-        if not _verify_github_signature(body, x_hub_signature, webhook_secret):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Firma HMAC X-Hub-Signature inválida o no coincidente.",
-            )
+    if not _verify_github_signature(body, x_hub_signature, webhook_secret):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Firma HMAC X-Hub-Signature inválida o no coincidente.",
+        )
 
     try:
         payload = await request.json()

@@ -44,6 +44,40 @@ def test_create_and_get_organization() -> None:
     assert fetched.name == "Acme Corp"
 
 
+def test_create_user_never_silently_reassigns_existing_org() -> None:
+    """Caso real encontrado en revisión: `create_user` reescribía en
+    silencio el `org_id` de un usuario ya existente (mismo email) si se le
+    pasaba uno distinto, sin ninguna comprobación de autorización. Con
+    `User.email` único a nivel global, esto era una vía para que un
+    segundo tenant "robara" la afiliación de organización de un usuario ya
+    existente. Un `org_id` distinto en una llamada posterior debe
+    ignorarse -- solo se rellena si el usuario todavía no tenía uno."""
+    session = _get_memory_session()
+    org_a = create_organization(session, name="Org A")
+    org_b = create_organization(session, name="Org B")
+
+    user = create_user(session, email="shared@example.com", name="Shared", org_id=org_a.id)
+    assert user.org_id == org_a.id
+
+    # Un segundo "tenant" intenta reclamar el mismo email con otra org.
+    same_user = create_user(session, email="shared@example.com", name="Shared", org_id=org_b.id)
+    assert same_user.id == user.id
+    assert same_user.org_id == org_a.id  # NO se reasignó a org_b
+
+
+def test_create_user_fills_in_missing_org_id() -> None:
+    """Caso legítimo distinto del anterior: un usuario existente que
+    todavía no tenía ninguna organización SÍ debe poder completarla."""
+    session = _get_memory_session()
+    org = create_organization(session, name="Org A")
+
+    user = create_user(session, email="noorg@example.com", name="No Org")
+    assert user.org_id is None
+
+    updated = create_user(session, email="noorg@example.com", name="No Org", org_id=org.id)
+    assert updated.org_id == org.id
+
+
 def test_user_and_api_key_with_organization() -> None:
     session = _get_memory_session()
     org = create_organization(session, name="CyberSec Org")

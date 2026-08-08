@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import pytest
+from sqlalchemy import text
 from sqlmodel import Session, create_engine
 
 from watchgate.core.models import AggregatedResult, LayerResult, Semaforo
-from watchgate.db.connection import init_db
+from watchgate.db.connection import SchemaOutOfDateError, init_db
 from watchgate.db.models import User, UserAPIKey
 from watchgate.db.repository import (
     create_api_key,
@@ -28,6 +30,31 @@ def _get_memory_session() -> Session:
 def test_init_db_creates_tables() -> None:
     session = _get_memory_session()
     assert session is not None
+
+
+def test_init_db_fails_loudly_against_preexisting_db_missing_new_columns() -> None:
+    """Caso real encontrado en revisión: `init_db()` solo hace `create_all()`,
+    que no añade columnas a una tabla ya existente. Sin este chequeo, un
+    despliegue contra una base de datos que ya tenía la tabla `users` de
+    antes de la Fase 1 multi-tenant (sin `org_id`) fallaba mucho más tarde,
+    con un `OperationalError: no such column: org_id` confuso dentro de
+    `create_api_key`/`verify_api_key`. Ahora debe fallar aquí, en el
+    arranque, con un mensaje explícito."""
+    test_engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False})
+    # Tabla `users` mínima, "pre-Fase1": sin `org_id` (y sin el resto de
+    # columnas nuevas), simulando una base de datos desplegada antes de
+    # este cambio de esquema.
+    with test_engine.connect() as conn:
+        conn.execute(
+            text(
+                "CREATE TABLE users (id TEXT PRIMARY KEY, email TEXT NOT NULL, name TEXT NOT NULL)"
+            )
+        )
+        conn.commit()
+
+    with pytest.raises(SchemaOutOfDateError, match="users") as exc_info:
+        init_db(test_engine)
+    assert "org_id" in str(exc_info.value)
 
 
 def test_create_user_and_api_key() -> None:
@@ -80,6 +107,47 @@ def test_record_token_usage() -> None:
     record_token_usage(session, user.id, tokens_used=1500, month="2026-08")
     usage2 = get_token_usage(session, user.id, month="2026-08")
     assert usage2 == 2500
+
+
+def test_record_token_usage_atomic_under_concurrency(tmp_path) -> None:
+    """Caso real encontrado en revisión, reproducido dos veces por separado:
+    `record_token_usage` era un SELECT -> incrementar en Python -> UPDATE,
+    no atómico. 20 hilos incrementando 100 tokens cada uno para el mismo
+    user_id/mes perdían incrementos (de 2000 esperados, la BD terminaba con
+    200-600) o lanzaban `IntegrityError` sin capturar. Ahora es un único
+    `INSERT ... ON CONFLICT DO UPDATE` atómico -- no debe perder ninguno."""
+    import threading
+
+    db_path = tmp_path / "concurrency.db"
+    test_engine = create_engine(
+        f"sqlite:///{db_path}", connect_args={"check_same_thread": False}
+    )
+    init_db(test_engine)
+
+    n_threads = 20
+    tokens_per_call = 100
+    errors: list[Exception] = []
+
+    def worker() -> None:
+        try:
+            session = Session(test_engine)
+            record_token_usage(
+                session, user_id="agentA", tokens_used=tokens_per_call, month="2026-08"
+            )
+            session.close()
+        except Exception as exc:  # noqa: BLE001 -- se recoge para el assert, no se traga
+            errors.append(exc)
+
+    threads = [threading.Thread(target=worker) for _ in range(n_threads)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert errors == []
+    session = Session(test_engine)
+    total = get_token_usage(session, user_id="agentA", month="2026-08")
+    assert total == n_threads * tokens_per_call
 
 
 def test_save_pr_score() -> None:

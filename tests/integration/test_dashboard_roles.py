@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlmodel import create_engine
 
 # DB aislada por proceso de test.
 os.environ["WATCHGATE_DASHBOARD_DB"] = str(Path(__file__).resolve().parent / "_dashboard_test.db")
@@ -15,12 +16,32 @@ os.environ["WATCHGATE_DASHBOARD_SEED"] = "0"
 os.environ["WATCHGATE_DASHBOARD_SECRET"] = "test-secret"
 
 
+import watchgate.db.connection as db_connection  # noqa: E402
 from watchgate.dashboard.backend import db as database  # noqa: E402
 from watchgate.dashboard.backend.main import create_app  # noqa: E402
 
 
+def _isolate_db_connection_engine(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """`create_app()` dispara, en su `lifespan`, `init_db()` de
+    `watchgate/db/connection.py` (esquema de API keys/agentes, aparte del
+    que gestiona `watchgate/dashboard/backend/db.py` con `sqlite3` crudo).
+    `default_engine` de ese módulo es un singleton construido una sola vez
+    al importarse -- fijar `WATCHGATE_DATABASE_URL` por test no tiene
+    ningún efecto una vez importado, así que sin parchear `default_engine`
+    directamente, cada test de este fichero termina tocando el mismo
+    `.watchgate/app.db` real y compartido del checkout local (no un
+    fixture aislado), exactamente el mismo patrón que ya documenta y evita
+    `tests/integration/test_dashboard_api_keys.py`."""
+    fresh_engine = create_engine(
+        f"sqlite:///{tmp_path / 'app.db'}",
+        connect_args={"check_same_thread": False},
+    )
+    monkeypatch.setattr(db_connection, "default_engine", fresh_engine)
+
+
 @pytest.fixture()
-def client(tmp_path: Path) -> TestClient:
+def client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> TestClient:
+    _isolate_db_connection_engine(monkeypatch, tmp_path)
     db_path = tmp_path / "dashboard.db"
     os.environ["WATCHGATE_DASHBOARD_DB"] = str(db_path)
 
@@ -67,7 +88,8 @@ def _login(client: TestClient, login: str, role: str) -> None:
     assert resp.status_code == 200, resp.text
 
 
-def test_password_login_with_seeded_user(tmp_path: Path) -> None:
+def test_password_login_with_seeded_user(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _isolate_db_connection_engine(monkeypatch, tmp_path)
     db_path = tmp_path / "login.db"
     os.environ["WATCHGATE_DASHBOARD_DB"] = str(db_path)
     os.environ["WATCHGATE_DASHBOARD_SEED"] = "1"
@@ -347,6 +369,7 @@ def test_ingest_score_open_when_no_token_configured(client: TestClient) -> None:
 def test_ingest_score_requires_bearer_token_when_configured(
     monkeypatch, tmp_path: Path
 ) -> None:
+    _isolate_db_connection_engine(monkeypatch, tmp_path)
     db_path = tmp_path / "ingest.db"
     monkeypatch.setenv("WATCHGATE_DASHBOARD_DB", str(db_path))
     monkeypatch.setenv("WATCHGATE_DASHBOARD_SEED", "0")
@@ -380,6 +403,7 @@ def test_ci_config_returns_settings_with_dashboard_naming_convention(
     "amarillo"/"rojo"); la traducción a la convención del motor
     ("dependencies", "yellow"/"red") es responsabilidad del cliente, no de
     este endpoint (ver test_dashboard_settings_client.py)."""
+    _isolate_db_connection_engine(monkeypatch, tmp_path)
     db_path = tmp_path / "ci_config.db"
     monkeypatch.setenv("WATCHGATE_DASHBOARD_DB", str(db_path))
     monkeypatch.setenv("WATCHGATE_DASHBOARD_SEED", "0")
