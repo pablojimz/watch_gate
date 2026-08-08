@@ -1,11 +1,24 @@
 """Capa de análisis estático (spec §4).
 
-Ejecuta Semgrep sobre los parches de código modificados (`diff_hunk`),
-cargando reglas Semgrep específicas para el lenguaje del archivo: las
-propias (`rules/semgrep/custom/<lenguaje>`), las de terceros relevantes
-para ese lenguaje (`rules/semgrep/third-party/<vendor>/<carpeta>`) y las
-reglas de patrones genéricos (`rules/semgrep/custom/regex`, secretos
-hardcodeados etc.), que se aplican siempre con independencia del lenguaje.
+Ejecuta Semgrep + YARA sobre los parches de código modificados
+(`diff_hunk`) y combina ambos con un único `max()` (spec §4 paso 4: nunca
+sumar), bajo el mismo `layer_name="static"` -- son la MISMA capa, con el
+mismo peso en `.watchgate.yml` (`static: 0.25  # Semgrep / YARA`).
+
+- **Semgrep**, específico del lenguaje del archivo: reglas propias
+  (`rules/semgrep/custom/<lenguaje>`), de terceros relevantes para ese
+  lenguaje (`rules/semgrep/third-party/<vendor>/<carpeta>`) y de patrones
+  genéricos (`rules/semgrep/custom/regex`, secretos hardcodeados etc.).
+- **YARA**, con independencia del lenguaje (un webshell puede llevar
+  cualquier extensión, o ninguna): TODAS las categorías publicadas
+  siempre (`rules/yara/<categoria>/`, sin selección parcial -- requisito
+  explícito del diseño), usando el `risk_score` que cada regla ya trae en
+  sus propios metadatos (`meta.risk_score`, calculado en el repo de
+  reglas: `0.45*severity + 0.30*confidence + 0.25*exploitability`).
+
+Ambas familias de reglas vienen del MISMO repo privado de reglas
+(`pablojimz/Repo-reglas-SEMGREP-y-YARA`) y se sincronizan/verifican por
+hash con el mismo mecanismo -- ver docs/integracion_repo_reglas.md.
 
 Resolución del directorio de reglas (`_get_rules_dir`), en orden:
 1. Override explícito por parámetro de constructor.
@@ -37,6 +50,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+import yara
+
 from watchgate.core.layers.base import AnalysisLayer, register_layer
 from watchgate.core.models import (
     Confidence,
@@ -64,6 +79,22 @@ SEVERITY_SCORE: dict[str, int] = {
 # Tiempo TTL (24 horas) para verificación de actualización del repo de reglas
 _CACHE_TTL_SECONDS = 86400
 _GIT_TIMEOUT_SECONDS = 5.0
+
+# Puntuación de riesgo si una regla YARA coincide pero, por lo que sea, no
+# trae su propio meta.risk_score (no debería pasar con las reglas
+# generadas por el repo de reglas, pero es defensivo ante una regla
+# externa mal formada) -- se usa un valor alto porque el catálogo YARA
+# aquí es todo de detección de malware/webshells, nunca un simple aviso.
+_YARA_DEFAULT_RISK_SCORE = 60
+
+# Caché de reglas YARA compiladas, con vida de PROCESO (no de disco, a
+# diferencia de la caché de git de _get_rules_dir): compilar ~700 reglas
+# YARA de golpe no es gratis, y dentro de una misma ejecución de
+# `analyze()` se compila una sola vez y se reutiliza para todos los
+# ficheros del diff. Cada proceso de `watchgate` (CLI, GitHub Action) es
+# de usar-y-tirar, así que no hay riesgo de servir reglas obsoletas tras
+# una resincronización -- un proceso nuevo siempre recompila.
+_yara_rules_cache: dict[str, yara.Rules | None] = {}
 
 # Categoría de reglas custom/ que se aplica SIEMPRE, con independencia del
 # lenguaje detectado (patrones de secretos hardcodeados, cadenas de
@@ -429,6 +460,91 @@ class StaticLayer(AnalysisLayer):
 
         return results
 
+    def _get_compiled_yara_rules(self, rules_dir: Path) -> yara.Rules | None:
+        """Compila TODAS las categorías YARA publicadas (sin selección
+        parcial -- requisito explícito del diseño, ver
+        docs/integracion_repo_reglas.md), con caché de proceso.
+
+        Cada fichero .yar se compila en su propio namespace (clave del
+        dict `filepaths`) para evitar colisiones de nombre de regla entre
+        categorías -- las reglas generadas por el repo de reglas ya
+        incluyen cualquier regla "private" auxiliar que necesiten dentro
+        del propio fichero, así que no hace falta compartir namespace
+        entre ficheros para resolver dependencias.
+        """
+        yara_root = rules_dir / "rules" / "yara"
+        cache_key = str(yara_root.resolve()) if yara_root.exists() else f"missing:{yara_root}"
+        if cache_key in _yara_rules_cache:
+            return _yara_rules_cache[cache_key]
+
+        if not yara_root.exists():
+            _yara_rules_cache[cache_key] = None
+            return None
+
+        filepaths: dict[str, str] = {}
+        for index, yar_file in enumerate(sorted(yara_root.rglob("*.yar"))):
+            try:
+                yar_file.read_bytes()  # sanity check: legible (p. ej. no bloqueado por un AV)
+            except OSError as exc:
+                logger.warning("No se pudo leer la regla YARA %s, se omite: %r", yar_file, exc)
+                continue
+            filepaths[f"ns{index}"] = str(yar_file)
+
+        if not filepaths:
+            logger.warning("rules/yara/ existe pero no contiene ningún fichero .yar legible.")
+            _yara_rules_cache[cache_key] = None
+            return None
+
+        try:
+            compiled = yara.compile(filepaths=filepaths)
+        except yara.Error as exc:
+            logger.warning("Fallo al compilar las reglas YARA de %s: %r", yara_root, exc)
+            _yara_rules_cache[cache_key] = None
+            return None
+
+        _yara_rules_cache[cache_key] = compiled
+        return compiled
+
+    def _run_yara_on_text(self, text: str, rules_dir: Path) -> list[dict[str, Any]]:
+        """Ejecuta YARA sobre el mismo contenido que Semgrep (spec §4 paso
+        3), con independencia del lenguaje detectado -- un webshell puede
+        llevar cualquier extensión, o ninguna, así que YARA no se filtra
+        por `_detect_language` como sí hace Semgrep (ver `analyze`)."""
+        results: list[dict[str, Any]] = []
+        compiled_rules = self._get_compiled_yara_rules(rules_dir)
+        if compiled_rules is None:
+            return results
+
+        try:
+            matches = compiled_rules.match(data=text.encode("utf-8", errors="replace"))
+        except yara.Error as exc:
+            logger.debug("Excepción al ejecutar YARA: %r", exc)
+            return results
+
+        for match in matches:
+            meta = match.meta or {}
+            risk_score = meta.get("risk_score", _YARA_DEFAULT_RISK_SCORE)
+            if not isinstance(risk_score, int):
+                risk_score = _YARA_DEFAULT_RISK_SCORE
+            message = meta.get("risk_justification") or (
+                f"Coincidencia con la regla YARA '{match.rule}' (posible malware/webshell)."
+            )
+            results.append(
+                {
+                    "tool": "yara",
+                    "rule_id": match.rule,
+                    "message": message,
+                    "line": 1,  # YARA opera sobre bytes, no líneas -- ver docstring de analyze()
+                    "risk_score": risk_score,
+                    # Las reglas YARA aquí son SIEMPRE de detección de malware/webshells/
+                    # anti-análisis (nunca de "vulnerabilidad de código legítimo"), a
+                    # diferencia de Semgrep -- ver _infer_threat_nature_from_semgrep.
+                    "threat_nature": ThreatNature.MALICIOUS,
+                }
+            )
+
+        return results
+
     def analyze(self, diff: NormalizedDiff, metadata: dict[str, Any]) -> LayerResult:
         rules_dir = self._get_rules_dir()
         if not rules_dir:
@@ -437,7 +553,7 @@ class StaticLayer(AnalysisLayer):
                 risk_score=0,
                 justification="No se pudieron cargar las reglas de análisis estático.",
                 skipped=True,
-                skip_reason="Reglas Semgrep no disponibles",
+                skip_reason="Reglas Semgrep/YARA no disponibles",
             )
 
         all_findings: list[dict[str, Any]] = []
@@ -453,9 +569,13 @@ class StaticLayer(AnalysisLayer):
                 ):
                     continue
 
+                # Semgrep necesita saber el lenguaje para elegir qué reglas
+                # cargar -- si no se reconoce la extensión, simplemente no
+                # se ejecuta Semgrep sobre este fichero. YARA en cambio NO
+                # se filtra por lenguaje (ver _run_yara_on_text): un
+                # webshell puede llevar cualquier extensión, o ninguna, así
+                # que se ejecuta sobre TODO fichero de texto no binario.
                 language = self._detect_language(file_change.path)
-                if not language:
-                    continue
 
                 ext = os.path.splitext(file_change.path)[1] or ".txt"
                 temp_file = tempfile.NamedTemporaryFile(
@@ -465,9 +585,13 @@ class StaticLayer(AnalysisLayer):
                     temp_file.write(file_change.diff_hunk)
                     temp_file.close()
 
-                    findings = self._run_semgrep_on_file(
-                        temp_file.name, language, rules_dir=rules_dir
-                    )
+                    findings: list[dict[str, Any]] = []
+                    if language:
+                        findings.extend(
+                            self._run_semgrep_on_file(temp_file.name, language, rules_dir=rules_dir)
+                        )
+                    findings.extend(self._run_yara_on_text(file_change.diff_hunk, rules_dir=rules_dir))
+
                     for f in findings:
                         f["file_path"] = file_change.path
                     all_findings.extend(findings)
