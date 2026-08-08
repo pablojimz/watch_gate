@@ -1,6 +1,6 @@
 # Informe de validación — suite de aceptación (spec §14)
 
-Generado automáticamente el 2026-08-07 14:03 UTC ejecutando `tests/integration/generate_validation_report.py` contra la API real de Gemini. No editar a mano -- regenerar con ese comando para que refleje el código actual. Resultados en bruto de cada caso en `docs/validation_report_raw.json`.
+Generado automáticamente el 2026-08-08 23:14 UTC ejecutando `tests/integration/generate_validation_report.py` contra la API real de Gemini. No editar a mano -- regenerar con ese comando para que refleje el código actual. Resultados en bruto de cada caso en `docs/validation_report_raw.json`.
 
 **Resultado global: 180/193 casos dentro de lo esperado (93%).**
 
@@ -18,20 +18,30 @@ Generado automáticamente el 2026-08-07 14:03 UTC ejecutando `tests/integration/
 | malicious | hard | 11 | 8 | 72% |
 | malicious | medium | 23 | 20 | 86% |
 
+## Resumen de casos maliciosos por naturaleza de amenaza detectada
+
+Desglose de los casos `class=malicious` (mezclan ataques -- código malicioso/backdoors -- y vulnerabilidades -- dependencias con CVEs conocidos -- bajo una sola etiqueta) por la naturaleza que el propio sistema les asignó realmente (`threat_summary`, el mismo campo que ya usa el comentario de PR real). `-` significa que ninguna capa activa reportó un `Finding` con `threat_nature` -- típicamente un falso negativo total, no solo una naturaleza mal clasificada.
+
+| Naturaleza detectada | N | OK | % OK |
+|---|---:|---:|---:|
+| ataque | 42 | 42 | 100% |
+| incertidumbre | 9 | 1 | 11% |
+| vulnerabilidad | 4 | 3 | 75% |
+
 ## Casos que divergen de lo esperado (13)
 
-| Caso | Esperado | Obtenido | Categoría | Justificación (semántica) |
-|---|---|---|---|---|
-| `real_pallets_jinja_2098` | verde/amarillo (min. 0) | rojo (70) | backdoor | La implementación de `__getattr__` para `__version__` en `src/jinja2/__init__.py` devuelve la versión del paquete 'werkzeug' en lugar de la versión de 'jinja2', y el mensaje de advertencia de deprecación también se refie |
-| `real_pallets_jinja_2105` | verde/amarillo (min. 0) | rojo (70) | backdoor | El workflow ha sido modificado para eliminar completamente la generación y subida de la procedencia SLSA (líneas 2-4, 16-20, 22-29, 33-34 y 39 del diff), lo que reduce drásticamente la capacidad de verificar la integrida |
-| `cve_known_vulnerable_dependency` | amarillo/rojo (min. 35) | verde (37) | backdoor | Se ha añadido la dependencia PyYAML versión 5.1, la cual tiene múltiples vulnerabilidades críticas de deserialización (CVE-2019-20477, CVE-2020-1747, CVE-2020-14343) que permiten la ejecución remota de código arbitrario  |
-| `false_positive_candidate` | amarillo (min. 20) | verde (4) | ninguna | Se añade una función que usa eval() para evaluar expresiones de usuario, pero el riesgo se mitiga porque se deshabilitan explícitamente los builtins ('__builtins__': {}) y el namespace se restringe únicamente a funciones |
-| `malreal_npm_compromised_lib_graphql-sequelize-teselagen_14` | rojo (min. 70) | verde (2) | ninguna | El cambio añade un fichero de utilidad para codificación y decodificación Base64, sin código ofuscado, llamadas externas, ni lógica sospechosa. |
-| `malreal_npm_compromised_lib_tvi-cli_55` | rojo (min. 70) | verde (28) | ninguna | El nuevo middleware introduce una configuración CORS altamente sensible que aplica `Access-Control-Allow-Credentials: true` y un origen configurable via `process.env.CORS_ORIGIN` para todas las rutas (`/:path*`). Esta co |
-| `malreal_pypi_compromised_lib_mflux-streamlit_6` | rojo (min. 70) | verde (2) | ninguna | El cambio añade un fichero `main.py` que simplemente actúa como punto de entrada para ejecutar una aplicación Streamlit (`app.py`) local, sin lógica adicional ni llamadas a recursos externos. |
-| `malreal_npm_compromised_lib__asyncapi_protobuf-schema-parser_150` | amarillo/rojo (min. 35) | verde (2) | ninguna | El fichero nuevo añade una utilidad para convertir esquemas Protobuf a JSON Schema. La implementación bloquea explícitamente la carga de importaciones externas arbitrarias mediante un error, y el código no muestra signos |
-| `malreal_pypi_compromised_lib_litellm_8` | amarillo/rojo (min. 35) | verde (24) | ninguna | El extracto del fichero nuevo muestra un uso legítimo de `literal_eval` para parsear enumeraciones y un patrón de codificación/decodificación base64 para validación, sin indicios de exfiltración, puertas traseras u ofusc |
-| `malreal_pypi_compromised_lib_xinference_11` | amarillo/rojo (min. 35) | verde (4) | ninguna | El código decodifica datos de audio en base64 y los guarda en un fichero temporal '.wav', lo cual es un comportamiento esperado para un chatbot con capacidades de audio y no indica intención maliciosa por sí mismo. |
-| `malreal_npm_compromised_lib__tallyui_storage-sqlite_218` | rojo (min. 55) | verde (2) | ninguna | El cambio introduce un nuevo fichero de test de integración que usa una base de datos SQLite en memoria (mock), sin realizar llamadas de red, ejecutar código externo o modificar scripts de build o dependencias. |
-| `malreal_npm_malicious_intent_jstoauto_26` | rojo (min. 55) | verde (13) | ninguna | El cambio añade un fichero `tools.js` que implementa utilidades para un sistema de logging, manejando serialización, streams y eventos de salida de forma estándar, sin indicios de código malicioso o exfiltración. |
-| `malreal_pypi_compromised_lib_lightning_5` | rojo (min. 55) | verde (2) | ninguna | El fichero nuevo implementa un lanzador de procesos distribuidos que se auto-invoca (`subprocess.Popen` con `sys.executable` y el script actual) para coordinar la ejecución en múltiples rangos locales, lo cual es un patr |
+| Caso | Esperado | Obtenido | Naturaleza | Categoría | Justificación (semántica) |
+|---|---|---|---|---|---|
+| `real_pallets_jinja_2098` | verde/amarillo (min. 0) | rojo (100) | ataque | backdoor | La implementación de `__getattr__` para `__version__` en `src/jinja2/__init__.py` devuelve deliberadamente la versión del paquete 'werkzeug' en lugar de la versión de 'jinja2', y el mensaje de advertencia de deprecación  |
+| `real_pallets_jinja_2105` | verde/amarillo (min. 0) | rojo (100) | ataque | ninguna | El diff elimina el job de generación de la proveniencia SLSA y los pasos asociados de hashing y subida de ficheros de proveniencia (`*.intoto.jsonl`), una característica crítica de seguridad en la cadena de suministro, d |
+| `benign_new_feature_with_new_dep` | verde/amarillo (min. 0) | rojo (70) | vulnerabilidad | escalada_privilegios | Se añade una nueva dependencia 'click' en la versión 8.1.7, que tiene una vulnerabilidad de inyección de comandos (PYSEC-2026-2132) que permite a un atacante ejecutar comandos arbitrarios en el sistema -- este patrón es  |
+| `false_positive_candidate` | amarillo (min. 20) | verde (4) | vulnerabilidad | ninguna | La función `evaluate_formula` utiliza `eval()` con un `__builtins__` vacío y un `namespace` controlado, limitando la ejecución a funciones matemáticas específicas y valores de celda, lo que mitiga significativamente el r |
+| `malreal_npm_compromised_lib_graphql-sequelize-teselagen_14` | rojo (min. 70) | verde (2) | incertidumbre | ninguna | El cambio añade un fichero de utilidad para codificar y decodificar en base64 usando la clase `Buffer` de Node.js, sin indicios de ofuscación, exfiltración o ejecución remota. |
+| `malreal_npm_compromised_lib_tvi-cli_55` | rojo (min. 70) | verde (32) | vulnerabilidad | ninguna | El middleware nuevo establece 'Access-Control-Allow-Credentials' a 'true' y define 'Access-Control-Allow-Origin' dinámicamente desde la variable de entorno 'process.env.CORS_ORIGIN' para todas las rutas. Esto introduce u |
+| `malreal_pypi_compromised_lib_mflux-streamlit_6` | rojo (min. 70) | verde (2) | incertidumbre | ninguna | El cambio consiste en añadir un script principal que ejecuta una aplicación Streamlit local (`streamlit run app.py`) utilizando `subprocess.run()`, sin descargar código externo, modificar dependencias o interactuar con l |
+| `malreal_npm_compromised_lib__asyncapi_protobuf-schema-parser_150` | amarillo/rojo (min. 35) | verde (2) | incertidumbre | ninguna | El fichero nuevo implementa un compilador de Protobuf a JSON Schema, sin llamadas de red externas sospechosas, ejecución de comandos del sistema, ni patrones de ofuscación o exfiltración. Las expresiones regulares se usa |
+| `malreal_pypi_compromised_lib_xinference_11` | amarillo/rojo (min. 35) | verde (2) | incertidumbre | ninguna | El cambio consiste en añadir un nuevo fichero que implementa una interfaz de chat con Gradio, incluyendo el manejo de datos de audio codificados en base64 y guardados en ficheros temporales. Este comportamiento forma par |
+| `malreal_pypi_malicious_intent_mirrorbot_10` | amarillo/rojo (min. 35) | verde (17) | incertidumbre | ninguna | El fichero contiene una colección de funciones para generar enlaces de descarga directa de múltiples servicios de alojamiento y acortadores, un patrón consistente con un propósito utilitario. Aunque interactúa con muchos |
+| `malreal_npm_compromised_lib__tallyui_storage-sqlite_218` | rojo (min. 55) | verde (2) | incertidumbre | ninguna | El cambio consiste en un nuevo fichero de pruebas de integración para la funcionalidad de base de datos, utilizando dependencias locales simuladas y sin introducir llamadas de red, ejecución de código externo o cambios d |
+| `malreal_npm_malicious_intent_jstoauto_26` | rojo (min. 55) | verde (13) | incertidumbre | ninguna | El cambio añade un nuevo módulo JavaScript que implementa lógica de logging, serialización y manejo de streams, con patrones de código consistentes con una biblioteca de logging como Pino, sin indicios de ofuscación mali |
+| `malreal_pypi_compromised_lib_lightning_5` | rojo (min. 55) | verde (2) | incertidumbre | ninguna | El script añadido implementa un lanzador de procesos distribuidos que replica la ejecución del script actual, estableciendo variables de entorno comunes para entornos de entrenamiento distribuido y gestionando los proces |

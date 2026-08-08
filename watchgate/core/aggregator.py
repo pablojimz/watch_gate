@@ -106,7 +106,6 @@ def _semaforo(score: int, thresholds: dict[str, int]) -> Semaforo:
 def _apply_malicious_and_uncertain_policy(
     score: int,
     results: dict[str, LayerResult],
-    diff: NormalizedDiff | None,
     thresholds: dict[str, int],
 ) -> tuple[int, Semaforo]:
     has_high_confidence_malicious = False
@@ -143,14 +142,55 @@ def _apply_malicious_and_uncertain_policy(
     if has_medium_confidence_malicious:
         score = max(score, thresholds["red"])
 
-    if diff and diff.files:
-        from watchgate.core.layers._semantic.prompting import UNVERIFIED_CONTENT_MARKER
-
-        uncertain_files_count = sum(
-            1 for fc in diff.files if UNVERIFIED_CONTENT_MARKER in fc.diff_hunk
-        )
-        if uncertain_files_count / len(diff.files) > 0.5 and score < thresholds["yellow"]:
-            score = thresholds["yellow"]
+    # Bug real encontrado regenerando el informe de validación (caso
+    # `malreal_pypi_malicious_intent_mirrorbot_10`): esta escalada
+    # comprobaba `UNVERIFIED_CONTENT_MARKER in fc.diff_hunk` sobre el
+    # `NormalizedDiff` original -- pero ese marcador solo se inserta en el
+    # STRING del prompt que construye `prompting.py` para el LLM
+    # (`_render_truncated_file_change`), nunca se escribe de vuelta en
+    # `file_change.diff_hunk`. La condición era código muerto: nunca podía
+    # cumplirse, así que esta "red de seguridad" jamás disparaba en
+    # producción (sin test de regresión que lo cubriera tampoco). Caso real
+    # reproducido: contenido truncado sin verificar + `fetch_referenced_file`
+    # nunca llamado -- `_apply_unverified_content_floor` (`_semantic/layer.py`)
+    # sí flota el risk_score de la propia capa semántica a >=60 y marca
+    # `threat_nature=UNCERTAIN`, pero con los pesos por defecto (semantic=0.40)
+    # y las demás capas activas puntuando 0 (nada que reportar, no `skipped`),
+    # el combinado se queda por debajo de `thresholds["yellow"]` de todas
+    # formas -- el PR se marca verde pese a que la propia capa semántica ya
+    # señaló "no pude comprobar esto".
+    #
+    # Arreglado consultando directamente el `threat_nature` que ya calculó la
+    # capa semántica (no reconstruyendo la misma señal de forma redundante e
+    # inconsistente desde el diff): si marcó incertidumbre real, el combinado
+    # nunca se queda por debajo de AMARILLO.
+    #
+    # OJO, segundo bug encontrado regenerando el informe tras el primer
+    # arreglo (caso `benign_refactor`, un renombrado cosmético sin riesgo
+    # real): `threat_nature` es un campo que el LLM rellena libremente en su
+    # propia salida estructurada (`SemanticOutput.threat_nature`, ver
+    # `client.py`/prompting.py) -- NO es exclusivo de
+    # `_apply_unverified_content_floor` (`_semantic/layer.py`). El modelo
+    # puede devolver `threat_nature="incertidumbre"` con un `risk_score`
+    # bajísimo (p. ej. 5) solo por prudencia genérica, sin que exista
+    # contenido truncado sin verificar de por medio. Comprobar solo
+    # `threat_nature == UNCERTAIN` disparaba el suelo para CUALQUIER
+    # incertidumbre autoreportada por el modelo, por trivial que fuera --
+    # forzando amarillo en diffs limpios de verdad. Se exige además que el
+    # propio risk_score de la capa ya haya alcanzado por sí solo el umbral
+    # amarillo: eso es justo lo que distingue "el suelo local de
+    # `_apply_unverified_content_floor` disparó de verdad" (fuerza el score
+    # a >=60) de "el modelo eligió la etiqueta 'incertidumbre' con un score
+    # que ya refleja que no le preocupa".
+    semantic_result = results.get("semantic")
+    if (
+        semantic_result is not None
+        and not semantic_result.skipped
+        and semantic_result.threat_nature == ThreatNature.UNCERTAIN
+        and semantic_result.risk_score >= thresholds["yellow"]
+        and score < thresholds["yellow"]
+    ):
+        score = thresholds["yellow"]
 
     return score, _semaforo(score, thresholds)
 
@@ -174,7 +214,7 @@ def aggregate(
     thresholds = thresholds or DEFAULT_THRESHOLDS
     score = round(weighted_average(results, weights))
     score = _apply_high_confidence_semantic_floor(score, results, thresholds)
-    score, semaforo = _apply_malicious_and_uncertain_policy(score, results, diff, thresholds)
+    score, semaforo = _apply_malicious_and_uncertain_policy(score, results, thresholds)
 
     threat_summary = {
         ThreatNature.MALICIOUS.value: 0,

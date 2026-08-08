@@ -295,3 +295,133 @@ def test_malicious_without_stated_confidence_does_not_force_red():
 
     assert out.semaforo != Semaforo.ROJO
     assert out.score < 20
+
+
+def test_uncertain_semantic_threat_nature_floors_combined_score_to_yellow():
+    """Bug real encontrado regenerando el informe de validación
+    (`malreal_pypi_malicious_intent_mirrorbot_10`): la escalada de
+    "incertidumbre" anterior comprobaba `UNVERIFIED_CONTENT_MARKER in
+    fc.diff_hunk` sobre el `NormalizedDiff` original -- pero ese marcador
+    solo se inserta en el prompt que arma `prompting.py`, nunca se escribe
+    de vuelta en `diff_hunk`, así que la condición era código muerto: nunca
+    podía cumplirse. Caso real reproducido: la capa semántica marca
+    `threat_nature=UNCERTAIN` (contenido truncado, nunca comprobado con
+    fetch_referenced_file) y su propio `_apply_unverified_content_floor`
+    ya sube su risk_score a 60+, pero con los pesos por defecto (semantic
+    0.40) y el resto de capas activas puntuando 0 (no `skipped`, simplemente
+    sin hallazgos), el combinado se queda en verde de todas formas -- pese a
+    que la propia capa semántica ya señaló que no pudo comprobar el
+    contenido. Ahora se consulta directamente el `threat_nature` ya
+    calculado por la capa semántica, no una señal redundante y rota
+    reconstruida desde el diff."""
+    results = {
+        "static": _result("static", 0),
+        "dependencies": _result("dependencies", 0),
+        "vulnerabilities": _result("vulnerabilities", 0),
+        "reputation": _result("reputation", 75),
+        "semantic": LayerResult(
+            layer_name="semantic",
+            risk_score=69,
+            justification="Contenido truncado, no verificado con fetch_referenced_file.",
+            threat_nature=ThreatNature.UNCERTAIN,
+            confidence=Confidence.MEDIA,
+        ),
+    }
+    weights = {
+        "static": 0.25,
+        "dependencies": 0.10,
+        "vulnerabilities": 0.10,
+        "reputation": 0.15,
+        "semantic": 0.40,
+    }
+
+    out = aggregate(results, weights, diff=None, pr_id="1", repo="org/repo")
+
+    # Media ponderada real: 0.15*75 + 0.40*69 = 38.85 -> redondea a 39,
+    # por debajo del umbral amarillo (40) por poco -- exactamente el caso
+    # real que se coló en verde.
+    assert out.score == 40
+    assert out.semaforo == Semaforo.AMARILLO
+
+
+def test_low_score_self_reported_uncertainty_does_not_floor_a_clean_diff():
+    """Segundo bug real encontrado regenerando el informe de validación,
+    esta vez introducido por el propio arreglo anterior (caso
+    `benign_refactor`, un renombrado cosmético sin riesgo real que empezó a
+    salir en amarillo). `threat_nature` es un campo que el LLM rellena
+    libremente en su propia salida estructurada -- no es exclusivo de
+    `_apply_unverified_content_floor`. El modelo puede devolver
+    `threat_nature="incertidumbre"` con un `risk_score` bajísimo solo por
+    prudencia genérica ("no puedo estar 100% seguro de que este renombrado
+    no rompa algún contrato externo"), sin que exista contenido truncado sin
+    verificar de por medio. El suelo NO debe activarse aquí -- el propio
+    risk_score bajo de la capa (5) ya refleja que el modelo no le da
+    importancia real; forzar amarillo de todas formas convertiría cualquier
+    incertidumbre trivial autoreportada en una falsa alarma."""
+    results = {
+        "static": _result("static", 0),
+        "dependencies": _result("dependencies", 0),
+        "vulnerabilities": _result("vulnerabilities", 0),
+        "reputation": _result("reputation", 0),
+        "semantic": LayerResult(
+            layer_name="semantic",
+            risk_score=5,
+            justification="Renombrado puramente cosmético, sin riesgo real.",
+            threat_nature=ThreatNature.UNCERTAIN,
+            confidence=Confidence.ALTA,
+        ),
+    }
+    weights = {
+        "static": 0.25,
+        "dependencies": 0.10,
+        "vulnerabilities": 0.10,
+        "reputation": 0.15,
+        "semantic": 0.40,
+    }
+
+    out = aggregate(results, weights, diff=None, pr_id="1", repo="org/repo")
+
+    assert out.score == 2  # 0.40 * 5, sin suelo aplicado
+    assert out.semaforo == Semaforo.VERDE
+
+
+def test_uncertain_semantic_threat_nature_does_not_lower_an_already_higher_score():
+    results = {
+        "reputation": _result("reputation", 0),
+        "semantic": LayerResult(
+            layer_name="semantic",
+            risk_score=85,
+            justification="Riesgo ya alto por otro motivo, además incertidumbre real.",
+            threat_nature=ThreatNature.UNCERTAIN,
+            confidence=Confidence.MEDIA,
+        ),
+    }
+    weights = {"reputation": 0.5, "semantic": 0.5}
+
+    out = aggregate(results, weights, diff=None, pr_id="1", repo="org/repo")
+
+    assert out.score == 42  # media ponderada real, no se pisa con el suelo de 40
+    assert out.semaforo == Semaforo.AMARILLO
+
+
+def test_uncertain_semantic_threat_nature_ignored_when_semantic_is_skipped():
+    """Si la capa semántica se omitió (presupuesto agotado, fallo del LLM),
+    su `threat_nature` por defecto es None/UNCERTAIN según el modelo, pero
+    `skipped=True` -- no debe activar el suelo, sería tratar "no se ejecutó"
+    igual que "se ejecutó y no pudo verificar", que no es lo mismo."""
+    results = {
+        "reputation": _result("reputation", 0),
+        "semantic": LayerResult(
+            layer_name="semantic",
+            risk_score=0,
+            justification="",
+            skipped=True,
+            skip_reason="Presupuesto de tokens agotado",
+        ),
+    }
+    weights = {"reputation": 1.0, "semantic": 0.0}
+
+    out = aggregate(results, weights, diff=None, pr_id="1", repo="org/repo")
+
+    assert out.score == 0
+    assert out.semaforo == Semaforo.VERDE
