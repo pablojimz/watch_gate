@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-07T12:47:13Z",
+  "generated_at": "2026-08-09T12:50:03Z",
   "hashes": {
     "semgrep": {
       "custom": {
@@ -72,7 +72,7 @@
       "webshells": "sha256:2a5ab8cadae75488d327b8b47c2d66db5031761dfb4950b5f7127c252a38416a"
     }
   },
-  "verified_at": "2026-08-07T14:42:11Z",
-  "verified_by_workflow": "reconcile-rules.yml",
-  "version": "v0.0.2"
+  "verified_at": "2026-08-09T12:56:26Z",
+  "verified_by_workflow": "sync-rules.yml",
+  "version": "v0.0.3"
 }
