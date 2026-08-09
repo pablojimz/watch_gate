@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-09T12:50:03Z",
+  "generated_at": "2026-08-09T15:59:02Z",
   "hashes": {
     "semgrep": {
       "custom": {
@@ -68,11 +68,11 @@
       }
     },
     "yara": {
-      "antidebug_antivm": "sha256:6880067c6bc0f55a44906330480d67ea9bb0ae51b2231322b199d374b71310b5",
-      "webshells": "sha256:2a5ab8cadae75488d327b8b47c2d66db5031761dfb4950b5f7127c252a38416a"
+      "antidebug_antivm": "sha256:a0231feb1f78543b6e5896ccffc57a52f2de64353f6479ffc5e6bb3f3eaacfc5",
+      "webshells": "sha256:8bfdf45c52b48fbe68df79b3c3af6d70615753937745060fa34a9db6ab4180ec"
     }
   },
-  "verified_at": "2026-08-09T12:56:26Z",
+  "verified_at": "2026-08-09T16:05:17Z",
   "verified_by_workflow": "sync-rules.yml",
-  "version": "v0.0.3"
+  "version": "v0.0.5"
 }
