@@ -44,3 +44,4 @@ rules:
     exploitability_score: 100
     risk_score: 62
     risk_justification: Regla admite marcar tambien actuators de bajo riesgo (info/metrics); punto medio de impacto. FALTA DATO proteccion adicional, asumo ausente.
+    finding_type: vulnerability

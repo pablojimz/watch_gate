@@ -25,6 +25,7 @@ rules:
     exploitability_score: 80
     risk_score: 83
     risk_justification: Taint req.*->puppeteer goto (SSRF) y evaluate (ejecución JS en navegador).
+    finding_type: vulnerability
   languages:
   - javascript
   - typescript

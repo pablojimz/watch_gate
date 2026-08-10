@@ -30,6 +30,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: Comparacion numerica de bits RSA < 2048, exacta.
+    finding_type: vulnerability
   patterns:
   - pattern-either:
     - pattern: |

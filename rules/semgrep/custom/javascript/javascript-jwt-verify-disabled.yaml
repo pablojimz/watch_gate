@@ -24,6 +24,7 @@ rules:
       exploitability_score: 80
       risk_score: 83
       risk_justification: "decode() sin verificar o algorithms:['none'] permite forjar tokens y tomar control de cualquier cuenta; jwt.decode() a veces se usa solo para inspeccion no relacionada con autorizacion (falso positivo posible); ejecucion normal."
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern: jwt.decode($TOKEN, ...)

@@ -25,6 +25,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: Comparacion exacta BITS<2048 en generacion de clave RSA; fuerza de cifrado insuficiente.
+    finding_type: vulnerability
   patterns:
   - pattern-either:
     - pattern: |

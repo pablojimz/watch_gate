@@ -63,3 +63,4 @@ rules:
     exploitability_score: 40
     risk_score: 62
     risk_justification: Combinación Upgrade+Connection+http_version 1.1; heurística de indicadores, no confirma soporte h2c real del backend.
+    finding_type: vulnerability

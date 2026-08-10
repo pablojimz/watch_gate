@@ -28,6 +28,7 @@ rules:
       exploitability_score: 40
       risk_score: 73
       risk_justification: Overflow en tamaño de malloc/calloc por multiplicación/suma; requiere operandos grandes o controlados externamente.
+      finding_type: vulnerability
     message: >-
       The software performs a calculation that can produce an integer
       overflow or wraparound, when the logic assumes that the resulting

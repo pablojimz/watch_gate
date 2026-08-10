@@ -23,6 +23,7 @@ rules:
     exploitability_score: 80
     risk_score: 52
     risk_justification: ListenAndServe sin TLS; patron extremadamente comun y seguro cuando TLS se termina en proxy/balanceador externo.
+    finding_type: vulnerability
   message: >-
     Found an HTTP server without TLS. Use 'http.ListenAndServeTLS' instead.
     See https://golang.org/pkg/net/http/#ListenAndServeTLS for more information.

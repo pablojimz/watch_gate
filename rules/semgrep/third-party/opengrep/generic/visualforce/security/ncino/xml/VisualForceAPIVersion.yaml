@@ -28,6 +28,7 @@ rules:
       exploitability_score: 100
       risk_score: 66
       risk_justification: API version <55 impide usar cspHeader; hallazgo de config/higiene, regex numérica exacta.
+      finding_type: vulnerability
     patterns:
       - pattern-inside: <apiVersion.../apiVersion>
       - pattern-either:

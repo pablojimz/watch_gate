@@ -26,6 +26,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: XOR como cifrado exacto, sin seguridad criptográfica real.
+    finding_type: vulnerability
   severity: WARNING
   languages:
   - python

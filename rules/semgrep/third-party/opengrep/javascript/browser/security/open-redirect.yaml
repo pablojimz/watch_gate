@@ -35,6 +35,7 @@ rules:
     exploitability_score: 80
     risk_score: 78
     risk_justification: Taint URL params->location.href/replace, excluye concatenación con literal fijo.
+    finding_type: vulnerability
   languages:
   - javascript
   - typescript

@@ -28,6 +28,7 @@ rules:
     exploitability_score: 80
     risk_score: 78
     risk_justification: Taint event->body con Content-Type text/html, sink estructural específico.
+    finding_type: vulnerability
   languages:
   - javascript
   - typescript

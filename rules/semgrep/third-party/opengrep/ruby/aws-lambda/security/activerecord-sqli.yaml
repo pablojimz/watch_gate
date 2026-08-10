@@ -34,6 +34,7 @@ rules:
     exploitability_score: 80
     risk_score: 78
     risk_justification: Objeto 'event' de Lambda tainted hacia ActiveRecord raw SQL; taint genuino a sink exacto.
+    finding_type: vulnerability
   pattern-sinks:
   - patterns:
     - pattern: $QUERY

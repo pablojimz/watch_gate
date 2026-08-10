@@ -23,6 +23,7 @@ rules:
       exploitability_score: 40
       risk_score: 64
       risk_justification: load_model con formato pickle/hdf5 deprecado (RCE potencial); excluye solo extensión .keras, marca casi todo uso legítimo local.
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern: keras.models.load_model(...)

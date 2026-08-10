@@ -38,6 +38,7 @@ rules:
     exploitability_score: 80
     risk_score: 66
     risk_justification: http.Cookie sin HttpOnly; facilita robo de cookie via XSS.
+    finding_type: vulnerability
   fix-regex:
     regex: (HttpOnly\s*:\s+)false
     replacement: \1true

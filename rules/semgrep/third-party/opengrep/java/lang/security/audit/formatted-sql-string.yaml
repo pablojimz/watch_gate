@@ -31,6 +31,7 @@ rules:
     exploitability_score: 60
     risk_score: 67
     risk_justification: 'Fuente mixta: HttpServletRequest (externa) o cualquier parametro anotado (no confirmado externo); punto medio.'
+    finding_type: vulnerability
   options:
     taint_assume_safe_numbers: true
     taint_assume_safe_booleans: true

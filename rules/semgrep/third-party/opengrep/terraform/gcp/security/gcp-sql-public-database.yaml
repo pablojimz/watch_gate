@@ -59,5 +59,6 @@ rules:
     exploitability_score: 100
     risk_score: 89
     risk_justification: authorized_networks 0.0.0.0/0; expone Cloud SQL a toda la red, requiere credenciales validas para explotar.
+    finding_type: vulnerability
   languages: [hcl]
   severity: WARNING

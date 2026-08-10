@@ -91,3 +91,4 @@ rules:
     exploitability_score: 80
     risk_score: 78
     risk_justification: SQLi con sanitizadores robustos (to_i/to_f, ternario) y exclusión de formas parametrizadas.
+    finding_type: vulnerability

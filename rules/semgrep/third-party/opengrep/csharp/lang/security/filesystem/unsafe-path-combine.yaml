@@ -62,3 +62,4 @@ rules:
     exploitability_score: 40
     risk_score: 73
     risk_justification: Taint hacia File.Read/Write sin sanitizar; fuente es cualquier parámetro público, no confirma origen externo real.
+    finding_type: vulnerability

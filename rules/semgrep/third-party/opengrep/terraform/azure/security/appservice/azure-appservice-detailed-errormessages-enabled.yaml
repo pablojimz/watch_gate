@@ -40,5 +40,6 @@ rules:
     exploitability_score: 100
     risk_score: 45
     risk_justification: Logging detallado de errores ausente; auditoria, heuristica amplia coincide con mayoria de apps.
+    finding_type: vulnerability
   languages: [hcl]
   severity: WARNING

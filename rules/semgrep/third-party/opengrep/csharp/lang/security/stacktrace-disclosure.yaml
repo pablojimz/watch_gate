@@ -32,6 +32,7 @@ rules:
     exploitability_score: 40
     risk_score: 50
     risk_justification: UseDeveloperExceptionPage fuera de IsDevelopment; solo excluye un estilo de guard, requiere error real.
+    finding_type: vulnerability
   languages:
   - csharp
   severity: WARNING

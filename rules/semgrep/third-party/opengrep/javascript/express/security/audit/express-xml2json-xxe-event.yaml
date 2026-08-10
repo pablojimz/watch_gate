@@ -27,6 +27,7 @@ rules:
     exploitability_score: 80
     risk_score: 83
     risk_justification: 'FALTA DATO: depende de si expat/xml2json expande entidades externas por defecto; asumo vulnerable (conservador).'
+    finding_type: vulnerability
   languages:
   - javascript
   - typescript

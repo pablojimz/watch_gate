@@ -35,4 +35,5 @@ rules:
     exploitability_score: 40
     risk_score: 42
     risk_justification: Scheme dinámico en proxy_pass; heurística amplia, menor impacto que host dinámico.
+    finding_type: vulnerability
   pattern: proxy_pass $$SCHEME:// ...;

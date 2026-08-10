@@ -25,6 +25,7 @@ rules:
       exploitability_score: 80
       risk_score: 72
       risk_justification: "extra()/raw() con SQL concatenado permite SQLi bypaseando el ORM; metavariable-regex excluye solo literal completo; ejecucion normal."
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - patterns:

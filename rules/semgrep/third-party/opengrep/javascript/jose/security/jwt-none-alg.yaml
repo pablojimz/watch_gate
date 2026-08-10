@@ -34,6 +34,7 @@ rules:
     exploitability_score: 80
     risk_score: 95
     risk_justification: Uso explícito de JWK.None en verify, bypass total de firma.
+    finding_type: vulnerability
   languages:
   - javascript
   - typescript

@@ -21,6 +21,7 @@ rules:
       exploitability_score: 40
       risk_score: 64
       risk_justification: Solo detecta presencia de callAfterTransfer en transfer sin verificar orden CEI; heurística muy amplia.
+      finding_type: vulnerability
     patterns:
       - pattern-inside: |
           function transfer(...) {

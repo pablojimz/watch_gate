@@ -39,3 +39,4 @@ rules:
     exploitability_score: 100
     risk_score: 78
     risk_justification: check_origin==False global y exacto, config permanente para toda la app en cada request.
+    finding_type: vulnerability

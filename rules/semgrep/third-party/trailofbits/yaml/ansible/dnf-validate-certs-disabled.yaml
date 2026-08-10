@@ -19,6 +19,7 @@ rules:
       exploitability_score: 100
       risk_score: 94
       risk_justification: TLS no verificado en descarga dnf; mismo riesgo de sustitución de paquete vía MITM.
+      finding_type: vulnerability
     patterns:
       - pattern-inside: |
           $DNF:

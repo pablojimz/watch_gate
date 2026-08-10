@@ -38,3 +38,4 @@ rules:
     exploitability_score: 40
     risk_score: 42
     risk_justification: Marca $host y $http_host igual; $host es variable resuelta segura de nginx, heurística imprecisa.
+    finding_type: vulnerability

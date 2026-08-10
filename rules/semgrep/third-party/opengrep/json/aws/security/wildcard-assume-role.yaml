@@ -32,5 +32,6 @@ rules:
     exploitability_score: 100
     risk_score: 88
     risk_justification: AssumeRole con Principal AWS:*, control total del rol por cualquier cuenta; no verifica Condition/ExternalId mitigante.
+    finding_type: vulnerability
   languages: [json]
   severity: ERROR

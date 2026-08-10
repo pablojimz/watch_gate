@@ -23,6 +23,7 @@ rules:
       exploitability_score: 80
       risk_score: 72
       risk_justification: "Interpolacion en metodos raw de ActiveRecord permite SQLi; deteccion sintactica sin taint tracking; ejecucion normal."
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern: $MODEL.where("...#{$X}...")

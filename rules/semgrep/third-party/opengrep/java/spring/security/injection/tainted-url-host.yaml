@@ -38,6 +38,7 @@ rules:
     exploitability_score: 80
     risk_score: 78
     risk_justification: SSRF via host construido con formato; taint real con anotaciones Spring.
+    finding_type: vulnerability
   mode: taint
   pattern-sources:
   - patterns:

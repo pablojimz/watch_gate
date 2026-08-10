@@ -26,6 +26,7 @@ rules:
     exploitability_score: 80
     risk_score: 52
     risk_justification: Marca cualquier implementacion custom de HostnameVerifier/TrustStrategy sin comprobar si valida correctamente; uso legitimo posible.
+    finding_type: vulnerability
   languages: [java]
   pattern-either:
   - pattern: |

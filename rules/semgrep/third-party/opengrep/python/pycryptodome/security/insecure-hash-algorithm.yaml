@@ -29,6 +29,7 @@ rules:
     exploitability_score: 80
     risk_score: 66
     risk_justification: Crypto/Cryptodome.Hash.SHA.new (SHA1) exacto; librería dedicada a crypto.
+    finding_type: vulnerability
   severity: WARNING
   languages:
   - python

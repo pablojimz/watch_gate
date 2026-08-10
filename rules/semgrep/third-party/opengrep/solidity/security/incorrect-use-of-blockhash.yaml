@@ -18,6 +18,7 @@ rules:
       exploitability_score: 80
       risk_score: 72
       risk_justification: blockhash(block.number) siempre retorna 0; patrón literal exacto, fuente de aleatoriedad rota/débil.
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern: blockhash(block.number)

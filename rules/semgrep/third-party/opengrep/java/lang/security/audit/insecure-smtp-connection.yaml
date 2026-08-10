@@ -21,6 +21,7 @@ rules:
     exploitability_score: 40
     risk_score: 62
     risk_justification: API exacta sin verificacion SSL; requiere atacante en posicion de red (MITM).
+    finding_type: vulnerability
   message: >-
     Insecure SMTP connection detected. This connection will trust any SSL certificate.
     Enable certificate verification by setting 'email.setSSLCheckServerIdentity(true)'.

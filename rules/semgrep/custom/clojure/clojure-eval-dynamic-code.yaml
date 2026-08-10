@@ -22,6 +22,7 @@ rules:
       exploitability_score: 80
       risk_score: 83
       risk_justification: "eval sobre forma no literal permite RCE en la JVM; excluye solo formas citadas literales, sin verificar origen; ejecucion normal."
+      finding_type: vulnerability
     patterns:
       - pattern: (eval $FORM)
       - pattern-not: (eval '$LITERAL)

@@ -32,6 +32,7 @@ rules:
     exploitability_score: 80
     risk_score: 78
     risk_justification: Taint event->knex raw/whereRaw, sink específico de SQL crudo.
+    finding_type: vulnerability
   languages:
   - javascript
   - typescript

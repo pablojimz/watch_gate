@@ -37,3 +37,4 @@ rules:
     exploitability_score: 100
     risk_score: 78
     risk_justification: Policy TLS insegura explicita en dominio Elasticsearch; match literal exacto.
+    finding_type: vulnerability

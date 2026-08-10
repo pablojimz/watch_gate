@@ -30,6 +30,7 @@ rules:
       exploitability_score: 80
       risk_score: 72
       risk_justification: Metodo exacto DigestUtils.getMd5Digest, sin ambiguedad.
+      finding_type: vulnerability
     patterns:
       - pattern: |
           $DU.$GET_ALGO().digest(...)

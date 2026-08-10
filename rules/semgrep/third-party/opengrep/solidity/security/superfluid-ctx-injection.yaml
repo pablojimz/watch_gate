@@ -20,6 +20,7 @@ rules:
       exploitability_score: 80
       risk_score: 89
       risk_justification: decodeCtx sin isCtxValid previo; permite impersonar cuentas vía calldata, incidente real de gran pérdida.
+      finding_type: vulnerability
     patterns:
       - pattern: $T.decodeCtx(ctx);
       - pattern-not-inside: |

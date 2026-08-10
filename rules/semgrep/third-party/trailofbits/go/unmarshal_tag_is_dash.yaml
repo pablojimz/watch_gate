@@ -19,6 +19,7 @@ rules:
       exploitability_score: 80
       risk_score: 72
       risk_justification: Tag mal formado permite decodificar campo que se creía excluido; puede exponer asignación no intencionada.
+      finding_type: vulnerability
     patterns:
       - pattern: |
           type $T1 struct {

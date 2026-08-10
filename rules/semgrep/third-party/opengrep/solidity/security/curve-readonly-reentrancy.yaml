@@ -19,6 +19,7 @@ rules:
       exploitability_score: 40
       risk_score: 73
       risk_justification: get_virtual_price sin guard; clase de bug con exploits reales documentados, requiere reentrada orquestada.
+      finding_type: vulnerability
     patterns:
       - pattern: |
           $POOL.get_virtual_price()

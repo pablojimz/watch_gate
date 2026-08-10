@@ -23,6 +23,7 @@ rules:
       exploitability_score: 40
       risk_score: 42
       risk_justification: Resta de punteros para tamaño; patrón muy común y a menudo válido dentro del mismo array, requiere chunks distintos.
+      finding_type: vulnerability
     message: >-
       The software subtracts one pointer from another in order to determine
       size, but this calculation can be incorrect if the pointers do not

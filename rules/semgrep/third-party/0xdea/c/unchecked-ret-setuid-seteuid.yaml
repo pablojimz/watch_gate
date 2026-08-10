@@ -25,6 +25,7 @@ rules:
       exploitability_score: 40
       risk_score: 62
       risk_justification: setuid/seteuid sin comprobar retorno; retención de privilegios si falla el drop, requiere fallo real.
+      finding_type: vulnerability
     message: >-
       The software does not check the return value from a method or
       function, which can prevent it from detecting unexpected states and

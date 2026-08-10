@@ -34,5 +34,6 @@ rules:
     exploitability_score: 100
     risk_score: 100
     risk_justification: hostPath a /var/run/docker.sock literal; control root equivalente sobre el host, activo en cada despliegue del pod.
+    finding_type: vulnerability
   languages: [yaml]
   severity: WARNING

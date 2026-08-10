@@ -21,6 +21,7 @@ rules:
       exploitability_score: 40
       risk_score: 73
       risk_justification: torch.load/save con pickle (RCE en load); buenas exclusiones mezclando save/load de distinto riesgo.
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern: torch.save(...)

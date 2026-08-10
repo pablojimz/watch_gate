@@ -21,4 +21,5 @@ rules:
       exploitability_score: 40
       risk_score: 64
       risk_justification: Solo detecta el import, no el uso real de deserialización insegura; heurística muy amplia, confianza baja del propio autor.
+      finding_type: vulnerability
     pattern: import torch.package

@@ -23,6 +23,7 @@ rules:
       exploitability_score: 80
       risk_score: 61
       risk_justification: Comparación siempre falsa/verdadera en tipo unsigned; bug lógico sin vía de explotación, patrón exacto.
+      finding_type: vulnerability
     message: >-
       Checking if an unsigned variable is negative makes no sense and is
       usually a good indication that something is probably wrong with the

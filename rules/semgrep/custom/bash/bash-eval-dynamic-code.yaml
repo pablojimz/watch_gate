@@ -22,6 +22,7 @@ rules:
       exploitability_score: 80
       risk_score: 83
       risk_justification: "eval ejecuta codigo arbitrario; el regex solo comprueba presencia de '$', no origen del dato; se dispara en ejecucion normal."
+      finding_type: vulnerability
     patterns:
       - pattern: eval $CMD
       - metavariable-regex:

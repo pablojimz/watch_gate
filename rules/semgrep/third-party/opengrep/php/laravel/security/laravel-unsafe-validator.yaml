@@ -66,3 +66,4 @@ rules:
     exploitability_score: 80
     risk_score: 78
     risk_justification: Input de Request a Rule::unique()->ignore(); taint razonablemente preciso.
+    finding_type: vulnerability

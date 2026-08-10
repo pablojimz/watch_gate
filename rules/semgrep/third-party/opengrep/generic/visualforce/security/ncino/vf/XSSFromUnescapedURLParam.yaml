@@ -38,6 +38,7 @@ rules:
       exploitability_score: 60
       risk_score: 73
       risk_justification: XSS reflejado desde parámetro URL sin JSENCODE/escape; requiere que víctima siga enlace manipulado.
+      finding_type: vulnerability
     patterns:
       - pattern-either:
         # Cannot use full VF syntax of {!$...} because Semgrep thinks CurrentPage is a metavariable

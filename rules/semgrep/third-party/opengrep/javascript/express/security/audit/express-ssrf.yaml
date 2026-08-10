@@ -29,6 +29,7 @@ rules:
       exploitability_score: 80
       risk_score: 78
       risk_justification: Taint req.*->request lib con host/URL controlado, SSRF directo.
+      finding_type: vulnerability
     languages:
       - javascript
       - typescript

@@ -26,6 +26,7 @@ rules:
     exploitability_score: 80
     risk_score: 83
     risk_justification: Decode sin verify permite forjar JWT; falso positivo si verify ocurre en otro metodo/clase.
+    finding_type: vulnerability
   languages: [java]
   severity: WARNING
   patterns:

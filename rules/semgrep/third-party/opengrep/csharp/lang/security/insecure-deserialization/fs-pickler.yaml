@@ -26,6 +26,7 @@ rules:
     exploitability_score: 40
     risk_score: 73
     risk_justification: FsPickler deserialización insegura; solo detecta instanciación, sin taint hacia fuente externa.
+    finding_type: vulnerability
   message: >-
     The FsPickler is dangerous and is not recommended for data processing. Default configuration tend
     to insecure deserialization

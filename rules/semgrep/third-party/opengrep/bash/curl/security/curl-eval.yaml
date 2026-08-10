@@ -25,6 +25,7 @@ rules:
     exploitability_score: 40
     risk_score: 79
     risk_justification: Taint real curl->eval; requiere servidor curl comprometido/MITM.
+    finding_type: vulnerability
   mode: taint
   pattern-sources:
   - pattern: |

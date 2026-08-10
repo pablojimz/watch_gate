@@ -23,6 +23,7 @@ rules:
     exploitability_score: 80
     risk_score: 78
     risk_justification: Incluye Kernel.system/exec (RCE real) pero mezcla nombres de método que no existen bajo ese receptor.
+    finding_type: vulnerability
   message: >-
     Using user input when accessing files is potentially dangerous. A malicious actor could use this to
     modify or access files

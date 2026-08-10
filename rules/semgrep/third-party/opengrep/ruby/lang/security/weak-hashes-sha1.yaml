@@ -26,6 +26,7 @@ rules:
     exploitability_score: 80
     risk_score: 52
     risk_justification: Uso de SHA1; mismo razonamiento que MD5, uso mayoritario no relacionado con seguridad.
+    finding_type: vulnerability
   languages:
   - ruby
   severity: WARNING

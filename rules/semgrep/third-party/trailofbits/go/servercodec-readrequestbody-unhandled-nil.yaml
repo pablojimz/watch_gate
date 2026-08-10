@@ -22,6 +22,7 @@ rules:
       exploitability_score: 40
       risk_score: 39
       risk_justification: Nil-deref en implementación custom de interfaz RPC; requiere que ARG llegue nil en runtime.
+      finding_type: vulnerability
     patterns:
       - pattern: |
           func ($O *$CODEC) ReadRequestBody($ARG $TYPE) error {

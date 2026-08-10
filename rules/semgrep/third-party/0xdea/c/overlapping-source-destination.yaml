@@ -23,6 +23,7 @@ rules:
       exploitability_score: 80
       risk_score: 84
       risk_justification: src==dst (mismo metavariable) en función no memmove-safe; comportamiento indefinido garantizado por estándar C.
+      finding_type: vulnerability
     message: >-
       C standards specify that the results are undefined if a call to
       copy functions, with the exception of memmove(), would cause copying

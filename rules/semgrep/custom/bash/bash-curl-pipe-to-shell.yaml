@@ -25,6 +25,7 @@ rules:
       exploitability_score: 100
       risk_score: 100
       risk_justification: "Ejecucion de codigo no verificado descargado de red; patron inequivoco; tipico en scripts de build/instalacion que corren solos."
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern: curl ... | sh

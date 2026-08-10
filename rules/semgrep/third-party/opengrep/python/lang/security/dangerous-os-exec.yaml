@@ -160,5 +160,6 @@ rules:
     exploitability_score: 80
     risk_score: 83
     risk_justification: Taint multi-framework (flask/DRF/django/BaseHTTPRequestHandler/pyramid)->os.exec*; RCE si la fuente request es real.
+    finding_type: vulnerability
   languages: [python]
   severity: ERROR

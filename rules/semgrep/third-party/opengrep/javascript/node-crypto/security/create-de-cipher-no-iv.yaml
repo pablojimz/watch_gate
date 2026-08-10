@@ -24,6 +24,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: createCipher/createDecipher deprecados, IV derivado débil, llamada exacta.
+    finding_type: vulnerability
   languages:
   - javascript
   - typescript

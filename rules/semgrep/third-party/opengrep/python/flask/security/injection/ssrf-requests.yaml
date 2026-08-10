@@ -26,6 +26,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: Taint request->requests.*; SSRF, no aísla si el dato tainted es la URL u otro parámetro.
+    finding_type: vulnerability
   pattern-either:
   - patterns:
           # Written this way so that Semgrep only matches the requests call,

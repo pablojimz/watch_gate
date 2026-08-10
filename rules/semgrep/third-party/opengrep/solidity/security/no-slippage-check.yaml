@@ -18,6 +18,7 @@ rules:
       exploitability_score: 80
       risk_score: 78
       risk_justification: Swap Uniswap V2/V3 con amountOutMin en 0/max; permite sandwich/front-running, firmas de función precisas.
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern: $X.swapExactTokensForTokens($A, $LIMIT, $B, $C, $D)

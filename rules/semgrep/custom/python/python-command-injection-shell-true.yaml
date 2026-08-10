@@ -24,6 +24,7 @@ rules:
       exploitability_score: 80
       risk_score: 83
       risk_justification: "subprocess con shell=True y comando no literal permite inyeccion de comandos; sin taint tracking, solo excluye literal; ejecucion normal."
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern: subprocess.$FUNC($CMD, ..., shell=True, ...)

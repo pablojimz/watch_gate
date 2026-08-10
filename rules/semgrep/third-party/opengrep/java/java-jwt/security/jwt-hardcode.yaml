@@ -30,6 +30,7 @@ rules:
     exploitability_score: 100
     risk_score: 89
     risk_justification: Secreto HMAC literal sin ambiguedad; expuesto en cada build del codigo fuente.
+    finding_type: vulnerability
   languages: [java]
   severity: WARNING
   patterns:

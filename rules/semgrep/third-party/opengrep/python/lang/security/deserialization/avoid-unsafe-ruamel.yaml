@@ -23,6 +23,7 @@ rules:
     exploitability_score: 80
     risk_score: 95
     risk_justification: "FALTA DATO: no se confirma que después se cargue YAML no confiable; asumo que sí (E alto). typ='unsafe'/'base' es detección exacta sin uso seguro."
+    finding_type: vulnerability
   languages:
   - python
   message: >-

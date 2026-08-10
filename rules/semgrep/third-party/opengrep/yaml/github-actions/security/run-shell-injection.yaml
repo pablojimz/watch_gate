@@ -27,6 +27,7 @@ rules:
     exploitability_score: 80
     risk_score: 95
     risk_justification: Contexto github no confiable interpolado directamente en run:; command injection en runner, patron muy documentado.
+    finding_type: vulnerability
   patterns:
   - pattern-inside: 'steps: [...]'
   - pattern-inside: |

@@ -1,0 +1,15 @@
+symfony/console
+symfony/http-foundation
+laravel/framework
+guzzlehttp/guzzle
+doctrine/orm
+monolog/monolog
+phpunit/phpunit
+nesbot/carbon
+psr/log
+psr/container
+vlucas/phpdotenv
+ramsey/uuid
+league/flysystem
+nikic/php-parser
+composer/composer

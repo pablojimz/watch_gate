@@ -29,6 +29,7 @@ rules:
       exploitability_score: 80
       risk_score: 78
       risk_justification: Taint real anotaciones Spring hacia concatenacion SQL con exclusion de logging.
+      finding_type: vulnerability
     options:
       taint_assume_safe_numbers: true
       taint_assume_safe_booleans: true

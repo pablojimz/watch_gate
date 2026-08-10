@@ -19,6 +19,7 @@ rules:
       exploitability_score: 100
       risk_score: 78
       risk_justification: Verificación TLS de registry deshabilitada; literal exacto, config de infra siempre activa.
+      finding_type: vulnerability
     patterns:
       - pattern-inside: |
           task "..." {

@@ -28,6 +28,7 @@ rules:
       exploitability_score: 80
       risk_score: 74
       risk_justification: "FALTA DATO: RCE total en Log4j <2.17.1 (Log4Shell) vs. solo log injection si esta parcheado; se asume conservador S=100 (alternativa si esta parcheado: S=25, riesgo~36). Patron muy limitado, LOW ya en yaml; se activa en ejecucion normal al loguear la cabecera."
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern: logger.info($REQ.getHeader(...))

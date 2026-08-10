@@ -38,6 +38,7 @@ rules:
     exploitability_score: 80
     risk_score: 60
     risk_justification: hashlib.md5 excluyendo usedforsecurity=False; MD5 vía hashlib tiene usos legítimos no criptográficos frecuentes.
+    finding_type: vulnerability
   severity: WARNING
   languages:
   - python

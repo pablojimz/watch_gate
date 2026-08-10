@@ -23,6 +23,7 @@ rules:
       exploitability_score: 100
       risk_score: 66
       risk_justification: "Cifrado/validacion de certificado desactivados permiten MITM sobre trafico de BD (candado roto/TLS apagado); dos regex razonablemente precisas sobre parametros conocidos (MEDIUM); activo desde el despliegue, sin condicion adicional."
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern-regex: (?i)Encrypt\s*=\s*false

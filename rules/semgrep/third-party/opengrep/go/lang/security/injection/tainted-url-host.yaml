@@ -29,6 +29,7 @@ rules:
       exploitability_score: 80
       risk_score: 78
       risk_justification: Taint request hasta URL de peticion saliente (Get/Post/NewRequest); SSRF con logica CLEAN para excluir concatenaciones seguras.
+      finding_type: vulnerability
     mode: taint
     pattern-sources:
       - label: INPUT

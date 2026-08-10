@@ -26,6 +26,7 @@ rules:
       exploitability_score: 80
       risk_score: 63
       risk_justification: Fuente incluye cualquier parámetro de función ($ARG) como taint source, heurística muy amplia; sinks y sanitizers sí son específicos.
+      finding_type: vulnerability
     mode: taint
     pattern-sources:
       - pattern: |

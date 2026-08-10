@@ -20,6 +20,7 @@ rules:
     exploitability_score: 40
     risk_score: 62
     risk_justification: grpc.WithInsecure() exacto, canal sin cifrar; requiere atacante en posicion de red (MITM).
+    finding_type: vulnerability
   message: >-
     Found an insecure gRPC connection using 'grpc.WithInsecure()'. This creates a
     connection without encryption to a gRPC

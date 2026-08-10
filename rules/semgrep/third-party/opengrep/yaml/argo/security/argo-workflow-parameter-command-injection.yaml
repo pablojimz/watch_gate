@@ -25,6 +25,7 @@ rules:
       exploitability_score: 40
       risk_score: 79
       risk_justification: Parametro Argo interpolado en script here-doc ejecutado por sh/python; command injection, requiere que el parametro sea controlado por atacante.
+      finding_type: vulnerability
     severity: ERROR
     patterns:
       - pattern-inside: |

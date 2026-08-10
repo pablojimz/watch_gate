@@ -112,5 +112,6 @@ rules:
     exploitability_score: 40
     risk_score: 73
     risk_justification: Taint env/argv->os.spawn*; RCE, misma reserva sobre el origen del dato.
+    finding_type: vulnerability
   languages: [python]
   severity: ERROR

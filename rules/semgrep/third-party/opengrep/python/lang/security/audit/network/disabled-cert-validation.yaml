@@ -35,5 +35,6 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: cert_reqs=NONE/OPTIONAL exacto; deshabilita validación TLS, posible MITM, sin caso de uso seguro.
+    finding_type: vulnerability
   languages: [python]
   severity: ERROR

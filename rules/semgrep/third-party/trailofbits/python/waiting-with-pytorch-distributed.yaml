@@ -20,6 +20,7 @@ rules:
       exploitability_score: 80
       risk_score: 45
       risk_justification: isend/irecv sin wait() es undefined behavior interno en entrenamiento distribuido; no explotable por atacante externo.
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern: $REQ = torch.distributed.irecv(...)
