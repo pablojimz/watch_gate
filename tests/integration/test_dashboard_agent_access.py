@@ -55,7 +55,9 @@ def app_and_key(monkeypatch: pytest.MonkeyPatch, tmp_path) -> Iterator[tuple]:  
     yield app, raw_token
 
 
-def _seed_score(app, tmp_path, *, repo: str, score: int, semaforo: str) -> None:
+def _seed_score(
+    app, tmp_path, *, repo: str, score: int, semaforo: str, user_login: str = "alice"
+) -> None:
     import os
 
     from watchgate.core.models import AggregatedResult, LayerResult
@@ -76,6 +78,8 @@ def _seed_score(app, tmp_path, *, repo: str, score: int, semaforo: str) -> None:
     )
     with database.db_session() as conn:
         database.insert_aggregated(conn, result, author_login="octocat")
+        if user_login:
+            database.upsert_role(conn, user_login, repo, "revisor")
 
 
 def test_agent_access_requires_a_valid_api_key(app_and_key) -> None:
@@ -93,6 +97,19 @@ def test_agent_access_rejects_garbage_bearer_token(app_and_key) -> None:
             headers={"Authorization": "Bearer wg_live_no-existe"},
         )
     assert resp.status_code == 401
+
+
+def test_agent_access_denied_without_repo_role(app_and_key, tmp_path) -> None:
+    app, raw_token = app_and_key
+    _seed_score(app, tmp_path, repo="acme/secret-repo", score=80, semaforo="rojo", user_login="")
+
+    with TestClient(app) as client:
+        resp = client.get(
+            "/api/agent-access/repos/acme%2Fsecret-repo/scores",
+            headers={"Authorization": f"Bearer {raw_token}"},
+        )
+    assert resp.status_code == 403
+    assert "Permiso denegado" in resp.json()["detail"]
 
 
 def test_repo_score_history_via_api_key_returns_real_data(app_and_key, tmp_path) -> None:

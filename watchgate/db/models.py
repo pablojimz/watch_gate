@@ -93,13 +93,3 @@ class PRScore(SQLModel, table=True):
     layer_results_json: str
     weights_used_json: str
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC), index=True)
-
-
-class RepoRole(SQLModel, table=True):
-    """Asignación de rol por usuario y repositorio."""
-
-    __tablename__ = "repo_roles"
-
-    user_login: str = Field(primary_key=True)
-    repo: str = Field(primary_key=True)
-    role: str = Field(default="revisor")
