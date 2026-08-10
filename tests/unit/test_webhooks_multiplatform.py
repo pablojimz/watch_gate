@@ -95,3 +95,31 @@ def test_bitbucket_webhook_no_secret_fails_closed(api_client):
             "/api/v1/webhooks/bitbucket", content=body_bytes, headers=headers
         )
         assert response.status_code == 503
+
+
+def test_gitlab_and_bitbucket_webhook_ignored_and_malformed_events(api_client):
+    secret = "secret123"
+    headers_gitlab = {
+        "X-Gitlab-Event": "Push Hook",
+        "X-Gitlab-Token": secret,
+    }
+
+    with patch.dict(os.environ, {"GITLAB_WEBHOOK_SECRET": secret}):
+        resp = api_client.post(
+            "/api/v1/webhooks/gitlab", headers=headers_gitlab, content=b"invalid-json"
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "ignored"
+
+    computed_sig = hmac.new(secret.encode("utf-8"), b"invalid-json", digestmod="sha256").hexdigest()
+    headers_bitbucket = {
+        "X-Event-Key": "repo:push",
+        "X-Hub-Signature": f"sha256={computed_sig}",
+        "Content-Type": "application/json",
+    }
+    with patch.dict(os.environ, {"BITBUCKET_WEBHOOK_SECRET": secret}):
+        resp_bb = api_client.post(
+            "/api/v1/webhooks/bitbucket", headers=headers_bitbucket, content=b"invalid-json"
+        )
+        assert resp_bb.status_code == 200
+        assert resp_bb.json()["status"] == "ignored"
