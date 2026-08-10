@@ -9,9 +9,12 @@ import sqlite3
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import final
+from typing import Any, final
 
-import tiktoken
+try:
+    import tiktoken
+except ImportError:
+    tiktoken = None
 
 from watchgate.core.layers._semantic.client import SemanticOutput
 from watchgate.core.models import FileChange, LayerResult, NormalizedDiff
@@ -48,14 +51,12 @@ _encoder: tiktoken.Encoding | None = None
 _encoder_load_failed = False
 
 
-def _get_encoder() -> tiktoken.Encoding | None:
-    """`None` si tiktoken no pudo cargar el encoding (p. ej. sin red en el
-    primer uso -- descarga el fichero de encoding la primera vez y lo
-    cachea localmente después). No relanza: quien llama cae al heurístico
-    de caracteres en vez de que un problema de red tumbe el análisis
-    entero por un detalle de estimación de coste."""
+def _get_encoder() -> Any | None:
+    """`None` si tiktoken no está disponible o no pudo cargar el encoding."""
     global _encoder, _encoder_load_failed
-    if _encoder is not None or _encoder_load_failed:
+    if tiktoken is None or _encoder_load_failed:
+        return None
+    if _encoder is not None:
         return _encoder
     try:
         _encoder = tiktoken.get_encoding("o200k_base")
