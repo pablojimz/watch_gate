@@ -21,6 +21,7 @@ rules:
     exploitability_score: 40
     risk_score: 62
     risk_justification: El propio mensaje admite que solo servidores antiguos son vulnerables.
+    finding_type: vulnerability
   message: >-
     Older Java application servers are vulnerable to HTTP response splitting, which
     may occur if an HTTP

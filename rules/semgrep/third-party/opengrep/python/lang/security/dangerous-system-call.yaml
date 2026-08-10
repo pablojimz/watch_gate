@@ -164,5 +164,6 @@ rules:
     exploitability_score: 80
     risk_score: 83
     risk_justification: os.system/popen (incl. getattr/__import__) con dato web amplio, excluye literal.
+    finding_type: vulnerability
   languages: [python]
   severity: ERROR

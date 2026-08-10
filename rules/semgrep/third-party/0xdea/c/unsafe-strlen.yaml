@@ -23,6 +23,7 @@ rules:
       exploitability_score: 40
       risk_score: 79
       risk_justification: Resultado de strlen truncado a short; wraparound clásico, requiere cadena larga controlada externamente.
+      finding_type: vulnerability
     message: >-
       The software performs a calculation that can produce an integer
       overflow or wraparound, when the logic assumes that the resulting

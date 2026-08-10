@@ -25,6 +25,7 @@ rules:
       exploitability_score: 80
       risk_score: 78
       risk_justification: Taint request hasta http.Redirect con URL sin validar contra dominio permitido; open redirect.
+      finding_type: vulnerability
     mode: taint
     pattern-sources:
       - label: INPUT

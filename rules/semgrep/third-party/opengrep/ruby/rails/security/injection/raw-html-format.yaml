@@ -34,6 +34,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: XSS por HTML manual; fuente amplia (params/request completos) y heurística de regex de etiqueta.
+    finding_type: vulnerability
   mode: taint
   pattern-sanitizers:
   - pattern-either:

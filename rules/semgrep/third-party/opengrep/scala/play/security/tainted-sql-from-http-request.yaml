@@ -34,6 +34,7 @@ rules:
     exploitability_score: 80
     risk_score: 78
     risk_justification: SQLi taint real desde Request de Play hacia concatenación SQL; atacante envía request directamente.
+    finding_type: vulnerability
   pattern-sources:
   - patterns:
     - pattern-either:

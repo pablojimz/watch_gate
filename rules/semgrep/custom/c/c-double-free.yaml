@@ -23,6 +23,7 @@ rules:
       exploitability_score: 80
       risk_score: 83
       risk_justification: "Doble free corrompe el heap y puede llevar a RCE; deteccion puramente textual sin dataflow real; ejecucion normal."
+      finding_type: vulnerability
     patterns:
       - pattern: |
           free($PTR);

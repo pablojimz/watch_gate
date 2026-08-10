@@ -35,6 +35,7 @@ rules:
     exploitability_score: 80
     risk_score: 95
     risk_justification: Campos de contexto github no confiables interpolados en script de github-script; code injection bien documentado y explotable por cualquier issue/PR externo.
+    finding_type: vulnerability
   patterns:
   - pattern-inside: 'steps: [...]'
   - pattern-inside: |

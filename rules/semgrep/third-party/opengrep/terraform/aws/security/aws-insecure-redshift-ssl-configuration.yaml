@@ -48,5 +48,6 @@ rules:
     exploitability_score: 100
     risk_score: 72
     risk_justification: require_ssl no forzado en grupo de parametros Redshift; chequeo bastante preciso.
+    finding_type: vulnerability
   languages: [hcl]
   severity: WARNING

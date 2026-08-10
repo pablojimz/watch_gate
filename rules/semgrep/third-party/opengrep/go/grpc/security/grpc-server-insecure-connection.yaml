@@ -20,6 +20,7 @@ rules:
     exploitability_score: 40
     risk_score: 50
     risk_justification: Servidor gRPC sin Creds; podria dar FP si TLS se aplica a nivel de listener/net.Conn en vez de grpc.Creds; requiere MITM.
+    finding_type: vulnerability
   message: >-
     Found an insecure gRPC server without 'grpc.Creds()' or options with credentials.
     This allows for a connection without

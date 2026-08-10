@@ -30,6 +30,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: ARC4 detectado por regex exacto sobre nombre de algoritmo, cifrado roto conocido.
+    finding_type: vulnerability
   severity: WARNING
   languages:
   - python

@@ -38,3 +38,4 @@ rules:
     exploitability_score: 100
     risk_score: 66
     risk_justification: backup_retention_period=0; afecta resiliencia/DR, no confidencialidad, literal exacto.
+    finding_type: vulnerability

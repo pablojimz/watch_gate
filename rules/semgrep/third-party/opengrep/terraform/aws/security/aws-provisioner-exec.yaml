@@ -44,3 +44,4 @@ rules:
     exploitability_score: 80
     risk_score: 49
     risk_justification: Uso de provisioner remote/local-exec; feature legitima, sin verificar entrada no confiable.
+    finding_type: vulnerability

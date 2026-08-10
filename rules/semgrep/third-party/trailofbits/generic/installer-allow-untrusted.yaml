@@ -18,4 +18,5 @@ rules:
       exploitability_score: 80
       risk_score: 89
       risk_justification: 'FALTA DATO: idem ejecución, conservador=80. Instala paquete sin verificar firma y ejecuta scripts con privilegios; requiere fuente manipulada (MITM/supply chain).'
+      finding_type: vulnerability
     pattern: installer ... -allowUntrusted

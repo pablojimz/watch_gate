@@ -25,6 +25,7 @@ rules:
     exploitability_score: 80
     risk_score: 95
     risk_justification: Input de superglobales a exec/system/shell_exec; sinks exactos, sanitizador explícito.
+    finding_type: vulnerability
   mode: taint
   pattern-sources:
   - patterns:

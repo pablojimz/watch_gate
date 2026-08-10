@@ -23,6 +23,7 @@ rules:
     exploitability_score: 80
     risk_score: 89
     risk_justification: Taint req.*->vm2 run, sandbox con escapes conocidos, code injection.
+    finding_type: vulnerability
   languages:
   - javascript
   - typescript

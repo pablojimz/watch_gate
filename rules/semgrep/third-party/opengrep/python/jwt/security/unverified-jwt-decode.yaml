@@ -47,6 +47,7 @@ rules:
     exploitability_score: 80
     risk_score: 95
     risk_justification: verify_signature=False literal exacto; bypass de verificación JWT equivalente a bypass de autenticación.
+    finding_type: vulnerability
   fix: |
     True
   severity: ERROR

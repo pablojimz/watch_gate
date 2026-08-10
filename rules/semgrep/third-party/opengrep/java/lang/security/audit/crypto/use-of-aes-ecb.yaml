@@ -25,6 +25,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: Regex AES/ECB literal exacta.
+    finding_type: vulnerability
   message: >-
     Use of AES with ECB mode detected. ECB doesn't provide message confidentiality and  is not semantically secure so should not be used.
     Instead, use a strong, secure cipher: Cipher.getInstance("AES/CBC/PKCS7PADDING").

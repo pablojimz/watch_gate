@@ -25,5 +25,6 @@ rules:
       exploitability_score: 80
       risk_score: 74
       risk_justification: "Overflow en malloc(a*b) puede derivar en heap overflow y RCE; patron muy amplio sin distinguir constantes seguras (LOW ya en yaml); ejecucion normal."
+      finding_type: vulnerability
     patterns:
       - pattern: malloc($A * $B)

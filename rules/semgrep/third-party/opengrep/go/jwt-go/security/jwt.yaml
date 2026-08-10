@@ -32,6 +32,7 @@ rules:
     exploitability_score: 100
     risk_score: 89
     risk_justification: Literal string en []byte(...) usado como clave de firma JWT; credencial hardcodeada, expuesta en el codigo fuente.
+    finding_type: vulnerability
   severity: WARNING
   languages: [go]
   mode: taint

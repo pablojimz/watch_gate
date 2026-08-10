@@ -36,6 +36,7 @@ rules:
     exploitability_score: 80
     risk_score: 66
     risk_justification: Falta flag Secure en cookie de sesion; expone la cookie en HTTP plano.
+    finding_type: vulnerability
   fix-regex:
     regex: (Secure\s*:\s+)false
     replacement: \1true

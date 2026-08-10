@@ -22,6 +22,7 @@ rules:
       exploitability_score: 40
       risk_score: 51
       risk_justification: Reconocimiento de hook marshal_load; requiere Marshal.load sobre dato no confiable en otra parte del código.
+      finding_type: vulnerability
     patterns:
       - pattern-inside: |
           class $CLS

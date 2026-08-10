@@ -23,6 +23,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: Nonce GCM construido desde literal string, deteccion inequivoca.
+    finding_type: vulnerability
   languages:
   - java
   message: 'GCM IV/nonce is reused: encryption can be totally useless'

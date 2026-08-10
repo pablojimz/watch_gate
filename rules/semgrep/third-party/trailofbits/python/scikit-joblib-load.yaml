@@ -22,6 +22,7 @@ rules:
       exploitability_score: 40
       risk_score: 73
       risk_justification: joblib.load usa pickle (RCE); excluye solo literal, requiere archivo no confiable.
+      finding_type: vulnerability
     patterns:
       - pattern: joblib.load(...)
       - pattern-not: joblib.load("...")

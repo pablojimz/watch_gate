@@ -35,6 +35,7 @@ rules:
     exploitability_score: 100
     risk_score: 83
     risk_justification: Taint de literal string hacia sign/verify como secreto, expuesto en código.
+    finding_type: vulnerability
   languages:
   - javascript
   - typescript

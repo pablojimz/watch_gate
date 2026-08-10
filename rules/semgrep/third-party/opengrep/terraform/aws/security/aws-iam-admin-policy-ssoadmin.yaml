@@ -45,5 +45,6 @@ rules:
     exploitability_score: 100
     risk_score: 83
     risk_justification: Policy de SSO Admin con Action=* Resource=*; sobre-privilegio severo si se asigna.
+    finding_type: vulnerability
   languages: [hcl]
   severity: ERROR

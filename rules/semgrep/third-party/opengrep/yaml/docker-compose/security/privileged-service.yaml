@@ -43,6 +43,7 @@ rules:
     exploitability_score: 100
     risk_score: 78
     risk_justification: privileged:true literal en servicio docker-compose; equivalente a root en el host, config activa en cada despliegue.
+    finding_type: vulnerability
   languages:
   - yaml
   severity: WARNING

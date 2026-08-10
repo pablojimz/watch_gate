@@ -22,6 +22,7 @@ rules:
     exploitability_score: 80
     risk_score: 60
     risk_justification: Debilita entropía de token vía base_convert; taint desde funciones hash/random especificas.
+    finding_type: vulnerability
   languages: [php]
   severity: WARNING
   mode: taint

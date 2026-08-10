@@ -61,3 +61,4 @@ rules:
     exploitability_score: 80
     risk_score: 83
     risk_justification: Taint request directo a filepath/path.Clean(), que no previene traversal; no confirma que el resultado llegue a lectura de archivo.
+    finding_type: vulnerability

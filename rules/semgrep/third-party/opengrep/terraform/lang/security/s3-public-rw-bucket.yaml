@@ -28,3 +28,4 @@ rules:
     exploitability_score: 100
     risk_score: 100
     risk_justification: acl=public-read-write; lectura/escritura arbitraria publica del bucket, literal exacto sin ambiguedad.
+    finding_type: vulnerability

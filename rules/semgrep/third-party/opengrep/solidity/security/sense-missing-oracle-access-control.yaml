@@ -19,6 +19,7 @@ rules:
       exploitability_score: 80
       risk_score: 89
       risk_justification: _updateOracle sin restricción de acceso; permite manipular oráculo crítico, incidente real citado.
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern-inside: |

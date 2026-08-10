@@ -33,6 +33,7 @@ rules:
     exploitability_score: 80
     risk_score: 66
     risk_justification: hazmat.hashes.MD5 exacto; API dedicada a crypto, poco uso no-seguridad frente a hashlib genérico.
+    finding_type: vulnerability
   severity: WARNING
   languages:
   - python

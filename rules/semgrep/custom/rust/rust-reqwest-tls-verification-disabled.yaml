@@ -23,6 +23,7 @@ rules:
       exploitability_score: 80
       risk_score: 72
       risk_justification: "Verificacion de certificado/hostname desactivada permite MITM (candado roto/TLS apagado); metodo explicito 'danger_*', inequivoco por diseno de la propia API (HIGH); ejecucion normal."
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern: $BUILDER.danger_accept_invalid_certs(true)

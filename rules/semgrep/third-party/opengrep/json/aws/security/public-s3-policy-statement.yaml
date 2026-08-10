@@ -33,6 +33,7 @@ rules:
     exploitability_score: 100
     risk_score: 77
     risk_justification: Statement Allow Principal:* sobre recurso S3; no filtra por Action, ambigüedad de alcance.
+    finding_type: vulnerability
   severity: WARNING
   languages:
   - json

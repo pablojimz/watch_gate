@@ -42,3 +42,4 @@ rules:
     exploitability_score: 80
     risk_score: 49
     risk_justification: NaN injection en cast bool/float/complex; impacto real bajo (comportamiento indefinido, no ejecución).
+    finding_type: vulnerability

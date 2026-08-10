@@ -30,6 +30,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: check_origin==False exacto, deshabilitado por vista.
+    finding_type: vulnerability
   severity: WARNING
   languages:
   - python

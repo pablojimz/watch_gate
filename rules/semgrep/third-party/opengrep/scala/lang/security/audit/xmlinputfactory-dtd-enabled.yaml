@@ -41,3 +41,4 @@ rules:
     exploitability_score: 40
     risk_score: 79
     risk_justification: XMLInputFactory sin isSupportingExternalEntities=false; requiere XML malicioso real para explotar.
+    finding_type: vulnerability

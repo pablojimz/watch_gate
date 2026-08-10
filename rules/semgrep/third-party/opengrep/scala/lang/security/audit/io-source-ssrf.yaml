@@ -46,5 +46,6 @@ rules:
     exploitability_score: 40
     risk_score: 62
     risk_justification: Source.fromURL con parámetro de función; fuente no confirmada como externa, requiere atacante controlando URL.
+    finding_type: vulnerability
   languages: [scala]
   severity: WARNING

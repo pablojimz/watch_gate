@@ -42,3 +42,4 @@ rules:
     exploitability_score: 100
     risk_score: 78
     risk_justification: Volumen EBS sin cifrar (no cifra por defecto); campo exacto ausente.
+    finding_type: vulnerability

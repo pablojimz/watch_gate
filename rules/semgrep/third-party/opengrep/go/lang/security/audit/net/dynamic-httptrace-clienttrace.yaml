@@ -31,6 +31,7 @@ rules:
     exploitability_score: 40
     risk_score: 30
     risk_justification: No encuentra definicion estatica de ClientTrace en el mismo archivo; muchos FP si esta definido en otro archivo.
+    finding_type: vulnerability
   patterns:
   - pattern-not-inside: |
       package $PACKAGE

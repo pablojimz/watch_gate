@@ -110,5 +110,6 @@ rules:
     exploitability_score: 40
     risk_score: 73
     risk_justification: Taint env/argv->os.system/popen (incluye import dinámico de os); RCE, origen dudosamente hostil.
+    finding_type: vulnerability
   languages: [python]
   severity: ERROR

@@ -44,6 +44,7 @@ rules:
     exploitability_score: 100
     risk_score: 78
     risk_justification: Debilita validación de expiración JWT; permite reuso indefinido de tokens robados.
+    finding_type: vulnerability
   languages:
   - csharp
   severity: WARNING

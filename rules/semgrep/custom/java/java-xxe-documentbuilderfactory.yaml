@@ -25,6 +25,7 @@ rules:
       exploitability_score: 80
       risk_score: 74
       risk_justification: "XXE permite lectura arbitraria de archivos/SSRF/DoS (roba dato); pattern-not-inside fragil si el setFeature esta en otro metodo (LOW); ejecucion normal al parsear XML."
+      finding_type: vulnerability
     patterns:
       - pattern: |
           $DBF = DocumentBuilderFactory.newInstance();

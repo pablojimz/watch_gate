@@ -70,3 +70,4 @@ rules:
     exploitability_score: 40
     risk_score: 53
     risk_justification: 'Fuente muy amplia: cualquier parametro String de metodo publico, no confirma alcance web.'
+    finding_type: vulnerability

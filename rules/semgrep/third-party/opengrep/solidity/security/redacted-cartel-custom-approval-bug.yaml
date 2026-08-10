@@ -19,6 +19,7 @@ rules:
       exploitability_score: 80
       risk_score: 89
       risk_justification: _approve con allowance mal referenciada en transferFrom; permite robar allowance ajena, incidente real citado.
+      finding_type: vulnerability
     patterns:
       - pattern-inside: |
           function transferFrom(...) {

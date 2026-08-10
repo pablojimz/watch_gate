@@ -51,3 +51,4 @@ rules:
     exploitability_score: 80
     risk_score: 60
     risk_justification: http.FileServer como handler expone listado de directorio; uso legitimo comun para servir assets estaticos reduce precision.
+    finding_type: vulnerability

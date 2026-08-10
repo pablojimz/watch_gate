@@ -16,6 +16,7 @@ rules:
       exploitability_score: 40
       risk_score: 62
       risk_justification: Antipatrón conocido de Go (uintptr guardado en variable); riesgo depende del timing del GC, no siempre determinista.
+      finding_type: vulnerability
     severity: WARNING
     languages: [go]
     pattern-either:

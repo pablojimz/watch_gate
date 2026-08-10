@@ -36,6 +36,7 @@ rules:
     exploitability_score: 100
     risk_score: 89
     risk_justification: Secreto JWT literal en JWT.verify/sign, expuesto permanentemente.
+    finding_type: vulnerability
   languages:
   - javascript
   - typescript

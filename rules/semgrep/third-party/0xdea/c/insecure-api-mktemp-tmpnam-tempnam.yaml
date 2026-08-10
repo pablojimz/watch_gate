@@ -24,6 +24,7 @@ rules:
       exploitability_score: 40
       risk_score: 62
       risk_justification: Funciones de temp file inherentemente inseguras (TOCTOU); requiere condición de carrera para explotar.
+      finding_type: vulnerability
     message: >-
       Creating and using insecure temporary files can leave application and
       system data vulnerable to attack.

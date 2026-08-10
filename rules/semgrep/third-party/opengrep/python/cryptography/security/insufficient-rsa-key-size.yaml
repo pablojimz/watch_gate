@@ -38,5 +38,6 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: key_size<2048 comparación numérica exacta para RSA.
+    finding_type: vulnerability
   languages: [python]
   severity: WARNING

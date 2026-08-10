@@ -52,3 +52,4 @@ rules:
     exploitability_score: 80
     risk_score: 63
     risk_justification: IDOR potencial; Model.find(params[:id]) es patrón extremadamente común y a menudo legítimo.
+    finding_type: vulnerability

@@ -34,6 +34,7 @@ rules:
     exploitability_score: 80
     risk_score: 78
     risk_justification: Taint evento Lambda hasta texto de query SQL directo; SQLi clasica sin sanitizar.
+    finding_type: vulnerability
   pattern-sinks:
   - patterns:
     - focus-metavariable: $QUERY

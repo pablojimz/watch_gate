@@ -40,5 +40,6 @@ rules:
     exploitability_score: 100
     risk_score: 78
     risk_justification: enable_https_traffic_only=false explicito; literal exacto sin ambiguedad.
+    finding_type: vulnerability
   languages: [hcl]
   severity: WARNING

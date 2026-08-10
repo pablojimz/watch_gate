@@ -25,6 +25,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: Literal RC2 exacto.
+    finding_type: vulnerability
   message: >-
     Use of RC2 was detected. RC2 is vulnerable to related-key attacks,
     and is therefore considered non-compliant. Instead, use a strong,

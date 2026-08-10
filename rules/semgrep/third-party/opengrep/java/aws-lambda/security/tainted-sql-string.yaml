@@ -35,6 +35,7 @@ rules:
     exploitability_score: 80
     risk_score: 78
     risk_justification: Taint real desde evento Lambda hacia concatenacion SQL con keywords; fuente genuinamente externa.
+    finding_type: vulnerability
   mode: taint
   pattern-sources:
   - patterns:

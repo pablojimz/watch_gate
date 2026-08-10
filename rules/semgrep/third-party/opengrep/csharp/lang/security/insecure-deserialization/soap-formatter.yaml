@@ -26,6 +26,7 @@ rules:
     exploitability_score: 40
     risk_score: 73
     risk_justification: SoapFormatter deserialización insegura; solo detecta instanciación.
+    finding_type: vulnerability
   message: >-
     The SoapFormatter type is dangerous and is not recommended for data processing. Applications should
     stop using SoapFormatter

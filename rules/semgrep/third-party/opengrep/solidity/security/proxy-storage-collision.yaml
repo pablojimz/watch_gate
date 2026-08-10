@@ -18,6 +18,7 @@ rules:
       exploitability_score: 80
       risk_score: 89
       risk_justification: State var no immutable en contrato proxy; colisión de slot puede tomar control del contrato (incidente real Audius).
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern: |

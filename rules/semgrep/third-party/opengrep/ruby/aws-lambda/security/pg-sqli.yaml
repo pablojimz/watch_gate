@@ -35,6 +35,7 @@ rules:
     exploitability_score: 80
     risk_score: 78
     risk_justification: event hacia texto de consulta en exec/exec_params/exec_prepared de pg gem.
+    finding_type: vulnerability
   pattern-sinks:
   - patterns:
     - pattern: $QUERY

@@ -42,3 +42,4 @@ rules:
     exploitability_score: 100
     risk_score: 66
     risk_justification: X-Ray tracing inactivo; observabilidad, sin via de explotacion, campo exacto.
+    finding_type: vulnerability

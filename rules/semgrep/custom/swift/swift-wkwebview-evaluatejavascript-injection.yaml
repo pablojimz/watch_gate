@@ -25,6 +25,7 @@ rules:
       exploitability_score: 80
       risk_score: 72
       risk_justification: "Interpolacion en evaluateJavaScript permite inyeccion de JS en el contexto de la pagina, exfiltracion de cookies/tokens o llamada a bridges nativos; sin taint tracking, solo excluye literal; ejecucion normal."
+      finding_type: vulnerability
     patterns:
       - pattern: $WEBVIEW.evaluateJavaScript($SCRIPT, ...)
       - pattern-not: $WEBVIEW.evaluateJavaScript("...", ...)

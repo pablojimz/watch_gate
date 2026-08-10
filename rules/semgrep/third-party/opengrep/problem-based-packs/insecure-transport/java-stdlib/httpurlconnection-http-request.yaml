@@ -26,6 +26,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: URL literal http:// abierta via openConnection, protocolo inequivoco.
+    finding_type: vulnerability
   languages:
   - java
   fix-regex:

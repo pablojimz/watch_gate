@@ -26,6 +26,7 @@ rules:
       exploitability_score: 40
       risk_score: 50
       risk_justification: malloc/calloc/strdup sin comprobar NULL; requiere fallo real de asignación de memoria.
+      finding_type: vulnerability
     message: >-
       The software does not check the return value from a method or
       function, which can prevent it from detecting unexpected states and

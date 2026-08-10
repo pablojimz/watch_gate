@@ -25,6 +25,7 @@ rules:
       exploitability_score: 80
       risk_score: 74
       risk_justification: "Path traversal permite lectura/escritura de archivos arbitrarios del sistema (roba dato); patron amplio sin verificar validacion posterior (LOW); ejecucion normal."
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern: File.ReadAllText(Path.Combine($BASE, $SEGMENT))

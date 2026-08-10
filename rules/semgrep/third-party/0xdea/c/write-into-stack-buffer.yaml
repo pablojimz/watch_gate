@@ -23,6 +23,7 @@ rules:
       exploitability_score: 80
       risk_score: 40
       risk_justification: Enumeración amplia de escrituras a buffers de pila (subcategory audit, severity INFO); no vulnerabilidad confirmada.
+      finding_type: vulnerability
     message: >-
       The software directly writes into a stack buffer. This might lead to
       a stack-based buffer overflow.

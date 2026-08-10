@@ -35,5 +35,6 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: Open redirect vía REQUEST_URI concatenado a Location; patrón exacto y sin uso seguro.
+    finding_type: vulnerability
   languages: [php]
   severity: WARNING

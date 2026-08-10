@@ -29,6 +29,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: RSA.generate con bits<3072, comparación numérica exacta; debilita fortaleza criptográfica de la clave generada.
+    finding_type: vulnerability
   options:
     symbolic_propagation: true
   languages: [python]

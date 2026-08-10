@@ -23,6 +23,7 @@ rules:
       exploitability_score: 80
       risk_score: 72
       risk_justification: "JPQL/SQL concatenado permite inyeccion equivalente a SQLi; sin taint tracking, solo excluye literal; ejecucion normal."
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern: $EM.createQuery($JPQL)

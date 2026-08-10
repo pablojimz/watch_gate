@@ -35,3 +35,4 @@ rules:
     exploitability_score: 100
     risk_score: 66
     risk_justification: Falta retencion de logs; higiene/auditoria, sin via de explotacion directa.
+    finding_type: vulnerability

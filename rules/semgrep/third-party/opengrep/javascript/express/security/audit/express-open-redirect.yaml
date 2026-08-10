@@ -26,6 +26,7 @@ rules:
       exploitability_score: 80
       risk_score: 78
       risk_justification: Taint req.*->res.redirect, varias variantes incl. sin prefijo http.
+      finding_type: vulnerability
     languages:
       - javascript
       - typescript

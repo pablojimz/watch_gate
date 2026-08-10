@@ -24,6 +24,7 @@ rules:
       exploitability_score: 80
       risk_score: 40
       risk_justification: Regla de auditoría (taint) muy amplia; marca casi cualquier origin no-false/no-vacío, incluidos configs seguros.
+      finding_type: vulnerability
     mode: taint
 
     pattern-sources:

@@ -22,6 +22,7 @@ rules:
       exploitability_score: 40
       risk_score: 30
       risk_justification: Solo detecta lectura de campo Status; requiere uso posterior inseguro no verificado por el patrón.
+      finding_type: vulnerability
     patterns:
       - pattern-inside: |
           import "github.com/ethereum/go-ethereum/core/types"

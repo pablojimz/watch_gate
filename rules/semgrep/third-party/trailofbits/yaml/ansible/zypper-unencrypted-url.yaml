@@ -18,6 +18,7 @@ rules:
       exploitability_score: 100
       risk_score: 94
       risk_justification: Descarga de paquete zypper sin cifrar; MITM puede sustituir binario ejecutado como root.
+      finding_type: vulnerability
     patterns:
       - pattern-inside: |
           $ZYPPER:

@@ -26,6 +26,7 @@ rules:
     exploitability_score: 40
     risk_score: 50
     risk_justification: 'FALTA DATO: Node usa tag de 16 bytes por defecto salvo que la app trunque con datos externos; asumo escenario vulnerable (conservador).'
+    finding_type: vulnerability
   languages:
   - javascript
   - typescript

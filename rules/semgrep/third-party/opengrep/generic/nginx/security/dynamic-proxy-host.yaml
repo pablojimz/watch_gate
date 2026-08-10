@@ -35,6 +35,7 @@ rules:
     exploitability_score: 40
     risk_score: 53
     risk_justification: proxy_pass con host dinámico; heurística amplia sobre cualquier variable nginx, no distingue variables internas seguras.
+    finding_type: vulnerability
   pattern-either:
   - pattern: proxy_pass $SCHEME://$$HOST ...;
   - pattern: proxy_pass $$SCHEME://$$HOST ...;

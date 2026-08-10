@@ -71,6 +71,7 @@ rules:
     exploitability_score: 100
     risk_score: 83
     risk_justification: Wildcard Allow en policy de SQS; lectura/escritura publica de la cola.
+    finding_type: vulnerability
   languages:
   - hcl
   severity: ERROR

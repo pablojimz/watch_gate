@@ -23,6 +23,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: Net::FTP.new/open + login, clase exclusiva de protocolo ftp sin cifrar.
+    finding_type: vulnerability
   languages:
   - ruby
   pattern-either:

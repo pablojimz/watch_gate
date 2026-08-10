@@ -20,6 +20,7 @@ rules:
       exploitability_score: 40
       risk_score: 56
       risk_justification: 'FALTA DATO: no se sabe si el check de host protege una decisión de seguridad; se asume que sí. hasSuffix sin punto permite bypass de allowlist de dominio.'
+      finding_type: vulnerability
     pattern-either:
       # Pattern 1: Any .host property followed by hasSuffix
       - patterns:

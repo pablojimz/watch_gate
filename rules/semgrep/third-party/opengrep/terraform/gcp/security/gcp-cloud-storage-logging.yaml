@@ -38,3 +38,4 @@ rules:
     exploitability_score: 100
     risk_score: 66
     risk_justification: Bucket sin logging configurado; auditoria, chequeo estructural exacto.
+    finding_type: vulnerability

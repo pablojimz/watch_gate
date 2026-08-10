@@ -38,5 +38,6 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: Ausencia de secure= en cookie de autenticación; default inseguro documentado de Pyramid.
+    finding_type: vulnerability
   languages: [python]
   severity: WARNING

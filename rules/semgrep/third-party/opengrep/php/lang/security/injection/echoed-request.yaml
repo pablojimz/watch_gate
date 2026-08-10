@@ -65,3 +65,4 @@ rules:
     exploitability_score: 80
     risk_score: 78
     risk_justification: XSS reflejado; taint real desde superglobales con lista amplia de sanitizadores reconocidos.
+    finding_type: vulnerability

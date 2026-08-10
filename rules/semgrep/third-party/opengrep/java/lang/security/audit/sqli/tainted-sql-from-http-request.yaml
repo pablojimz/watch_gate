@@ -33,6 +33,7 @@ rules:
     exploitability_score: 80
     risk_score: 78
     risk_justification: 'Taint real: getters especificos de HttpServletRequest hacia sinks SQL bien definidos.'
+    finding_type: vulnerability
   languages: [java]
   mode: taint
   options:

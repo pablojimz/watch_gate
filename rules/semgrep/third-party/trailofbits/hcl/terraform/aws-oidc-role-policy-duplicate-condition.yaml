@@ -24,6 +24,7 @@ rules:
       exploitability_score: 100
       risk_score: 94
       risk_justification: Condición duplicada en policy IAM anula restricción previa; duda 75/100 según qué condición prevalece.
+      finding_type: vulnerability
     patterns:
       - pattern-inside: |
           {

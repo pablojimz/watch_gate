@@ -24,6 +24,7 @@ rules:
       exploitability_score: 100
       risk_score: 68
       risk_justification: Heurística de entropía sobre cualquier literal; secreto hardcodeado queda expuesto en fuente permanentemente.
+      finding_type: vulnerability
     message: >-
       Entropy, or randomness, is a common approach for detecting secret
       strings. If an assignment has high entropy, it might involve a

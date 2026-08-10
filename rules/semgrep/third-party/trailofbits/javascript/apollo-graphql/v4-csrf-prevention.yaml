@@ -27,6 +27,7 @@ rules:
       exploitability_score: 80
       risk_score: 84
       risk_justification: csrfPrevention puesto explícitamente a false; literal exacto sin ambigüedad ni uso seguro.
+      finding_type: vulnerability
     patterns:
       - pattern: |
           new ApolloServer({..., csrfPrevention: false, ...})

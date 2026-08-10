@@ -43,3 +43,4 @@ rules:
       exploitability_score: 100
       risk_score: 78
       risk_justification: scheme:basic literal en securityScheme OpenAPI 3.x; autenticacion debil por diseno, activa mientras la API este publicada.
+      finding_type: vulnerability

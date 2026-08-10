@@ -33,6 +33,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: Taint request->URL construida con scheme://; SSRF por construcción manual de host.
+    finding_type: vulnerability
   mode: taint
   pattern-sinks:
   - patterns:

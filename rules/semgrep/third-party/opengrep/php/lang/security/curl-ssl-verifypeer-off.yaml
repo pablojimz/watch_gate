@@ -34,5 +34,6 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: Constante 0/false/null exacta desactivando verificación TLS; sin uso seguro conocido.
+    finding_type: vulnerability
   languages: [php]
   severity: ERROR
