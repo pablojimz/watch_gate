@@ -21,12 +21,25 @@ Ambas familias de reglas vienen del MISMO repo privado de reglas
 hash con el mismo mecanismo -- ver docs/integracion_repo_reglas.md.
 
 Resolución del directorio de reglas (`_get_rules_dir`), en orden:
+0. Verificación bajo demanda contra la ÚLTIMA versión publicada
+   (`scripts/local_rules_client.get_verified_rules`), si la variable de
+   entorno RULES_REPO_TOKEN está configurada en el proceso -- ver
+   docs/integracion_repo_reglas.md §9. Desacopla "tener este checkout de
+   watch_gate actualizado" de "la capa estática usa las reglas
+   correctas": cada `analyze()` pregunta a la Releases API cuál es la
+   versión activa y descarga/verifica bajo demanda lo que le falte (con
+   caché local, así que en la práctica solo hay trabajo real de red/Git
+   cuando de verdad se publicó una versión nueva). Si este paso falla por
+   cualquier motivo (sin token, sin red, verificación fallida) se
+   registra y se cae a los pasos 1-4 SIN abortar el análisis -- nunca es
+   la única fuente de reglas disponible.
 1. Override explícito por parámetro de constructor.
 2. Variable de entorno WATCHGATE_SEMGREP_RULES_DIR.
 3. Directorio local del proyecto `rules/semgrep/` -- esta es la ruta que
    pueblan y verifican por hash .github/workflows/sync-rules.yml y
    reconcile-rules.yml (ver docs/integracion_repo_reglas.md); en este
-   propio repo SIEMPRE debería resolverse aquí.
+   propio repo SIEMPRE debería resolverse aquí (o en el paso 0, si el
+   token está disponible en el entorno).
 4. Caché local persistente en .watchgate/rules_cache/ (TTL 24h, clon
    directo de GitHub sin ninguna verificación de hash). Es un ÚLTIMO
    RECURSO pensado para un consumidor externo que instale `watchgate`
@@ -45,6 +58,7 @@ import re
 import shutil
 import stat
 import subprocess
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -221,6 +235,46 @@ def _handle_remove_read_only(func: Any, path: str, exc_info: Any) -> None:
         raise exc_info[1]
 
 
+# Nombre de la variable de entorno que autentica contra el repo privado de
+# reglas (mismo secret que usan .github/workflows/sync-rules.yml /
+# reconcile-rules.yml, ver docs/integracion_repo_reglas.md §5.2). Se
+# comprueba su presencia ANTES de intentar importar/llamar a
+# local_rules_client -- sin ella no hay forma de preguntar a la Releases
+# API, así que ni vale la pena el import.
+_RULES_REPO_TOKEN_ENV = "RULES_REPO_TOKEN"
+
+# Charset seguro para usar la versión activa ("v0.0.3") como nombre de
+# subdirectorio de la vista local de reglas verificadas -- defensivo, no
+# una comprobación de seguridad crítica (esa ya la hace
+# local_rules_client, letra a letra, sobre cada clave ANTES de tocar
+# disco/red); aquí solo evita que un valor inesperado rompa la ruta.
+_UNSAFE_VERSION_PATH_CHARS = re.compile(r"[^A-Za-z0-9_.-]")
+
+
+def _sanitize_version_for_path(version: str) -> str:
+    cleaned = _UNSAFE_VERSION_PATH_CHARS.sub("_", version.strip())
+    return cleaned or "unknown"
+
+
+def _import_local_rules_client() -> Any | None:
+    """Importa `scripts/local_rules_client.py` bajo demanda -- nunca al
+    cargar este módulo. `scripts/` no es un paquete instalado: un
+    consumidor externo que instale `watchgate` como paquete pip puede no
+    traer ese directorio, y `_get_verified_rules_dir` debe degradar a los
+    pasos existentes de `_get_rules_dir` en ese caso, sin romper el import
+    de `static_layer.py` en sí."""
+    scripts_dir = Path(__file__).resolve().parents[3] / "scripts"
+    if not (scripts_dir / "local_rules_client.py").exists():
+        return None
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    try:
+        import local_rules_client
+    except ImportError:
+        return None
+    return local_rules_client
+
+
 @register_layer
 class StaticLayer(AnalysisLayer):
     """Capa de análisis estático que ejecuta Semgrep sobre los parches modificados."""
@@ -230,15 +284,148 @@ class StaticLayer(AnalysisLayer):
     def __init__(self, rules_dir_override: str | Path | None = None) -> None:
         self.rules_dir_override = Path(rules_dir_override) if rules_dir_override else None
 
+    def _refresh_rules_view_entry(self, src: Path, dst: Path) -> None:
+        """Deja `dst` apuntando al contenido YA VERIFICADO de `src`.
+
+        Se intenta un symlink de directorio primero (barato, sin copiar
+        nada); si la plataforma/permisos no lo permiten (p. ej. Windows
+        sin "Developer Mode" ni privilegios de administrador -- el caso
+        habitual en una máquina de desarrollo), se cae a una copia real:
+        el contenido de reglas es texto plano, unos pocos MB en total, así
+        que copiar es aceptable como respaldo."""
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        if dst.is_symlink():
+            dst.unlink()
+        elif dst.is_dir():
+            shutil.rmtree(dst, onerror=_handle_remove_read_only)
+        elif dst.exists():
+            dst.unlink()
+        try:
+            os.symlink(src, dst, target_is_directory=True)
+        except OSError:
+            shutil.copytree(src, dst)
+
+    def _sync_rules_view(self, view_root: Path, rules: Any) -> None:
+        """Remapea las rutas verificadas devueltas por
+        `local_rules_client.get_verified_rules()` (que son agnósticas de
+        cualquier convención de `watch_gate`, ver docstring de ese módulo)
+        a la MISMA convención de rutas que el resto de este fichero espera
+        bajo `view_root`: `rules/semgrep/custom/<lenguaje>`,
+        `rules/semgrep/third-party/<vendor>/<carpeta>`,
+        `rules/yara/<categoria>` -- análogo al remapeo que hace
+        `sync_rules._apply_verified_content` al comitear sobre el árbol
+        git de watch_gate, pero apuntando a una caché local fuera de git."""
+        for lang, src in rules.custom.items():
+            dst = view_root / "rules" / "semgrep" / "custom" / lang
+            self._refresh_rules_view_entry(src, dst)
+        for key, src in rules.third_party.items():
+            vendor, carpeta = key.split("/", 1)
+            dst = view_root / "rules" / "semgrep" / "third-party" / vendor / carpeta
+            self._refresh_rules_view_entry(src, dst)
+        for category, src in rules.yara.items():
+            dst = view_root / "rules" / "yara" / category
+            self._refresh_rules_view_entry(src, dst)
+
+    def _get_verified_rules_dir(self) -> Path | None:
+        """Paso 0 de `_get_rules_dir`: verifica contra la ÚLTIMA versión
+        publicada del repo de reglas (`local_rules_client.get_verified_rules`,
+        catálogo completo: todos los lenguajes custom, todas las carpetas
+        third-party, todas las categorías YARA) y materializa una vista
+        local con ese contenido YA verificado -- ver docs/integracion_repo_reglas.md §9.
+
+        Nunca lanza: cualquier fallo (sin token, sin red, verificación de
+        integridad fallida) se registra y devuelve None, para que
+        `_get_rules_dir` caiga a los pasos 1-4 existentes -- este paso
+        nunca debe ser la única fuente de reglas disponible.
+
+        La vista se materializa bajo un subdirectorio con el NOMBRE de la
+        versión activa (`rules-view/<version>/...`, no `rules-view/...` a
+        secas): así, si este proceso vive más de un `analyze()` (p. ej. la
+        Engine API o el dashboard backend, de larga duración) y la versión
+        activa cambia entre dos llamadas, la ruta resuelta cambia con
+        ella, y con eso basta para que las cachés de PROCESO existentes
+        (`_yara_rules_cache`, `_semgrep_finding_type_cache`, indexadas por
+        la ruta resuelta) dejen de servir contenido de la versión anterior
+        sin tener que tocar esas cachés en sí.
+        """
+        if not os.environ.get(_RULES_REPO_TOKEN_ENV):
+            # Sin token no hay forma de preguntar a la Releases API. Es
+            # una configuración legítima (p. ej. un consumidor externo, o
+            # el workflow de análisis de PRs de este propio repo, que hoy
+            # NO recibe este secret -- solo lo reciben sync-rules.yml /
+            # reconcile-rules.yml, ver docs/integracion_repo_reglas.md §9)
+            # -- se cae en silencio a los pasos existentes.
+            return None
+
+        local_rules_client = _import_local_rules_client()
+        if local_rules_client is None:
+            return None
+
+        try:
+            rules = local_rules_client.get_verified_rules(
+                include_all_custom=True, include_all_third_party=True, include_yara=True
+            )
+        except local_rules_client.RulesClientError as exc:
+            logger.info(
+                "No se pudo verificar la versión activa de las reglas (%s); "
+                "se usa el checkout local.",
+                exc,
+            )
+            return None
+        except local_rules_client.RulesVerificationError as exc:
+            logger.error(
+                "Verificación de integridad de reglas fallida (%s); se usa el "
+                "último checkout local ya verificado.",
+                exc,
+            )
+            return None
+        except Exception as exc:  # noqa: BLE001 -- nunca debe abortar el análisis por esto
+            logger.warning(
+                "Fallo inesperado verificando la versión activa de las reglas "
+                "(%r); se usa el checkout local.",
+                exc,
+            )
+            return None
+
+        view_root = (
+            local_rules_client.repo_cache_dir().parent
+            / "rules-view"
+            / _sanitize_version_for_path(rules.version)
+        )
+        try:
+            self._sync_rules_view(view_root, rules)
+        except OSError as exc:
+            logger.warning(
+                "No se pudo materializar la vista local de reglas verificadas "
+                "(%r); se usa el checkout local.",
+                exc,
+            )
+            return None
+
+        logger.info(
+            "Capa estática usando reglas verificadas de la versión activa %s (%s).",
+            rules.version,
+            view_root,
+        )
+        return view_root
+
     def _get_rules_dir(self) -> Path | None:
         """Obtiene la ruta al directorio de reglas Semgrep con sincronización inteligente.
 
         Prioridad de resolución:
+        0. Verificación bajo demanda contra la última versión publicada
+           (ver `_get_verified_rules_dir`), si RULES_REPO_TOKEN está en el
+           entorno.
         1. Override explícito por parámetro de constructor.
         2. Variable de entorno WATCHGATE_SEMGREP_RULES_DIR.
         3. Directorio local del proyecto rules/semgrep/ si contiene reglas.
         4. Caché local persistente en .watchgate/rules_cache/ con TTL de 24h y fallback offline.
         """
+        # 0. Verificación bajo demanda contra la última versión publicada
+        verified_dir = self._get_verified_rules_dir()
+        if verified_dir is not None:
+            return verified_dir
+
         # 1. Override por constructor
         if self.rules_dir_override and self.rules_dir_override.exists():
             return self.rules_dir_override
