@@ -86,7 +86,7 @@ files = ["watchgate"]
 
 [[tool.mypy.overrides]]
 # Librerías externas sin marcador py.typed o stubs globales.
-module = ["google.*", "yaml", "chromadb", "sentence_transformers", "langchain_text_splitters.*", "anthropic", "unidiff", "unidiff.*", "argcomplete", "rich.*", "yara", "psycopg", "psycopg.*", "jose", "jose.*", "authlib.*"]
+module = ["google.*", "yaml", "chromadb", "sentence_transformers", "langchain_text_splitters.*", "anthropic", "unidiff", "unidiff.*", "argcomplete", "rich.*", "yara", "psycopg", "psycopg.*", "jose", "jose.*", "authlib.*", "tiktoken", "tiktoken.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
