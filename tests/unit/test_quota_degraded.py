@@ -248,6 +248,9 @@ def test_analyze_with_quota_closes_toctou_window_under_concurrency(monkeypatch, 
     results: list[bool] = []
     lock = threading.Lock()
 
+    target_org_id = str(org.id)
+    target_user_id = str(user.id)
+
     def worker() -> None:
         thread_session = Session(test_engine)
         quota_service = QuotaService(thread_session)
@@ -255,8 +258,8 @@ def test_analyze_with_quota_closes_toctou_window_under_concurrency(monkeypatch, 
             diff=diff,
             metadata={"pr_id": "race", "repo": "test/race"},
             config=WatchGateConfig(),
-            org_id=org.id,
-            user_id=user.id,
+            org_id=target_org_id,
+            user_id=target_user_id,
         )
         with lock:
             results.append(is_degraded)

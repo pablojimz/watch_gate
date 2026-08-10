@@ -97,6 +97,9 @@ testpaths = ["tests"]
 pythonpath = ["."]
 filterwarnings = [
     "ignore::DeprecationWarning:chromadb.*",
+    "ignore::DeprecationWarning:starlette.*",
+    "ignore::DeprecationWarning:fastapi.*",
+    "ignore::starlette.exceptions.StarletteDeprecationWarning",
     "ignore::pydantic.warnings.PydanticDeprecatedSince211",
     "ignore::pydantic.warnings.ArbitraryTypeWarning",
 ]
