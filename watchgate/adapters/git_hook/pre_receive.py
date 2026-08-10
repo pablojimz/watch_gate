@@ -19,7 +19,15 @@ from watchgate.core.pipeline import run_full_analysis
 
 NULL_SHA = "0000000000000000000000000000000000000000"
 EMPTY_TREE_SHA = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
-DEFAULT_TIMEOUT_SECONDS = 8.0
+# 8s (valor anterior) rechazaba en la práctica TODO push real con la capa
+# semántica activa: una llamada real a un LLM en la nube (Anthropic/Gemini)
+# tarda con normalidad más de 8s, y `fail_closed=True` (el default) convierte
+# ese timeout en un rechazo del push -- verificado en vivo empujando a un
+# repo bare local con el hook instalado: el push se rechazaba por timeout,
+# no por contenido. 45s da margen real sin dejar de proteger contra un
+# análisis colgado de verdad (ver test_run_pre_receive_enforces_timeout_
+# on_hung_analysis). Sigue siendo overrideable por WATCHGATE_TIMEOUT.
+DEFAULT_TIMEOUT_SECONDS = 45.0
 
 
 class PreReceiveTimeout(Exception):

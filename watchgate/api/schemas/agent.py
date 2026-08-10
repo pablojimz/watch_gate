@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -139,3 +139,21 @@ def build_agent_guidance(aggregated_result: AggregatedResult) -> AgentGuidance:
         summary_for_agent=summary,
         actionable_steps=steps,
     )
+
+
+class AgentFeedbackRequest(BaseModel):
+    """Solicitud para enviar retroalimentación sobre un análisis previo."""
+
+    score_id: int = Field(description="ID entero del registro de puntuación")
+    feedback: Literal["correcto", "falso_positivo"] = Field(
+        description="'correcto' para veredicto verificado, 'falso_positivo' para falsa alerta"
+    )
+
+
+class AgentFeedbackResponse(BaseModel):
+    """Respuesta tras confirmar la retroalimentación de un análisis."""
+
+    score_id: int
+    repo: str
+    feedback: str
+    status: str = "success"

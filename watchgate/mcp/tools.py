@@ -14,12 +14,14 @@ from watchgate.core.diffparser import parse_diff, parse_diff_from_text
 from watchgate.core.models import AggregatedResult, Finding, LayerResult
 from watchgate.core.pipeline import run_full_analysis
 from watchgate.core.rag.retriever import retrieve_relevant_context
+from watchgate.mcp.auth import open_session, resolve_mcp_identity
 from watchgate.mcp.schemas import (
     McpTextContent,
     McpToolCallResult,
     McpToolDefinition,
     McpToolParameterSchema,
 )
+from watchgate.service.quota import QuotaService
 
 TOOLS: list[McpToolDefinition] = [
     McpToolDefinition(
@@ -153,6 +155,77 @@ TOOLS: list[McpToolDefinition] = [
             required=["query"],
         ),
     ),
+    McpToolDefinition(
+        name="watchgate_submit_feedback",
+        description=(
+            "Envía la confirmación o corrección sobre la evaluación de un "
+            "análisis previo ('correcto' o 'falso_positivo') para realimentar "
+            "las métricas y la base de conocimiento RAG de la organización."
+        ),
+        inputSchema=McpToolParameterSchema(
+            type="object",
+            properties={
+                "score_id": {
+                    "type": "integer",
+                    "description": "Identificador entero del análisis en el historial.",
+                },
+                "feedback": {
+                    "type": "string",
+                    "enum": ["correcto", "falso_positivo"],
+                    "description": "'correcto' para confirmar, 'falso_positivo' para desestimar.",
+                },
+            },
+            required=["score_id", "feedback"],
+        ),
+    ),
+    McpToolDefinition(
+        name="watchgate_repo_score_history",
+        description=(
+            "Consulta el historial de análisis de riesgo de un repositorio tal como lo ve el "
+            "Dashboard (score, semáforo, desglose por capa y feedback humano de cada PR "
+            "analizado). Requiere WATCHGATE_MCP_API_KEY configurada -- sin identidad de "
+            "organización, no hay datos de dashboard que devolver. Respeta el rol del usuario "
+            "por repositorio del Dashboard (mantenedor/revisor/admin): sin rol asignado en el "
+            "repo solicitado, devuelve error de permiso denegado."
+        ),
+        inputSchema=McpToolParameterSchema(
+            type="object",
+            properties={
+                "repo": {
+                    "type": "string",
+                    "description": "Repositorio en formato 'owner/nombre'.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Número máximo de análisis a devolver (los más recientes).",
+                    "default": 20,
+                },
+            },
+            required=["repo"],
+        ),
+    ),
+    McpToolDefinition(
+        name="watchgate_org_metrics",
+        description=(
+            "Métricas agregadas de postura de seguridad tal como las ve el Dashboard: PRs "
+            "analizados, score medio, distribución de semáforos, feedback humano acumulado y "
+            "desglose por repositorio. Requiere WATCHGATE_MCP_API_KEY configurada. Sin "
+            "'repos', agrega los repositorios del Dashboard visibles para el usuario según su "
+            "rol (todos si es admin_organizacion); con 'repos', filtra a los que tenga rol "
+            "asignado."
+        ),
+        inputSchema=McpToolParameterSchema(
+            type="object",
+            properties={
+                "repos": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Repositorios a agregar ('owner/nombre'). Si se omite, todos.",
+                },
+            },
+            required=[],
+        ),
+    ),
 ]
 
 
@@ -176,6 +249,12 @@ def execute_mcp_tool(name: str, arguments: dict[str, Any] | None) -> McpToolCall
             return _handle_verify_fix(args)
         elif name == "watchgate_query_threat_kb":
             return _handle_query_threat_kb(args)
+        elif name == "watchgate_repo_score_history":
+            return _handle_repo_score_history(args)
+        elif name == "watchgate_org_metrics":
+            return _handle_org_metrics(args)
+        elif name == "watchgate_submit_feedback":
+            return _handle_submit_feedback(args)
         else:
             return McpToolCallResult(
                 content=[McpTextContent(text=f"Herramienta no encontrada: '{name}'")],
@@ -186,6 +265,38 @@ def execute_mcp_tool(name: str, arguments: dict[str, Any] | None) -> McpToolCall
             content=[McpTextContent(text=f"Error ejecutando la herramienta '{name}': {exc}")],
             isError=True,
         )
+
+
+def _run_analysis_with_optional_quota(
+    diff: Any, metadata: dict[str, Any], config: WatchGateConfig
+) -> AggregatedResult:
+    """Ejecuta el análisis real -- por `QuotaService` si `WATCHGATE_MCP_API_KEY`
+    resuelve una identidad válida (cuota mensual respetada, coste registrado,
+    `org_id` propagado al RAG distribuido, igual que la API REST de agentes),
+    o directo si no hay identidad configurada (uso local sin organización,
+    sin límites -- el comportamiento de siempre).
+
+    Hallazgo real de revisión: antes esta tool llamaba a `run_full_analysis`
+    siempre directo, sin pasar nunca por `QuotaService` -- ningún límite de
+    presupuesto mensual ni `org_id` que aislara el feedback humano del RAG
+    distribuido entre organizaciones, a diferencia de la API REST de agentes
+    (`/api/v1/agent/*`), que sí lo hacía."""
+    with open_session() as session:
+        identity = resolve_mcp_identity(session)
+        if identity is None:
+            return run_full_analysis(diff=diff, metadata=metadata, config=config)
+
+        api_key, user, org = identity
+        quota_service = QuotaService(session)
+        result, _is_degraded = quota_service.analyze_with_quota(
+            diff=diff,
+            metadata=metadata,
+            config=config,
+            org_id=org.id,
+            user_id=user.id,
+            agent_id=api_key.default_agent_name,
+        )
+        return result
 
 
 def _handle_analyze_diff(args: dict[str, Any]) -> McpToolCallResult:
@@ -202,7 +313,7 @@ def _handle_analyze_diff(args: dict[str, Any]) -> McpToolCallResult:
         head = args.get("head", "HEAD")
         diff = parse_diff(repo_path=repo_path, base_sha=base, head_sha=head)
 
-    analysis_res = run_full_analysis(diff=diff, metadata=metadata, config=config)
+    analysis_res = _run_analysis_with_optional_quota(diff, metadata, config)
     guidance = build_agent_guidance(analysis_res)
 
     output = {
@@ -322,10 +433,10 @@ def _handle_verify_fix(args: dict[str, Any]) -> McpToolCallResult:
     config = load_config()
 
     orig_diff_obj = parse_diff_from_text(diff_text=original_diff, repo_path=repo_path)
-    orig_res = run_full_analysis(diff=orig_diff_obj, metadata={}, config=config)
+    orig_res = _run_analysis_with_optional_quota(orig_diff_obj, {}, config)
 
     cand_diff_obj = parse_diff_from_text(diff_text=candidate_diff, repo_path=repo_path)
-    cand_res = run_full_analysis(diff=cand_diff_obj, metadata={}, config=config)
+    cand_res = _run_analysis_with_optional_quota(cand_diff_obj, {}, config)
 
     orig_findings: dict[str, Finding] = {}
     for layer in orig_res.layer_results.values():
@@ -365,7 +476,22 @@ def _handle_query_threat_kb(args: dict[str, Any]) -> McpToolCallResult:
     query = args.get("query", "")
     k = int(args.get("k", 3))
 
-    fragments = retrieve_relevant_context(diff_summary=query, k=k)
+    # Hallazgo real de revisión: sin `org_id`, `retrieve_relevant_context`
+    # consulta la colección de feedback humano SIN filtrar -- en RAG
+    # distribuido (`WATCHGATE_CHROMA_URL` compartido entre organizaciones),
+    # esta tool devolvía el feedback de TODAS las organizaciones mezclado,
+    # sin el aislamiento que ya tiene la API REST (`quota.py`). El corpus
+    # público (`attack_patterns`) sigue sin filtrar nunca -- es
+    # intencionalmente compartido, esto solo afecta al feedback propio.
+    with open_session() as session:
+        identity = resolve_mcp_identity(session)
+        # `.id` leído DENTRO del `with`: fuera, con la sesión ya cerrada,
+        # acceder a un atributo de un objeto ORM expirado/detached lanza
+        # `DetachedInstanceError` -- bug real que se coló aquí mismo en la
+        # primera versión de este fix, atrapado por el test de este caso.
+        org_id = identity[2].id if identity is not None else None
+
+    fragments = retrieve_relevant_context(diff_summary=query, k=k, org_id=org_id)
 
     if not fragments:
         no_frag_msg = (
@@ -386,3 +512,140 @@ def _handle_query_threat_kb(args: dict[str, Any]) -> McpToolCallResult:
         )
 
     return McpToolCallResult(content=[McpTextContent(text=json.dumps(results, indent=2))])
+
+
+_NO_MCP_IDENTITY_ERROR = (
+    "Esta herramienta necesita una organización -- configura WATCHGATE_MCP_API_KEY "
+    "con una API Key de WatchGate válida (la misma que usarías contra la Engine API) "
+    "antes de usarla."
+)
+
+
+def _handle_repo_score_history(args: dict[str, Any]) -> McpToolCallResult:
+    repo = args.get("repo")
+    limit = int(args.get("limit", 20))
+    if not repo:
+        return McpToolCallResult(
+            content=[McpTextContent(text="Falta el parámetro requerido 'repo'.")],
+            isError=True,
+        )
+
+    with open_session() as session:
+        identity = resolve_mcp_identity(session)
+        if identity is None:
+            return McpToolCallResult(
+                content=[McpTextContent(text=_NO_MCP_IDENTITY_ERROR)],
+                isError=True,
+            )
+        _key, user, _org = identity
+        user_login = user.name
+
+    from watchgate.dashboard.backend import db as dashboard_db
+
+    with dashboard_db.db_session() as conn:
+        is_admin = dashboard_db.user_is_org_admin(conn, user_login)
+        if not is_admin and dashboard_db.get_role(conn, user_login, repo) is None:
+            return McpToolCallResult(
+                content=[McpTextContent(text=f"Permiso denegado: Sin rol asignado en '{repo}'.")],
+                isError=True,
+            )
+        scores = dashboard_db.list_scores(conn, repo)
+
+    output = [s.model_dump(mode="json") for s in scores[:limit]]
+    return McpToolCallResult(content=[McpTextContent(text=json.dumps(output, indent=2))])
+
+
+def _handle_org_metrics(args: dict[str, Any]) -> McpToolCallResult:
+    requested_repos = args.get("repos")
+
+    with open_session() as session:
+        identity = resolve_mcp_identity(session)
+        if identity is None:
+            return McpToolCallResult(
+                content=[McpTextContent(text=_NO_MCP_IDENTITY_ERROR)],
+                isError=True,
+            )
+        _key, user, _org = identity
+        user_login = user.name
+
+    from watchgate.dashboard.backend import db as dashboard_db
+
+    with dashboard_db.db_session() as conn:
+        is_admin = dashboard_db.user_is_org_admin(conn, user_login)
+        if requested_repos:
+            repos = [
+                r
+                for r in requested_repos
+                if is_admin or dashboard_db.get_role(conn, user_login, r) is not None
+            ]
+        else:
+            repos = dashboard_db.list_repos_for_user(conn, user_login, is_admin=is_admin)
+        metrics = dashboard_db.compute_org_metrics(conn, repos)
+
+    return McpToolCallResult(content=[McpTextContent(text=metrics.model_dump_json(indent=2))])
+
+
+def _handle_submit_feedback(args: dict[str, Any]) -> McpToolCallResult:
+    score_id = args.get("score_id")
+    feedback = args.get("feedback")
+    if score_id is None or not feedback:
+        return McpToolCallResult(
+            content=[McpTextContent(text="Se requieren los parámetros 'score_id' y 'feedback'.")],
+            isError=True,
+        )
+
+    with open_session() as session:
+        identity = resolve_mcp_identity(session)
+        if identity is None:
+            return McpToolCallResult(
+                content=[McpTextContent(text=_NO_MCP_IDENTITY_ERROR)],
+                isError=True,
+            )
+        _user_api_key, user, _org = identity
+        user_name = str(user.name)
+
+    from watchgate.dashboard.backend import db as dashboard_db
+    from watchgate.db.repository import check_user_repo_permission
+
+    with dashboard_db.db_session() as conn:
+        existing = dashboard_db.get_score(conn, int(score_id))
+        if existing is None:
+            return McpToolCallResult(
+                content=[McpTextContent(text=f"Análisis con ID '{score_id}' no encontrado.")],
+                isError=True,
+            )
+
+        with open_session() as session:
+            has_perm = check_user_repo_permission(
+                session, user_name, existing.repo, required_role="mantenedor"
+            )
+        if not has_perm:
+            msg = (
+                f"Permiso denegado: Se requiere rol 'mantenedor' sobre el "
+                f"repositorio '{existing.repo}'."
+            )
+            return McpToolCallResult(
+                content=[McpTextContent(text=msg)],
+                isError=True,
+            )
+
+        if feedback not in ("correcto", "falso_positivo"):
+            msg_err = "El feedback debe ser 'correcto' o 'falso_positivo'."
+            return McpToolCallResult(
+                content=[McpTextContent(text=msg_err)],
+                isError=True,
+            )
+        updated = dashboard_db.set_feedback(conn, int(score_id), feedback)
+        if updated is None:
+            return McpToolCallResult(
+                content=[McpTextContent(text=f"Error actualizando feedback para ID '{score_id}'.")],
+                isError=True,
+            )
+
+    res = {
+        "status": "success",
+        "score_id": score_id,
+        "repo": existing.repo,
+        "feedback": feedback,
+    }
+    return McpToolCallResult(content=[McpTextContent(text=json.dumps(res, indent=2))])

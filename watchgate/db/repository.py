@@ -24,6 +24,59 @@ from watchgate.db.models import (
 _TOKEN_PREFIX_LIVE = "wg_live_"
 _TOKEN_PREFIX_TEST = "wg_test_"
 
+_ROLE_HIERARCHY: dict[str, int] = {
+    "revisor": 1,
+    "mantenedor": 2,
+    "admin_organizacion": 3,
+}
+
+
+def has_required_role(user_role: str | None, required_role: str) -> bool:
+    """Verifica si `user_role` cumple o supera el nivel jerárquico de `required_role`."""
+    if not user_role:
+        return False
+    user_level = _ROLE_HIERARCHY.get(user_role.lower(), 0)
+    req_level = _ROLE_HIERARCHY.get(required_role.lower(), 0)
+    return user_level >= req_level
+
+
+def check_user_repo_permission(
+    session: Session, user_login: str, repo: str, required_role: str = "revisor"
+) -> bool:
+    """Unifica la identidad y verifica el rol del usuario sobre un repositorio.
+
+    1. Comprueba si el usuario es `admin_organizacion` global en `User` o en el Dashboard.
+    2. Comprueba el rol asignado en la base de datos del Dashboard para `(user_login, repo)`.
+    """
+    if not user_login or not repo:
+        return False
+
+    norm_login = user_login.strip().lower()
+    norm_email = f"{norm_login}@watchgate.internal"
+
+    # 1. Comprobar si el usuario existe en Engine DB y es admin_organizacion global
+    stmt_user = select(User).where(
+        (func.lower(User.email) == norm_email) | (func.lower(User.name) == norm_login)
+    )
+    user_record = session.exec(stmt_user).first()
+    if user_record and user_record.role == "admin_organizacion":
+        return True
+
+    # 2. Consultar rol real en la base de datos del Dashboard
+    from watchgate.dashboard.backend import db as dashboard_db
+
+    try:
+        with dashboard_db.db_session() as conn:
+            if dashboard_db.user_is_org_admin(conn, norm_login):
+                return True
+            role = dashboard_db.get_role(conn, norm_login, repo)
+            if role is not None:
+                return has_required_role(role, required_role)
+    except Exception:
+        pass
+
+    return False
+
 
 def hash_token(raw_token: str) -> str:
     """Calcula el hash SHA-256 en hexadecimal de un token crudo."""

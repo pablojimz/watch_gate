@@ -259,7 +259,40 @@ def test_malicious_threat_forces_red_semaforo():
 
     out = aggregate(results, weights, diff=None, pr_id="1", repo="org/repo")
 
-    assert out.score == 100
+    assert out.score == 70
+    assert out.semaforo == Semaforo.ROJO
+    assert out.threat_summary["malicioso"] == 1
+
+
+def test_deps_layer_malicious_escalates_to_red_threshold_without_forcing_100():
+    """Verifica que una detección maliciosa en dependencias eleva el score
+    al umbral rojo (70) con semáforo ROJO sin forzar arbitrariamente a 100."""
+    finding = Finding(
+        file_path="package.json",
+        rule_id="dependency-npm",
+        message="Posible typosquatting: 'expresss' imita a 'express'",
+        threat_nature=ThreatNature.MALICIOUS,
+        severity="error",
+    )
+    deps_layer = LayerResult(
+        layer_name="dependencies",
+        risk_score=75,
+        justification="typosquatting detectado",
+        findings=[finding],
+        confidence=Confidence.ALTA,
+        threat_nature=ThreatNature.MALICIOUS,
+    )
+    results = {
+        "static": _result("static", 0),
+        "dependencies": deps_layer,
+        "reputation": _result("reputation", 0),
+        "semantic": _result("semantic", 0),
+    }
+    weights = {"static": 0.25, "dependencies": 0.10, "reputation": 0.25, "semantic": 0.40}
+
+    out = aggregate(results, weights, diff=None, pr_id="1", repo="org/repo")
+
+    assert out.score == 70
     assert out.semaforo == Semaforo.ROJO
     assert out.threat_summary["malicioso"] == 1
 
@@ -425,3 +458,29 @@ def test_uncertain_semantic_threat_nature_ignored_when_semantic_is_skipped():
 
     assert out.score == 0
     assert out.semaforo == Semaforo.VERDE
+
+
+def test_compute_effective_weights_renormalizes_when_layers_are_skipped():
+    results = {
+        "static": _result("static", 80),
+        "dependencies": _result("dependencies", 80),
+        "vulnerabilities": _result("vulnerabilities", 80),
+        "reputation": _result("reputation", 0, skipped=True, skip_reason="sin metadatos"),
+        "semantic": _result("semantic", 0, skipped=True, skip_reason="sin API key"),
+    }
+    weights = {
+        "static": 0.25,
+        "dependencies": 0.10,
+        "vulnerabilities": 0.10,
+        "reputation": 0.15,
+        "semantic": 0.40,
+    }
+
+    out = aggregate(results, weights, diff=None, pr_id="1", repo="org/repo")
+
+    assert out.effective_weights["static"] == 0.5556
+    assert out.effective_weights["dependencies"] == 0.2222
+    assert out.effective_weights["vulnerabilities"] == 0.2222
+    assert out.effective_weights["reputation"] == 0.0
+    assert out.effective_weights["semantic"] == 0.0
+    assert sum(out.effective_weights.values()) == 1.0

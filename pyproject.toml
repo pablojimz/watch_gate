@@ -36,6 +36,7 @@ dependencies = [
   # CLI UX y autocompletado
   "rich>=13.0,<14",
   "argcomplete>=3.0,<4",
+  "tiktoken (>=0.13.0,<0.14.0)",
 ]
 
 [project.scripts]
@@ -85,7 +86,7 @@ files = ["watchgate"]
 
 [[tool.mypy.overrides]]
 # Librerías externas sin marcador py.typed o stubs globales.
-module = ["google.*", "yaml", "chromadb", "sentence_transformers", "langchain_text_splitters.*", "anthropic", "unidiff", "unidiff.*", "argcomplete", "rich.*", "yara", "psycopg", "psycopg.*", "jose", "jose.*", "authlib.*"]
+module = ["google.*", "yaml", "chromadb", "sentence_transformers", "langchain_text_splitters.*", "anthropic", "unidiff", "unidiff.*", "argcomplete", "rich.*", "yara", "psycopg", "psycopg.*", "jose", "jose.*", "authlib.*", "tiktoken", "tiktoken.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

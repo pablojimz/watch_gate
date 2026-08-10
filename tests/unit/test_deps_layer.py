@@ -136,6 +136,29 @@ def test_parsers() -> None:
     assert composer[0].new_version == "^7.8"
 
 
+def test_parse_go_mod_does_not_treat_comment_prose_as_a_fake_dependency() -> None:
+    """Bug real encontrado en revisión: el regex genérico para líneas dentro
+    de un bloque `require (...)` multilínea (sin la palabra clave "require"
+    delante) exigía solo que la "versión" empezara por "v" seguido de
+    caracteres alfanuméricos -- sin exigir un dígito, cualquier palabra
+    normal que empezara por "v" ("ver", "vale"...) contaba como versión
+    válida. Una línea de comentario mencionando una versión en prosa
+    ("// ver la migración a v2.0...") se parseaba como una dependencia Go
+    inventada (nombre "//", versión "ver"), contaminando el resultado con
+    ruido."""
+    comment_hunk = "+// ver la migracion a v2.0 antes de actualizar\n"
+    assert parse_go_mod(comment_hunk) == []
+
+    # Una línea legítima del bloque require (sin la palabra "require"
+    # delante, como aparecen de verdad dentro de un `require (...)`
+    # multilínea) sigue reconociéndose.
+    block_line_hunk = "+\tgithub.com/stretchr/testify v1.8.4\n"
+    result = parse_go_mod(block_line_hunk)
+    assert len(result) == 1
+    assert result[0].name == "github.com/stretchr/testify"
+    assert result[0].new_version == "v1.8.4"
+
+
 def test_typosquat_checker() -> None:
     checker = TyposquatChecker()
     is_ts, ref = checker.is_typosquatting("1odash", "npm")

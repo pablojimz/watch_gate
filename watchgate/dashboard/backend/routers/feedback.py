@@ -26,6 +26,34 @@ def submit_feedback(
     return updated
 
 
+@router.post("/scores/{score_id}/accept", response_model=ScoreOut)
+def accept_score(score_id: int, request: Request, user: CurrentUser) -> ScoreOut:
+    """Gate de aprobación manual: registra que `user` revisó este PR
+    amarillo/rojo y decide seguir adelante a sabiendas del riesgo."""
+    with database.db_session() as conn:
+        existing = database.get_score(conn, score_id)
+        if existing is None:
+            raise HTTPException(status_code=404, detail="Score no encontrado")
+        require_role(user, existing.repo, min_role="mantenedor", request=request)
+        updated = database.set_accepted(conn, score_id, user.login)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Score no encontrado")
+    return updated
+
+
+@router.delete("/scores/{score_id}/accept", response_model=ScoreOut)
+def unaccept_score(score_id: int, request: Request, user: CurrentUser) -> ScoreOut:
+    with database.db_session() as conn:
+        existing = database.get_score(conn, score_id)
+        if existing is None:
+            raise HTTPException(status_code=404, detail="Score no encontrado")
+        require_role(user, existing.repo, min_role="mantenedor", request=request)
+        updated = database.clear_accepted(conn, score_id)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Score no encontrado")
+    return updated
+
+
 @router.get("/admin/roles", response_model=list[RepoRoleOut])
 def list_all_roles(request: Request, user: CurrentUser) -> list[RepoRoleOut]:
     with database.db_session() as conn:

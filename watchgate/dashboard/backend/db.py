@@ -15,6 +15,7 @@ import json
 import os
 import secrets
 import sqlite3
+import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
@@ -23,6 +24,8 @@ from typing import Any, Literal, cast
 
 from watchgate.core.models import (
     AggregatedResult,
+    Confidence,
+    Finding,
     LayerResult,
     RiskCategory,
     Semaforo,
@@ -68,7 +71,10 @@ CREATE TABLE IF NOT EXISTS pr_scores (
   author_login TEXT,
   human_feedback TEXT CHECK(
     human_feedback IN ('correcto','falso_positivo') OR human_feedback IS NULL
-  )
+  ),
+  accepted_by TEXT,
+  accepted_at TEXT,
+  findings_json TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_repo_timestamp ON pr_scores(repo, timestamp);
 
@@ -178,6 +184,17 @@ def connect(db_path: Path | None = None) -> DBConnection:
     return conn
 
 
+def _connection_target(db_path: Path | None) -> str:
+    """Identificador estable de a qué base de datos apunta `connect(db_path)`
+    -- mismo criterio que usa `connect()` para decidir Postgres vs SQLite,
+    duplicado aquí a propósito para no acoplar el guard de `db_session()` a
+    cambios de firma de `connect()`."""
+    database_url = os.environ.get("WATCHGATE_DASHBOARD_DATABASE_URL")
+    if database_url and database_url.startswith(("postgres://", "postgresql://")):
+        return database_url
+    return str(db_path or default_db_path())
+
+
 def _init_db_postgres(conn: PostgresConnection) -> None:
     conn.executescript(db_postgres.POSTGRES_SCHEMA)
     # A diferencia de SQLite, Postgres soporta IF NOT EXISTS en ADD COLUMN de
@@ -185,6 +202,9 @@ def _init_db_postgres(conn: PostgresConnection) -> None:
     conn.execute("ALTER TABLE pr_scores ADD COLUMN IF NOT EXISTS author_login TEXT")
     conn.execute("ALTER TABLE pr_scores ADD COLUMN IF NOT EXISTS vulnerabilities_score INTEGER")
     conn.execute("ALTER TABLE pr_scores ADD COLUMN IF NOT EXISTS vulnerabilities_skipped BOOLEAN")
+    conn.execute("ALTER TABLE pr_scores ADD COLUMN IF NOT EXISTS accepted_by TEXT")
+    conn.execute("ALTER TABLE pr_scores ADD COLUMN IF NOT EXISTS accepted_at TEXT")
+    conn.execute("ALTER TABLE pr_scores ADD COLUMN IF NOT EXISTS findings_json TEXT")
     conn.execute(
         "ALTER TABLE pr_scores ADD COLUMN IF NOT EXISTS "
         "threat_summary_json TEXT NOT NULL DEFAULT '{}'"
@@ -235,6 +255,12 @@ def init_db(conn: DBConnection) -> None:
         )
     if "static_threat_nature" not in cols:
         conn.execute("ALTER TABLE pr_scores ADD COLUMN static_threat_nature TEXT")
+    if "accepted_by" not in cols:
+        conn.execute("ALTER TABLE pr_scores ADD COLUMN accepted_by TEXT")
+    if "accepted_at" not in cols:
+        conn.execute("ALTER TABLE pr_scores ADD COLUMN accepted_at TEXT")
+    if "findings_json" not in cols:
+        conn.execute("ALTER TABLE pr_scores ADD COLUMN findings_json TEXT")
     repo_cols = {row[1] for row in conn.execute("PRAGMA table_info(repo_settings)").fetchall()}
     if "layers_enabled_json" not in repo_cols:
         conn.execute(
@@ -267,11 +293,38 @@ def init_db(conn: DBConnection) -> None:
     ensure_ui_settings(conn)
 
 
+_initialized_targets: set[str] = set()
+_init_lock = threading.Lock()
+
+
 @contextmanager
 def db_session(db_path: Path | None = None) -> Iterator[DBConnection]:
     conn = connect(db_path)
+    target = _connection_target(db_path)
     try:
-        init_db(conn)
+        # Bug real encontrado desplegando contra Postgres real: `init_db()`
+        # (incluye `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`, DDL que exige
+        # un lock exclusivo) se ejecutaba en CADA llamada a `db_session()` --
+        # es decir, en cada request de cada router. Bajo tráfico concurrente
+        # real (varias pestañas/peticiones en paralelo cargando el
+        # Dashboard, exactamente lo que hace un navegador), dos peticiones
+        # ejecutando el mismo ALTER TABLE a la vez podían deadlockear de
+        # verdad entre sí (`psycopg.errors.DeadlockDetected`, reproducido en
+        # vivo). SQLite nunca lo mostró porque su locking es de fichero
+        # completo, no por fila/tabla como Postgres.
+        #
+        # `init_db()` en sí ya es idempotente en efecto (todo `IF NOT
+        # EXISTS`), pero eso no evita la carrera de dos conexiones
+        # comprobando y alterando el mismo esquema a la vez -- el problema
+        # no era el resultado final, era ejecutarlo más de una vez por
+        # proceso sin necesidad. Con double-checked locking, por cada base
+        # de datos destino (`target`) real solo la primera llamada del
+        # proceso ejecuta la migración; el resto la salta.
+        if target not in _initialized_targets:
+            with _init_lock:
+                if target not in _initialized_targets:
+                    init_db(conn)
+                    _initialized_targets.add(target)
         yield conn
         conn.commit()
     except Exception:
@@ -284,6 +337,27 @@ def db_session(db_path: Path | None = None) -> Iterator[DBConnection]:
 def _pr_number_from_pr_id(pr_id: str) -> int:
     digits = "".join(ch for ch in pr_id if ch.isdigit())
     return int(digits) if digits else 0
+
+
+def _serialize_findings(layers: dict[str, LayerResult]) -> str | None:
+    """Guarda lo que las columnas planas de `pr_scores` no capturan
+    (`findings` con fichero/línea/regla, `category`, `confidence`,
+    `threat_nature` por capa) -- sin esto, el histórico del dashboard
+    perdía toda la sustancia de un hallazgo (dónde está, qué regla lo
+    disparó) en cuanto se insertaba, aunque el propio `AggregatedResult` la
+    tuviera en el momento del análisis. `None` si no hay nada que guardar,
+    para no ensuciar filas de capas sin hallazgos con un JSON vacío."""
+    payload = {
+        name: {
+            "findings": [f.model_dump(mode="json") for f in layer.findings],
+            "category": layer.category.value if layer.category else None,
+            "confidence": layer.confidence.value if layer.confidence else None,
+            "threat_nature": layer.threat_nature.value if layer.threat_nature else None,
+        }
+        for name, layer in layers.items()
+        if layer.findings or layer.category or layer.confidence or layer.threat_nature
+    }
+    return json.dumps(payload) if payload else None
 
 
 def insert_aggregated(
@@ -330,8 +404,8 @@ def insert_aggregated(
           reputation_score, reputation_skipped,
           semantic_score, semantic_skipped, semantic_justification,
           weights_json, author_login, human_feedback,
-          threat_summary_json, static_threat_nature
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
+          threat_summary_json, static_threat_nature, findings_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)
         """
     params = (
         result.repo,
@@ -354,6 +428,7 @@ def insert_aggregated(
         author_login,
         json.dumps(result.threat_summary),
         static_threat_nature,
+        _serialize_findings(layers),
     )
 
     if isinstance(conn, PostgresConnection):
@@ -374,23 +449,35 @@ def _row_to_score_out(row: Row) -> ScoreOut:
     static_threat_nature_raw = (
         row["static_threat_nature"] if "static_threat_nature" in keys else None
     )
+    findings_raw = row["findings_json"] if "findings_json" in keys else None
+    findings_by_layer: dict[str, dict[str, Any]] = json.loads(findings_raw) if findings_raw else {}
 
     layer_results: dict[str, LayerResult] = {}
     for name, score_col, skip_col in _LAYER_COLS:
         skipped = bool(row[skip_col]) if row[skip_col] is not None else True
         raw_score = row[score_col]
         justification = ""
-        category: RiskCategory | None = None
-        threat_nature: ThreatNature | None = None
         if name == "semantic":
             justification = row["semantic_justification"] or ""
-        if name == "static" and static_threat_nature_raw:
+
+        extra = findings_by_layer.get(name, {})
+        findings = [Finding.model_validate(f) for f in extra.get("findings", [])]
+        category = RiskCategory(extra["category"]) if extra.get("category") else None
+        confidence = Confidence(extra["confidence"]) if extra.get("confidence") else None
+        threat_nature = ThreatNature(extra["threat_nature"]) if extra.get("threat_nature") else None
+        # Filas antiguas (o insertadas antes de que findings_json existiera)
+        # solo tienen la naturaleza de la capa estática en su columna
+        # dedicada -- se usa como respaldo cuando el blob no la trae.
+        if name == "static" and threat_nature is None and static_threat_nature_raw:
             threat_nature = ThreatNature(static_threat_nature_raw)
+
         layer_results[name] = LayerResult(
             layer_name=name,
             risk_score=int(raw_score) if raw_score is not None else 0,
             justification=justification,
+            findings=findings,
             category=category,
+            confidence=confidence,
             threat_nature=threat_nature,
             skipped=skipped,
             skip_reason="omitida" if skipped else None,
@@ -412,11 +499,15 @@ def _row_to_score_out(row: Row) -> ScoreOut:
         threat_summary=threat_summary,
     )
     feedback = row["human_feedback"]
+    accepted_by = row["accepted_by"] if "accepted_by" in keys else None
+    accepted_at = row["accepted_at"] if "accepted_at" in keys else None
     return ScoreOut.from_aggregated(
         score_id=int(row["id"]),
         result=result,
         human_feedback=feedback,
         author_login=author,
+        accepted_by=accepted_by,
+        accepted_at=accepted_at,
     )
 
 
@@ -437,6 +528,33 @@ def set_feedback(conn: DBConnection, score_id: int, feedback: FeedbackValue) -> 
     cur = conn.execute(
         "UPDATE pr_scores SET human_feedback = ? WHERE id = ?",
         (feedback, score_id),
+    )
+    conn.commit()
+    if cur.rowcount == 0:
+        return None
+    return get_score(conn, score_id)
+
+
+def set_accepted(conn: DBConnection, score_id: int, user_login: str) -> ScoreOut | None:
+    """Gate de aprobación manual: un mantenedor/admin marca un PR en amarillo/
+    rojo como revisado y aceptado a sabiendas del riesgo. Distinto del
+    `human_feedback` de arriba (que valora si el ANÁLISIS acertó, no si el
+    riesgo real se acepta) -- deliberadamente independiente para no mezclar
+    "el score está mal" con "el score está bien pero seguimos adelante"."""
+    cur = conn.execute(
+        "UPDATE pr_scores SET accepted_by = ?, accepted_at = ? WHERE id = ?",
+        (normalize_login(user_login), datetime.now(UTC).isoformat(), score_id),
+    )
+    conn.commit()
+    if cur.rowcount == 0:
+        return None
+    return get_score(conn, score_id)
+
+
+def clear_accepted(conn: DBConnection, score_id: int) -> ScoreOut | None:
+    cur = conn.execute(
+        "UPDATE pr_scores SET accepted_by = NULL, accepted_at = NULL WHERE id = ?",
+        (score_id,),
     )
     conn.commit()
     if cur.rowcount == 0:

@@ -6,6 +6,7 @@ import { ClipboardList, History, MessageSquareWarning, Users } from 'lucide-reac
 import { api, type RoleName, type ScoreOut } from '@/api/client'
 import { AuthorsBreakdown } from '@/components/dashboard/AuthorsBreakdown'
 import { ChartSkeleton } from '@/components/dashboard/ChartSkeleton'
+import { CommitsVsThreatsChart } from '@/components/dashboard/CommitsVsThreatsChart'
 import { DashboardTabs } from '@/components/dashboard/DashboardTabs'
 import { ScoreTrendChart } from '@/components/dashboard/ScoreTrendChart'
 import { ScoresTable } from '@/components/dashboard/ScoresTable'
@@ -83,7 +84,10 @@ export default function RepoPage() {
       ) : (
         <>
           <SummaryCards scores={scores} />
-          <ScoreTrendChart scores={scores} />
+          <div className="grid gap-4 lg:grid-cols-2">
+            <ScoreTrendChart scores={scores} />
+            <CommitsVsThreatsChart scores={scores} />
+          </div>
 
           <div className="flex flex-col gap-4 lg:flex-row lg:gap-6">
             <DashboardTabs tabs={tabs} active={tab} onChange={setTab} />
@@ -91,7 +95,15 @@ export default function RepoPage() {
               {tab === 'history' ? (
                 <div>
                   <h2 className="mb-3 text-lg font-semibold">{t('repo.recent')}</h2>
-                  <ScoresTable scores={scores} />
+                  <ScoresTable
+                    scores={scores}
+                    canAccept={canFeedback}
+                    onScoreUpdated={(updated) =>
+                      setScores((prev) =>
+                        prev ? prev.map((s) => (s.id === updated.id ? updated : s)) : prev,
+                      )
+                    }
+                  />
                 </div>
               ) : (
                 <div>
