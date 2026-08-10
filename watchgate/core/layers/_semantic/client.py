@@ -22,6 +22,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
+from watchgate.core.layers._semantic.prompting import split_cache_breakpoint
 from watchgate.core.layers._semantic.tools import FORCE_FINAL_ANSWER_MESSAGE, ToolCallBudget
 from watchgate.core.models import Confidence, RiskCategory, ThreatNature
 
@@ -92,6 +93,24 @@ def _extract_json_object(text: str) -> dict[str, Any]:
     return candidate
 
 
+def _anthropic_system_param(system_prompt: str) -> str | list[dict[str, Any]]:
+    """El bloque estático de `system_prompt` (instrucciones + few-shot, ver
+    `prompting.py`) marcado con `cache_control` real -- la API de Anthropic
+    exige este marcador explícito por bloque, a diferencia de Gemini/vLLM,
+    que cachean el mismo prefijo repetido sin pedir nada especial. Si
+    `system_prompt` no lleva el marcador (p. ej. un string a mano en un
+    test), se manda tal cual, sin cachear -- mismo comportamiento que antes
+    de esta optimización."""
+    split = split_cache_breakpoint(system_prompt)
+    if split is None:
+        return system_prompt
+    static_block, variable_block = split
+    return [
+        {"type": "text", "text": static_block, "cache_control": {"type": "ephemeral"}},
+        {"type": "text", "text": variable_block},
+    ]
+
+
 class AnthropicClient(LLMClient):
     """Implementación concreta inicial contra la API de Anthropic."""
 
@@ -113,6 +132,7 @@ class AnthropicClient(LLMClient):
     ) -> SemanticOutput:
         budget = ToolCallBudget(max_calls=max_tool_calls)
         messages: list[dict[str, Any]] = [{"role": "user", "content": user_prompt}]
+        system_param = _anthropic_system_param(system_prompt)
 
         # Tope duro de turnos, independiente del presupuesto de tool calls: si
         # el modelo sigue pidiendo tool_use incluso después de agotado el
@@ -125,7 +145,7 @@ class AnthropicClient(LLMClient):
             response = self._client.messages.create(
                 model=self._model,
                 max_tokens=1024,
-                system=system_prompt,
+                system=system_param,
                 messages=messages,
                 tools=tools if not budget.exhausted else [],
             )
@@ -133,7 +153,7 @@ class AnthropicClient(LLMClient):
 
             if not tool_use_blocks:
                 text = "".join(block.text for block in response.content if block.type == "text")
-                return self._parse_with_retry(system_prompt, messages, text)
+                return self._parse_with_retry(system_param, messages, text)
 
             messages.append({"role": "assistant", "content": response.content})
             tool_results = []
@@ -164,7 +184,7 @@ class AnthropicClient(LLMClient):
         )
 
     def _parse_with_retry(
-        self, system_prompt: str, messages: list[dict[str, Any]], text: str
+        self, system_param: str | list[dict[str, Any]], messages: list[dict[str, Any]], text: str
     ) -> SemanticOutput:
         try:
             return SemanticOutput.model_validate(_extract_json_object(text))
@@ -179,7 +199,7 @@ class AnthropicClient(LLMClient):
         retry_response = self._client.messages.create(
             model=self._model,
             max_tokens=1024,
-            system=system_prompt,
+            system=system_param,
             messages=retry_messages,
         )
         retry_text = "".join(block.text for block in retry_response.content if block.type == "text")

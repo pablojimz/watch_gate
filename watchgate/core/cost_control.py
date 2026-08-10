@@ -4,14 +4,19 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import sqlite3
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import final
 
+import tiktoken
+
 from watchgate.core.layers._semantic.client import SemanticOutput
 from watchgate.core.models import FileChange, LayerResult, NormalizedDiff
+
+logger = logging.getLogger("watchgate.core.cost_control")
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS semantic_cache (
@@ -28,7 +33,40 @@ CREATE TABLE IF NOT EXISTS token_usage (
 """
 
 _TRUNCATION_MARKER = "[...truncado, {n} líneas adicionales sin hallazgos previos...]"
-_CHARS_PER_TOKEN_ESTIMATE = 4  # aproximación conservadora sin depender de un tokenizer externo
+_CHARS_PER_TOKEN_ESTIMATE = 4  # fallback si tiktoken no está disponible (ver estimate_tokens)
+
+# o200k_base es el encoding de los modelos GPT-4o/o200k -- no coincide token a
+# token con los tokenizadores reales de Anthropic/Gemini/un modelo local, pero
+# es una aproximación real basada en cómo se agrupan las subpalabras, mucho
+# más fiel que contar caracteres (que no distingue "aaaa" de código denso en
+# símbolos, donde el ratio real de caracteres/token es muy distinto). Mismo
+# criterio que ya usa el proyecto hermano de optimización de costes
+# (mercedes-uma-hackathon/backend/shared/tools.py). Cacheado a nivel de
+# módulo: instanciarlo por llamada sería un coste real evitable (mismo motivo
+# que `_get_embedding_model()` en rag/retriever.py).
+_encoder: tiktoken.Encoding | None = None
+_encoder_load_failed = False
+
+
+def _get_encoder() -> tiktoken.Encoding | None:
+    """`None` si tiktoken no pudo cargar el encoding (p. ej. sin red en el
+    primer uso -- descarga el fichero de encoding la primera vez y lo
+    cachea localmente después). No relanza: quien llama cae al heurístico
+    de caracteres en vez de que un problema de red tumbe el análisis
+    entero por un detalle de estimación de coste."""
+    global _encoder, _encoder_load_failed
+    if _encoder is not None or _encoder_load_failed:
+        return _encoder
+    try:
+        _encoder = tiktoken.get_encoding("o200k_base")
+    except Exception as exc:  # noqa: BLE001 - fallback deliberado, ver docstring
+        _encoder_load_failed = True
+        logger.warning(
+            "No se pudo cargar el encoding de tiktoken (¿sin red la primera vez?), "
+            "usando el heurístico de ~4 caracteres/token: %r",
+            exc,
+        )
+    return _encoder
 
 
 def diff_hash(diff: NormalizedDiff) -> str:
@@ -87,11 +125,21 @@ class CostController:
     # -- Tokens ----------------------------------------------------------
 
     def estimate_tokens(self, text: str) -> int:
-        """Estimación de tokens sin depender de un tokenizer externo del
-        proveedor: ~4 caracteres por token (aproximación estándar para
-        texto en inglés/código; conservadora para español)."""
+        """Estimación real de tokens vía tiktoken (encoding o200k_base) --
+        no coincide token a token con el tokenizer real de cada proveedor
+        (Anthropic/Gemini/local no publican el suyo), pero es sensiblemente
+        más fiel que contar caracteres, sobre todo en código denso en
+        símbolos (JSON, minificado, base64), donde el ratio real de
+        caracteres/token se aleja mucho de la media del texto en prosa que
+        asumía el heurístico anterior. Cae al heurístico de ~4
+        caracteres/token solo si tiktoken no pudo cargar su encoding (ver
+        `_get_encoder`) -- una estimación de coste no debe poder tumbar el
+        análisis por un problema de red puntual."""
         if not text:
             return 0
+        encoder = _get_encoder()
+        if encoder is not None:
+            return max(1, len(encoder.encode(text)))
         return max(1, len(text) // _CHARS_PER_TOKEN_ESTIMATE)
 
     def _diff_text_size(self, diff: NormalizedDiff) -> int:
