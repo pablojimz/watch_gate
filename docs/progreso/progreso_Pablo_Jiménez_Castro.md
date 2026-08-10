@@ -4,7 +4,7 @@
 
 - Responsable: Pablo Jiménez Castro
 - Última actualización: 2026-08-10
-- Estado general: Componentes funcionales y con tests unitarios propios, pero con un defecto de integración confirmado (incompatibilidad de claves `"deps"` vs `"dependencies"`) que impide que `deps_layer.py` participe en el análisis con la configuración por defecto, y que lo excluye siempre del cortocircuito. Ver §2.2, §2.3 y §3. **Adenda 2026-08-08 (§2.5):** implementada, verificada en producción real y documentada la integración consumidora del repo privado de reglas (`sync-rules.yml`, `reconcile-rules.yml`, `scripts/sync_rules.py`) y su conexión con `static_layer.py` (third-party Semgrep + YARA, antes sin usar pese a estar ya sincronizadas). **Adenda 2026-08-10 (§2.2):** cerrado el hueco de cobertura de tests de `_has_new_dependencies` (commit `de963d1`, rama `test/shortcircuit-dependency-coverage`); de paso se confirma que `DEPENDENCY_MANIFEST_FILENAMES` ya no cubre cuatro ecosistemas sino seis (se sumaron `go.mod` y `composer.json` en el commit `792ed33`, posterior a la redacción original de este documento) — el propio TODO de "cuatro ecosistemas" estaba desactualizado respecto al código. **Nota aparte, fuera del alcance de esta pasada:** el mismatch de clave `"deps"`/`"dependencies"` que este documento marca abajo como "Confirmado, prioridad alta" y bloqueante ya no lo es — el código actual de `shortcircuit.py` define `_PARTIAL_LAYER_NAMES = ("static", "dependencies", "deps", "vulnerabilities", "reputation")`, incluyendo ya la clave canónica `"dependencies"` (corregido en el commit `222a3f9`, "unificar claves de capas", 2026-08-07 — anterior incluso a la "Última actualización" previa de este documento). El resto de §2.2, §5 y §6 que describen este bug como abierto no se ha revisado a fondo ni corregido en esta pasada; queda como deuda documental pendiente de una revisión dedicada.
+- Estado general: Componentes funcionales y con tests unitarios propios. La revisión original de este documento (2026-08-07) encontró un defecto de integración confirmado (incompatibilidad de claves `"deps"` vs `"dependencies"`) que impedía que `deps_layer.py` participara en el análisis con la configuración por defecto, y que lo excluía siempre del cortocircuito — **ese defecto ya está resuelto** (ver adenda 2026-08-10 abajo y detalle en §2.2, §2.3 y §3, que se mantienen narrados en pasado como registro histórico). **Adenda 2026-08-08 (§2.5):** implementada, verificada en producción real y documentada la integración consumidora del repo privado de reglas (`sync-rules.yml`, `reconcile-rules.yml`, `scripts/sync_rules.py`) y su conexión con `static_layer.py` (third-party Semgrep + YARA, antes sin usar pese a estar ya sincronizadas). **Adenda 2026-08-10 (§2.2):** cerrado el hueco de cobertura de tests de `_has_new_dependencies` (commit `de963d1`, rama `test/shortcircuit-dependency-coverage`); de paso se confirma que `DEPENDENCY_MANIFEST_FILENAMES` ya no cubre cuatro ecosistemas sino seis (se sumaron `go.mod` y `composer.json` en el commit `792ed33`, posterior a la redacción original de este documento) — el propio TODO de "cuatro ecosistemas" estaba desactualizado respecto al código. **Nota aparte, fuera del alcance de esta pasada:** el mismatch de clave `"deps"`/`"dependencies"` que este documento marca abajo como "Confirmado, prioridad alta" y bloqueante ya no lo es — el código actual de `shortcircuit.py` define `_PARTIAL_LAYER_NAMES = ("static", "dependencies", "deps", "vulnerabilities", "reputation")`, incluyendo ya la clave canónica `"dependencies"` (corregido en el commit `222a3f9`, "unificar claves de capas", 2026-08-07 — anterior incluso a la "Última actualización" previa de este documento). El resto de §2.2, §5 y §6 que describen este bug como abierto no se ha revisado a fondo ni corregido en esta pasada; queda como deuda documental pendiente de una revisión dedicada.
 - Última revisión realizada por: Pablo Jiménez Castro (análisis e implementación asistidos por Claude Code, contraste directo contra el código fuente actual y contra los repos reales en producción, no solo contra documentación previa)
 - Componentes registrados: CLI (`watchgate/cli.py`), Cortocircuito / shortcircuit (`watchgate/core/shortcircuit.py`), Capa de dependencias / deps_layer (`watchgate/core/layers/deps_layer.py`, `watchgate/core/layers/_shared.py`), Integración con el repo de reglas y capa estática (`.github/workflows/sync-rules.yml`, `.github/workflows/reconcile-rules.yml`, `scripts/sync_rules.py`, `scripts/rules_hash.py`, `watchgate/core/layers/static_layer.py` — §2.5)
 
@@ -169,13 +169,11 @@ Es decir: según la planificación vigente del proyecto, `cli.py` y `shortcircui
   - **Cortocircuito a ROJO**: calcula el score mínimo posible (peso parcial `static+deps+reputation` sobre peso total, asumiendo semántica en 0) reutilizando `weighted_average()` de `aggregator.py`; si ese mínimo ya alcanza `thresholds["red"]`, corta sin llamar al LLM.
   - **Cortocircuito a VERDE**: si el score parcial es `< thresholds["yellow"] * 0.5` **y** no hay "patrones forzadores" (`_matches_forcing_pattern`: `PKGBUILD`, `.github/workflows/`, `Makefile`, `Dockerfile`; `_has_new_network_calls`: regex sobre el diff; `_has_new_dependencies`: intersección con `DEPENDENCY_MANIFEST_FILENAMES`).
   - **Muestreo de auditoría**: con probabilidad 1/20 (`rng()` inyectable para tests deterministas), fuerza igualmente la capa semántica pese a la baja señal parcial, e invoca `on_audit_sample()` si se pasó.
-  - Constante `_PARTIAL_LAYER_NAMES = ("static", "deps", "reputation")` — las tres capas "ligeras" que se consideran para el score parcial.
-- **Funcionalidad pendiente / defecto confirmado — mismatch de nombre de capa**:
-  `_PARTIAL_LAYER_NAMES` usa literalmente la cadena `"deps"`. Pero la capa real de dependencias se registra bajo `name: str = "dependencies"` (`watchgate/core/layers/deps_layer.py:528`, confirmado también por el propio test `test_deps_layer_registered` en `tests/unit/test_deps_layer.py`, que comprueba `"dependencies" in LAYER_REGISTRY`). El orquestador (`watchgate/core/orchestrator.py`) construye el diccionario `results` de `run_analysis()` usando `layer.name` como clave — es decir, el `LayerResult` real de `DepsLayer` llega a `evaluate_shortcircuit` bajo la clave `"dependencies"`, nunca `"deps"`.
+  - Constante `_PARTIAL_LAYER_NAMES = ("static", "dependencies", "deps", "vulnerabilities", "reputation")` — las capas "ligeras" que se consideran para el score parcial. Incluye tanto `"dependencies"` como `"deps"` (ver nota de resolución justo abajo).
+- ~~**Funcionalidad pendiente / defecto confirmado — mismatch de nombre de capa**~~ — **Resuelto, verificado 2026-08-10** (no es un cambio de esta sesión: el commit `222a3f9`, "unificar claves de capas", 2026-08-07, es anterior incluso a la revisión original de este documento, que no lo detectó en su momento):
+  `_PARTIAL_LAYER_NAMES` usaba literalmente solo la cadena `"deps"`, mientras que la capa real de dependencias se registra bajo `name: str = "dependencies"` (`watchgate/core/layers/deps_layer.py:148`). Hoy `_PARTIAL_LAYER_NAMES` incluye ambas claves (ver arriba), y se ha verificado además que `watchgate/config.py::_DEFAULT_WEIGHTS` también usa ya `"dependencies"` (no `"deps"`), en línea con `.watchgate.yml.example` y con `LAYER_REGISTRY`. Con esto, el `LayerResult` real de `DepsLayer` sí participa en el cálculo del score parcial y en el cortocircuito.
 
-  Consecuencia verificada leyendo `weighted_average()` (`aggregator.py`): cuando `evaluate_shortcircuit` filtra `partial_results` por `layer_names=_PARTIAL_LAYER_NAMES`, la clave `"dependencies"` no está en `("static", "deps", "reputation")`, así que **el resultado real de `DepsLayer` queda fuera del cálculo del score parcial del cortocircuito en el 100% de las ejecuciones**, con independencia de la configuración de pesos usada. Ni el cortocircuito a ROJO (que debería poder dispararse ante un manifiesto de dependencias claramente malicioso sin gastar presupuesto de LLM) ni la condición de "no forzar semántica" tienen en cuenta jamás el veredicto real de `deps_layer.py`. Sí funciona `_has_new_dependencies()`, porque esa función no lee `partial_results` — solo mira nombres de fichero en el diff, no el `risk_score` calculado por `DepsLayer`.
-
-  Los 13 tests de `tests/unit/test_shortcircuit.py` no detectan esto porque construyen sus propios `dict[str, LayerResult]` a mano usando la clave `"deps"` (ver `tests/unit/test_shortcircuit.py:13`, `_WEIGHTS = {"static": 0.25, "deps": 0.20, ...}`), es decir, los tests son consistentes *con la convención interna de `shortcircuit.py`*, pero nunca se contrastan contra la clave real que produce `DepsLayer` en ejecución. Es un defecto de integración invisible a los tests unitarios de cada módulo por separado — solo aparece al conectar ambos componentes reales. Ver §2.3 y §3 para el resto de sitios donde aparece la misma inconsistencia de nombre.
+  **Alcance de esta verificación**: se confirmó `shortcircuit.py` y `config.py` leyendo el código actual directamente. **No** se ha vuelto a auditar en profundidad `watchgate/dashboard/backend/db.py`/`schemas.py` (§3, §5 los marcaban fuera de alcance): siguen usando `"deps"` como convención interna (`DEFAULT_WEIGHTS`, nombres de columna `deps_score`/`deps_skipped`), pero `db.py::insert_aggregated._get_layer()` (líneas ~278-284) ya contiene una capa de traducción explícita que acepta tanto `"deps"` como `"dependencies"` como clave de entrada — así que, a primera vista, tampoco parece bloqueante ahí, aunque no se ha revisado el resto del módulo con el mismo nivel de detalle que en la revisión original.
 - **Partes completas**: la lógica matemática de decisión en sí (ROJO/VERDE/None), aislada de la cuestión de qué claves recibe.
 - **Limitaciones conocidas** (documentadas en el propio docstring del módulo, no encontradas por este análisis): `_has_new_network_calls` es una heurística textual (regex), no reinvoca Semgrep; el propio autor original marca varias decisiones de diseño como "a confirmar con el equipo" en el docstring de cabecera del fichero.
 
@@ -210,26 +208,26 @@ Es decir: según la planificación vigente del proyecto, `cli.py` y `shortcircui
 
 ### Problemas detectados
 
-- **[Confirmado, prioridad alta] Mismatch de clave `"deps"` vs `"dependencies"`** — ver desarrollo completo arriba en "Estado actual". Es el hallazgo principal de esta revisión y afecta simultáneamente a `shortcircuit.py`, `deps_layer.py` y `config.py` (§2.3, §3).
+- ~~**[Confirmado, prioridad alta] Mismatch de clave `"deps"` vs `"dependencies"`**~~ — **Resuelto, ver "Estado actual" arriba.** Era el hallazgo principal de esta revisión; afectaba simultáneamente a `shortcircuit.py`, `deps_layer.py` y `config.py` (§2.3, §3), y los tres ya están alineados en `"dependencies"`.
 - ~~**Cobertura de `_has_new_dependencies` incompleta**~~ — **Resuelto 2026-08-10 (commit `de963d1`)**: `tests/unit/test_shortcircuit.py` solo probaba la detección vía `package.json`. Se añadieron tests para `requirements.txt`, `Pipfile`, `PKGBUILD`, `Cargo.toml`, `go.mod` y `composer.json` (estos dos últimos porque `DEPENDENCY_MANIFEST_FILENAMES` ya cubre 6 ecosistemas, no 4 — se añadieron en el commit `792ed33`, posterior a como estaba redactado este hallazgo), más un caso de basename exacto y uno de manifiesto de ecosistema no soportado (`Gemfile`). 23/23 tests en verde; no hizo falta tocar `shortcircuit.py`, confirmando que el riesgo era bajo como ya se apuntaba aquí.
 - **Docstring de cabecera con decisiones "a confirmar con el equipo" que no constan resueltas en ningún otro documento revisado** (p. ej. dónde debería persistirse `on_audit_sample`). No es un bug, pero es deuda de decisión abierta desde la implementación original.
 
 ### Posibles mejoras
 
-- Corregir el mismatch de clave (ver §5, alta prioridad) — es la mejora de mayor impacto de todo este documento porque además de arreglar `shortcircuit.py`, expone y obliga a resolver el mismo bug en `config.py`.
-- Añadir un test de integración que construya un `partial_results` a partir de una ejecución real de `DepsLayer.analyze()` (no un `dict` escrito a mano) y verifique que `evaluate_shortcircuit` sí lo tiene en cuenta — así una futura regresión de nombre de clave se detectaría automáticamente.
+- ~~Corregir el mismatch de clave (ver §5, alta prioridad)~~ — Resuelto (ver "Estado actual" arriba). Sigue en pie, y con más motivo ahora que ya no es un bug abierto, la mejora de abajo: un test de regresión que lo mantenga corregido.
+- Añadir un test de integración que construya un `partial_results` a partir de una ejecución real de `DepsLayer.analyze()` (no un `dict` escrito a mano) y verifique que `evaluate_shortcircuit` sí lo tiene en cuenta — sigue pendiente; serviría como red de seguridad para que una futura regresión de nombre de clave se detecte automáticamente en vez de en silencio, como ocurrió aquí.
 - ~~Completar la cobertura de `_has_new_dependencies` para los cuatro ecosistemas.~~ Resuelto 2026-08-10 (commit `de963d1`) — ver "Problemas detectados" arriba.
 
 ### Estado para otros desarrolladores
 
-- **Partes estables**: la fórmula matemática de decisión (ROJO/VERDE), una vez arreglada la clave de entrada.
-- **Partes a revisar antes de modificar**: `_PARTIAL_LAYER_NAMES` — no cambiarlo sin revisar a la vez `config.py` y `deps_layer.py` (los tres deben usar la misma clave).
+- **Partes estables**: la fórmula matemática de decisión (ROJO/VERDE) — la clave de entrada ya está arreglada.
+- **Partes a revisar antes de modificar**: `_PARTIAL_LAYER_NAMES` — no cambiarlo sin revisar a la vez `config.py` y `deps_layer.py` (los tres deben seguir usando la misma clave canónica, `"dependencies"`).
 - **Conocimientos necesarios**: medias ponderadas, y el contrato de `LAYER_REGISTRY`/`layer.name` de `layers/base.py`.
-- **Tareas pendientes**: corregir el mismatch antes de activar `shortcircuit_enabled: true` en cualquier entorno real — hoy activar el cortocircuito no aporta el beneficio de seguridad que su propio diseño promete para manifiestos de dependencias maliciosos.
+- **Tareas pendientes**: el mismatch ya no bloquea activar `shortcircuit_enabled: true`; queda pendiente el test de integración/regresión (§2.2 "Posibles mejoras", §5) para que una futura reintroducción del mismo bug no vuelva a pasar desapercibida.
 
 ### Próximos pasos
 
-- Resolver el mismatch de nombre (ver §5 y §6) y añadir el test de integración descrito arriba antes de considerar este componente "listo para producción".
+- ~~Resolver el mismatch de nombre (ver §5 y §6)~~ Resuelto. Añadir el test de integración descrito arriba sigue pendiente, ahora como prevención de regresión en vez de como corrección de un bug abierto.
 
 ---
 
@@ -239,9 +237,9 @@ Es decir: según la planificación vigente del proyecto, `cli.py` y `shortcircui
 
 - Responsable formal (plan de tareas vigente): **Pablo Jiménez Castro** (Línea 3) — único de los tres componentes de este documento asignado formalmente a esta línea.
 - Ubicación en el proyecto: `watchgate/core/layers/deps_layer.py` (735 líneas) + `watchgate/core/layers/_shared.py` (utilidades compartidas)
-- Estado actual: Implementado y con 14 tests unitarios propios (`tests/unit/test_deps_layer.py`) más 4 tests de `_shared.py` (`tests/unit/test_shared.py`); no queda activado en la práctica salvo que se use exactamente la clave `"dependencies"` en `weights` (ver más abajo).
-- Última revisión: 2026-08-07 (esta revisión)
-- Nivel de madurez: La lógica interna (parsers, typosquatting, caché OSV) es madura; la integración con el resto del sistema (config, cortocircuito, wiring de parámetros) tiene defectos confirmados.
+- Estado actual: Implementado y con 14 tests unitarios propios (`tests/unit/test_deps_layer.py`) más 4 tests de `_shared.py` (`tests/unit/test_shared.py`); ~~no queda activado en la práctica salvo que se use exactamente la clave `"dependencies"` en `weights`~~ ya se activa con los defaults de `config.py` (ver nota de resolución en "Problemas detectados" más abajo).
+- Última revisión: 2026-08-07; **estado de activación revisado 2026-08-10** (ver nota de resolución en "Problemas detectados").
+- Nivel de madurez: La lógica interna (parsers, typosquatting, caché OSV) es madura; la integración con el resto del sistema que motivó el defecto de config/cortocircuito ya está corregida (ver abajo) — queda pendiente el wiring de `max_dependency_checks`.
 
 ### Historial de cambios
 
@@ -257,7 +255,7 @@ Es decir: según la planificación vigente del proyecto, `cli.py` y `shortcircui
 ### Estado actual
 
 - **Funcionalidades implementadas** (verificado leyendo el código):
-  - Parsers de diff para `package.json`, `requirements.txt`/`Pipfile`, `PKGBUILD`, `Cargo.toml` (`parse_package_json`, `parse_requirements_txt`, `parse_pkgbuild`, `parse_cargo_toml`), todos operando solo sobre líneas añadidas (`+`) del `diff_hunk`.
+  - Parsers de diff para `package.json`, `requirements.txt`/`Pipfile`, `PKGBUILD`, `Cargo.toml`, `go.mod` y `composer.json` (`parse_package_json`, `parse_requirements_txt`, `parse_pkgbuild`, `parse_cargo_toml`, `parse_go_mod`, `parse_composer_json`), todos operando solo sobre líneas añadidas (`+`) del `diff_hunk`. Los dos últimos (commit `792ed33`) son posteriores a la redacción original de esta sección, que los listaba como pendientes — ver corrección en "Funcionalidades pendientes" abajo.
   - `TyposquatChecker`: distancia Levenshtein (`rapidfuzz.distance.Levenshtein`) contra `datasets/typosquat_reference/{npm,pypi,aur,crates}.txt`, con normalización `_`↔`-` y filtro previo por diferencia de longitud (optimización, no solo corrección).
   - `OSVCache`: caché SQLite thread-safe (`threading.Lock`, `check_same_thread=False`, `timeout=30.0`) con TTL de 24h, resolución de ruta con fallback (`WATCHGATE_CACHE_DIR` → `~/.watchgate/cache.db` → `/tmp/.watchgate/cache.db` → `:memory:`).
   - Consulta batch a OSV.dev (`/v1/querybatch`) acotada por `max_osv_queries` (parámetro del constructor, default 20, tope duro `_HARD_MAX_BATCH_SIZE = 20`); los cambios que exceden el límite se marcan `"OSV omitido (límite de consultas batch alcanzado)"` en vez de silenciarse.
@@ -267,7 +265,7 @@ Es decir: según la planificación vigente del proyecto, `cli.py` y `shortcircui
   - `risk_score` final = `max(...)` de las puntuaciones individuales por dependencia, nunca suma — cumple explícitamente la regla de la spec de no inflar el score por volumen de paquetes nuevos legítimos.
   - Registrado en `LAYER_REGISTRY` bajo la clave `"dependencies"` vía `@register_layer` (confirmado por `tests/unit/test_deps_layer.py::test_deps_layer_registered`).
 - **Funcionalidades pendientes**:
-  - Ecosistemas adicionales (`go.mod`, `composer.json`) — no implementados.
+  - ~~Ecosistemas adicionales (`go.mod`, `composer.json`) — no implementados.~~ **Resuelto, verificado 2026-08-10**: ambos están implementados desde el commit `792ed33` (posterior a esta sección), con parsers propios en `_shared.py` y wiring en `DepsLayer.analyze()` (`watchgate/core/layers/deps_layer.py:182-185`).
   - `config.max_dependency_checks` (`watchgate/config.py:57`, comentado como "Usado por `deps_layer.py` (§5)") **no está conectado a nada**: no aparece en ninguna otra parte del código fuente de `watchgate/` fuera de su propia declaración (confirmado por búsqueda en todo el árbol). El parámetro real que limita las consultas OSV es `max_osv_queries`, que solo se puede fijar pasándolo al constructor de `DepsLayer(...)` directamente — y ni `cli.py` ni `pipeline.py` lo hacen (ver "Problemas detectados").
 - **Partes completas**: los cuatro parsers, `OSVCache`, `TyposquatChecker`, mapeo de severidad OSV.
 - **Limitaciones conocidas**:
@@ -314,22 +312,11 @@ Es decir: según la planificación vigente del proyecto, `cli.py` y `shortcircui
 
 ### Problemas detectados
 
-- **[Confirmado, prioridad alta] `DepsLayer` nunca se activa con la configuración por defecto de `config.py`.** `DepsLayer.name = "dependencies"` (línea 528), y `LAYER_REGISTRY` queda indexado bajo esa clave. Pero `_DEFAULT_WEIGHTS` en `watchgate/config.py` (líneas 29-34) usa la clave `"deps"`:
-  ```python
-  _DEFAULT_WEIGHTS: dict[str, float] = {
-      "static": 0.25,
-      "deps": 0.20,
-      "reputation": 0.15,
-      "semantic": 0.40,
-  }
-  ```
-  `orchestrator.run_analysis()` construye la lista de capas activas con `for name, weight in config.weights.items() if weight > 0 and name in LAYER_REGISTRY` — como `"deps"` no está en `LAYER_REGISTRY` (solo `"dependencies"` lo está), **`DepsLayer` nunca se instancia ni se ejecuta** cuando se usan los defaults de `config.py`. No hay ningún error ni warning: la capa simplemente no aparece en `layer_results`, y el peso `0.20` reservado para ella no se redistribuye a las demás (se pierde silenciosamente del cálculo de `weighted_average`, que solo normaliza sobre las claves presentes en los resultados reales).
+- ~~**[Confirmado, prioridad alta] `DepsLayer` nunca se activa con la configuración por defecto de `config.py`.**~~ **Resuelto, verificado 2026-08-10.** El hallazgo original era: `DepsLayer.name = "dependencies"` y `LAYER_REGISTRY` queda indexado bajo esa clave, pero `_DEFAULT_WEIGHTS` en `watchgate/config.py` usaba la clave `"deps"`, así que `orchestrator.run_analysis()` (que solo instancia capas cuyo nombre está en `LAYER_REGISTRY`) nunca instanciaba `DepsLayer` con los defaults.
 
-  Esto no es un caso hipotético: **no existe ningún `.watchgate.yml` en la raíz de este repositorio** (verificado con `git`/sistema de ficheros), así que si hoy se ejecutara `watchgate analyze` sobre este mismo proyecto sin crear antes ese fichero, se usarían los defaults de `config.py` y `DepsLayer` no correría.
+  Verificado leyendo el código actual: `watchgate/config.py::_DEFAULT_WEIGHTS` ya usa `"dependencies"` (no `"deps"`), en línea con `LAYER_REGISTRY` y con `.watchgate.yml.example`. Los tres ya están de acuerdo entre sí, así que con los defaults actuales `DepsLayer` sí se instancia y se ejecuta.
 
-  El fichero de ejemplo que sí trae el proyecto, `.watchgate.yml.example`, usa la clave correcta `dependencies: 0.20` — es decir, coincide con `LAYER_REGISTRY`, no con `config.py`. Dicho de otro modo: **el ejemplo documentado y los defaults en código están en desacuerdo entre sí**, y solo copiar el ejemplo tal cual (`cp .watchgate.yml.example .watchgate.yml`) produce el comportamiento correcto.
-
-  El mismo mismatch de clave `"deps"` aparece también, de forma independiente, en `watchgate/dashboard/backend/db.py` (`DEFAULT_WEIGHTS`, `DEFAULT_LAYERS`, nombres de columna `deps_score`/`deps_skipped`) y `watchgate/dashboard/backend/schemas.py` — fuera del alcance de este documento (dashboard no está en el alcance solicitado), pero se deja constancia porque confirma que el error de nombre está extendido más allá de `config.py`/`shortcircuit.py`, y su corrección probablemente deba tocar también el dashboard. Se marca **pendiente de confirmar** si existe alguna capa de traducción `"dependencies"` → `"deps"` en el camino hacia la persistencia del dashboard — no se ha revisado ese código en detalle por estar fuera de alcance.
+  Sobre el dashboard (`watchgate/dashboard/backend/db.py`/`schemas.py`, fuera de alcance de este documento): sigue usando `"deps"` como convención interna (`DEFAULT_WEIGHTS`, columnas `deps_score`/`deps_skipped`), pero `db.py::insert_aggregated._get_layer()` ya contiene una capa de traducción explícita que acepta indistintamente `"deps"` o `"dependencies"` como clave del `LayerResult` de entrada — por lo que, a primera vista, tampoco bloquea la persistencia de resultados reales de `DepsLayer`. No se ha auditado el resto del módulo de dashboard con el mismo detalle que en la revisión original; se deja como observación, no como hallazgo cerrado.
 
 - **[Confirmado, prioridad media] `config.max_dependency_checks` es un campo muerto.** Declarado en `WatchGateConfig` (`config.py:57`) con el comentario "Usado por `deps_layer.py` (§5)", pero una búsqueda en todo `watchgate/` no encuentra ninguna otra referencia a `max_dependency_checks` fuera de su propia declaración. El límite real de consultas OSV lo controla `max_osv_queries` en el constructor de `DepsLayer`, y ni `orchestrator.run_analysis()` (que instancia capas sin argumentos vía `LAYER_REGISTRY[name]()` salvo que se pase una `layer_factories` explícita) ni `pipeline.py` (que solo define una factory para `"semantic"`, nunca para `"dependencies"`) tienen forma de pasarle ese valor. Cualquier cambio de `max_dependency_checks` en `.watchgate.yml` no tiene ningún efecto observable hoy.
 
@@ -342,24 +329,24 @@ Es decir: según la planificación vigente del proyecto, `cli.py` y `shortcircui
 
 ### Posibles mejoras
 
-- **Alta prioridad**: unificar la clave de la capa de dependencias (`"deps"` vs `"dependencies"`) en todo el proyecto — `config.py`, `shortcircuit.py`, y (fuera de este alcance pero a coordinar) `dashboard/backend/`. Ver §5 para el detalle de opciones.
+- ~~**Alta prioridad**: unificar la clave de la capa de dependencias (`"deps"` vs `"dependencies"`) en todo el proyecto~~ — Resuelto en `config.py`/`shortcircuit.py`/`deps_layer.py` (ver "Problemas detectados" arriba); dashboard sin auditar a fondo, ver misma nota.
 - Conectar `config.max_dependency_checks` con `DepsLayer` de verdad: o bien registrar una `layer_factories["dependencies"]` en `pipeline.py` que pase `max_osv_queries=config.max_dependency_checks` (mismo patrón que ya existe para `"semantic"`), o bien eliminar el campo de `config.py` si se decide que no merece ser configurable.
 - Decidir el destino de `_query_osv()` (eliminar si es código muerto, o documentar su propósito si se mantiene a propósito).
 - Evaluar si la caché de OSV debería ser por-repo (como la de `static_layer.py`) en vez de global por usuario, especialmente de cara a la Engine API SaaS multi-tenant mencionada en el resto de la documentación del proyecto.
-- Añadir parsers para `go.mod` y `composer.json` (ya apuntado en `progreso_pablo_ayllon_garcia.md`, coincide con este análisis).
-- Añadir `deps`/`dependencies` a `_WEIGHTS` en `tests/integration/pipeline_runner.py` — actualmente ese runner solo pesa `reputation` y `semantic` (`_WEIGHTS: dict[str, float] = {"reputation": 0.15, "semantic": 0.40}`, `tests/integration/pipeline_runner.py:50`), así que **la suite de validación de 191 casos (`docs/validation_report.md`) no mide en absoluto la contribución de `DepsLayer` al resultado**, pese a que la capa está implementada y registrada. Esto es un hueco de validación real y verificado en el propio fichero del runner, no una suposición.
+- ~~Añadir parsers para `go.mod` y `composer.json` (ya apuntado en `progreso_pablo_ayllon_garcia.md`, coincide con este análisis).~~ Resuelto (commit `792ed33`, ver "Funcionalidades pendientes" en "Estado actual" arriba).
+- ~~Añadir `deps`/`dependencies` a `_WEIGHTS` en `tests/integration/pipeline_runner.py`~~ — **Resuelto, verificado 2026-08-10**: `_WEIGHTS` en `tests/integration/pipeline_runner.py:55` ya incluye `"dependencies": 0.10`. No se ha vuelto a ejecutar la suite de 191 casos en esta pasada para confirmar la cifra de acierto/fallo resultante, solo que el peso ya está presente.
 
 ### Estado para otros desarrolladores
 
-- **Partes estables**: los cuatro parsers, `TyposquatChecker`, el mapeo de severidad OSV — probados de forma aislada y con lógica autocontenida.
-- **Partes a revisar antes de modificar**: cualquier cambio a `DepsLayer.name` o a las claves de `weights`/`LAYER_REGISTRY` debe hacerse a la vez en `config.py`, `shortcircuit.py` y (coordinando con quien mantenga el dashboard) `dashboard/backend/db.py`/`schemas.py` — son cuatro sitios que hoy están desincronizados entre sí.
+- **Partes estables**: los seis parsers, `TyposquatChecker`, el mapeo de severidad OSV — probados de forma aislada y con lógica autocontenida.
+- **Partes a revisar antes de modificar**: cualquier cambio a `DepsLayer.name` o a las claves de `weights`/`LAYER_REGISTRY` debe hacerse a la vez en `config.py`, `shortcircuit.py` y (coordinando con quien mantenga el dashboard) `dashboard/backend/db.py`/`schemas.py` — hoy los tres primeros ya están sincronizados en `"dependencies"`; el dashboard sigue usando `"deps"` internamente con una capa de traducción (ver "Problemas detectados" arriba), así que sigue mereciendo el mismo cuidado si se toca.
 - **Conocimientos necesarios**: contrato de `AnalysisLayer`/`LAYER_REGISTRY` (`layers/base.py`), API de OSV.dev (`/v1/querybatch`), distancia Levenshtein.
-- **Tareas pendientes**: resolver el mismatch de clave es condición previa para poder confiar en cualquier cifra de "score combinado" que involucre a esta capa en un entorno real; hasta entonces, cualquier demo o validación manual debe usar explícitamente `.watchgate.yml.example` (clave `dependencies`) y no los defaults de `config.py`.
+- **Tareas pendientes**: ~~resolver el mismatch de clave es condición previa para poder confiar en cualquier cifra de "score combinado"~~ ya resuelto en el pipeline principal; queda pendiente el test de regresión (ver "Próximos pasos" abajo) para que no reaparezca en silencio.
 
 ### Próximos pasos
 
-- Corregir el mismatch de clave y añadir un test de regresión que falle si `DepsLayer.name` alguna vez deja de coincidir con la clave usada en `_DEFAULT_WEIGHTS` de `config.py` (por ejemplo, un test de arquitectura tipo `test_architecture.py` que compare ambos conjuntos de claves en tiempo de test, no solo a ojo).
-- Incluir `dependencies`/`deps` en los pesos de `tests/integration/pipeline_runner.py` para que la próxima ejecución de la suite de 191 casos sí refleje la contribución real de esta capa.
+- ~~Corregir el mismatch de clave~~ Resuelto. Sigue pendiente añadir un test de regresión que falle si `DepsLayer.name` alguna vez deja de coincidir con la clave usada en `_DEFAULT_WEIGHTS` de `config.py` (por ejemplo, un test de arquitectura tipo `test_architecture.py` que compare ambos conjuntos de claves en tiempo de test, no solo a ojo).
+- ~~Incluir `dependencies`/`deps` en los pesos de `tests/integration/pipeline_runner.py`~~ Resuelto, ver "Posibles mejoras" arriba. Sigue pendiente re-ejecutar la suite de 191 casos y regenerar `docs/validation_report.md` con el peso ya incluido.
 
 ---
 
@@ -369,7 +356,7 @@ Se documentan aquí, de forma breve y solo en lo necesario para sustentar los ha
 
 ### 2.4.1 `watchgate/config.py` (`WatchGateConfig`, `_DEFAULT_WEIGHTS`)
 
-No asignado a ninguna línea en `plan_tareas_equipo.md` — el propio docstring del módulo lo dice explícitamente ("este módulo no está asignado explícitamente a nadie en el reparto de tareas del equipo... debe confirmarse con el equipo — en particular los nombres de las claves de `.watchgate.yml`"). Es exactamente la fuente del mismatch documentado en §2.2 y §2.3: `_DEFAULT_WEIGHTS` usa `"deps"` mientras que `LAYER_REGISTRY` (poblado por `deps_layer.py`) usa `"dependencies"`. Cualquier corrección del bug principal de este documento pasa por decidir aquí cuál de las dos cadenas es la canónica y propagarla de forma consistente.
+No asignado a ninguna línea en `plan_tareas_equipo.md` — el propio docstring del módulo lo dice explícitamente ("este módulo no está asignado explícitamente a nadie en el reparto de tareas del equipo... debe confirmarse con el equipo — en particular los nombres de las claves de `.watchgate.yml`"). Era la fuente del mismatch documentado en §2.2 y §2.3: `_DEFAULT_WEIGHTS` usaba `"deps"` mientras que `LAYER_REGISTRY` (poblado por `deps_layer.py`) usa `"dependencies"`. **Resuelto, verificado 2026-08-10**: `_DEFAULT_WEIGHTS` ya usa `"dependencies"` como clave canónica, de acuerdo con `LAYER_REGISTRY` y `.watchgate.yml.example`.
 
 ### 2.4.2 `watchgate/core/layers/base.py` (`AnalysisLayer`, `LAYER_REGISTRY`, `register_layer`, `safe_analyze`)
 
@@ -496,9 +483,11 @@ graph TD
 5. **Agregación**: `aggregator.aggregate()` calcula la media ponderada de los `risk_score` de las capas realmente ejecutadas (no `skipped`, con peso `> 0`) y determina el `Semaforo`.
 6. **Salida**: `cli.py` formatea el `AggregatedResult` en Markdown o JSON.
 
-## El punto de fallo real (el paso 3/4 arriba, en la práctica)
+## El punto de fallo real (el paso 3/4 arriba, en la práctica) — **RESUELTO 2026-08-10**
 
-El diagrama siguiente distingue explícitamente entre el flujo *documentado/intencionado* y el flujo *real* cuando se usan los pesos por defecto de `config.py` — que es la situación de este mismo repositorio, al no existir un `.watchgate.yml` en la raíz.
+> **Nota de resolución (2026-08-10):** el mismatch de clave `"deps"`/`"dependencies"` que describe todo este apartado, incluido el diagrama de abajo, ya está corregido en el código actual: `config.py::_DEFAULT_WEIGHTS` y `shortcircuit.py::_PARTIAL_LAYER_NAMES` usan ya `"dependencies"` (commit `222a3f9`, "unificar claves de capas", 2026-08-07 — anterior incluso a la revisión original que documentó este apartado). Se deja el diagrama y el análisis tal cual, en pasado, como registro de qué estaba roto y por qué; **no reflejan el comportamiento actual del sistema**. Ver §2.2/§2.3 para el detalle de la verificación.
+
+El diagrama siguiente documenta, con valor histórico, la distinción entre el flujo *documentado/intencionado* y el flujo *real que existía entonces* cuando se usaban los pesos por defecto de `config.py`.
 
 ```mermaid
 graph TD
@@ -526,9 +515,9 @@ graph TD
 ## Puntos de integración clave
 
 - `cli.py` ↔ `pipeline.py`: contrato limpio, sin acoplamiento adicional (ver §2.1).
-- `shortcircuit.py` ↔ `deps_layer.py`: acoplados **indirectamente** a través de dos convenciones de nombre que hoy no coinciden (`_PARTIAL_LAYER_NAMES` en uno, `AnalysisLayer.name` en otro) — este es el hallazgo central de este documento.
-- `shortcircuit.py` ↔ `deps_layer.py` (acoplamiento correcto, para contraste): ambos importan `DEPENDENCY_MANIFEST_FILENAMES` desde `_shared.py`, así que la lista de manifiestos reconocidos sí está unificada correctamente — el problema no es la falta de un módulo compartido, es que ese módulo compartido no incluye también el nombre canónico de la capa.
-- `config.py` ↔ `LAYER_REGISTRY`: acoplamiento implícito y no validado (§2.4.1) — la causa raíz común de los dos puntos anteriores.
+- `shortcircuit.py` ↔ `deps_layer.py`: acoplados **indirectamente** a través de dos convenciones de nombre (`_PARTIAL_LAYER_NAMES` en uno, `AnalysisLayer.name` en otro) — este era el hallazgo central de este documento; **ya coinciden** (ver nota de resolución arriba).
+- `shortcircuit.py` ↔ `deps_layer.py` (acoplamiento correcto, para contraste): ambos importan `DEPENDENCY_MANIFEST_FILENAMES` desde `_shared.py`, así que la lista de manifiestos reconocidos sí está unificada correctamente — el problema no era la falta de un módulo compartido, era que ese módulo compartido no incluía también el nombre canónico de la capa.
+- `config.py` ↔ `LAYER_REGISTRY`: acoplamiento implícito y no validado por ningún test de arquitectura (§2.4.1, §5 "Añadir test de arquitectura...") — la causa raíz común de los dos puntos anteriores; el valor concreto que usaban ya coincide, pero sigue sin haber una comprobación automática que impida que se vuelva a desalinear.
 
 ---
 
@@ -536,25 +525,29 @@ graph TD
 
 ## Resumen ejecutivo
 
-De los tres componentes en el alcance de este documento, **la lógica interna de cada uno, tomada de forma aislada, es sólida y está razonablemente bien testeada** (6 tests en `cli.py`, 13 en `shortcircuit.py`, 14 + 4 en `deps_layer.py`/`_shared.py` — cifras contadas directamente sobre los ficheros de test, `2026-08-07`). El problema real de este subconjunto del sistema no está dentro de ningún módulo individual, sino en la **frontera de integración entre ellos**: un nombre de capa (`"deps"` vs `"dependencies"`) que no coincide entre `config.py`, `shortcircuit.py` y `deps_layer.py` (y, por extensión no verificada a fondo, el dashboard), y que hace que — con la configuración por defecto del propio proyecto — `DepsLayer` no participe ni en el análisis normal ni en el cortocircuito.
+**Actualización 2026-08-10**: el hallazgo central de este resumen (mismatch `"deps"`/`"dependencies"`) ya está resuelto en `config.py`/`shortcircuit.py`/`deps_layer.py` — ver nota de resolución en §3 y detalle en §2.2/§2.3. El resto de este resumen se mantiene en pasado como registro de la revisión original; no describe el estado actual del sistema en ese punto concreto. Sigue sin existir el test de integración/arquitectura que hubiera detectado el defecto automáticamente (§5), así que la clase de bug en sí (una capa que deja de coincidir con `LAYER_REGISTRY` sin ningún error) sigue siendo posible en el futuro si se vuelve a introducir un nombre inconsistente en cualquiera de estos ficheros.
 
-No se ha podido ejecutar la suite de tests real en este entorno (Python 3.10 disponible, proyecto requiere ≥3.11) para confirmar en vivo si este defecto está o no cubierto por algún test de integración que no se haya localizado en la revisión; por lectura de todos los ficheros de test relevantes (`test_cli.py`, `test_shortcircuit.py`, `test_deps_layer.py`, `test_shared.py`, `test_architecture.py`), **no se ha encontrado ningún test que active `DepsLayer` a través del wiring real de `config.py`/`orchestrator.py`/`shortcircuit.py` juntos** — todos los tests existentes construyen sus propios diccionarios de resultados/pesos a mano, consistentes con la convención interna de cada módulo por separado.
+De los tres componentes en el alcance de este documento, **la lógica interna de cada uno, tomada de forma aislada, es sólida y está razonablemente bien testeada** (6 tests en `cli.py`, 13 en `shortcircuit.py` — ahora 23, ver §2.2 —, 14 + 4 en `deps_layer.py`/`_shared.py` — cifras contadas directamente sobre los ficheros de test, `2026-08-07`). El problema real de este subconjunto del sistema, en el momento de la revisión original, no estaba dentro de ningún módulo individual, sino en la **frontera de integración entre ellos**: un nombre de capa (`"deps"` vs `"dependencies"`) que no coincidía entre `config.py`, `shortcircuit.py` y `deps_layer.py` (y, por extensión no verificada a fondo, el dashboard), y que hacía que — con la configuración por defecto del propio proyecto — `DepsLayer` no participara ni en el análisis normal ni en el cortocircuito. Con las claves ya alineadas, `DepsLayer` sí participa hoy en ambos.
+
+No se ha podido ejecutar la suite de tests real en este entorno (Python 3.10 disponible, proyecto requiere ≥3.11) para confirmar en vivo si este defecto estaba o no cubierto por algún test de integración que no se haya localizado en la revisión; por lectura de todos los ficheros de test relevantes (`test_cli.py`, `test_shortcircuit.py`, `test_deps_layer.py`, `test_shared.py`, `test_architecture.py`), **no se encontró entonces ningún test que activara `DepsLayer` a través del wiring real de `config.py`/`orchestrator.py`/`shortcircuit.py` juntos** — todos los tests existentes construían (y siguen construyendo) sus propios diccionarios de resultados/pesos a mano, consistentes con la convención interna de cada módulo por separado. Esa observación sigue siendo válida como hueco de cobertura, con independencia de que el bug de nombre en sí ya esté corregido: sigue sin haber un test que hubiera fallado si el mismatch no se hubiera corregido, ni que impida que reaparezca.
 
 ## Clasificación de componentes por madurez (dentro del alcance de este documento)
 
-- **Maduro en aislamiento, con defecto de integración confirmado**:
-  - `watchgate/core/layers/deps_layer.py` + `_shared.py` — lógica de parsing/typosquatting/OSV sólida; wiring roto (§2.3).
-  - `watchgate/core/shortcircuit.py` — lógica de decisión sólida; input de dependencias roto por el mismo motivo (§2.2).
+- **Maduro, defecto de integración ya corregido (2026-08-10)**:
+  - `watchgate/core/layers/deps_layer.py` + `_shared.py` — lógica de parsing/typosquatting/OSV sólida; wiring que estaba roto ya está corregido (§2.3). Además, ya soporta 6 ecosistemas (no 4), ver §2.3.
+  - `watchgate/core/shortcircuit.py` — lógica de decisión sólida; input de dependencias ya no roto (§2.2). Cobertura de tests de `_has_new_dependencies` también cerrada (§2.2).
 - **Funcional con huecos de robustez conocidos, no de integración**:
   - `watchgate/cli.py` — funciona correctamente en camino feliz; sin manejo de errores en rutas de entrada, sin cobertura de `ReputationLayer` (§2.1).
-- **Fuera de alcance, mencionados solo como causa raíz**:
-  - `watchgate/config.py` — declarado explícitamente por su propio autor como "no asignado a nadie, a confirmar con el equipo".
+- **Fuera de alcance, mencionados solo como causa raíz (histórica)**:
+  - `watchgate/config.py` — declarado explícitamente por su propio autor como "no asignado a nadie, a confirmar con el equipo"; su `_DEFAULT_WEIGHTS` ya usa la clave correcta.
 
 ## Riesgos principales
 
-1. **Riesgo de producto, no solo de código**: si `shortcircuit_enabled: true` se activa en un entorno real con los pesos por defecto (o incluso con `.watchgate.yml.example` copiado tal cual), el cortocircuito nunca reacciona a lo que encuentre `DepsLayer` — un manifiesto de dependencias con una vulnerabilidad crítica conocida en OSV no puede, por sí solo, disparar un cortocircuito a ROJO, contradiciendo el propósito documentado del propio `shortcircuit.py` (que sí lista `deps` entre las tres señales que debería mirar).
-2. **Riesgo de "falso verde" silencioso**: con los defaults de `config.py`, un PR que solo añade una dependencia typosquatted o con vulnerabilidad OSV, sin activar ninguna otra capa, puede terminar con un veredicto que ignora por completo esa señal — sin ningún error ni log que lo delate, porque el sistema no distingue "capa sin peso asignado a propósito" de "capa cuyo nombre no coincide con el registro".
-3. **Riesgo de validación ciega**: la suite de 191 casos de `tests/integration/` (citada como referencia de calidad en `progreso_pablo_ayllon_garcia.md` y en `plan_tareas_equipo.md`) no pesa `deps` en absoluto, así que ninguna cifra de acierto/fallo publicada hasta ahora refleja el comportamiento de esta capa, con o sin el bug de nombre corregido.
+**Actualización 2026-08-10**: los tres riesgos siguientes dependían todos del mismatch de clave, ya corregido (§2.2/§2.3/§3). Se dejan documentados en pasado porque describen bien el *tipo* de riesgo que este patrón de bug puede volver a causar si se reintroduce una discrepancia de nombre similar en el futuro — de ahí que la recomendación de añadir un test de arquitectura preventivo (§5) siga vigente pese a que el bug puntual ya no lo está.
+
+1. ~~**Riesgo de producto, no solo de código**~~: si `shortcircuit_enabled: true` se activaba en un entorno real con los pesos por defecto (o incluso con `.watchgate.yml.example` copiado tal cual), el cortocircuito nunca reaccionaba a lo que encontrara `DepsLayer` — un manifiesto de dependencias con una vulnerabilidad crítica conocida en OSV no podía, por sí solo, disparar un cortocircuito a ROJO. Hoy sí puede.
+2. ~~**Riesgo de "falso verde" silencioso**~~: con los defaults de `config.py`, un PR que solo añadía una dependencia typosquatted o con vulnerabilidad OSV, sin activar ninguna otra capa, podía terminar con un veredicto que ignoraba por completo esa señal. Ya no ocurre con las claves alineadas.
+3. ~~**Riesgo de validación ciega**~~ — **Resuelto, verificado 2026-08-10**: `tests/integration/pipeline_runner.py::_WEIGHTS` (línea 55) ya incluye `"dependencies": 0.10`, igual que `config.py::_DEFAULT_WEIGHTS`, así que la suite de validación sí pesa esta capa. No se ha vuelto a ejecutar la suite completa ni a regenerar `docs/validation_report.md` en esta pasada para confirmar la cifra de acierto/fallo resultante, solo que el peso ya está presente en el runner.
 
 ---
 
@@ -562,18 +555,14 @@ No se ha podido ejecutar la suite de tests real en este entorno (Python 3.10 dis
 
 ## Alta prioridad
 
-1. **Unificar la clave canónica de la capa de dependencias en todo el proyecto.** Requiere decidir una única cadena (`"dependencies"` parece la opción de menor impacto, porque ya es la que usa `DepsLayer.name`, `.watchgate.yml.example` y el propio test `test_deps_layer_registered`) y propagarla a:
-   - `watchgate/config.py` → `_DEFAULT_WEIGHTS`.
-   - `watchgate/core/shortcircuit.py` → `_PARTIAL_LAYER_NAMES`.
-   - `watchgate/dashboard/backend/db.py` / `schemas.py` (fuera de este alcance, pero a coordinar con quien mantenga el dashboard — usan `"deps"` de forma consistente entre sí, así que el cambio ahí es más invasivo: nombres de columna de base de datos incluidos).
-   Alternativa igualmente válida: mantener `"deps"` como clave canónica y renombrar `DepsLayer.name`, actualizando `.watchgate.yml.example` y el test que hoy fija `"dependencies"` como valor esperado. Cualquiera de las dos opciones es aceptable; lo que no lo es es el estado actual, con tres/cuatro convenciones distintas conviviendo sin ningún test que las contraste entre sí.
-2. **Añadir un test de arquitectura/integración que impida que este tipo de defecto vuelva a pasar desapercibido** — por ejemplo, extender `tests/unit/test_architecture.py` con una comprobación de que toda clave presente en `WatchGateConfig()._DEFAULT_WEIGHTS` con valor `> 0` corresponde a una clave real de `LAYER_REGISTRY` tras importar `watchgate.core.layers`, y que `shortcircuit._PARTIAL_LAYER_NAMES` es un subconjunto de `LAYER_REGISTRY.keys()`.
-3. **Conectar `config.max_dependency_checks` a `DepsLayer` de verdad** (o retirar el campo si se decide que no aporta valor) — mismo patrón que ya existe para `layer_factories["semantic"]` en `pipeline.py`.
+1. ~~**Unificar la clave canónica de la capa de dependencias en todo el proyecto.**~~ **Resuelto, verificado 2026-08-10** para el pipeline principal: `watchgate/config.py::_DEFAULT_WEIGHTS`, `watchgate/core/shortcircuit.py::_PARTIAL_LAYER_NAMES`, `DepsLayer.name` y `.watchgate.yml.example` ya usan todos `"dependencies"` como clave canónica. **Sigue sin unificar** `watchgate/dashboard/backend/db.py`/`schemas.py`, que siguen usando `"deps"` internamente — aunque `db.py::insert_aggregated._get_layer()` ya acepta ambas claves como entrada (ver §2.2/§2.3), así que no está claro que siga siendo bloqueante; no auditado a fondo en esta pasada.
+2. **Añadir un test de arquitectura/integración que impida que este tipo de defecto vuelva a pasar desapercibido** — sigue pendiente pese a que el bug puntual ya está corregido; por ejemplo, extender `tests/unit/test_architecture.py` con una comprobación de que toda clave presente en `WatchGateConfig()._DEFAULT_WEIGHTS` con valor `> 0` corresponde a una clave real de `LAYER_REGISTRY` tras importar `watchgate.core.layers`, y que `shortcircuit._PARTIAL_LAYER_NAMES` es un subconjunto de `LAYER_REGISTRY.keys()`.
+3. **Conectar `config.max_dependency_checks` a `DepsLayer` de verdad** (o retirar el campo si se decide que no aporta valor) — mismo patrón que ya existe para `layer_factories["semantic"]` en `pipeline.py`. Sigue pendiente.
 
 ## Media prioridad
 
 1. Envolver `load_config()`/`parse_diff()` en `cli.py::_cmd_analyze` con manejo de errores explícito y tests de las rutas de fallo (§2.1).
-2. Incluir `dependencies` en los pesos de `tests/integration/pipeline_runner.py` para que la suite de 191 casos sí valide esta capa (§2.3).
+2. ~~Incluir `dependencies` en los pesos de `tests/integration/pipeline_runner.py` para que la suite de 191 casos sí valide esta capa (§2.3).~~ Resuelto, verificado 2026-08-10 (ver §2.3/§4) — pendiente re-ejecutar la suite y regenerar `docs/validation_report.md`.
 3. Documentar en `cli.py` (docstring o `--help`) que `watchgate analyze` en local no alimenta `ReputationLayer` con datos reales (§2.1).
 4. Unificar el uso de `UTC` vs `timezone.utc` dentro de `deps_layer.py` (§2.3) — cosmético, pero relacionado con el bug real de compatibilidad con Python 3.10 ya corregido en el commit `1fe70ef`.
 
@@ -588,16 +577,16 @@ No se ha podido ejecutar la suite de tests real en este entorno (Python 3.10 dis
 
 # 6. Pendientes
 
-- [ ] **Corregir el mismatch de clave `"deps"`/`"dependencies"`** entre `config.py`, `shortcircuit.py`, `deps_layer.py` y (a coordinar) `dashboard/backend/`. Bloqueante para poder confiar en cualquier resultado de análisis que dependa del veredicto de `DepsLayer`.
-- [ ] Añadir el test de arquitectura que impida la reaparición de este tipo de defecto (§5, alta prioridad, punto 2).
-- [ ] Conectar `config.max_dependency_checks` con `DepsLayer` o eliminar el campo.
-- [ ] Añadir `dependencies` a los pesos de `tests/integration/pipeline_runner.py` y volver a generar `docs/validation_report.md` una vez corregido el punto anterior, para tener una cifra de acierto/fallo que sí refleje esta capa.
+- [x] ~~**Corregir el mismatch de clave `"deps"`/`"dependencies"`** entre `config.py`, `shortcircuit.py`, `deps_layer.py`~~ — **Resuelto, verificado 2026-08-10** (commit `222a3f9`, previo incluso a la revisión original). Sigue sin confirmar/coordinar el caso del dashboard, ver punto de abajo.
+- [ ] Añadir el test de arquitectura que impida la reaparición de este tipo de defecto (§5, alta prioridad, punto 2). Sigue pendiente y con más valor ahora, como red de seguridad para no perder la corrección ya aplicada.
+- [ ] Conectar `config.max_dependency_checks` con `DepsLayer` o eliminar el campo. Sigue pendiente.
+- [x] ~~Añadir `dependencies` a los pesos de `tests/integration/pipeline_runner.py`~~ — Resuelto, verificado 2026-08-10 (§2.3/§4). Sigue pendiente volver a generar `docs/validation_report.md` con el peso ya incluido.
 - [ ] Envolver `_cmd_analyze` (`cli.py`) en manejo de errores explícito, con tests de las rutas de fallo.
 - [ ] **Confirmar con el equipo** (no verificable solo leyendo el repositorio):
   - La correspondencia real entre las identidades de git (`elpeloncho`, `javiermartinj`) y las personas nombradas en la documentación de planificación (Pablo Ayllón García, Javier Martín Jurado).
-  - Si existe alguna capa de traducción `"dependencies"` → `"deps"` en el camino hacia `dashboard/backend/`, o si el mismo bug se manifiesta también ahí (fuera del alcance verificado en esta revisión).
-  - Recuento real de tests en verde de este subconjunto (`cli.py`, `shortcircuit.py`, `deps_layer.py`, `_shared.py`) en un entorno con Python ≥3.11 y `poetry` — no se ha podido ejecutar `pytest` en esta máquina de análisis.
-- [ ] Re-ejecutar esta revisión tras aplicar las correcciones anteriores y actualizar el "Estado general" de los metadatos en consecuencia.
+  - Si el dashboard (`dashboard/backend/db.py`/`schemas.py`, que siguen usando `"deps"` internamente) necesita algo más de trabajo: `db.py::insert_aggregated._get_layer()` ya acepta ambas claves como entrada de un `LayerResult` real (verificado 2026-08-10), pero no se ha auditado el resto del módulo (lectura/reporting) con el mismo detalle.
+  - Recuento real de tests en verde de este subconjunto (`cli.py`, `shortcircuit.py`, `deps_layer.py`, `_shared.py`) en un entorno con Python ≥3.11 y `poetry` — parcialmente confirmado el 2026-08-10 solo para `test_shortcircuit.py` (23/23 en verde, ver §2.2), usando un venv de Python 3.11 creado ad hoc para esta verificación; el resto de la suite no se ha vuelto a ejecutar.
+- [ ] Re-ejecutar esta revisión al completo tras las correcciones ya aplicadas y actualizar el "Estado general" de los metadatos en consecuencia — esta pasada corrigió los hallazgos afectados por el mismatch de clave y por la cobertura de `_has_new_dependencies`, pero no repitió una revisión exhaustiva de cero de los tres componentes.
 - [ ] **(Adenda 2026-08-08, §2.5)** Confirmar el disparo real de `sync-rules.yml` por `repository_dispatch` en la próxima release del repo de reglas — es el único punto de esa integración sin verificar en real.
 - [ ] **(Adenda 2026-08-08, §2.5)** Ejecutar `pytest` de verdad sobre `tests/unit/test_sync_rules.py`, `tests/unit/test_sync_rules_git_lfs.py` y los tests nuevos de `test_static_layer.py` en un entorno con Python ≥3.11 — verificados por ejecución directa del código real en esta máquina, pero no con la suite de test tal cual (mismo motivo de entorno que el resto del documento).
 - [ ] **(Adenda 2026-08-08, §2.5)** Configurar exclusión de Windows Defender para la carpeta del repo en máquinas de desarrollo Windows (ya en curso al cierre de esta adenda) — evita que se repita la cuarentena de ficheros YARA/fixtures de malware real documentada en §2.5.
