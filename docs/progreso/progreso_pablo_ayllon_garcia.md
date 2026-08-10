@@ -23,7 +23,7 @@ Adicionalmente, se han completado los siguientes hitos de infraestructura, API S
 4. **Paquete Unificado de Persistencia (`watchgate/db/`)**: Implementado mediante `SQLModel` (`User`, `UserAPIKey`, `UserTokenUsage`, `SemanticCache`, `PRScore`), con soporte híbrido SQLite (WAL) y PostgreSQL, vault de claves API con almacenamiento exclusivo de hash SHA-256 (`key_hash`) y repositorio de transacciones atómicas.
 5. **Ingesta de Diffs HTTP e in-memory (`watchgate/core/diffparser.py`)**: Incorporación de `parse_diff_from_text()` haciendo uso de `unidiff` para procesar parches enviados por red sin requerir repositorios Git locales.
 6. **Separación de Vulnerabilidades y Código Malicioso (`ThreatNature`)**: Incorporación de la enumeración `ThreatNature` (`VULNERABILITY`, `MALICIOUS`, `UNCERTAIN`), cálculo puro de naturaleza dominante por capa (`compute_dominant_threat_nature`), políticas de bloqueo estricto por malware en `aggregator.py` y `shortcircuit.py`, degradación por incertidumbre (>50% ficheros no verificados), normalización sintáctica en el LLM y exportación estandarizada en SARIF v2.1.0 (`properties.threatNature`, tags `malware`/`vulnerability`) y comentarios de PR.
-7. **Verificación de la Suite de Pruebas**: Suite de pruebas unitarias e integradas ejecutada con éxito alcanzando **305/305 tests pasados al 100 %**.
+7. **Verificación de la Suite de Pruebas**: Suite de pruebas unitarias e integradas ejecutada con éxito alcanzando **465/465 tests pasados al 100 %**.
 
 ---
 
