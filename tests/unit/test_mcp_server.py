@@ -146,9 +146,7 @@ def test_mcp_tool_query_threat_kb(mock_retrieve: MagicMock) -> None:
             text="Compromiso de liblzma con backdoor.",
         )
     ]
-    result = execute_mcp_tool(
-        "watchgate_query_threat_kb", {"query": "xz utils", "k": 1}
-    )
+    result = execute_mcp_tool("watchgate_query_threat_kb", {"query": "xz utils", "k": 1})
     assert not result.isError
     data = json.loads(result.content[0].text)
     assert len(data) == 1

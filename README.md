@@ -194,6 +194,10 @@ cp .env.example .env   # rellena al menos WATCHGATE_LLM_API_KEY
 docker compose up --build
 ```
 
+Para probar la capa semántica contra modelos servidos localmente (vLLM en
+una máquina con GPU, en vez de Anthropic/Gemini), ver
+[`docs/despliegue_gpu_modelos_locales.md`](docs/despliegue_gpu_modelos_locales.md).
+
 ## Pruebas y Calidad de Código
 
 Para ejecutar la batería de pruebas y las herramientas de análisis estático:

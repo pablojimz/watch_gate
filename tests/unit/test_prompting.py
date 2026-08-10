@@ -6,6 +6,8 @@ from watchgate.core.layers._semantic.prompting import (
     build_system_prompt,
     build_user_prompt,
     load_few_shot_examples,
+    split_cache_breakpoint,
+    strip_cache_breakpoint_marker,
 )
 from watchgate.core.models import FileChange, FileStatus, NormalizedDiff
 from watchgate.core.rag.retriever import RetrievedFragment
@@ -185,6 +187,64 @@ def test_build_system_prompt_accepts_explicit_few_shot_examples():
     custom = [{"diff_summary": "cambio de prueba concreto", "expected_output": {"risk_score": 1}}]
     prompt = build_system_prompt("app", "Python", "sin datos", [], few_shot_examples=custom)
     assert "cambio de prueba concreto" in prompt
+
+
+def test_build_system_prompt_static_block_is_identical_across_calls_with_different_context():
+    """Garantía central de la optimización de caché de prompts: el bloque
+    estático (instrucciones + few-shot) debe ser byte-idéntico sin importar
+    lo que varíe (RAG, proyecto, fecha) -- si no lo fuera, ningún proveedor
+    (Anthropic explícito, Gemini/vLLM implícito) podría reutilizar la caché
+    entre análisis distintos, y la optimización sería un placebo."""
+    fragment = RetrievedFragment(text="contenido de ejemplo", case_name="caso_x")
+    prompt_a = build_system_prompt(
+        "librería Python", "Python", "actividad A", [], current_date="2026-01-01"
+    )
+    prompt_b = build_system_prompt(
+        "app Node.js", "TypeScript", "actividad B", [fragment], current_date="2026-06-15"
+    )
+
+    static_a, variable_a = split_cache_breakpoint(prompt_a)
+    static_b, variable_b = split_cache_breakpoint(prompt_b)
+
+    assert static_a == static_b
+    assert variable_a != variable_b
+
+
+def test_build_system_prompt_variable_block_contains_the_actual_context():
+    fragment = RetrievedFragment(text="contenido recuperado", case_name="caso_rag")
+    prompt = build_system_prompt(
+        "librería Python", "Python", "3 PRs esta semana", [fragment], current_date="2026-03-01"
+    )
+    _static, variable = split_cache_breakpoint(prompt)
+
+    assert "librería Python" in variable
+    assert "3 PRs esta semana" in variable
+    assert "2026-03-01" in variable
+    assert "contenido recuperado" in variable
+    # el contexto variable no duplica las instrucciones fijas del bloque estático
+    assert "Eres un analista de seguridad" not in variable
+
+
+def test_build_system_prompt_static_block_contains_the_fixed_instructions_and_examples():
+    prompt = build_system_prompt("app", "Python", "sin datos", [])
+    static, _variable = split_cache_breakpoint(prompt)
+
+    assert "Eres un analista de seguridad" in static
+    assert '"risk_score"' in static
+    assert "Ejemplos de referencia" in static  # few-shot, ver test dedicado más abajo
+
+
+def test_split_cache_breakpoint_returns_none_without_the_marker():
+    assert split_cache_breakpoint("un prompt cualquiera sin marcador") is None
+
+
+def test_strip_cache_breakpoint_marker_removes_it_but_keeps_both_blocks():
+    prompt = build_system_prompt("app", "Python", "sin datos", [], current_date="2026-01-01")
+    stripped = strip_cache_breakpoint_marker(prompt)
+
+    static, variable = split_cache_breakpoint(prompt)
+    assert stripped == static + "\n\n" + variable
+    assert "<<<WATCHGATE_CACHE_BREAKPOINT>>>" not in stripped
 
 
 def test_load_few_shot_examples_reads_the_committed_dataset():
