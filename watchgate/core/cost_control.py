@@ -9,12 +9,9 @@ import sqlite3
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, final
+from typing import final
 
-try:
-    import tiktoken
-except ImportError:
-    tiktoken = None
+import tiktoken
 
 from watchgate.core.layers._semantic.client import SemanticOutput
 from watchgate.core.models import FileChange, LayerResult, NormalizedDiff
@@ -47,15 +44,22 @@ _CHARS_PER_TOKEN_ESTIMATE = 4  # fallback si tiktoken no está disponible (ver e
 # (mercedes-uma-hackathon/backend/shared/tools.py). Cacheado a nivel de
 # módulo: instanciarlo por llamada sería un coste real evitable (mismo motivo
 # que `_get_embedding_model()` en rag/retriever.py).
+#
+# `import tiktoken` arriba es incondicional a propósito, sin
+# `try/except ImportError` -- es una dependencia declarada de verdad en
+# pyproject.toml/poetry.lock (`poetry add tiktoken`), no opcional; un
+# `try/except` ahí solo cambia `tiktoken` de módulo a `None`, lo que rompe
+# mypy contra la anotación `tiktoken.Encoding` de abajo (ya revertido una
+# vez en este mismo fichero, ver historial de `cost_control.py`). Lo que sí
+# puede fallar de verdad, y por eso el `try/except` de `_get_encoder` sigue
+# ahí, es la DESCARGA del fichero de encoding en el primer uso si no hay red.
 _encoder: tiktoken.Encoding | None = None
 _encoder_load_failed = False
 
 
-def _get_encoder() -> Any | None:
+def _get_encoder() -> tiktoken.Encoding | None:
     global _encoder, _encoder_load_failed
-    if tiktoken is None or _encoder_load_failed:
-        return None
-    if _encoder is not None:
+    if _encoder is not None or _encoder_load_failed:
         return _encoder
     try:
         _encoder = tiktoken.get_encoding("o200k_base")

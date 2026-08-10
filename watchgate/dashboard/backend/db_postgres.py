@@ -17,13 +17,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
-try:
-    import psycopg
-    from psycopg.rows import DictRow, dict_row
-except ImportError:
-    psycopg = None
-    DictRow = Any
-    dict_row = None
+import psycopg
+from psycopg.rows import DictRow, dict_row
 
 _PLACEHOLDER_RE = re.compile(r"\?")
 

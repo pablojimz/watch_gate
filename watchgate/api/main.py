@@ -93,9 +93,7 @@ async def rate_limiting_middleware(
     if request.url.path.startswith("/api/v1/"):
         client_ip = request.client.host if request.client else "unknown"
         raw_key = (
-            request.headers.get("X-API-Key")
-            or request.headers.get("Authorization")
-            or client_ip
+            request.headers.get("X-API-Key") or request.headers.get("Authorization") or client_ip
         )
         client_key = f"{client_ip}:{raw_key[:16]}"
 

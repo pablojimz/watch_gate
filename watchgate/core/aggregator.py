@@ -107,10 +107,7 @@ def compute_effective_weights(
     if total_weight <= 0:
         return {k: 0.0 for k in weights}
 
-    return {
-        k: round(weights[k] / total_weight, 4) if k in active else 0.0
-        for k in weights
-    }
+    return {k: round(weights[k] / total_weight, 4) if k in active else 0.0 for k in weights}
 
 
 def _semaforo(score: int, thresholds: dict[str, int]) -> Semaforo:
