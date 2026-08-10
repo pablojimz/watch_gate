@@ -154,10 +154,7 @@ def _apply_malicious_and_uncertain_policy(
             elif layer_res.confidence == Confidence.MEDIA:
                 has_medium_confidence_malicious = True
 
-    if has_high_confidence_malicious:
-        return 100, Semaforo.ROJO
-
-    if has_medium_confidence_malicious:
+    if has_high_confidence_malicious or has_medium_confidence_malicious:
         score = max(score, thresholds["red"])
 
     # Bug real encontrado regenerando el informe de validación (caso
