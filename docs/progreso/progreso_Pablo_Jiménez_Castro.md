@@ -3,8 +3,8 @@
 ## Metadatos
 
 - Responsable: Pablo Jiménez Castro
-- Última actualización: 2026-08-08
-- Estado general: Componentes funcionales y con tests unitarios propios, pero con un defecto de integración confirmado (incompatibilidad de claves `"deps"` vs `"dependencies"`) que impide que `deps_layer.py` participe en el análisis con la configuración por defecto, y que lo excluye siempre del cortocircuito. Ver §2.2, §2.3 y §3. **Adenda 2026-08-08 (§2.5):** implementada, verificada en producción real y documentada la integración consumidora del repo privado de reglas (`sync-rules.yml`, `reconcile-rules.yml`, `scripts/sync_rules.py`) y su conexión con `static_layer.py` (third-party Semgrep + YARA, antes sin usar pese a estar ya sincronizadas).
+- Última actualización: 2026-08-10
+- Estado general: Componentes funcionales y con tests unitarios propios, pero con un defecto de integración confirmado (incompatibilidad de claves `"deps"` vs `"dependencies"`) que impide que `deps_layer.py` participe en el análisis con la configuración por defecto, y que lo excluye siempre del cortocircuito. Ver §2.2, §2.3 y §3. **Adenda 2026-08-08 (§2.5):** implementada, verificada en producción real y documentada la integración consumidora del repo privado de reglas (`sync-rules.yml`, `reconcile-rules.yml`, `scripts/sync_rules.py`) y su conexión con `static_layer.py` (third-party Semgrep + YARA, antes sin usar pese a estar ya sincronizadas). **Adenda 2026-08-10 (§2.2):** cerrado el hueco de cobertura de tests de `_has_new_dependencies` (commit `de963d1`, rama `test/shortcircuit-dependency-coverage`); de paso se confirma que `DEPENDENCY_MANIFEST_FILENAMES` ya no cubre cuatro ecosistemas sino seis (se sumaron `go.mod` y `composer.json` en el commit `792ed33`, posterior a la redacción original de este documento) — el propio TODO de "cuatro ecosistemas" estaba desactualizado respecto al código. **Nota aparte, fuera del alcance de esta pasada:** el mismatch de clave `"deps"`/`"dependencies"` que este documento marca abajo como "Confirmado, prioridad alta" y bloqueante ya no lo es — el código actual de `shortcircuit.py` define `_PARTIAL_LAYER_NAMES = ("static", "dependencies", "deps", "vulnerabilities", "reputation")`, incluyendo ya la clave canónica `"dependencies"` (corregido en el commit `222a3f9`, "unificar claves de capas", 2026-08-07 — anterior incluso a la "Última actualización" previa de este documento). El resto de §2.2, §5 y §6 que describen este bug como abierto no se ha revisado a fondo ni corregido en esta pasada; queda como deuda documental pendiente de una revisión dedicada.
 - Última revisión realizada por: Pablo Jiménez Castro (análisis e implementación asistidos por Claude Code, contraste directo contra el código fuente actual y contra los repos reales en producción, no solo contra documentación previa)
 - Componentes registrados: CLI (`watchgate/cli.py`), Cortocircuito / shortcircuit (`watchgate/core/shortcircuit.py`), Capa de dependencias / deps_layer (`watchgate/core/layers/deps_layer.py`, `watchgate/core/layers/_shared.py`), Integración con el repo de reglas y capa estática (`.github/workflows/sync-rules.yml`, `.github/workflows/reconcile-rules.yml`, `scripts/sync_rules.py`, `scripts/rules_hash.py`, `watchgate/core/layers/static_layer.py` — §2.5)
 
@@ -160,6 +160,7 @@ Es decir: según la planificación vigente del proyecto, `cli.py` y `shortcircui
 | 2026-07-29 | Commit `078e769`: creación junto con la Fase 0 | Contrato compartido inicial | javiermartinj |
 | 2026-08-05 | Commit `df2fdec`: "refactor a aggregator, `_shared` para utilidades compartidas entre capas de análisis y shortcircuit" — introduce `_shared.py` y `DEPENDENCY_MANIFEST_FILENAMES` | Evitar duplicar la lista de manifiestos de dependencias entre `shortcircuit.py` y `deps_layer.py` | elpeloncho |
 | 2026-08-05 | Commit `e2e63d9`: "actualizacion para la correccion de errores y logica" | Ajustes de la lógica de decisión (umbral rojo, muestreo de auditoría) | elpeloncho |
+| 2026-08-10 | Commit `de963d1`: "test(shortcircuit): completar cobertura de `_has_new_dependencies`" (rama `test/shortcircuit-dependency-coverage`) | Cerrar el hueco de tests anotado abajo en "Problemas detectados" — solo faltaba cobertura de test, la función ya era agnóstica al ecosistema | pablojimz (asistido por Claude Code) |
 
 ### Estado actual
 
@@ -210,14 +211,14 @@ Es decir: según la planificación vigente del proyecto, `cli.py` y `shortcircui
 ### Problemas detectados
 
 - **[Confirmado, prioridad alta] Mismatch de clave `"deps"` vs `"dependencies"`** — ver desarrollo completo arriba en "Estado actual". Es el hallazgo principal de esta revisión y afecta simultáneamente a `shortcircuit.py`, `deps_layer.py` y `config.py` (§2.3, §3).
-- **Cobertura de `_has_new_dependencies` incompleta**: `tests/unit/test_shortcircuit.py` solo prueba la detección vía `package.json` (`test_has_new_dependencies_detects_package_json`); no hay test equivalente para `requirements.txt`, `PKGBUILD` o `Cargo.toml`, pese a que los cuatro están en `DEPENDENCY_MANIFEST_FILENAMES`. Riesgo bajo (la función es una simple intersección de conjuntos), pero es un hueco real de cobertura.
+- ~~**Cobertura de `_has_new_dependencies` incompleta**~~ — **Resuelto 2026-08-10 (commit `de963d1`)**: `tests/unit/test_shortcircuit.py` solo probaba la detección vía `package.json`. Se añadieron tests para `requirements.txt`, `Pipfile`, `PKGBUILD`, `Cargo.toml`, `go.mod` y `composer.json` (estos dos últimos porque `DEPENDENCY_MANIFEST_FILENAMES` ya cubre 6 ecosistemas, no 4 — se añadieron en el commit `792ed33`, posterior a como estaba redactado este hallazgo), más un caso de basename exacto y uno de manifiesto de ecosistema no soportado (`Gemfile`). 23/23 tests en verde; no hizo falta tocar `shortcircuit.py`, confirmando que el riesgo era bajo como ya se apuntaba aquí.
 - **Docstring de cabecera con decisiones "a confirmar con el equipo" que no constan resueltas en ningún otro documento revisado** (p. ej. dónde debería persistirse `on_audit_sample`). No es un bug, pero es deuda de decisión abierta desde la implementación original.
 
 ### Posibles mejoras
 
 - Corregir el mismatch de clave (ver §5, alta prioridad) — es la mejora de mayor impacto de todo este documento porque además de arreglar `shortcircuit.py`, expone y obliga a resolver el mismo bug en `config.py`.
 - Añadir un test de integración que construya un `partial_results` a partir de una ejecución real de `DepsLayer.analyze()` (no un `dict` escrito a mano) y verifique que `evaluate_shortcircuit` sí lo tiene en cuenta — así una futura regresión de nombre de clave se detectaría automáticamente.
-- Completar la cobertura de `_has_new_dependencies` para los cuatro ecosistemas.
+- ~~Completar la cobertura de `_has_new_dependencies` para los cuatro ecosistemas.~~ Resuelto 2026-08-10 (commit `de963d1`) — ver "Problemas detectados" arriba.
 
 ### Estado para otros desarrolladores
 
@@ -579,7 +580,7 @@ No se ha podido ejecutar la suite de tests real en este entorno (Python 3.10 dis
 ## Baja prioridad
 
 1. Decidir el destino de `_query_osv()` (código posiblemente muerto en `deps_layer.py`).
-2. Completar cobertura de `_has_new_dependencies` en `shortcircuit.py` para los cuatro ecosistemas.
+2. ~~Completar cobertura de `_has_new_dependencies` en `shortcircuit.py` para los cuatro ecosistemas.~~ Resuelto 2026-08-10, commit `de963d1` (ver §2.2).
 3. Autocompletado de shell para `cli.py` (ya apuntado en `progreso_pablo_ayllon_garcia.md`).
 4. Evaluar si la caché de `OSVCache` debería ser por-repo en vez de global por usuario, de cara a la Engine API SaaS multi-tenant.
 
