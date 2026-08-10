@@ -34,6 +34,7 @@ from watchgate.core.layers._shared import (
 )
 from watchgate.core.layers.base import AnalysisLayer, register_layer
 from watchgate.core.models import (
+    Confidence,
     Finding,
     LayerResult,
     NormalizedDiff,
@@ -260,10 +261,19 @@ class DepsLayer(AnalysisLayer):
         final_justification = " | ".join(justifications)
         dominant_threat = compute_dominant_threat_nature(structured_findings)
 
+        confidence = None
+        if final_score >= 70:
+            confidence = Confidence.ALTA
+        elif final_score >= 40:
+            confidence = Confidence.MEDIA
+        elif final_score > 0:
+            confidence = Confidence.BAJA
+
         return LayerResult(
             layer_name=self.name,
             risk_score=final_score,
             justification=final_justification,
             findings=structured_findings,
             threat_nature=dominant_threat,
+            confidence=confidence,
         )
