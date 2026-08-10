@@ -147,6 +147,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>
 }
 
+export interface AgentMetricRow {
+  agent_id: string
+  tokens_used: number
+  analyses_count: number
+  avg_score: number
+}
+
+export interface AgentUsageMetrics {
+  total_tokens_used: number
+  agents_count: number
+  by_agent: AgentMetricRow[]
+}
+
 export const api = {
   me: () => request<MeResponse>('/auth/me'),
   logout: () => request<{ status: string }>('/auth/logout', { method: 'POST' }),
@@ -179,6 +192,7 @@ export const api = {
       body: JSON.stringify(body),
     }),
   getMetrics: () => request<OrgMetrics>('/metrics'),
+  getAgentUsageMetrics: () => request<AgentUsageMetrics>('/metrics/agent-usage'),
   getLlmSettings: () => request<LlmSettings>('/settings/llm'),
   putLlmSettings: (body: LlmSettingsUpdate) =>
     request<LlmSettings>('/settings/llm', {

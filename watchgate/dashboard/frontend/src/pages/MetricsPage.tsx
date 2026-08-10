@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { BarChart3, ClipboardCheck, Layers } from 'lucide-react'
+import { BarChart3, Bot, ClipboardCheck, Layers } from 'lucide-react'
 import {
   Bar,
   BarChart,
@@ -17,7 +17,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { api, type OrgMetrics } from '@/api/client'
+import { api, type AgentUsageMetrics, type OrgMetrics } from '@/api/client'
 import { TableSkeleton } from '@/components/dashboard/TableSkeleton'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { buttonVariants } from '@/components/ui/button'
@@ -26,6 +26,7 @@ import { cn, semaforoColor } from '@/lib/utils'
 export default function MetricsPage() {
   const { t } = useTranslation()
   const [metrics, setMetrics] = useState<OrgMetrics | null>(null)
+  const [agentMetrics, setAgentMetrics] = useState<AgentUsageMetrics | null>(null)
 
   useEffect(() => {
     void api
@@ -45,6 +46,13 @@ export default function MetricsPage() {
           by_repo: [],
           trend: [],
         })
+      })
+
+    void api
+      .getAgentUsageMetrics()
+      .then(setAgentMetrics)
+      .catch(() => {
+        setAgentMetrics({ total_tokens_used: 0, agents_count: 0, by_agent: [] })
       })
   }, [])
 
@@ -184,6 +192,41 @@ export default function MetricsPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
+        <Card className="lg:col-span-3">
+          <CardHeader className="flex flex-row items-center gap-2">
+            <Bot className="size-4 text-muted-foreground" strokeWidth={1.75} />
+            <CardTitle className="text-sm text-muted-foreground">
+              Métricas de Agentes de IA y Consumo SaaS
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="overflow-x-auto p-0">
+            {!agentMetrics || agentMetrics.by_agent.length === 0 ? (
+              <p className="px-6 pb-6 text-sm text-muted-foreground">{t('metrics.empty')}</p>
+            ) : (
+              <table className="w-full min-w-[35rem] text-sm">
+                <thead className="bg-muted/40 text-left text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">Agente / Identificador</th>
+                    <th className="px-4 py-3 font-medium">Análisis Realizados</th>
+                    <th className="px-4 py-3 font-medium">Tokens Consumidos</th>
+                    <th className="px-4 py-3 font-medium">Riesgo Promedio (Score)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {agentMetrics.by_agent.map((agent) => (
+                    <tr key={agent.agent_id} className="border-t">
+                      <td className="px-4 py-3 font-medium">{agent.agent_id}</td>
+                      <td className="px-4 py-3">{agent.analyses_count}</td>
+                      <td className="px-4 py-3">{agent.tokens_used.toLocaleString()}</td>
+                      <td className="px-4 py-3">{agent.avg_score}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader className="flex flex-row items-center gap-2">
             <ClipboardCheck className="size-4 text-muted-foreground" strokeWidth={1.75} />
