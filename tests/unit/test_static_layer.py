@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 import tempfile
+import types
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -643,3 +644,229 @@ def test_analyze_combines_semgrep_and_yara_via_max_never_sum(tmp_path) -> None:
 
     # max(30, 83) = 83, NUNCA 30 + 83 = 113
     assert res.risk_score == 83
+
+
+# --------------------------------------------------------------------------
+# Paso 0 de _get_rules_dir: verificación bajo demanda contra la última
+# versión publicada, vía local_rules_client.get_verified_rules (ver
+# docs/integracion_repo_reglas.md §9). `_import_local_rules_client` se
+# sustituye por un doble en todos estos tests -- la mecánica real de
+# local_rules_client.py ya se prueba aparte en
+# tests/unit/test_local_rules_client*.py.
+# --------------------------------------------------------------------------
+
+
+class _FakeRulesClientError(RuntimeError):
+    pass
+
+
+class _FakeRulesVerificationError(RuntimeError):
+    pass
+
+
+def _make_fake_local_rules_client(
+    get_verified_rules=None, repo_cache_dir_path: Path | None = None
+):
+    """Doble mínimo de scripts/local_rules_client.py: mismas dos
+    excepciones (con los mismos nombres, para que `except
+    local_rules_client.RulesClientError` del código real las reconozca) y
+    `repo_cache_dir()` / `get_verified_rules()`."""
+    module = types.SimpleNamespace()
+    module.RulesClientError = _FakeRulesClientError
+    module.RulesVerificationError = _FakeRulesVerificationError
+    module.get_verified_rules = get_verified_rules or (lambda **kwargs: None)
+    module.repo_cache_dir = lambda: repo_cache_dir_path
+    return module
+
+
+def test_get_verified_rules_dir_returns_none_without_token(monkeypatch) -> None:
+    monkeypatch.delenv("RULES_REPO_TOKEN", raising=False)
+    layer = StaticLayer()
+
+    def _fail_if_called():
+        pytest.fail("no debería importar local_rules_client sin RULES_REPO_TOKEN")
+
+    monkeypatch.setattr(static_layer_module, "_import_local_rules_client", _fail_if_called)
+
+    assert layer._get_verified_rules_dir() is None
+
+
+def test_get_verified_rules_dir_returns_none_when_scripts_module_unavailable(monkeypatch) -> None:
+    monkeypatch.setenv("RULES_REPO_TOKEN", "fake-token")
+    monkeypatch.setattr(static_layer_module, "_import_local_rules_client", lambda: None)
+    layer = StaticLayer()
+
+    assert layer._get_verified_rules_dir() is None
+
+
+def test_get_verified_rules_dir_falls_back_on_client_error(monkeypatch) -> None:
+    monkeypatch.setenv("RULES_REPO_TOKEN", "fake-token")
+
+    def raise_client_error(**kwargs):
+        raise _FakeRulesClientError("falta red")
+
+    fake_module = _make_fake_local_rules_client(get_verified_rules=raise_client_error)
+    monkeypatch.setattr(static_layer_module, "_import_local_rules_client", lambda: fake_module)
+
+    layer = StaticLayer()
+    assert layer._get_verified_rules_dir() is None
+
+
+def test_get_verified_rules_dir_falls_back_on_verification_error(monkeypatch) -> None:
+    monkeypatch.setenv("RULES_REPO_TOKEN", "fake-token")
+
+    def raise_verification_error(**kwargs):
+        raise _FakeRulesVerificationError("clave manipulada")
+
+    fake_module = _make_fake_local_rules_client(get_verified_rules=raise_verification_error)
+    monkeypatch.setattr(static_layer_module, "_import_local_rules_client", lambda: fake_module)
+
+    layer = StaticLayer()
+    assert layer._get_verified_rules_dir() is None
+
+
+def test_get_verified_rules_dir_falls_back_on_unexpected_exception(monkeypatch) -> None:
+    """Ningún fallo de este paso debe propagar ni abortar el análisis --
+    ni siquiera uno inesperado (p. ej. un error de red sin envolver)."""
+    monkeypatch.setenv("RULES_REPO_TOKEN", "fake-token")
+
+    def raise_unexpected(**kwargs):
+        raise ConnectionError("sin red")
+
+    fake_module = _make_fake_local_rules_client(get_verified_rules=raise_unexpected)
+    monkeypatch.setattr(static_layer_module, "_import_local_rules_client", lambda: fake_module)
+
+    layer = StaticLayer()
+    assert layer._get_verified_rules_dir() is None
+
+
+def test_get_verified_rules_dir_requests_the_full_catalog(monkeypatch, tmp_path) -> None:
+    """Pide TODO el catálogo (no solo los lenguajes del diff actual):
+    _get_rules_dir() se resuelve UNA vez por analyze(), antes de saber qué
+    lenguajes trae el diff -- ver docstring de _get_verified_rules_dir."""
+    monkeypatch.setenv("RULES_REPO_TOKEN", "fake-token")
+    seen_kwargs = {}
+
+    def fake_get_verified_rules(**kwargs):
+        seen_kwargs.update(kwargs)
+        return types.SimpleNamespace(version="v0.0.5", custom={}, third_party={}, yara={})
+
+    fake_module = _make_fake_local_rules_client(
+        get_verified_rules=fake_get_verified_rules, repo_cache_dir_path=tmp_path / "rules-repo"
+    )
+    monkeypatch.setattr(static_layer_module, "_import_local_rules_client", lambda: fake_module)
+
+    StaticLayer()._get_verified_rules_dir()
+
+    assert seen_kwargs == {
+        "include_all_custom": True,
+        "include_all_third_party": True,
+        "include_yara": True,
+    }
+
+
+def test_get_verified_rules_dir_materializes_expected_layout(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("RULES_REPO_TOKEN", "fake-token")
+
+    src_python = tmp_path / "source" / "custom-python"
+    (src_python).mkdir(parents=True)
+    (src_python / "r.yaml").write_text("regla-python", encoding="utf-8")
+
+    src_third_party = tmp_path / "source" / "trailofbits-rs"
+    src_third_party.mkdir(parents=True)
+    (src_third_party / "r.yaml").write_text("regla-rust-third-party", encoding="utf-8")
+
+    src_yara = tmp_path / "source" / "webshells"
+    src_yara.mkdir(parents=True)
+    (src_yara / "w.yar").write_text("rule w {}", encoding="utf-8")
+
+    fake_rules = types.SimpleNamespace(
+        version="v0.0.5",
+        custom={"python": src_python},
+        third_party={"trailofbits/rs": src_third_party},
+        yara={"webshells": src_yara},
+    )
+    fake_module = _make_fake_local_rules_client(
+        get_verified_rules=lambda **kwargs: fake_rules,
+        repo_cache_dir_path=tmp_path / "cache" / "rules-repo",
+    )
+    monkeypatch.setattr(static_layer_module, "_import_local_rules_client", lambda: fake_module)
+
+    layer = StaticLayer()
+    view_root = layer._get_verified_rules_dir()
+
+    assert view_root == tmp_path / "cache" / "rules-view" / "v0.0.5"
+    python_rule = view_root / "rules" / "semgrep" / "custom" / "python" / "r.yaml"
+    third_party_rule = (
+        view_root / "rules" / "semgrep" / "third-party" / "trailofbits" / "rs" / "r.yaml"
+    )
+    yara_rule = view_root / "rules" / "yara" / "webshells" / "w.yar"
+    assert python_rule.read_text(encoding="utf-8") == "regla-python"
+    assert third_party_rule.read_text(encoding="utf-8") == "regla-rust-third-party"
+    assert yara_rule.read_text(encoding="utf-8") == "rule w {}"
+
+
+def test_get_verified_rules_dir_view_path_changes_with_active_version(
+    monkeypatch, tmp_path
+) -> None:
+    """Requisito clave para un proceso de larga duración (Engine API,
+    dashboard backend): si la versión activa cambia entre dos llamadas, la
+    ruta devuelta cambia con ella -- así las cachés de proceso existentes
+    (_yara_rules_cache, _semgrep_finding_type_cache), indexadas por esa
+    ruta, dejan de servir contenido de la versión anterior."""
+    monkeypatch.setenv("RULES_REPO_TOKEN", "fake-token")
+    current_version = {"value": "v0.0.5"}
+
+    def fake_get_verified_rules(**kwargs):
+        return types.SimpleNamespace(
+            version=current_version["value"], custom={}, third_party={}, yara={}
+        )
+
+    fake_module = _make_fake_local_rules_client(
+        get_verified_rules=fake_get_verified_rules, repo_cache_dir_path=tmp_path / "rules-repo"
+    )
+    monkeypatch.setattr(static_layer_module, "_import_local_rules_client", lambda: fake_module)
+
+    layer = StaticLayer()
+    first = layer._get_verified_rules_dir()
+    current_version["value"] = "v0.0.6"
+    second = layer._get_verified_rules_dir()
+
+    assert first != second
+    assert first.name == "v0.0.5"
+    assert second.name == "v0.0.6"
+
+
+def test_get_rules_dir_prefers_verified_rules_when_available(tmp_path) -> None:
+    layer = StaticLayer()
+    with patch.object(layer, "_get_verified_rules_dir", return_value=tmp_path / "verified-view"):
+        assert layer._get_rules_dir() == tmp_path / "verified-view"
+
+
+def test_get_rules_dir_falls_back_to_existing_steps_when_verified_unavailable(tmp_path) -> None:
+    layer = StaticLayer(rules_dir_override=tmp_path)
+    with patch.object(layer, "_get_verified_rules_dir", return_value=None):
+        assert layer._get_rules_dir() == tmp_path
+
+
+def test_sanitize_version_for_path_leaves_normal_versions_untouched() -> None:
+    assert static_layer_module._sanitize_version_for_path("v0.0.5") == "v0.0.5"
+
+
+def test_sanitize_version_for_path_replaces_unsafe_characters() -> None:
+    assert static_layer_module._sanitize_version_for_path("../../etc") == ".._.._etc"
+
+
+def test_sanitize_version_for_path_falls_back_to_unknown_when_empty() -> None:
+    assert static_layer_module._sanitize_version_for_path("   ") == "unknown"
+
+
+def test_import_local_rules_client_resolves_the_real_module() -> None:
+    """Sanity check contra el fichero real (sin red: solo comprueba que el
+    mecanismo de import bajo demanda funciona y expone lo que
+    _get_verified_rules_dir necesita)."""
+    module = static_layer_module._import_local_rules_client()
+    assert module is not None
+    assert callable(module.get_verified_rules)
+    assert callable(module.repo_cache_dir)
+    assert issubclass(module.RulesVerificationError, module.RulesClientError)

@@ -116,7 +116,32 @@ Per spec §4, YARA no es una capa nueva ni independiente: es la MISMA capa `stat
 
 Verificado con reglas reales del repo (compilación de las 9 reglas ya sincronizadas + match real contra un webshell ASP legítimo, extrayendo `risk_score=83` de sus propios metadatos) y con tests unitarios que fijan el caso clave: un fichero `.asp` (extensión que Semgrep no reconoce) sigue detectándose vía YARA.
 
-## 9. Pendiente / gaps conocidos
+## 9. Verificación LOCAL (fuera de CI): `scripts/local_rules_client.py`
+
+Todo lo anterior (§1-8) resuelve la sincronización dentro de **CI**: el runner de GitHub Actions siempre ve la última versión activada, porque `sync-rules.yml`/`reconcile-rules.yml` comitean directamente sobre `rules/` de `watch_gate`. Pero un checkout **local** de un desarrollador solo se entera de esa actualización cuando hace `git pull` — mientras tanto, ejecutar el analizador en local usaría el contenido de `rules/` que hubiera en ese commit, sin ningún aviso de que pudiera estar desactualizado.
+
+`scripts/local_rules_client.py` resuelve justamente ese caso, desacoplando "tener `watch_gate` actualizado localmente" de "el análisis usa las reglas correctas":
+
+- En cada llamada, pregunta **directamente** a la Releases API cuál es la versión activa (`GET /repos/pablojimz/Repo-reglas-SEMGREP-y-YARA/releases/latest`) — nunca infiere la versión a partir del checkout local de `watch_gate`.
+- Mantiene su propio clon disperso **persistente y reutilizable** fuera del árbol git de `watch_gate` (por defecto `~/.cache/watch_gate/rules-repo`, configurable por `WATCHGATE_RULES_REPO_CACHE_DIR`), que solo se AMPLÍA entre llamadas (nunca se re-clona ni se reduce).
+- Verifica por hash cada clave pedida, con el mismo método determinista que `scripts/rules_hash.py` / `build_release_manifest.py`, y cachea qué claves ya verificó con qué hash (`~/.cache/watch_gate/verified_state.json`, configurable por `WATCHGATE_RULES_VERIFIED_STATE_FILE`) para no repetir checkout/LFS/hash de una clave cuyo hash esperado no ha cambiado desde la última ejecución.
+- Falla cerrado, todo-o-nada, igual que el mecanismo de CI (§5.4): una clave manipulada aborta la llamada entera (`RulesVerificationError`, con la lista exacta de claves fallidas) sin activar ni actualizar el estado de ninguna, ni siquiera de las que sí verificaron.
+- Nunca escribe dentro del árbol git de `watch_gate`: expone únicamente rutas de lectura, vía `get_verified_rules()` (librería) o por stdout (CLI, `python scripts/local_rules_client.py --language ... --third-party ... --all-yara`).
+
+Reutiliza la lógica ya existente en vez de duplicarla: `rules_hash.compute_dir_hash`/`hashes_match` para el hash, y de `sync_rules.py` la descarga del manifest como asset de Release (`fetch_release_manifest`), la ejecución de git con enmascarado de token (`_run_git`), el aplanado de hashes de terceros (`_flatten_third_party`), la validación de charset seguro de cada segmento de clave (`_validate_key_segment`) y la defensa frente al "cone mode leak" (`_assert_no_lfs_pointers`, mismo bug que §5.3). Además de la selección explícita (`languages=[...]`, `third_party=[...]`), admite `include_all_custom=True`/`include_all_third_party=True` para pedir TODO el catálogo publicado de esa familia (mismo criterio que `include_yara`, que siempre es todo-o-nada) -- lo usa `static_layer.py`, ver §9.1. Ver el docstring de `scripts/local_rules_client.py` para el detalle completo de cada decisión de diseño (incluido el límite de confianza asumido conscientemente sobre la caché local) y los tests en `tests/unit/test_local_rules_client.py` (lógica, con la Releases API y el checkout mockeados) y `tests/unit/test_local_rules_client_git_lfs.py` (mecánica real de git+LFS y del clon disperso persistente, sin red, contra un repo local `file://`).
+
+### 9.1 Conectado a la capa estática: verificación automática en cada `analyze()`
+
+`watchgate/core/layers/static_layer.py::StaticLayer._get_rules_dir()` usa `local_rules_client` como **paso 0**, por delante de los 4 pasos de resolución que ya existían (override de constructor, variable de entorno, `rules/semgrep/` local, caché de último recurso sin verificar):
+
+- Si `RULES_REPO_TOKEN` está en el entorno del proceso que ejecuta `watchgate`, cada `analyze()` llama a `get_verified_rules(include_all_custom=True, include_all_third_party=True, include_yara=True)` -- el catálogo completo, porque `_get_rules_dir()` se resuelve UNA vez por análisis, antes de saber qué lenguajes concretos trae el diff.
+- Si verifica, se materializa una **vista local** (`~/.cache/watch_gate/rules-view/<versión>/rules/semgrep/...`, `.../rules/yara/...`) que remapea las rutas agnósticas que devuelve `local_rules_client` a la misma convención de carpetas que el resto de `static_layer.py` ya esperaba -- symlink de directorio si la plataforma lo permite, copia si no (p. ej. Windows sin "Developer Mode"). Ese remapeo vive en `static_layer.py`, no en `local_rules_client.py`, que deliberadamente no conoce ninguna convención de un consumidor concreto.
+- La vista se nombra por versión (`rules-view/<versión>/...`, no una carpeta fija) precisamente para que, en un proceso de larga duración (Engine API, dashboard backend) que sobrevive a un cambio de versión activa entre dos análisis, la ruta resuelta cambie con ella -- así las cachés de PROCESO ya existentes (`_yara_rules_cache`, `_semgrep_finding_type_cache`, indexadas por la ruta resuelta) dejan de servir contenido de la versión anterior sin tener que tocar esas cachés en sí.
+- Cualquier fallo de este paso (sin token, sin red, verificación de integridad fallida) se registra (`logger.info`/`error`/`warning` según el caso) y se cae a los 4 pasos existentes -- **nunca** aborta el análisis ni es la única fuente de reglas disponible.
+
+**Alcance real hoy:** solo `sync-rules.yml` y `reconcile-rules.yml` reciben el secret `RULES_REPO_TOKEN` en este repo (ver tabla de §2) -- el workflow que analiza PRs no lo tiene configurado. Por construcción, este paso 0 se activa donde quiera que `RULES_REPO_TOKEN` esté presente en el entorno (típicamente, la máquina de un desarrollador que lo exporte para trabajar en local) y es un no-op transparente donde no lo esté (CI de análisis de PRs, tal y como está hoy: sigue leyendo `rules/` del checkout tal cual, sin cambios de comportamiento).
+
+## 10. Pendiente / gaps conocidos
 
 - **`sync-rules.yml` (el disparo real por `repository_dispatch`) todavía no se ha probado de punta a punta** — sí se validó `reconcile-rules.yml`, que comparte toda la lógica de sincronización, pero el disparo por evento en sí queda por confirmar (simulando el evento o publicando una release real desde el repo de reglas).
 
