@@ -16,6 +16,7 @@ from watchgate.dashboard.backend.auth import _dev_mode, _secret, ensure_safe_sta
 from watchgate.dashboard.backend.auth import router as auth_router
 from watchgate.dashboard.backend.auth_oidc import router as oidc_router
 from watchgate.dashboard.backend.auth_oidc import setup_oidc
+from watchgate.dashboard.backend.routers.agent_access import router as agent_access_router
 from watchgate.dashboard.backend.routers.feedback import router as feedback_router
 from watchgate.dashboard.backend.routers.keys import router as keys_router
 from watchgate.dashboard.backend.routers.llm_settings import router as llm_router
@@ -79,6 +80,7 @@ def create_app() -> FastAPI:
 
     app.include_router(auth_router, prefix="/api")
     app.include_router(oidc_router, prefix="/api")
+    app.include_router(agent_access_router, prefix="/api")
     app.include_router(scores_router, prefix="/api")
     app.include_router(keys_router, prefix="/api")
     app.include_router(feedback_router, prefix="/api")
