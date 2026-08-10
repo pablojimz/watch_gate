@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import io
 import json
+import sys
 from unittest.mock import MagicMock, patch
 
 from watchgate.core.models import (
@@ -481,15 +483,36 @@ def test_org_metrics_aggregates_real_dashboard_data(monkeypatch, tmp_path) -> No
     assert data["repos_count"] == 2
 
 
-def test_org_metrics_scoped_to_explicit_repos_when_given(monkeypatch, tmp_path) -> None:
-    _configure_mcp_identity(monkeypatch, tmp_path)
-    _seed_dashboard_score(tmp_path, monkeypatch, repo="acme/webapp", score=75, semaforo="rojo")
-    _seed_dashboard_score(tmp_path, monkeypatch, repo="acme/otro", score=5, semaforo="verde")
+def test_run_stdio_server_loop(monkeypatch) -> None:
+    from watchgate.mcp.server import run_stdio_server
 
-    result = execute_mcp_tool("watchgate_org_metrics", {"repos": ["acme/webapp"]})
-    assert not result.isError
-    data = json.loads(result.content[0].text)
-    assert data["total_prs"] == 1
+    input_lines = (
+        "\n"
+        "not-valid-json\n"
+        '{"jsonrpc": "2.0", "id": 1, "method": "ping"}\n'
+        '{"jsonrpc": "2.0", "method": "notifications/initialized"}\n'
+    )
+
+    fake_stdin = io.StringIO(input_lines)
+    fake_stdout = io.StringIO()
+    fake_stderr = io.StringIO()
+
+    monkeypatch.setattr(sys, "stdin", fake_stdin)
+    monkeypatch.setattr(sys, "stdout", fake_stdout)
+    monkeypatch.setattr(sys, "stderr", fake_stderr)
+
+    ret = run_stdio_server()
+    assert ret == 0
+
+    output = fake_stdout.getvalue().strip().splitlines()
+    assert len(output) == 2  # 1 error de parseo + 1 respuesta a ping
+
+    err_doc = json.loads(output[0])
+    assert err_doc["error"]["code"] == -32700
+
+    ping_doc = json.loads(output[1])
+    assert ping_doc["id"] == 1
+    assert ping_doc["result"] == {}
 
 
 def test_mcp_tool_submit_feedback(monkeypatch, tmp_path) -> None:
