@@ -62,6 +62,35 @@ def test_handle_jsonrpc_tools_list() -> None:
     assert len(tools) == 8
 
 
+def test_handle_jsonrpc_invalid_structure_and_method() -> None:
+    # Structure not a dict
+    resp = handle_jsonrpc_request("not a dict")  # type: ignore[arg-type]
+    assert resp is not None
+    assert resp.error["code"] == -32600
+
+    # Unsupported method
+    resp_method = handle_jsonrpc_request({"jsonrpc": "2.0", "id": 10, "method": "unknown/method"})
+    assert resp_method is not None
+    assert resp_method.error["code"] == -32601
+
+    # Notification initialized returns None
+    assert handle_jsonrpc_request({"jsonrpc": "2.0", "method": "notifications/initialized"}) is None
+
+
+def test_handle_jsonrpc_tool_call_internal_error() -> None:
+    with patch("watchgate.mcp.server.execute_mcp_tool", side_effect=ValueError("Fallo interno")):
+        req = {
+            "jsonrpc": "2.0",
+            "id": 99,
+            "method": "tools/call",
+            "params": {"name": "watchgate_precheck"},
+        }
+        resp = handle_jsonrpc_request(req)
+        assert resp is not None
+        assert resp.error["code"] == -32603
+        assert "Fallo interno" in resp.error["message"]
+
+
 def test_mcp_tool_precheck() -> None:
     diff_text = """--- a/test.py
 +++ b/test.py
@@ -362,7 +391,9 @@ def _configure_mcp_identity(monkeypatch, tmp_path):
     return org_id
 
 
-def _seed_dashboard_score(tmp_path, monkeypatch, *, repo: str, score: int, semaforo: str) -> None:
+def _seed_dashboard_score(
+    tmp_path, monkeypatch, *, repo: str, score: int, semaforo: str, user_login: str = "MCP User"
+) -> None:
     from watchgate.core.models import AggregatedResult, LayerResult
     from watchgate.core.models import Semaforo as SemaforoEnum
     from watchgate.dashboard.backend import db as dashboard_db
@@ -381,7 +412,10 @@ def _seed_dashboard_score(tmp_path, monkeypatch, *, repo: str, score: int, semaf
         },
     )
     with dashboard_db.db_session() as conn:
-        return dashboard_db.insert_aggregated(conn, result, author_login="octocat")
+        score_id = dashboard_db.insert_aggregated(conn, result, author_login="octocat")
+        if user_login:
+            dashboard_db.upsert_role(conn, user_login, repo, "revisor")
+        return score_id
 
 
 def test_repo_score_history_requires_mcp_api_key(monkeypatch) -> None:
@@ -389,6 +423,17 @@ def test_repo_score_history_requires_mcp_api_key(monkeypatch) -> None:
     result = execute_mcp_tool("watchgate_repo_score_history", {"repo": "acme/webapp"})
     assert result.isError
     assert "WATCHGATE_MCP_API_KEY" in result.content[0].text
+
+
+def test_mcp_repo_score_history_denied_without_role(monkeypatch, tmp_path) -> None:
+    _configure_mcp_identity(monkeypatch, tmp_path)
+    _seed_dashboard_score(
+        tmp_path, monkeypatch, repo="acme/secret-repo", score=80, semaforo="rojo", user_login=""
+    )
+
+    result = execute_mcp_tool("watchgate_repo_score_history", {"repo": "acme/secret-repo"})
+    assert result.isError
+    assert "Permiso denegado" in result.content[0].text
 
 
 def test_repo_score_history_returns_real_dashboard_data(monkeypatch, tmp_path) -> None:

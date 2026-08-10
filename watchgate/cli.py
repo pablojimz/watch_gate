@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 
 import argcomplete
+import yaml
 
 import watchgate.core.layers  # noqa: F401 - registrar capas en LAYER_REGISTRY
 from watchgate.config import apply_cli_overrides, load_config
@@ -135,6 +136,16 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _setup_logging(args: argparse.Namespace) -> None:
+    # Silenciar loggers ruidosos de telemetría de terceros
+    noisy_loggers = (
+        "chromadb",
+        "chromadb.telemetry",
+        "chromadb.telemetry.product.posthog",
+        "httpx",
+    )
+    for noisy_logger in noisy_loggers:
+        logging.getLogger(noisy_logger).setLevel(logging.ERROR)
+
     if args.quiet:
         logging.basicConfig(level=logging.ERROR, stream=sys.stderr, force=True)
     elif args.debug:
@@ -164,6 +175,15 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
         config = apply_cli_overrides(
             config, weight_overrides=args.weight, threshold_overrides=args.threshold
         )
+    except (yaml.YAMLError, TypeError, ValueError) as exc:
+        logger.debug("Fallo cargando/aplicando configuración", exc_info=True)
+        if not args.quiet:
+            msg = (
+                f"[Error de Configuración] Archivo de configuración "
+                f"'{args.config}' inválido: {exc}"
+            )
+            print(msg, file=sys.stderr)
+        return 2
     except Exception as exc:  # noqa: BLE001
         logger.debug("Fallo cargando/aplicando configuración", exc_info=True)
         if not args.quiet:

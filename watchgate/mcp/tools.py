@@ -532,15 +532,23 @@ def _handle_repo_score_history(args: dict[str, Any]) -> McpToolCallResult:
 
     with open_session() as session:
         identity = resolve_mcp_identity(session)
-    if identity is None:
-        return McpToolCallResult(
-            content=[McpTextContent(text=_NO_MCP_IDENTITY_ERROR)],
-            isError=True,
-        )
+        if identity is None:
+            return McpToolCallResult(
+                content=[McpTextContent(text=_NO_MCP_IDENTITY_ERROR)],
+                isError=True,
+            )
+        _key, user, _org = identity
+        user_login = user.name
 
     from watchgate.dashboard.backend import db as dashboard_db
 
     with dashboard_db.db_session() as conn:
+        is_admin = dashboard_db.user_is_org_admin(conn, user_login)
+        if not is_admin and dashboard_db.get_role(conn, user_login, repo) is None:
+            return McpToolCallResult(
+                content=[McpTextContent(text=f"Permiso denegado: Sin rol asignado en '{repo}'.")],
+                isError=True,
+            )
         scores = dashboard_db.list_scores(conn, repo)
 
     output = [s.model_dump(mode="json") for s in scores[:limit]]
@@ -552,24 +560,26 @@ def _handle_org_metrics(args: dict[str, Any]) -> McpToolCallResult:
 
     with open_session() as session:
         identity = resolve_mcp_identity(session)
-    if identity is None:
-        return McpToolCallResult(
-            content=[McpTextContent(text=_NO_MCP_IDENTITY_ERROR)],
-            isError=True,
-        )
+        if identity is None:
+            return McpToolCallResult(
+                content=[McpTextContent(text=_NO_MCP_IDENTITY_ERROR)],
+                isError=True,
+            )
+        _key, user, _org = identity
+        user_login = user.name
 
     from watchgate.dashboard.backend import db as dashboard_db
 
     with dashboard_db.db_session() as conn:
+        is_admin = dashboard_db.user_is_org_admin(conn, user_login)
         if requested_repos:
-            repos = list(requested_repos)
+            repos = [
+                r
+                for r in requested_repos
+                if is_admin or dashboard_db.get_role(conn, user_login, r) is not None
+            ]
         else:
-            # `is_admin=True` ignora `user_login` y devuelve TODOS los repos
-            # del Dashboard -- ver limitación documentada en la descripción
-            # de esta tool: el Dashboard identifica repos por login de
-            # GitHub, no por organización, así que sin una lista explícita
-            # de `repos` no hay forma de acotar solo a "los de esta org".
-            repos = dashboard_db.list_repos_for_user(conn, "_mcp_agent", is_admin=True)
+            repos = dashboard_db.list_repos_for_user(conn, user_login, is_admin=is_admin)
         metrics = dashboard_db.compute_org_metrics(conn, repos)
 
     return McpToolCallResult(content=[McpTextContent(text=metrics.model_dump_json(indent=2))])
