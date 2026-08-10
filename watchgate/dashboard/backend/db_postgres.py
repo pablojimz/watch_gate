@@ -112,7 +112,10 @@ CREATE TABLE IF NOT EXISTS pr_scores (
   author_login TEXT,
   human_feedback TEXT CHECK(
     human_feedback IN ('correcto','falso_positivo') OR human_feedback IS NULL
-  )
+  ),
+  accepted_by TEXT,
+  accepted_at TEXT,
+  findings_json TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_repo_timestamp ON pr_scores(repo, timestamp);
 
