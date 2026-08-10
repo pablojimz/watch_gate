@@ -48,7 +48,7 @@ from watchgate.core.layers._shared import (
     parse_requirements_txt,
 )
 from watchgate.core.layers.base import AnalysisLayer, register_layer
-from watchgate.core.models import Finding, LayerResult, NormalizedDiff
+from watchgate.core.models import Confidence, Finding, LayerResult, NormalizedDiff
 
 logger = logging.getLogger("watchgate.vulnerabilities")
 
@@ -419,9 +419,18 @@ class VulnerabilitiesLayer(AnalysisLayer):
         final_score = max(scores, default=0)
         final_justification = " | ".join(justifications)
 
+        confidence = None
+        if final_score >= 70:
+            confidence = Confidence.ALTA
+        elif final_score >= 40:
+            confidence = Confidence.MEDIA
+        elif final_score > 0:
+            confidence = Confidence.BAJA
+
         return LayerResult(
             layer_name=self.name,
             risk_score=final_score,
             justification=final_justification,
             findings=structured_findings,
+            confidence=confidence,
         )

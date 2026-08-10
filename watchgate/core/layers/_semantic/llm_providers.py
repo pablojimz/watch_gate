@@ -36,6 +36,7 @@ from watchgate.core.layers._semantic.client import (
     ToolExecutor,
     _extract_json_object,
 )
+from watchgate.core.layers._semantic.prompting import strip_cache_breakpoint_marker
 from watchgate.core.layers._semantic.tools import FORCE_FINAL_ANSWER_MESSAGE, ToolCallBudget
 
 
@@ -60,6 +61,12 @@ class GeminiClient(LLMClient):
     ) -> SemanticOutput:
         from google.genai import types
 
+        # No hace falta marcar nada explícito para beneficiarse del bloque
+        # estático-primero de `build_system_prompt()` -- Gemini 2.5 cachea de
+        # forma implícita/automática el prefijo repetido entre llamadas. Solo
+        # hay que quitar el marcador en sí, que no significa nada para el
+        # modelo (ver `prompting.py`).
+        system_prompt = strip_cache_breakpoint_marker(system_prompt)
         budget = ToolCallBudget(max_calls=max_tool_calls)
         contents: list[Any] = [types.Content(role="user", parts=[types.Part(text=user_prompt)])]
         gemini_tools = self._build_tools(tools)
@@ -196,6 +203,10 @@ class OpenAICompatibleClient(LLMClient):
         tool_executor: ToolExecutor,
         max_tool_calls: int,
     ) -> SemanticOutput:
+        # Igual que en GeminiClient: vLLM (radix cache) y Ollama/llama.cpp
+        # cachean el prefijo de KV-cache repetido de forma automática, sin
+        # ningún flag ni marcador -- solo hay que quitar el marcador en sí.
+        system_prompt = strip_cache_breakpoint_marker(system_prompt)
         budget = ToolCallBudget(max_calls=max_tool_calls)
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": system_prompt},

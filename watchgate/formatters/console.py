@@ -74,8 +74,9 @@ def render_console(aggregated: AggregatedResult) -> str:
             "semantic": "Semántica (LLM)",
         }
 
+        eff_weights = aggregated.effective_weights or aggregated.weights_used
         for layer_name, layer_res in aggregated.layer_results.items():
-            weight = aggregated.weights_used.get(layer_name, 0.0)
+            weight = eff_weights.get(layer_name, 0.0)
             contrib = round(layer_res.risk_score * weight, 1)
             display_name = layer_labels.get(layer_name, layer_name.capitalize())
 

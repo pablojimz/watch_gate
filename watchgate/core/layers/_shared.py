@@ -51,6 +51,23 @@ class DependencyChange(BaseModel):
 
 _PKG_JSON_DEP_REGEX = re.compile(r'^\+\s*"([^"]+)":\s*"([^"]+)"')
 _PKG_JSON_SCRIPT_REGEX = re.compile(r'^\+\s*"(preinstall|postinstall|install)":\s*"([^"]+)"')
+_PKG_JSON_NON_DEP_KEYS = frozenset(
+    {
+        "name",
+        "version",
+        "description",
+        "main",
+        "author",
+        "license",
+        "private",
+        "type",
+        "repository",
+        "bugs",
+        "homepage",
+        "keywords",
+        "scripts",
+    }
+)
 
 
 def _is_npm_url_version(version_str: str) -> bool:
@@ -90,6 +107,8 @@ def parse_package_json(diff_hunk: str) -> list[DependencyChange]:
         if dep_match:
             dep_name = dep_match.group(1)
             dep_version = dep_match.group(2)
+            if dep_name in _PKG_JSON_NON_DEP_KEYS:
+                continue
             is_direct = _is_npm_url_version(dep_version)
             changes.append(
                 DependencyChange(
@@ -253,11 +272,17 @@ def parse_cargo_toml(diff_hunk: str) -> list[DependencyChange]:
 
 
 _GO_MOD_REQUIRE_SINGLE_REGEX = re.compile(
-    r"^\+\s*require\s+([A-Za-z0-9._\-/]+)\s+(v[A-Za-z0-9._\-+]+)"
+    r"^\+\s*require\s+([A-Za-z0-9._\-/]+)\s+(v\d[A-Za-z0-9._\-+]*)"
 )
-_GO_MOD_REQUIRE_LINE_REGEX = re.compile(
-    r"^\+\s*([A-Za-z0-9._\-/]+)\s+(v[A-Za-z0-9._\-+]+)"
-)
+# La versión exige un dígito justo después de "v" (no solo `v[A-Za-z...]+`,
+# que también matchea palabras normales como "ver" o "vale") -- bug real
+# encontrado en revisión: sin el dígito, una línea de comentario cualquiera
+# que mencione una palabra empezada en "v" ("// ver la migración a v2.0...")
+# se parseaba como una dependencia Go inventada (nombre "//", versión "ver").
+# Este regex genérico (sin la palabra clave "require" delante, para las
+# líneas dentro de un bloque `require (...)` multilínea) es el más expuesto,
+# al no tener ningún otro anclaje léxico que lo distinga de prosa normal.
+_GO_MOD_REQUIRE_LINE_REGEX = re.compile(r"^\+\s*([A-Za-z0-9._\-/]+)\s+(v\d[A-Za-z0-9._\-+]*)")
 _GO_MOD_REPLACE_REGEX = re.compile(
     r"^\+\s*replace\s+([A-Za-z0-9._\-/]+)(?:\s+v[^\s]+)?\s*=>\s*(.+)"
 )
@@ -319,9 +344,7 @@ def parse_go_mod(diff_hunk: str) -> list[DependencyChange]:
     return changes
 
 
-_COMPOSER_DEP_REGEX = re.compile(
-    r'^\+\s*"([a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+)":\s*"([^"]+)"'
-)
+_COMPOSER_DEP_REGEX = re.compile(r'^\+\s*"([a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+)":\s*"([^"]+)"')
 _COMPOSER_SCRIPT_REGEX = re.compile(
     r'^\+\s*"(pre-install-cmd|post-install-cmd|post-autoload-dump|post-create-project-cmd)":\s*(?:"([^"]+)"|\[(.*?)\])'
 )

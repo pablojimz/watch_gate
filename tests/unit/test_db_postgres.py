@@ -16,7 +16,15 @@ requeriría un servicio de base de datos en CI que hoy no existe.
 
 from __future__ import annotations
 
-from watchgate.dashboard.backend.db_postgres import POSTGRES_SCHEMA, _to_pg_params
+from unittest.mock import MagicMock, patch
+
+from watchgate.dashboard.backend.db_postgres import (
+    POSTGRES_SCHEMA,
+    PostgresConnection,
+    PostgresCursor,
+    _to_pg_params,
+    connect,
+)
 
 
 def test_translates_single_placeholder() -> None:
@@ -57,3 +65,47 @@ def test_postgres_schema_declares_all_dashboard_tables() -> None:
         "ui_settings",
     ):
         assert f"CREATE TABLE IF NOT EXISTS {table}" in POSTGRES_SCHEMA
+
+
+def test_postgres_cursor_and_connection_wrapper_methods() -> None:
+    mock_cursor = MagicMock()
+    mock_cursor.fetchone.return_value = {"id": 1, "repo": "acme/api"}
+    mock_cursor.fetchall.return_value = [{"id": 1}, {"id": 2}]
+    mock_cursor.rowcount = 2
+
+    cursor_wrapper = PostgresCursor(mock_cursor)
+    assert cursor_wrapper.fetchone() == {"id": 1, "repo": "acme/api"}
+    assert cursor_wrapper.fetchall() == [{"id": 1}, {"id": 2}]
+    assert cursor_wrapper.rowcount == 2
+
+    mock_pg_conn = MagicMock()
+    mock_pg_conn.cursor.return_value = mock_cursor
+
+    pg_conn = PostgresConnection(mock_pg_conn)
+    res = pg_conn.execute("SELECT * FROM pr_scores WHERE id = ?", (1,))
+    assert res.fetchone() == {"id": 1, "repo": "acme/api"}
+
+    pg_conn.executescript("CREATE TABLE t1 (a INT); CREATE TABLE t2 (b INT);")
+    assert mock_pg_conn.cursor.return_value.execute.call_count > 0
+
+    pg_conn.commit()
+    mock_pg_conn.commit.assert_called_once()
+
+    pg_conn.rollback()
+    mock_pg_conn.rollback.assert_called_once()
+
+    pg_conn.close()
+    mock_pg_conn.close.assert_called_once()
+
+
+def test_connect_wrapper_invokes_psycopg_connect() -> None:
+    mock_psycopg = MagicMock()
+    mock_conn = MagicMock()
+    mock_psycopg.connect.return_value = mock_conn
+
+    with patch("watchgate.dashboard.backend.db_postgres.psycopg", mock_psycopg):
+        conn = connect("postgresql://user:pass@localhost:5432/db")
+        assert isinstance(conn, PostgresConnection)
+        mock_psycopg.connect.assert_called_once_with(
+            "postgresql://user:pass@localhost:5432/db", autocommit=False
+        )

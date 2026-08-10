@@ -48,6 +48,8 @@ class ScoreOut(BaseModel):
     timestamp: str
     author_login: str | None = None
     human_feedback: FeedbackValue | None = None
+    accepted_by: str | None = None
+    accepted_at: str | None = None
     # Conteo de hallazgos por naturaleza ("malicioso"/"vulnerabilidad"/
     # "incertidumbre") agregado de TODAS las capas de la PR -- mismo campo
     # y misma semántica que AggregatedResult.threat_summary, ya usado en
@@ -63,6 +65,8 @@ class ScoreOut(BaseModel):
         result: AggregatedResult,
         human_feedback: FeedbackValue | None,
         author_login: str | None = None,
+        accepted_by: str | None = None,
+        accepted_at: str | None = None,
     ) -> ScoreOut:
         return cls(
             id=score_id,
@@ -75,6 +79,8 @@ class ScoreOut(BaseModel):
             timestamp=result.timestamp,
             author_login=author_login,
             human_feedback=human_feedback,
+            accepted_by=accepted_by,
+            accepted_at=accepted_at,
             threat_summary=result.threat_summary,
         )
 
