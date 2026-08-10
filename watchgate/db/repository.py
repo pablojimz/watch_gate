@@ -65,9 +65,7 @@ def check_user_repo_permission(
 
     # 2. Consultar rol en la tabla repo_roles si existe
     try:
-        stmt_role = select(RepoRole).where(
-            RepoRole.user_login == norm_login, RepoRole.repo == repo
-        )
+        stmt_role = select(RepoRole).where(RepoRole.user_login == norm_login, RepoRole.repo == repo)
         role_record = session.exec(stmt_role).first()
         if role_record:
             return has_required_role(role_record.role, required_role)
@@ -79,7 +77,6 @@ def check_user_repo_permission(
         return True
 
     return False
-_TOKEN_PREFIX_TEST = "wg_test_"
 
 
 def hash_token(raw_token: str) -> str:
