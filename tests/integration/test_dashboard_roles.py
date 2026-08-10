@@ -136,6 +136,9 @@ def test_revisor_can_list_scores_but_not_feedback_or_settings_or_admin(client: T
     # Feedback: ✗
     assert client.post("/api/scores/1/feedback", json={"feedback": "correcto"}).status_code == 403
 
+    # Aceptar (gate de aprobación manual): ✗
+    assert client.post("/api/scores/1/accept").status_code == 403
+
     # Gestionar accesos: ✗
     assert client.get("/api/admin/roles").status_code == 403
     assert (
@@ -173,6 +176,22 @@ def test_mantenedor_can_feedback_but_not_settings_or_admin(client: TestClient) -
         == 403
     )
     assert client.get("/api/admin/roles").status_code == 403
+
+
+def test_mantenedor_can_accept_and_unaccept_score(client: TestClient) -> None:
+    _login(client, "maint", "mantenedor")
+
+    accepted = client.post("/api/scores/1/accept")
+    assert accepted.status_code == 200, accepted.text
+    body = accepted.json()
+    assert body["accepted_by"] == "maint"
+    assert body["accepted_at"] is not None
+
+    cleared = client.delete("/api/scores/1/accept")
+    assert cleared.status_code == 200, cleared.text
+    body = cleared.json()
+    assert body["accepted_by"] is None
+    assert body["accepted_at"] is None
 
 
 def test_admin_can_manage_roles_and_settings(client: TestClient) -> None:
@@ -428,3 +447,68 @@ def test_ci_config_returns_settings_with_dashboard_naming_convention(
         assert body["thresholds"] == {"amarillo": 30, "rojo": 80}
         assert body["monthly_budget_tokens"] == 2_000_000  # default de llm_settings
         assert "api_key" not in body and "api_key_masked" not in body
+
+
+def test_findings_survive_the_round_trip_through_pr_scores(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """`pr_scores` solo tenía columnas planas por capa (score/skipped) --
+    `findings` (fichero/línea/regla), `category`, `confidence` y
+    `threat_nature` se perdían al insertar, aunque el análisis original los
+    tuviera. Sin esto, un botón "ver reporte" en el dashboard no podría
+    mostrar nada más sustancioso de lo que ya cabe en la fila de la tabla."""
+    from watchgate.core.models import (
+        AggregatedResult,
+        Confidence,
+        Finding,
+        LayerResult,
+        RiskCategory,
+        Semaforo,
+        ThreatNature,
+    )
+
+    _isolate_db_connection_engine(monkeypatch, tmp_path)
+    db_path = tmp_path / "findings.db"
+
+    result = AggregatedResult(
+        score=95,
+        semaforo=Semaforo.ROJO,
+        pr_id="7",
+        repo="acme/payments-api",
+        timestamp="2026-08-10T10:00:00+00:00",
+        weights_used={"semantic": 1.0},
+        threat_summary={"malicioso": 1, "vulnerabilidad": 0, "incertidumbre": 0},
+        layer_results={
+            "semantic": LayerResult(
+                layer_name="semantic",
+                risk_score=95,
+                justification="Backdoor con exfiltración de credenciales.",
+                findings=[
+                    Finding(
+                        file_path="src/utils.py",
+                        line=10,
+                        rule_id="exfil-curl-bash",
+                        message="curl | bash con credenciales codificadas",
+                        severity="error",
+                        threat_nature=ThreatNature.MALICIOUS,
+                    )
+                ],
+                category=RiskCategory.EXFILTRACION,
+                confidence=Confidence.ALTA,
+                threat_nature=ThreatNature.MALICIOUS,
+            )
+        },
+    )
+
+    with database.db_session(db_path) as conn:
+        score_id = database.insert_aggregated(conn, result, author_login="mirrorbot")
+        fetched = database.get_score(conn, score_id)
+
+    assert fetched is not None
+    semantic = fetched.layer_results["semantic"]
+    assert semantic["threat_nature"] == "malicioso"
+    assert semantic["category"] == "exfiltracion"
+    assert semantic["confidence"] == "alta"
+    assert len(semantic["findings"]) == 1
+    assert semantic["findings"][0]["rule_id"] == "exfil-curl-bash"
+    assert semantic["findings"][0]["line"] == 10
