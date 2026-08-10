@@ -156,6 +156,29 @@ TOOLS: list[McpToolDefinition] = [
         ),
     ),
     McpToolDefinition(
+        name="watchgate_submit_feedback",
+        description=(
+            "Envía la confirmación o corrección sobre la evaluación de un "
+            "análisis previo ('correcto' o 'falso_positivo') para realimentar "
+            "las métricas y la base de conocimiento RAG de la organización."
+        ),
+        inputSchema=McpToolParameterSchema(
+            type="object",
+            properties={
+                "score_id": {
+                    "type": "integer",
+                    "description": "Identificador entero del análisis en el historial.",
+                },
+                "feedback": {
+                    "type": "string",
+                    "enum": ["correcto", "falso_positivo"],
+                    "description": "'correcto' para confirmar, 'falso_positivo' para desestimar.",
+                },
+            },
+            required=["score_id", "feedback"],
+        ),
+    ),
+    McpToolDefinition(
         name="watchgate_repo_score_history",
         description=(
             "Consulta el historial de análisis de riesgo de un repositorio tal como lo ve el "
@@ -230,6 +253,8 @@ def execute_mcp_tool(name: str, arguments: dict[str, Any] | None) -> McpToolCall
             return _handle_repo_score_history(args)
         elif name == "watchgate_org_metrics":
             return _handle_org_metrics(args)
+        elif name == "watchgate_submit_feedback":
+            return _handle_submit_feedback(args)
         else:
             return McpToolCallResult(
                 content=[McpTextContent(text=f"Herramienta no encontrada: '{name}'")],
@@ -548,3 +573,69 @@ def _handle_org_metrics(args: dict[str, Any]) -> McpToolCallResult:
         metrics = dashboard_db.compute_org_metrics(conn, repos)
 
     return McpToolCallResult(content=[McpTextContent(text=metrics.model_dump_json(indent=2))])
+
+
+def _handle_submit_feedback(args: dict[str, Any]) -> McpToolCallResult:
+    score_id = args.get("score_id")
+    feedback = args.get("feedback")
+    if score_id is None or not feedback:
+        return McpToolCallResult(
+            content=[McpTextContent(text="Se requieren los parámetros 'score_id' y 'feedback'.")],
+            isError=True,
+        )
+
+    with open_session() as session:
+        identity = resolve_mcp_identity(session)
+        if identity is None:
+            return McpToolCallResult(
+                content=[McpTextContent(text=_NO_MCP_IDENTITY_ERROR)],
+                isError=True,
+            )
+        _user_api_key, user, _org = identity
+        user_name = str(user.name)
+
+    from watchgate.dashboard.backend import db as dashboard_db
+    from watchgate.db.repository import check_user_repo_permission
+
+    with dashboard_db.db_session() as conn:
+        existing = dashboard_db.get_score(conn, int(score_id))
+        if existing is None:
+            return McpToolCallResult(
+                content=[McpTextContent(text=f"Análisis con ID '{score_id}' no encontrado.")],
+                isError=True,
+            )
+
+        with open_session() as session:
+            has_perm = check_user_repo_permission(
+                session, user_name, existing.repo, required_role="mantenedor"
+            )
+        if not has_perm:
+            msg = (
+                f"Permiso denegado: Se requiere rol 'mantenedor' sobre el "
+                f"repositorio '{existing.repo}'."
+            )
+            return McpToolCallResult(
+                content=[McpTextContent(text=msg)],
+                isError=True,
+            )
+
+        if feedback not in ("correcto", "falso_positivo"):
+            msg_err = "El feedback debe ser 'correcto' o 'falso_positivo'."
+            return McpToolCallResult(
+                content=[McpTextContent(text=msg_err)],
+                isError=True,
+            )
+        updated = dashboard_db.set_feedback(conn, int(score_id), feedback)
+        if updated is None:
+            return McpToolCallResult(
+                content=[McpTextContent(text=f"Error actualizando feedback para ID '{score_id}'.")],
+                isError=True,
+            )
+
+    res = {
+        "status": "success",
+        "score_id": score_id,
+        "repo": existing.repo,
+        "feedback": feedback,
+    }
+    return McpToolCallResult(content=[McpTextContent(text=json.dumps(res, indent=2))])
