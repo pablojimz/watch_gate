@@ -51,26 +51,11 @@ _encoder: tiktoken.Encoding | None = None
 _encoder_load_failed = False
 
 
-def _get_encoder() -> tiktoken.Encoding | None:
-    """`None` si tiktoken no pudo cargar el encoding (p. ej. sin red en el
-    primer uso -- descarga el fichero de encoding la primera vez y lo
-    cachea localmente después). No relanza: quien llama cae al heurístico
-    de caracteres en vez de que un problema de red tumbe el análisis
-    entero por un detalle de estimación de coste.
-
-    `import tiktoken` en sí (arriba) es incondicional a propósito, sin
-    `try/except ImportError` -- es una dependencia declarada de verdad en
-    `pyproject.toml`/`poetry.lock` (`poetry add tiktoken`), no opcional;
-    defenderse de que falte el propio paquete es manejo de errores para un
-    escenario que no puede pasar con un `poetry install` normal, mismo
-    criterio ya aplicado en este proyecto para chromadb/langchain_text_
-    splitters (ver `docs/planificacion/plan_tareas_equipo.md`, "revertido
-    tras el merge"). Lo que sí puede fallar de verdad, y por eso este
-    `try/except` sigue aquí, es la DESCARGA del fichero de encoding en el
-    primer uso si no hay red -- un problema real y externo, no un typo de
-    instalación."""
+def _get_encoder() -> Any | None:
     global _encoder, _encoder_load_failed
-    if _encoder is not None or _encoder_load_failed:
+    if tiktoken is None or _encoder_load_failed:
+        return None
+    if _encoder is not None:
         return _encoder
     try:
         _encoder = tiktoken.get_encoding("o200k_base")
