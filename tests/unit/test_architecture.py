@@ -42,9 +42,7 @@ def test_layer_names_consistency():
 
     # RepoSettings en el dashboard usa 'deps' como alias de 'dependencies'
     repo_settings = RepoSettings()
-    dashboard_layers = {
-        "dependencies" if k == "deps" else k for k in repo_settings.weights.keys()
-    }
+    dashboard_layers = {"dependencies" if k == "deps" else k for k in repo_settings.weights.keys()}
     assert (
         dashboard_layers == expected_layers
     ), f"Pesos de RepoSettings difieren: {dashboard_layers}"
