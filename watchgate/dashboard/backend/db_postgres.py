@@ -17,13 +17,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
-try:
-    import psycopg
-    from psycopg.rows import DictRow, dict_row
-except ImportError:
-    psycopg = None
-    DictRow = Any
-    dict_row = None
+import psycopg
+from psycopg.rows import DictRow, dict_row
 
 _PLACEHOLDER_RE = re.compile(r"\?")
 
@@ -117,7 +112,10 @@ CREATE TABLE IF NOT EXISTS pr_scores (
   author_login TEXT,
   human_feedback TEXT CHECK(
     human_feedback IN ('correcto','falso_positivo') OR human_feedback IS NULL
-  )
+  ),
+  accepted_by TEXT,
+  accepted_at TEXT,
+  findings_json TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_repo_timestamp ON pr_scores(repo, timestamp);
 

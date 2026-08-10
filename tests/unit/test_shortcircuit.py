@@ -199,11 +199,19 @@ def test_has_new_network_calls_ignores_binary_files():
 
 
 def test_has_new_dependencies_detects_package_json():
-    diff = _diff_with_paths(("package.json", '+ "lodash": "1.0.0"'))
+    diff = _diff_with_paths(("package.json", '+\t"lodash": "1.0.0"'))
     assert _has_new_dependencies(diff) is True
 
     diff2 = _diff_with_paths(("src/index.js", "+ console.log(1)"))
     assert _has_new_dependencies(diff2) is False
+
+    # Cambio en package.json que no añade dependencias (ej. cambio de versión o autor)
+    diff3 = _diff_with_paths(("package.json", '+\t"version": "1.0.1"'))
+    assert _has_new_dependencies(diff3) is False
+
+    # Adición de dependencia en go.mod
+    diff4 = _diff_with_paths(("go.mod", "+require github.com/gin-gonic/gin v1.9.1"))
+    assert _has_new_dependencies(diff4) is True
 
 
 def test_has_new_dependencies_detects_requirements_txt():

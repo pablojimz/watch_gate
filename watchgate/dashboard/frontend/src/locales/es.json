@@ -52,7 +52,28 @@
     "tabAuthors": "Por autor",
     "authorsTitle": "Análisis por autor",
     "authorsHint": "Agregado de PRs, score medio y distribución de riesgo por usuario.",
-    "authorsEmpty": "No hay autores en este repositorio."
+    "authorsEmpty": "No hay autores en este repositorio.",
+    "commitsVsThreats": "Commits analizados vs. amenazas por día"
+  },
+  "report": {
+    "title": "Informe del PR #{{pr}}",
+    "open": "Ver reporte",
+    "close": "Cerrar",
+    "acceptedBy": "Aceptado por {{user}} el {{date}}"
+  },
+  "accept": {
+    "column": "Aceptado",
+    "accept": "Aceptar",
+    "revoke": "Revocar",
+    "notAccepted": "Sin revisar",
+    "accepted": "PR aceptado",
+    "revoked": "Aceptación revocada"
+  },
+  "threatNature": {
+    "malicioso": "Malicioso",
+    "vulnerabilidad": "Vulnerabilidad",
+    "incertidumbre": "Incertidumbre",
+    "limpio": "Limpio"
   },
   "feedback": {
     "title": "Feedback humano",

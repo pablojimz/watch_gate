@@ -95,6 +95,21 @@ def weighted_average(
     return sum(weights[k] * active[k].risk_score for k in active) / total_weight
 
 
+def compute_effective_weights(
+    results: dict[str, LayerResult], weights: dict[str, float]
+) -> dict[str, float]:
+    """Calcula los pesos re-normalizados al 100% (suma = 1.0) para las capas
+    activas (no omitidas con peso nominal > 0). Las capas omitidas o con
+    peso nominal <= 0 reciben un peso efectivo de 0.0.
+    """
+    active = {k: v for k, v in results.items() if not v.skipped and weights.get(k, 0) > 0}
+    total_weight = sum(weights[k] for k in active)
+    if total_weight <= 0:
+        return {k: 0.0 for k in weights}
+
+    return {k: round(weights[k] / total_weight, 4) if k in active else 0.0 for k in weights}
+
+
 def _semaforo(score: int, thresholds: dict[str, int]) -> Semaforo:
     if score >= thresholds["red"]:
         return Semaforo.ROJO
@@ -136,10 +151,7 @@ def _apply_malicious_and_uncertain_policy(
             elif layer_res.confidence == Confidence.MEDIA:
                 has_medium_confidence_malicious = True
 
-    if has_high_confidence_malicious:
-        return 100, Semaforo.ROJO
-
-    if has_medium_confidence_malicious:
+    if has_high_confidence_malicious or has_medium_confidence_malicious:
         score = max(score, thresholds["red"])
 
     # Bug real encontrado regenerando el informe de validación (caso
@@ -233,6 +245,7 @@ def aggregate(
         semaforo=semaforo,
         layer_results=results,
         weights_used=weights,
+        effective_weights=compute_effective_weights(results, weights),
         pr_id=pr_id,
         repo=repo,
         timestamp=datetime.now(UTC).isoformat(),

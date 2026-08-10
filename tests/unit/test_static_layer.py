@@ -646,6 +646,80 @@ def test_analyze_combines_semgrep_and_yara_via_max_never_sum(tmp_path) -> None:
     assert res.risk_score == 83
 
 
+def test_infer_threat_nature_from_semgrep_metadata_variations() -> None:
+    fn = static_layer_module._infer_threat_nature_from_semgrep
+
+    # 1. Metadata explícita
+    assert fn({"metadata": {"threat_nature": "malicioso"}}, "r1") == ThreatNature.MALICIOUS
+    assert fn({"metadata": {"threat_nature": "vulnerabilidad"}}, "r1") == ThreatNature.VULNERABILITY
+
+    # 2. Keywords en categoría o id de regla
+    assert fn({"metadata": {"category": "backdoor"}}, "rule1") == ThreatNature.MALICIOUS
+    assert fn({"metadata": {"subcategory": "trojan"}}, "rule1") == ThreatNature.MALICIOUS
+    assert fn({}, "custom.malware.detector") == ThreatNature.MALICIOUS
+
+    # 3. Defectos / Vulnerabilidades normales
+    assert fn({"metadata": {"category": "security"}}, "owasp.sqli") == ThreatNature.VULNERABILITY
+    assert fn(None, "custom.rule") == ThreatNature.VULNERABILITY
+
+
+def test_get_rules_dir_env_var_override(monkeypatch, tmp_path) -> None:
+    layer = StaticLayer()
+    monkeypatch.setenv("WATCHGATE_SEMGREP_RULES_DIR", str(tmp_path))
+    assert layer._get_rules_dir() == tmp_path
+
+
+def test_get_rules_dir_persistent_cache_valid_and_expired(monkeypatch, tmp_path) -> None:
+    layer = StaticLayer()
+    monkeypatch.delenv("WATCHGATE_SEMGREP_RULES_DIR", raising=False)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+    cache_base = tmp_path / ".watchgate" / "rules_cache"
+    cached_repo_dir = cache_base / "Repo-reglas-SEMGREP-y-YARA"
+    cached_repo_dir.mkdir(parents=True)
+    timestamp_file = cache_base / ".last_updated"
+
+    # Evitar que las comprobaciones de reglas locales (prioridades 3 y 4) coincidan
+    with patch("watchgate.core.layers.static_layer.any", return_value=False):
+        # 1. Caché válida reciente
+        timestamp_file.write_text(str(static_layer_module.time.time()), encoding="utf-8")
+        res = layer._get_rules_dir()
+        assert res == cached_repo_dir
+
+        # 2. Caché expirada (> 24h)
+        timestamp_file.write_text("0.0", encoding="utf-8")
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0)
+            res_expired = layer._get_rules_dir()
+            assert res_expired == cached_repo_dir
+            mock_run.assert_called()
+
+
+def test_get_rules_dir_clones_when_no_cache_and_handles_error(monkeypatch, tmp_path) -> None:
+    layer = StaticLayer()
+    monkeypatch.delenv("WATCHGATE_SEMGREP_RULES_DIR", raising=False)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+    cache_base = tmp_path / ".watchgate" / "rules_cache"
+    cached_repo_dir = cache_base / "Repo-reglas-SEMGREP-y-YARA"
+
+    with patch("watchgate.core.layers.static_layer.any", return_value=False):
+        # Simular clonación fallida
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=1, stderr="Failed to clone")
+            res_failed = layer._get_rules_dir()
+            assert res_failed is None
+
+        # Simular clonación exitosa
+        def fake_clone(*args, **kwargs):
+            cached_repo_dir.mkdir(parents=True, exist_ok=True)
+            return MagicMock(returncode=0)
+
+        with patch("subprocess.run", side_effect=fake_clone):
+            res_success = layer._get_rules_dir()
+            assert res_success == cached_repo_dir
+
+
 # --------------------------------------------------------------------------
 # Paso 0 de _get_rules_dir: verificación bajo demanda contra la última
 # versión publicada, vía local_rules_client.get_verified_rules (ver

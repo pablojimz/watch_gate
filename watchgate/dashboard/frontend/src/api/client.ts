@@ -6,16 +6,29 @@ export type FeedbackValue = 'correcto' | 'falso_positivo'
 // watchgate/core/models.py. Reglas estáticas (Semgrep/YARA) etiquetan cada
 // hallazgo con esto vía el campo `finding_type` de la propia regla.
 export type ThreatNature = 'vulnerabilidad' | 'malicioso' | 'incertidumbre'
+export type Confidence = 'alta' | 'media' | 'baja'
+
+export interface Finding {
+  file_path: string
+  line: number | null
+  end_line: number | null
+  rule_id: string
+  message: string
+  severity: string
+  threat_nature: ThreatNature
+}
 
 export interface LayerResult {
   layer_name: string
   risk_score: number
   justification: string
+  findings: Finding[]
+  category: string | null
+  confidence: Confidence | null
   skipped: boolean
   skip_reason: string | null
   // Naturaleza dominante de los hallazgos de esta capa (jerarquía
-  // MALICIOUS > VULNERABILITY > UNCERTAIN) -- hoy solo se persiste para la
-  // capa "static", el resto llega `null` aunque el motor la calcule.
+  // MALICIOUS > VULNERABILITY > UNCERTAIN).
   threat_nature: ThreatNature | null
 }
 
@@ -30,6 +43,8 @@ export interface ScoreOut {
   timestamp: string
   author_login: string | null
   human_feedback: FeedbackValue | null
+  accepted_by: string | null
+  accepted_at: string | null
   // Conteo de hallazgos de TODA la PR por naturaleza, p. ej.
   // { malicioso: 1, vulnerabilidad: 3, incertidumbre: 0 }.
   threat_summary: Record<string, number>
@@ -222,6 +237,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ feedback }),
     }),
+  acceptScore: (scoreId: number) =>
+    request<ScoreOut>(`/scores/${scoreId}/accept`, { method: 'POST' }),
+  unacceptScore: (scoreId: number) =>
+    request<ScoreOut>(`/scores/${scoreId}/accept`, { method: 'DELETE' }),
   listRoles: () => request<RepoRole[]>('/admin/roles'),
   upsertRole: (body: RepoRole) =>
     request<RepoRole>('/admin/roles', {

@@ -12,6 +12,8 @@ from watchgate.api.dependencies import get_db_session
 from watchgate.api.routers.analyze import AnalyzeRequest
 from watchgate.api.schemas.agent import (
     AgentAnalyzeResponse,
+    AgentFeedbackRequest,
+    AgentFeedbackResponse,
     AgentPolicyResponse,
     VerifyFixRequest,
     VerifyFixResponse,
@@ -236,4 +238,50 @@ def get_agent_policy(
         thresholds=effective_config.thresholds,
         weights=effective_config.weights,
         block_on_red=effective_config.block_on_red,
+    )
+
+
+@router.post("/feedback", response_model=AgentFeedbackResponse)
+def agent_submit_feedback(
+    request: AgentFeedbackRequest,
+    auth: tuple[UserAPIKey, User, Organization] = Depends(require_scope("analysis:write")),  # noqa: B008
+    session: Session = Depends(get_db_session),  # noqa: B008
+) -> AgentFeedbackResponse:
+    """Registra la retroalimentación (correcto / falso_positivo) de un agente o usuario
+    verificando que el emisor posea rol 'mantenedor' sobre el repositorio.
+    """
+    from watchgate.dashboard.backend import db as database
+    from watchgate.db.repository import check_user_repo_permission
+
+    _api_key, user, _org = auth
+
+    with database.db_session() as conn:
+        existing = database.get_score(conn, request.score_id)
+        if existing is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Score con ID {request.score_id} no encontrado.",
+            )
+
+        has_perm = check_user_repo_permission(
+            session, user.name, existing.repo, required_role="mantenedor"
+        )
+        if not has_perm:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Se requiere rol 'mantenedor' sobre el repositorio '{existing.repo}'.",
+            )
+
+        updated = database.set_feedback(conn, request.score_id, request.feedback)
+        if updated is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Error actualizando el registro de feedback.",
+            )
+
+    return AgentFeedbackResponse(
+        score_id=request.score_id,
+        repo=existing.repo,
+        feedback=request.feedback,
+        status="success",
     )

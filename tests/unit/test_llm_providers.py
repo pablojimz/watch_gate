@@ -9,6 +9,10 @@ import pytest
 
 from watchgate.core.layers._semantic.client import SemanticParsingError
 from watchgate.core.layers._semantic.llm_providers import GeminiClient, OpenAICompatibleClient
+from watchgate.core.layers._semantic.prompting import (
+    _CACHE_BREAKPOINT_MARKER,
+    build_system_prompt,
+)
 from watchgate.core.models import Confidence, RiskCategory
 
 
@@ -422,3 +426,42 @@ def test_local_raises_semantic_parsing_error_after_two_invalid_json_attempts():
         client.complete_structured(
             "sys", "user", tools=[], tool_executor=lambda n, i: None, max_tool_calls=3
         )
+
+
+def test_gemini_strips_the_cache_breakpoint_marker_before_sending():
+    """Gemini no necesita marcar nada explícito para beneficiarse del bloque
+    estático-primero (caché implícita automática de Gemini 2.5) -- pero el
+    marcador en sí no debe llegarle nunca como texto literal."""
+    system_prompt = build_system_prompt(
+        project_type="Python", languages="python", recent_activity_summary="-", rag_context=[]
+    )
+    fake = _FakeGenaiClient([_gemini_text_response(_valid_json())])
+    client = GeminiClient(client=fake)
+
+    client.complete_structured(
+        system_prompt, "user", tools=[], tool_executor=lambda n, i: None, max_tool_calls=3
+    )
+
+    sent_config = fake.models.calls[0]["config"]
+    assert _CACHE_BREAKPOINT_MARKER not in sent_config.system_instruction
+    assert "Eres un analista de seguridad" in sent_config.system_instruction
+
+
+def test_local_strips_the_cache_breakpoint_marker_before_sending():
+    """Mismo caso que Gemini: vLLM/Ollama/llama.cpp cachean el prefijo de
+    KV-cache repetido de forma automática, sin ningún flag ni marcador."""
+    system_prompt = build_system_prompt(
+        project_type="Python", languages="python", recent_activity_summary="-", rag_context=[]
+    )
+    client, transport = _local_client(
+        [_chat_response({"role": "assistant", "content": _valid_json()})]
+    )
+
+    client.complete_structured(
+        system_prompt, "user", tools=[], tool_executor=lambda n, i: None, max_tool_calls=3
+    )
+
+    sent_payload = json.loads(transport.requests[0].content)
+    sent_system_message = sent_payload["messages"][0]["content"]
+    assert _CACHE_BREAKPOINT_MARKER not in sent_system_message
+    assert "Eres un analista de seguridad" in sent_system_message

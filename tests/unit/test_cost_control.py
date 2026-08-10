@@ -37,14 +37,46 @@ def _diff_with_files(*hunks: str) -> NormalizedDiff:
     )
 
 
-def test_estimate_tokens_proportional_to_length():
+def test_estimate_tokens_uses_a_real_tokenizer_not_just_char_count():
+    """Hallazgo real (referencia: mercedes-uma-hackathon, mismo problema ya
+    resuelto ahí): contar caracteres/4 no distingue prosa de código denso en
+    símbolos (JSON, base64, minificado) -- el ratio real de caracteres/token
+    en ese tipo de contenido está lejos de la media que asume ese heurístico.
+    tiktoken (`o200k_base`) sí lo distingue de verdad: un texto con mucha
+    puntuación/símbolos repetidos tokeniza distinto a prosa de la misma
+    longitud en caracteres."""
+    controller = CostController(
+        db_path=tempfile.mktemp(), max_diff_tokens=10, monthly_budget_tokens=10
+    )
+    prose = "the quick brown fox jumps over the lazy dog " * 5
+    symbols = "{}[]();,.:!?" * 20  # misma familia de longitud, sin palabras reales
+    assert controller.estimate_tokens("") == 0
+    assert controller.estimate_tokens(prose) > 0
+    # tiktoken agrupa símbolos repetidos de forma muy distinta a palabras
+    # reales -- si esto fuera solo len(texto)//4, ambos (longitud similar)
+    # darían el mismo resultado; con un tokenizer real, no tiene por qué.
+    assert controller.estimate_tokens(prose) != controller.estimate_tokens(symbols)
+    # Monotonía real: el doble de texto (repetido, sin cambiar el
+    # vocabulario) nunca puede dar MENOS tokens.
+    assert controller.estimate_tokens(prose * 2) > controller.estimate_tokens(prose)
+    controller.close()
+
+
+def test_estimate_tokens_falls_back_to_char_heuristic_if_tiktoken_unavailable(monkeypatch):
+    """Un fallo de red al cargar el encoding la primera vez (o cualquier otro
+    fallo de tiktoken) no debe tumbar la estimación de coste -- cae al
+    heurístico de caracteres en vez de propagar la excepción."""
+    import watchgate.core.cost_control as cost_control_module
     from watchgate.core.cost_control import _CHARS_PER_TOKEN_ESTIMATE
 
-    real = CostController(db_path=tempfile.mktemp(), max_diff_tokens=10, monthly_budget_tokens=10)
-    assert real.estimate_tokens("") == 0
-    assert real.estimate_tokens("a" * _CHARS_PER_TOKEN_ESTIMATE) == 1
-    assert real.estimate_tokens("a" * _CHARS_PER_TOKEN_ESTIMATE * 10) == 10
-    real.close()
+    monkeypatch.setattr(cost_control_module, "_get_encoder", lambda: None)
+    controller = CostController(
+        db_path=tempfile.mktemp(), max_diff_tokens=10, monthly_budget_tokens=10
+    )
+    assert controller.estimate_tokens("") == 0
+    assert controller.estimate_tokens("a" * _CHARS_PER_TOKEN_ESTIMATE) == 1
+    assert controller.estimate_tokens("a" * _CHARS_PER_TOKEN_ESTIMATE * 10) == 10
+    controller.close()
 
 
 def test_cache_roundtrip(controller):

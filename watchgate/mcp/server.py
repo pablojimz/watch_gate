@@ -19,11 +19,17 @@ def _send_response(response: JsonRpcResponse) -> None:
 
 def handle_jsonrpc_request(request_dict: dict[str, Any]) -> JsonRpcResponse | None:
     """Procesa una petición JSON-RPC 2.0 devolviendo la respuesta (o None si es notificación)."""
+    if not isinstance(request_dict, dict):
+        return JsonRpcResponse(
+            id=None,
+            error={"code": -32600, "message": "Estructura de petición JSON-RPC inválida."},
+        )
+
     try:
         req = JsonRpcRequest.model_validate(request_dict)
     except Exception as exc:
         return JsonRpcResponse(
-            id=request_dict.get("id"),
+            id=request_dict.get("id") if isinstance(request_dict, dict) else None,
             error={"code": -32600, "message": f"Petición JSON-RPC inválida: {exc}"},
         )
 
@@ -61,8 +67,17 @@ def handle_jsonrpc_request(request_dict: dict[str, Any]) -> JsonRpcResponse | No
     elif method == "tools/call":
         tool_name = str(params.get("name", ""))
         arguments = params.get("arguments") or {}
-        tool_result = execute_mcp_tool(tool_name, arguments)
-        return JsonRpcResponse(id=req_id, result=tool_result.model_dump())
+        try:
+            tool_result = execute_mcp_tool(tool_name, arguments)
+            return JsonRpcResponse(id=req_id, result=tool_result.model_dump())
+        except Exception as exc:
+            return JsonRpcResponse(
+                id=req_id,
+                error={
+                    "code": -32603,
+                    "message": f"Error interno ejecutando herramienta '{tool_name}': {exc}",
+                },
+            )
 
     else:
         if is_notification:

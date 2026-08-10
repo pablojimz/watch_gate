@@ -163,12 +163,17 @@ THIRD_PARTY_LANGUAGE_MAP: dict[str, list[tuple[str, str]]] = {
 }
 
 
-def _infer_threat_nature_from_semgrep(finding_extra: dict[str, Any], rule_id: str) -> ThreatNature:
+def _infer_threat_nature_from_semgrep(
+    finding_extra: dict[str, Any] | None, rule_id: str
+) -> ThreatNature:
     """Heurística de RESPALDO cuando no hay `finding_type` declarado para la
     regla (rule_id ausente del mapeo de _get_semgrep_finding_types -- p. ej.
     reglas externas no generadas por el repo de reglas, o clasificadas como
     "needs_review"/"unclassified"). El camino preferente es el `finding_type`
     explícito de options: ver _run_semgrep_on_file."""
+    if not isinstance(finding_extra, dict):
+        finding_extra = {}
+
     metadata = finding_extra.get("metadata", {})
     if not isinstance(metadata, dict):
         metadata = {}
@@ -862,9 +867,7 @@ class StaticLayer(AnalysisLayer):
                         findings.extend(
                             self._run_semgrep_on_file(temp_file.name, language, rules_dir=rules_dir)
                         )
-                    yara_res = self._run_yara_on_text(
-                        file_change.diff_hunk, rules_dir=rules_dir
-                    )
+                    yara_res = self._run_yara_on_text(file_change.diff_hunk, rules_dir=rules_dir)
                     findings.extend(yara_res)
 
                     for f in findings:
@@ -901,7 +904,12 @@ class StaticLayer(AnalysisLayer):
         )
 
         category = RiskCategory.OFUSCACION if max_risk_score >= 50 else RiskCategory.NINGUNA
-        confidence = Confidence.MEDIA if max_risk_score > 0 else Confidence.BAJA
+        if max_risk_score >= 70:
+            confidence = Confidence.ALTA
+        elif max_risk_score > 0:
+            confidence = Confidence.MEDIA
+        else:
+            confidence = Confidence.BAJA
 
         structured_findings = [
             Finding(
