@@ -135,8 +135,13 @@ THIRD_PARTY_LANGUAGE_MAP: dict[str, list[tuple[str, str]]] = {
 }
 
 
-def _infer_threat_nature_from_semgrep(finding_extra: dict[str, Any], rule_id: str) -> ThreatNature:
+def _infer_threat_nature_from_semgrep(
+    finding_extra: dict[str, Any] | None, rule_id: str
+) -> ThreatNature:
     """Infiere la naturaleza de la amenaza a partir de la metadata de la regla Semgrep."""
+    if not isinstance(finding_extra, dict):
+        finding_extra = {}
+
     metadata = finding_extra.get("metadata", {})
     if not isinstance(metadata, dict):
         metadata = {}
