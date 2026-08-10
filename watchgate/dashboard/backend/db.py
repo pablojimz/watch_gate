@@ -15,6 +15,7 @@ import json
 import os
 import secrets
 import sqlite3
+import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
@@ -172,6 +173,17 @@ def connect(db_path: Path | None = None) -> DBConnection:
     return conn
 
 
+def _connection_target(db_path: Path | None) -> str:
+    """Identificador estable de a qué base de datos apunta `connect(db_path)`
+    -- mismo criterio que usa `connect()` para decidir Postgres vs SQLite,
+    duplicado aquí a propósito para no acoplar el guard de `db_session()` a
+    cambios de firma de `connect()`."""
+    database_url = os.environ.get("WATCHGATE_DASHBOARD_DATABASE_URL")
+    if database_url and database_url.startswith(("postgres://", "postgresql://")):
+        return database_url
+    return str(db_path or default_db_path())
+
+
 def _init_db_postgres(conn: PostgresConnection) -> None:
     conn.executescript(db_postgres.POSTGRES_SCHEMA)
     # A diferencia de SQLite, Postgres soporta IF NOT EXISTS en ADD COLUMN de
@@ -250,11 +262,38 @@ def init_db(conn: DBConnection) -> None:
     ensure_ui_settings(conn)
 
 
+_initialized_targets: set[str] = set()
+_init_lock = threading.Lock()
+
+
 @contextmanager
 def db_session(db_path: Path | None = None) -> Iterator[DBConnection]:
     conn = connect(db_path)
+    target = _connection_target(db_path)
     try:
-        init_db(conn)
+        # Bug real encontrado desplegando contra Postgres real: `init_db()`
+        # (incluye `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`, DDL que exige
+        # un lock exclusivo) se ejecutaba en CADA llamada a `db_session()` --
+        # es decir, en cada request de cada router. Bajo tráfico concurrente
+        # real (varias pestañas/peticiones en paralelo cargando el
+        # Dashboard, exactamente lo que hace un navegador), dos peticiones
+        # ejecutando el mismo ALTER TABLE a la vez podían deadlockear de
+        # verdad entre sí (`psycopg.errors.DeadlockDetected`, reproducido en
+        # vivo). SQLite nunca lo mostró porque su locking es de fichero
+        # completo, no por fila/tabla como Postgres.
+        #
+        # `init_db()` en sí ya es idempotente en efecto (todo `IF NOT
+        # EXISTS`), pero eso no evita la carrera de dos conexiones
+        # comprobando y alterando el mismo esquema a la vez -- el problema
+        # no era el resultado final, era ejecutarlo más de una vez por
+        # proceso sin necesidad. Con double-checked locking, por cada base
+        # de datos destino (`target`) real solo la primera llamada del
+        # proceso ejecuta la migración; el resto la salta.
+        if target not in _initialized_targets:
+            with _init_lock:
+                if target not in _initialized_targets:
+                    init_db(conn)
+                    _initialized_targets.add(target)
         yield conn
         conn.commit()
     except Exception:
