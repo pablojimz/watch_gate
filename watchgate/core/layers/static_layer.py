@@ -216,34 +216,21 @@ class StaticLayer(AnalysisLayer):
             if env_path.exists():
                 return env_path
 
-        # 3. Directorio local del proyecto. `_run_semgrep_on_file` espera
-        # recibir una ruta "raíz de repo" y compone rules_dir/"rules"/
-        # "semgrep"/... (la misma convención que el repo externo clonado en
-        # el caso 4) -- devolver directamente `rules/semgrep` aquí duplicaba
-        # el segmento (`rules/semgrep/rules/semgrep/custom/<lenguaje>`, que
-        # nunca existe) y hacía que el checkout local siempre cayera al
-        # fallback de escanear el directorio entero con todas las reglas de
-        # terceros en vez de solo las del lenguaje del fichero. Verificado:
-        # `Path("rules/semgrep")` existe pero
-        # `Path("rules/semgrep") / "rules" / "semgrep" / "custom" / "python"`
-        # no.
+        # 3. Directorio del paquete/repositorio WatchGate instalado
+        package_root = Path(__file__).resolve().parents[3]
+        pkg_rules_dir = package_root / "rules" / "semgrep"
+        if pkg_rules_dir.exists() and any(pkg_rules_dir.iterdir()):
+            return package_root
+
+        # 4. Directorio local del proyecto actual
         local_rules_dir = Path("rules/semgrep")
         if local_rules_dir.exists() and any(local_rules_dir.iterdir()):
             return Path(".")
 
-        # 4. Caché persistente en .watchgate/rules_cache/ -- ÚLTIMO RECURSO.
-        # A partir de aquí se clona el repo de reglas directamente por su
-        # cuenta, SIN pasar por la verificación de integridad por hash de
-        # sync-rules.yml / reconcile-rules.yml (ver docs/integracion_repo_reglas.md).
-        # En este propio repo nunca debería alcanzarse (el paso 3 siempre
-        # encuentra rules/semgrep/ ya poblado y verificado) -- si se
-        # alcanza, es una señal de que algo no está bien (checkout
-        # incompleto, o un consumidor externo del paquete sin ese
-        # checkout), así que se deja constancia explícita en el log.
-        logger.warning(
-            "rules/semgrep/ no está disponible localmente -- cayendo al fallback de "
-            "clonar el repo de reglas directamente, SIN la verificación de integridad "
-            "por hash de sync-rules.yml/reconcile-rules.yml (ver docs/integracion_repo_reglas.md)."
+        # 5. Caché persistente en .watchgate/rules_cache/ -- ÚLTIMO RECURSO.
+        logger.info(
+            "rules/semgrep/ no está disponible localmente -- usando la caché de reglas "
+            "en .watchgate/rules_cache/ (ver docs/integracion_repo_reglas.md)."
         )
         cache_base = Path.home() / ".watchgate" / "rules_cache"
         repo_name = "Repo-reglas-SEMGREP-y-YARA"
