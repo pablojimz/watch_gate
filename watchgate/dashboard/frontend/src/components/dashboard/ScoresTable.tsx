@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { ChevronDown } from 'lucide-react'
 import type { ScoreOut } from '@/api/client'
 import { RiskBadge } from '@/components/dashboard/RiskBadge'
+import { ThreatNatureTag, ThreatSummaryBadges } from '@/components/dashboard/ThreatBadges'
 import { cn } from '@/lib/utils'
 
 export function ScoresTable({ scores }: { scores: ScoreOut[] }) {
@@ -19,6 +20,7 @@ export function ScoresTable({ scores }: { scores: ScoreOut[] }) {
             <th className="px-4 py-3 font-medium">Score</th>
             <th className="px-4 py-3 font-medium">Fecha</th>
             <th className="px-4 py-3 font-medium">Feedback</th>
+            <th className="px-4 py-3 font-medium">{t('threat.summaryTitle')}</th>
             <th className="px-4 py-3 text-right font-medium">{t('repo.risk')}</th>
             <th className="w-12 px-2 py-3" />
           </tr>
@@ -42,6 +44,9 @@ export function ScoresTable({ scores }: { scores: ScoreOut[] }) {
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
                     {score.human_feedback ?? t('feedback.pending')}
+                  </td>
+                  <td className="px-4 py-3">
+                    <ThreatSummaryBadges summary={score.threat_summary} />
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end">
@@ -69,17 +74,22 @@ export function ScoresTable({ scores }: { scores: ScoreOut[] }) {
                 </tr>
                 {open ? (
                   <tr className="border-t bg-muted/20">
-                    <td colSpan={7} className="px-4 py-4">
+                    <td colSpan={8} className="px-4 py-4">
                       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                         {Object.values(score.layer_results).map((layer) => (
                           <div
                             key={layer.layer_name}
                             className="rounded-lg border bg-card p-3"
                           >
-                            <div className="text-xs text-muted-foreground">
-                              {t(`layers.${layer.layer_name}`, {
-                                defaultValue: layer.layer_name,
-                              })}
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="text-xs text-muted-foreground">
+                                {t(`layers.${layer.layer_name}`, {
+                                  defaultValue: layer.layer_name,
+                                })}
+                              </div>
+                              {layer.threat_nature ? (
+                                <ThreatNatureTag nature={layer.threat_nature} />
+                              ) : null}
                             </div>
                             <div className="mt-1 text-lg font-semibold">
                               {layer.skipped ? t('repo.skipped') : layer.risk_score}

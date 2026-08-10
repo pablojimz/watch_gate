@@ -171,6 +171,13 @@
     "amarillo": "Medio",
     "rojo": "Alto"
   },
+  "threat": {
+    "malicioso": "Malicioso",
+    "vulnerabilidad": "Vulnerabilidad",
+    "incertidumbre": "Incertidumbre",
+    "summaryTitle": "Amenazas detectadas",
+    "layerNature": "Naturaleza"
+  },
   "summary": {
     "avgScore": "Score medio",
     "prs": "PRs analizados",

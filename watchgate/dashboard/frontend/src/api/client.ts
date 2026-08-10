@@ -2,12 +2,21 @@ export type RoleName = 'admin_organizacion' | 'mantenedor' | 'revisor'
 export type Semaforo = 'verde' | 'amarillo' | 'rojo'
 export type FeedbackValue = 'correcto' | 'falso_positivo'
 
+// "vulnerabilidad" | "malicioso" | "incertidumbre" -- ver ThreatNature en
+// watchgate/core/models.py. Reglas estáticas (Semgrep/YARA) etiquetan cada
+// hallazgo con esto vía el campo `finding_type` de la propia regla.
+export type ThreatNature = 'vulnerabilidad' | 'malicioso' | 'incertidumbre'
+
 export interface LayerResult {
   layer_name: string
   risk_score: number
   justification: string
   skipped: boolean
   skip_reason: string | null
+  // Naturaleza dominante de los hallazgos de esta capa (jerarquía
+  // MALICIOUS > VULNERABILITY > UNCERTAIN) -- hoy solo se persiste para la
+  // capa "static", el resto llega `null` aunque el motor la calcule.
+  threat_nature: ThreatNature | null
 }
 
 export interface ScoreOut {
@@ -21,6 +30,9 @@ export interface ScoreOut {
   timestamp: string
   author_login: string | null
   human_feedback: FeedbackValue | null
+  // Conteo de hallazgos de TODA la PR por naturaleza, p. ej.
+  // { malicioso: 1, vulnerabilidad: 3, incertidumbre: 0 }.
+  threat_summary: Record<string, number>
 }
 
 export interface MeResponse {
