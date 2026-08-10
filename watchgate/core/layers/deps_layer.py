@@ -26,6 +26,8 @@ from watchgate.core.layers._shared import (
     DependencyChange,
     analyze_install_script_text,
     parse_cargo_toml,
+    parse_composer_json,
+    parse_go_mod,
     parse_package_json,
     parse_pkgbuild,
     parse_requirements_txt,
@@ -46,6 +48,8 @@ __all__ = [
     "DepsLayer",
     "TyposquatChecker",
     "parse_cargo_toml",
+    "parse_composer_json",
+    "parse_go_mod",
     "parse_package_json",
     "parse_pkgbuild",
     "parse_requirements_txt",
@@ -77,6 +81,8 @@ class TyposquatChecker:
             "pypi": "pypi.txt",
             "aur": "aur.txt",
             "crates.io": "crates.txt",
+            "go": "go.txt",
+            "packagist": "packagist.txt",
         }
         filename = file_map.get(ecosystem_key.lower())
         if not filename:
@@ -173,6 +179,10 @@ class DepsLayer(AnalysisLayer):
                 parsed = parse_pkgbuild(hunk)
             elif fname == "Cargo.toml":
                 parsed = parse_cargo_toml(hunk)
+            elif fname == "go.mod":
+                parsed = parse_go_mod(hunk)
+            elif fname == "composer.json":
+                parsed = parse_composer_json(hunk)
             for ch in parsed:
                 ch.manifest_path = file_change.path
             all_changes.extend(parsed)
