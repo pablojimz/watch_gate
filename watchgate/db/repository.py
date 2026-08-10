@@ -15,7 +15,6 @@ from watchgate.core.models import AggregatedResult
 from watchgate.db.models import (
     Organization,
     PRScore,
-    RepoRole,
     SemanticCache,
     User,
     UserAPIKey,
@@ -46,8 +45,8 @@ def check_user_repo_permission(
 ) -> bool:
     """Unifica la identidad y verifica el rol del usuario sobre un repositorio.
 
-    1. Comprueba si el usuario es `admin_organizacion` global en `User`.
-    2. Comprueba el rol asignado en la tabla `repo_roles` para `(user_login, repo)`.
+    1. Comprueba si el usuario es `admin_organizacion` global en `User` o en el Dashboard.
+    2. Comprueba el rol asignado en la base de datos del Dashboard para `(user_login, repo)`.
     """
     if not user_login or not repo:
         return False
@@ -55,7 +54,7 @@ def check_user_repo_permission(
     norm_login = user_login.strip().lower()
     norm_email = f"{norm_login}@watchgate.internal"
 
-    # 1. Comprobar si el usuario existe y es admin_organizacion global
+    # 1. Comprobar si el usuario existe en Engine DB y es admin_organizacion global
     stmt_user = select(User).where(
         (func.lower(User.email) == norm_email) | (func.lower(User.name) == norm_login)
     )
@@ -63,18 +62,18 @@ def check_user_repo_permission(
     if user_record and user_record.role == "admin_organizacion":
         return True
 
-    # 2. Consultar rol en la tabla repo_roles si existe
+    # 2. Consultar rol real en la base de datos del Dashboard
+    from watchgate.dashboard.backend import db as dashboard_db
+
     try:
-        stmt_role = select(RepoRole).where(RepoRole.user_login == norm_login, RepoRole.repo == repo)
-        role_record = session.exec(stmt_role).first()
-        if role_record:
-            return has_required_role(role_record.role, required_role)
+        with dashboard_db.db_session() as conn:
+            if dashboard_db.user_is_org_admin(conn, norm_login):
+                return True
+            role = dashboard_db.get_role(conn, norm_login, repo)
+            if role is not None:
+                return has_required_role(role, required_role)
     except Exception:
         pass
-
-    # Fallback permisivo si no hay asignación explícita de repo_roles pero es rol de lectura
-    if required_role == "revisor" and user_record:
-        return True
 
     return False
 
