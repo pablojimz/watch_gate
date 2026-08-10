@@ -117,6 +117,7 @@ class AggregatedResult(BaseModel):
     semaforo: Semaforo
     layer_results: dict[str, LayerResult]
     weights_used: dict[str, float]
+    effective_weights: dict[str, float] = Field(default_factory=dict)
     pr_id: str
     repo: str
     timestamp: str  # ISO 8601

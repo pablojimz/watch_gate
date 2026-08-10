@@ -425,3 +425,29 @@ def test_uncertain_semantic_threat_nature_ignored_when_semantic_is_skipped():
 
     assert out.score == 0
     assert out.semaforo == Semaforo.VERDE
+
+
+def test_compute_effective_weights_renormalizes_when_layers_are_skipped():
+    results = {
+        "static": _result("static", 80),
+        "dependencies": _result("dependencies", 80),
+        "vulnerabilities": _result("vulnerabilities", 80),
+        "reputation": _result("reputation", 0, skipped=True, skip_reason="sin metadatos"),
+        "semantic": _result("semantic", 0, skipped=True, skip_reason="sin API key"),
+    }
+    weights = {
+        "static": 0.25,
+        "dependencies": 0.10,
+        "vulnerabilities": 0.10,
+        "reputation": 0.15,
+        "semantic": 0.40,
+    }
+
+    out = aggregate(results, weights, diff=None, pr_id="1", repo="org/repo")
+
+    assert out.effective_weights["static"] == 0.5556
+    assert out.effective_weights["dependencies"] == 0.2222
+    assert out.effective_weights["vulnerabilities"] == 0.2222
+    assert out.effective_weights["reputation"] == 0.0
+    assert out.effective_weights["semantic"] == 0.0
+    assert sum(out.effective_weights.values()) == 1.0
