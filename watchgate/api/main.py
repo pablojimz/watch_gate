@@ -89,7 +89,7 @@ async def max_payload_size_middleware(
             if length_val > MAX_PAYLOAD_BYTES:
                 msg = f"El tamaño excede el límite permitido ({MAX_PAYLOAD_BYTES} bytes / 10 MB)."
                 return JSONResponse(
-                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    status_code=status.HTTP_413_CONTENT_TOO_LARGE,
                     content={"detail": msg},
                 )
         except ValueError:
