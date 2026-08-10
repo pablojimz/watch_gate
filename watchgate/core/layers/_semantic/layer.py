@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from typing import Any, Protocol
 
 from watchgate.core.layers._semantic import prompting, tools
@@ -25,6 +26,8 @@ from watchgate.core.layers.base import AnalysisLayer, register_layer
 from watchgate.core.models import Finding, LayerResult, NormalizedDiff, RiskCategory, ThreatNature
 from watchgate.core.rag.indexer import DEFAULT_INDEX_PATH
 from watchgate.core.rag.retriever import retrieve_relevant_context
+
+logger = logging.getLogger("watchgate.semantic")
 
 _MAX_TOOL_CALLS = 3
 _NO_BUDGET_SKIP_REASON = "Presupuesto de tokens agotado para este repositorio este mes"
@@ -102,6 +105,10 @@ def _apply_unverified_content_floor(
 # aquí como sí lo hay con "no se pudo revisar" -- no es una escala de
 # incertidumbre, es una prueba directa.
 _PROMPT_INJECTION_FLOOR_SCORE = 100
+_NO_BUDGET_SKIP_REASON = "Presupuesto de tokens agotado para este repositorio este mes"
+_NO_LLM_CONFIG_SKIP_REASON = (
+    "Capa semántica omitida (requiere clave de API o configuración de proveedor LLM en el entorno)"
+)
 
 
 def _apply_prompt_injection_floor(output: SemanticOutput, scanned_text: str) -> SemanticOutput:
@@ -286,6 +293,15 @@ class SemanticLayer(AnalysisLayer):
                 justification="",
                 skipped=True,
                 skip_reason=str(exc),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.info("Capa semántica omitida por cliente LLM no disponible: %s", exc)
+            return LayerResult(
+                layer_name=self.name,
+                risk_score=0,
+                justification="",
+                skipped=True,
+                skip_reason=_NO_LLM_CONFIG_SKIP_REASON,
             )
 
         n_calls = 1
