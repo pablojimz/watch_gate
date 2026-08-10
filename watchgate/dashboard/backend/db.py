@@ -21,7 +21,13 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal, cast
 
-from watchgate.core.models import AggregatedResult, LayerResult, RiskCategory, Semaforo
+from watchgate.core.models import (
+    AggregatedResult,
+    LayerResult,
+    RiskCategory,
+    Semaforo,
+    ThreatNature,
+)
 from watchgate.dashboard.backend import db_postgres
 from watchgate.dashboard.backend.db_postgres import PostgresConnection
 from watchgate.dashboard.backend.schemas import (
@@ -180,6 +186,11 @@ def _init_db_postgres(conn: PostgresConnection) -> None:
     conn.execute("ALTER TABLE pr_scores ADD COLUMN IF NOT EXISTS vulnerabilities_score INTEGER")
     conn.execute("ALTER TABLE pr_scores ADD COLUMN IF NOT EXISTS vulnerabilities_skipped BOOLEAN")
     conn.execute(
+        "ALTER TABLE pr_scores ADD COLUMN IF NOT EXISTS "
+        "threat_summary_json TEXT NOT NULL DEFAULT '{}'"
+    )
+    conn.execute("ALTER TABLE pr_scores ADD COLUMN IF NOT EXISTS static_threat_nature TEXT")
+    conn.execute(
         "ALTER TABLE repo_settings ADD COLUMN IF NOT EXISTS "
         "layers_enabled_json TEXT NOT NULL DEFAULT '{}'"
     )
@@ -218,6 +229,12 @@ def init_db(conn: DBConnection) -> None:
         conn.execute("ALTER TABLE pr_scores ADD COLUMN vulnerabilities_score INTEGER")
     if "vulnerabilities_skipped" not in cols:
         conn.execute("ALTER TABLE pr_scores ADD COLUMN vulnerabilities_skipped BOOLEAN")
+    if "threat_summary_json" not in cols:
+        conn.execute(
+            "ALTER TABLE pr_scores ADD COLUMN threat_summary_json TEXT NOT NULL DEFAULT '{}'"
+        )
+    if "static_threat_nature" not in cols:
+        conn.execute("ALTER TABLE pr_scores ADD COLUMN static_threat_nature TEXT")
     repo_cols = {row[1] for row in conn.execute("PRAGMA table_info(repo_settings)").fetchall()}
     if "layers_enabled_json" not in repo_cols:
         conn.execute(
@@ -297,6 +314,13 @@ def insert_aggregated(
     semantic = layers.get("semantic")
     justification = semantic.justification if semantic is not None else None
 
+    static_layer_result = _get_layer("static")
+    static_threat_nature = (
+        static_layer_result.threat_nature.value
+        if static_layer_result is not None and static_layer_result.threat_nature is not None
+        else None
+    )
+
     insert_sql = """
         INSERT INTO pr_scores (
           repo, pr_number, timestamp, score, semaforo,
@@ -305,8 +329,9 @@ def insert_aggregated(
           vulnerabilities_score, vulnerabilities_skipped,
           reputation_score, reputation_skipped,
           semantic_score, semantic_skipped, semantic_justification,
-          weights_json, author_login, human_feedback
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+          weights_json, author_login, human_feedback,
+          threat_summary_json, static_threat_nature
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
         """
     params = (
         result.repo,
@@ -327,6 +352,8 @@ def insert_aggregated(
         justification,
         json.dumps(result.weights_used),
         author_login,
+        json.dumps(result.threat_summary),
+        static_threat_nature,
     )
 
     if isinstance(conn, PostgresConnection):
@@ -343,27 +370,37 @@ def insert_aggregated(
 
 
 def _row_to_score_out(row: Row) -> ScoreOut:
+    keys = row.keys()
+    static_threat_nature_raw = (
+        row["static_threat_nature"] if "static_threat_nature" in keys else None
+    )
+
     layer_results: dict[str, LayerResult] = {}
     for name, score_col, skip_col in _LAYER_COLS:
         skipped = bool(row[skip_col]) if row[skip_col] is not None else True
         raw_score = row[score_col]
         justification = ""
         category: RiskCategory | None = None
+        threat_nature: ThreatNature | None = None
         if name == "semantic":
             justification = row["semantic_justification"] or ""
+        if name == "static" and static_threat_nature_raw:
+            threat_nature = ThreatNature(static_threat_nature_raw)
         layer_results[name] = LayerResult(
             layer_name=name,
             risk_score=int(raw_score) if raw_score is not None else 0,
             justification=justification,
             category=category,
+            threat_nature=threat_nature,
             skipped=skipped,
             skip_reason="omitida" if skipped else None,
         )
 
-    weights_raw = row["weights_json"] if "weights_json" in row.keys() else "{}"
+    weights_raw = row["weights_json"] if "weights_json" in keys else "{}"
     weights = json.loads(weights_raw or "{}")
-    keys = row.keys()
     author = row["author_login"] if "author_login" in keys else None
+    threat_summary_raw = row["threat_summary_json"] if "threat_summary_json" in keys else "{}"
+    threat_summary = json.loads(threat_summary_raw or "{}")
     result = AggregatedResult(
         score=int(row["score"]),
         semaforo=Semaforo(row["semaforo"]),
@@ -372,6 +409,7 @@ def _row_to_score_out(row: Row) -> ScoreOut:
         pr_id=str(row["pr_number"]),
         repo=row["repo"],
         timestamp=row["timestamp"],
+        threat_summary=threat_summary,
     )
     feedback = row["human_feedback"]
     return ScoreOut.from_aggregated(

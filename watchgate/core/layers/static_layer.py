@@ -50,6 +50,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+import yaml
 import yara
 
 from watchgate.core.layers.base import AnalysisLayer, register_layer
@@ -96,6 +97,19 @@ _YARA_DEFAULT_RISK_SCORE = 60
 # una resincronización -- un proceso nuevo siempre recompila.
 _yara_rules_cache: dict[str, yara.Rules | None] = {}
 
+# Caché (misma vida de PROCESO que _yara_rules_cache) del mapeo
+# id-de-regla -> `finding_type` declarado en el propio YAML de cada regla
+# Semgrep ("vulnerability" | "malicious" | "needs_review" | "unclassified",
+# ver rules/manifest.json:finding_type_summary), construido parseando los
+# ficheros de reglas directamente en vez de reinferir la clasificación a
+# mano -- ver StaticLayer._get_semgrep_finding_types para el porqué (no
+# todas las reglas lo declaran en el mismo bloque). Sirve para que, a
+# partir del `check_id` de un hallazgo, se use la clasificación que el
+# propio autor de la regla ya decidió, en vez de la heurística de
+# _infer_threat_nature_from_semgrep (que se conserva solo como fallback
+# para reglas sin `finding_type` declarado, ver _run_semgrep_on_file).
+_semgrep_finding_type_cache: dict[str, dict[str, str]] = {}
+
 # Categoría de reglas custom/ que se aplica SIEMPRE, con independencia del
 # lenguaje detectado (patrones de secretos hardcodeados, cadenas de
 # conexión, etc. -- no son específicos de un lenguaje).
@@ -136,7 +150,11 @@ THIRD_PARTY_LANGUAGE_MAP: dict[str, list[tuple[str, str]]] = {
 
 
 def _infer_threat_nature_from_semgrep(finding_extra: dict[str, Any], rule_id: str) -> ThreatNature:
-    """Infiere la naturaleza de la amenaza a partir de la metadata de la regla Semgrep."""
+    """Heurística de RESPALDO cuando no hay `finding_type` declarado para la
+    regla (rule_id ausente del mapeo de _get_semgrep_finding_types -- p. ej.
+    reglas externas no generadas por el repo de reglas, o clasificadas como
+    "needs_review"/"unclassified"). El camino preferente es el `finding_type`
+    explícito de options: ver _run_semgrep_on_file."""
     metadata = finding_extra.get("metadata", {})
     if not isinstance(metadata, dict):
         metadata = {}
@@ -176,6 +194,22 @@ def _infer_threat_nature_from_semgrep(finding_extra: dict[str, Any], rule_id: st
         return ThreatNature.MALICIOUS
 
     return ThreatNature.VULNERABILITY
+
+
+def _finding_type_of_rule(rule: dict[str, Any]) -> str | None:
+    """Extrae `finding_type` de una regla ya parseada, priorizando
+    `metadata:` (bloque que Semgrep sí reenvía en el JSON de cada
+    hallazgo) sobre `options:` (donde lo declaran las 3 reglas heredadas
+    que necesitan ese bloque por otro motivo -- ver docstring de
+    StaticLayer._get_semgrep_finding_types)."""
+    for block_name in ("metadata", "options"):
+        block = rule.get(block_name, {})
+        if not isinstance(block, dict):
+            continue
+        finding_type = block.get("finding_type")
+        if isinstance(finding_type, str) and finding_type:
+            return finding_type.strip().lower()
+    return None
 
 
 def _handle_remove_read_only(func: Any, path: str, exc_info: Any) -> None:
@@ -353,6 +387,55 @@ class StaticLayer(AnalysisLayer):
         }
         return language_map.get(extension)
 
+    def _get_semgrep_finding_types(self, rules_dir: Path) -> dict[str, str]:
+        """Construye (con caché de proceso) el mapeo id-de-regla ->
+        `finding_type` leyendo directamente los YAML de
+        rules/semgrep/**/*.yml(.yaml).
+
+        La inmensa mayoría de las reglas (comprobado empíricamente sobre el
+        árbol actual: 775 de 803) declaran `finding_type` bajo `metadata:`,
+        que Semgrep SÍ reenvía tal cual en `extra.metadata` de cada
+        hallazgo -- para esas se podría leer directamente del JSON de
+        salida. Pero un puñado de reglas antiguas (`languages: [generic]`,
+        que ya necesitan un bloque `options:` para
+        `generic_ellipsis_max_span`) lo declaran ahí en su lugar, y
+        `options:` NO se reenvía en el JSON de Semgrep -- así que se
+        prioriza `metadata.finding_type` y se usa `options.finding_type`
+        como alternativa, para que el resultado no dependa de en qué
+        bloque haya elegido declararlo cada regla."""
+        semgrep_root = rules_dir / "rules" / "semgrep"
+        cache_key = (
+            str(semgrep_root.resolve()) if semgrep_root.exists() else f"missing:{semgrep_root}"
+        )
+        if cache_key in _semgrep_finding_type_cache:
+            return _semgrep_finding_type_cache[cache_key]
+
+        finding_types: dict[str, str] = {}
+        if not semgrep_root.exists():
+            _semgrep_finding_type_cache[cache_key] = finding_types
+            return finding_types
+
+        for pattern in ("*.yml", "*.yaml"):
+            for rule_file in semgrep_root.rglob(pattern):
+                try:
+                    doc = yaml.safe_load(rule_file.read_text(encoding="utf-8"))
+                except Exception as exc:  # noqa: BLE001
+                    logger.debug("No se pudo parsear %s como YAML de reglas: %r", rule_file, exc)
+                    continue
+
+                if not isinstance(doc, dict):
+                    continue
+                for rule in doc.get("rules", []) or []:
+                    if not isinstance(rule, dict):
+                        continue
+                    rule_id = rule.get("id")
+                    finding_type = _finding_type_of_rule(rule)
+                    if rule_id and finding_type:
+                        finding_types[str(rule_id)] = finding_type
+
+        _semgrep_finding_type_cache[cache_key] = finding_types
+        return finding_types
+
     def _run_semgrep_on_file(
         self, temp_file_path: str, language: str, rules_dir: Path
     ) -> list[dict[str, Any]]:
@@ -425,12 +508,27 @@ class StaticLayer(AnalysisLayer):
                 return results
 
             semgrep_output = json.loads(process.stdout)
+            declared_finding_types = self._get_semgrep_finding_types(rules_dir)
             for finding in semgrep_output.get("results", []):
                 extra = finding.get("extra", {})
                 severity_str = str(extra.get("severity", "INFO")).upper()
                 risk_score = SEVERITY_SCORE.get(severity_str, 10)
                 rule_id = finding.get("check_id", "semgrep-finding")
-                threat_nature = _infer_threat_nature_from_semgrep(extra, rule_id)
+                # `check_id` es "<ruta-de-config-con-puntos>.<id-de-regla>"
+                # (p. ej. "rules.semgrep.custom.bash.bash-curl-pipe-to-shell");
+                # el propio `id:` de la regla, con el que está indexado
+                # declared_finding_types, es siempre el último segmento.
+                bare_rule_id = rule_id.split(".")[-1]
+                declared_type = declared_finding_types.get(bare_rule_id)
+                if declared_type == "malicious":
+                    threat_nature = ThreatNature.MALICIOUS
+                elif declared_type == "vulnerability":
+                    threat_nature = ThreatNature.VULNERABILITY
+                else:
+                    # Sin finding_type declarado, o "needs_review"/
+                    # "unclassified" (aún no confirmado por un humano) --
+                    # cae a la heurística de respaldo.
+                    threat_nature = _infer_threat_nature_from_semgrep(extra, rule_id)
 
                 results.append(
                     {

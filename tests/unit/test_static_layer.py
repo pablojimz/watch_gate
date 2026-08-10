@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 import tempfile
 from pathlib import Path
@@ -213,6 +214,180 @@ def test_run_semgrep_on_file_regex_category_does_not_duplicate_itself() -> None:
         assert config_args.count(f"--config={semgrep_root / 'custom' / 'regex'}") == 1
     finally:
         shutil.rmtree(tmp_root, ignore_errors=True)
+
+
+def _write_rule_yaml(path: Path, rule_id: str, *, finding_type_in: str | None, block: str) -> None:
+    """Escribe un YAML de una sola regla con `finding_type` (si se pide)
+    bajo `metadata:` u `options:`, según `block` -- ver los dos convenios
+    reales encontrados en rules/semgrep (775 reglas bajo metadata, 3
+    heredadas bajo options)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    finding_type_line = f"\n      finding_type: {finding_type_in}" if finding_type_in else ""
+    if block == "metadata":
+        options_block = ""
+        metadata_extra = finding_type_line
+    else:
+        options_block = f"\n    options:{finding_type_line}" if finding_type_in else ""
+        metadata_extra = ""
+    path.write_text(
+        f"""rules:
+  - id: {rule_id}
+    languages: [generic]
+    severity: ERROR
+    message: "regla de test"
+    metadata:
+      category: security{metadata_extra}{options_block}
+    patterns:
+      - pattern: dummy
+""",
+        encoding="utf-8",
+    )
+
+
+def test_get_semgrep_finding_types_reads_metadata_and_options_blocks(tmp_path) -> None:
+    """`finding_type` declarado bajo `metadata:` (convenio mayoritario) y
+    bajo `options:` (3 reglas heredadas, ver docstring del método) deben
+    resolverse igual -- el resultado no debe depender de en qué bloque
+    haya elegido declararlo el autor de la regla."""
+    semgrep_root = tmp_path / "rules" / "semgrep"
+    _write_rule_yaml(
+        semgrep_root / "custom" / "csharp" / "rule-a.yaml",
+        "rule-a",
+        finding_type_in="vulnerability",
+        block="metadata",
+    )
+    _write_rule_yaml(
+        semgrep_root / "custom" / "powershell" / "rule-b.yaml",
+        "rule-b",
+        finding_type_in="malicious",
+        block="options",
+    )
+    _write_rule_yaml(
+        semgrep_root / "custom" / "python" / "rule-c.yaml",
+        "rule-c",
+        finding_type_in=None,
+        block="metadata",
+    )
+
+    layer = StaticLayer()
+    finding_types = layer._get_semgrep_finding_types(tmp_path)
+
+    assert finding_types["rule-a"] == "vulnerability"
+    assert finding_types["rule-b"] == "malicious"
+    assert "rule-c" not in finding_types
+
+
+def test_get_semgrep_finding_types_caches_within_process(tmp_path) -> None:
+    semgrep_root = tmp_path / "rules" / "semgrep"
+    _write_rule_yaml(
+        semgrep_root / "custom" / "csharp" / "rule-a.yaml",
+        "rule-a",
+        finding_type_in="vulnerability",
+        block="metadata",
+    )
+
+    layer = StaticLayer()
+    first = layer._get_semgrep_finding_types(tmp_path)
+    # Añadir una regla nueva en disco NO debe cambiar el resultado de una
+    # segunda llamada dentro del mismo proceso: se sirve de la caché.
+    _write_rule_yaml(
+        semgrep_root / "custom" / "csharp" / "rule-new.yaml",
+        "rule-new",
+        finding_type_in="malicious",
+        block="metadata",
+    )
+    second = layer._get_semgrep_finding_types(tmp_path)
+
+    assert first == second
+    assert "rule-new" not in second
+
+
+def test_run_semgrep_on_file_uses_declared_finding_type_over_keyword_heuristic(tmp_path) -> None:
+    """Caso real que motivó este cambio: una regla cuyo `category` es
+    "security" (no matchea ningún keyword de la heurística de
+    _infer_threat_nature_from_semgrep) pero que el propio autor clasificó
+    como `finding_type: malicious` -- el hallazgo debe salir MALICIOUS, no
+    VULNERABILITY por defecto de la heurística (ver
+    powershell-download-and-execute.yaml, que motivó este test)."""
+    semgrep_root = tmp_path / "rules" / "semgrep"
+    _write_rule_yaml(
+        semgrep_root / "custom" / "powershell" / "download-and-execute.yaml",
+        "download-and-execute",
+        finding_type_in="malicious",
+        block="options",
+    )
+
+    layer = StaticLayer()
+    fake_stdout = json.dumps(
+        {
+            "results": [
+                {
+                    "check_id": "rules.semgrep.custom.powershell.download-and-execute",
+                    "start": {"line": 1},
+                    "extra": {
+                        "severity": "ERROR",
+                        "message": "regla de test",
+                        # `metadata` a propósito SIN `finding_type` ni ningún
+                        # keyword malicioso -- solo lo tiene `options`, que
+                        # Semgrep no reenvía en su JSON de salida.
+                        "metadata": {"category": "security"},
+                    },
+                }
+            ]
+        }
+    )
+
+    def fake_run(command, **kwargs):
+        result = MagicMock()
+        result.returncode = 1
+        result.stdout = fake_stdout
+        result.stderr = ""
+        return result
+
+    with patch("watchgate.core.layers.static_layer.subprocess.run", side_effect=fake_run):
+        findings = layer._run_semgrep_on_file("dummy.ps1", "powershell", tmp_path)
+
+    assert len(findings) == 1
+    assert findings[0]["threat_nature"] == ThreatNature.MALICIOUS
+
+
+def test_run_semgrep_on_file_falls_back_to_heuristic_when_no_finding_type_declared(
+    tmp_path,
+) -> None:
+    """Sin ninguna regla en disco que declare `finding_type` para ese
+    rule_id (p. ej. una regla de terceros no clasificada, o un checkout
+    parcial de la caché de reglas), debe seguir cayendo a la heurística
+    de palabras clave existente -- sin regresión respecto al
+    comportamiento anterior a este cambio."""
+    layer = StaticLayer()
+    fake_stdout = json.dumps(
+        {
+            "results": [
+                {
+                    "check_id": "some.vendor.rules.malware-backdoor-check",
+                    "start": {"line": 3},
+                    "extra": {
+                        "severity": "ERROR",
+                        "message": "hallazgo de terceros sin finding_type",
+                        "metadata": {"category": "malware"},
+                    },
+                }
+            ]
+        }
+    )
+
+    def fake_run(command, **kwargs):
+        result = MagicMock()
+        result.returncode = 1
+        result.stdout = fake_stdout
+        result.stderr = ""
+        return result
+
+    with patch("watchgate.core.layers.static_layer.subprocess.run", side_effect=fake_run):
+        findings = layer._run_semgrep_on_file("dummy.py", "python", tmp_path)
+
+    assert len(findings) == 1
+    assert findings[0]["threat_nature"] == ThreatNature.MALICIOUS
 
 
 def test_severity_score_mapping() -> None:
