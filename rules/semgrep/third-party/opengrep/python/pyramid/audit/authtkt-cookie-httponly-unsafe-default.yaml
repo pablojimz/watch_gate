@@ -37,5 +37,6 @@ rules:
     exploitability_score: 80
     risk_score: 60
     risk_justification: AuthTkt sin httponly explícito; excluye si se define httponly o se pasan **kwargs.
+    finding_type: vulnerability
   languages: [python]
   severity: WARNING

@@ -25,6 +25,7 @@ rules:
       exploitability_score: 80
       risk_score: 95
       risk_justification: "BinaryFormatter.Deserialize es peligroso por diseno, sin caso de uso seguro (MS lo elimino); patron inequivoco; ejecucion normal."
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern: new BinaryFormatter(...).Deserialize(...)

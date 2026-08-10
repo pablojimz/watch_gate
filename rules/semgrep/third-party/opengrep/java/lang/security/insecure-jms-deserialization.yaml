@@ -31,6 +31,7 @@ rules:
     exploitability_score: 40
     risk_score: 79
     risk_justification: getObject() en MessageListener; requiere que la cola reciba mensajes de productor no confiable.
+    finding_type: vulnerability
   message: >-
     JMS Object messages depend on Java Serialization for marshalling/unmarshalling
     of the message payload when ObjectMessage.getObject() is called.

@@ -25,6 +25,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: Get/Post literal http://, excluye localhost/127.0.0.1 explicitamente.
+    finding_type: vulnerability
   languages:
   - go
   fix-regex:

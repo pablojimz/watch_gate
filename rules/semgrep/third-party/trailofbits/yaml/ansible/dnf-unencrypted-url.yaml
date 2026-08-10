@@ -19,6 +19,7 @@ rules:
       exploitability_score: 100
       risk_score: 94
       risk_justification: 'Igual que apt: descarga de paquete dnf sin cifrar, MITM puede sustituir binario ejecutado como root.'
+      finding_type: vulnerability
     patterns:
       - pattern-inside: |
           $DNF:

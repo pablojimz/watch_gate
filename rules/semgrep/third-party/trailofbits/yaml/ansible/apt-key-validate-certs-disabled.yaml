@@ -18,6 +18,7 @@ rules:
       exploitability_score: 100
       risk_score: 94
       risk_justification: TLS no verificado al descargar clave de firma; mismo riesgo de suplantación de clave de confianza vía MITM.
+      finding_type: vulnerability
     patterns:
       - pattern-inside: |
           $APTKEY:

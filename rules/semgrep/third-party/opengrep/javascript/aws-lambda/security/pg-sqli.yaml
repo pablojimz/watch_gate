@@ -32,6 +32,7 @@ rules:
     exploitability_score: 80
     risk_score: 78
     risk_justification: Taint event->db.query, mismo patrón que otros conectores SQL.
+    finding_type: vulnerability
   languages:
   - javascript
   - typescript

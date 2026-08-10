@@ -20,6 +20,7 @@ rules:
       exploitability_score: 80
       risk_score: 95
       risk_justification: "eval() con dato no literal es RCE directa, sin caso de uso seguro (HIGH); ejecucion normal."
+      finding_type: vulnerability
     patterns:
       - pattern: eval($CODE)
       - pattern-not: eval("...")

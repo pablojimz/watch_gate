@@ -36,5 +36,6 @@ rules:
     exploitability_score: 100
     risk_score: 78
     risk_justification: https_only no forzado; duplicado mas simple del anterior, campo exacto.
+    finding_type: vulnerability
   languages: [hcl]
   severity: WARNING

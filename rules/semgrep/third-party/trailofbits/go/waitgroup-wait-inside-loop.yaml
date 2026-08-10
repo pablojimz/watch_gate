@@ -21,6 +21,7 @@ rules:
       exploitability_score: 80
       risk_score: 49
       risk_justification: Wait() dentro de loop bloquea concurrencia esperada; bug de fiabilidad.
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern: |

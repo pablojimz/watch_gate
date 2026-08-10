@@ -25,6 +25,7 @@ rules:
     exploitability_score: 80
     risk_score: 89
     risk_justification: Input externo a funciones de archivo (fopen/unlink/file_put_contents); lectura/escritura arbitraria.
+    finding_type: vulnerability
   languages: [php]
   mode: taint
   pattern-sources:

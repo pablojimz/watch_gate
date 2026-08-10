@@ -60,5 +60,6 @@ rules:
     exploitability_score: 100
     risk_score: 72
     risk_justification: Contenedor sin bloque securityContext; permite escalada de privilegios por defecto en k8s, aplica al desplegar.
+    finding_type: vulnerability
   languages: [yaml]
   severity: WARNING

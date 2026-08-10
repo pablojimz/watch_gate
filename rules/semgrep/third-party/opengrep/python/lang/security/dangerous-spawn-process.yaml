@@ -206,5 +206,6 @@ rules:
     exploitability_score: 80
     risk_score: 83
     risk_justification: os.spawn*/posix_spawn con dato web/env/argv, excluye literales fijos.
+    finding_type: vulnerability
   languages: [python]
   severity: ERROR

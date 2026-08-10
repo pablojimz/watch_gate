@@ -115,5 +115,6 @@ rules:
     exploitability_score: 40
     risk_score: 73
     risk_justification: Taint env/argv->subprocess con sanitizer shlex.quote; RCE condicionada a origen hostil no garantizado.
+    finding_type: vulnerability
   languages: [python]
   severity: ERROR

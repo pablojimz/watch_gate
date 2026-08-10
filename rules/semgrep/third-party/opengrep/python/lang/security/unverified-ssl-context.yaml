@@ -33,6 +33,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: ssl._create_unverified_context exacto; desactiva verificación TLS para todo el proceso, sin caso de uso seguro.
+    finding_type: vulnerability
   severity: ERROR
   languages:
   - python

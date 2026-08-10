@@ -1,78 +1,78 @@
 {
-  "generated_at": "2026-08-09T15:59:02Z",
+  "generated_at": "2026-08-10T08:58:21Z",
   "hashes": {
     "semgrep": {
       "custom": {
-        "bash": "sha256:2b3c26aa36272f20e6fd5c955de71a8850819db5132ed5a1521f28d292596d9f",
-        "c": "sha256:e427cac2ddcead51f78bb03b96d5780155f467733e5d47616d8d64aec35f73bb",
-        "clojure": "sha256:f4dbe9701bce20bf144e11292ae3be176b10628141e5cd646fc4e13861edd891",
-        "csharp": "sha256:75fd0f4cbb6d0104679c6ad403fd725d7b52a1e666e766656c1cb1d87798304f",
-        "dockerfile": "sha256:c2659a08a3476280428d8fbe828506ee196e9922c2a3ee2fe2b399cf3ef9b45f",
-        "html": "sha256:e566049e9085eb2b0b85fb809d6f08a0068c1e3777949373d481eef2fcc644c9",
-        "java": "sha256:c6d273db6839c6eb9250a3d7908d3e488d39f8bf1911787e415d0ec8a371e152",
-        "javascript": "sha256:46810b1863d6aaad60a59ffc1b4b4e55ad74f82c40524801ba6952d690cb4b68",
-        "json": "sha256:c10e2619126cdf650078ab67ba0a455587f52d77a72ff87b82448caf60916352",
-        "ocaml": "sha256:18445630c159ce4ac58b46fb9e2a438bbe9f5cc7121bd7f609edfede002177a5",
-        "php": "sha256:fb4badae086c8cb91230955d532f03371e273cf610235eabb23ce35b9b297b0b",
-        "powershell": "sha256:6c912afdf678aa7aeb55aeaa3d685a47343edf2250b16d11f46b2c588f2cb316",
-        "python": "sha256:b5d9d699f673b6a63e1cbe5cacf6eadf03d2acf7f28fa007c7cead11b2940aee",
-        "regex": "sha256:198d26169926d94308a0691a09dd0e2e5100ab7da7526c76f3e9a626dc461a48",
-        "ruby": "sha256:d1169f9177bb1d91fcfa13ac7f203baf19ff65ac6d883c7b25c0c473aa829ea9",
-        "rust": "sha256:cc6617e27a46fd3615747c3b0d1dc6652df511cf030d6e770a42311c01b036f2",
-        "swift": "sha256:e3eeb14efb0fddc318d76377e574ecf616fc5eed763f0b99ad2c4f5c918ce690"
+        "bash": "sha256:04526539b0c1cba5fdfa1c62a13ea49053cdc57179e1cf93fb7f03820ce5d3b8",
+        "c": "sha256:55d19f88eb8903d35bfe5a34a065c92329ebae95b4bdd0cbaa48b5d13ea62b26",
+        "clojure": "sha256:c03fd9a426f51943021d5519431f3f5396f265d1bef24aa0ed03cb26f50d6d65",
+        "csharp": "sha256:fdfed1feeb079af040c656a7f82415f167a0f4e7ebf8fca0f5726c801bdd3b65",
+        "dockerfile": "sha256:f1a38252d89744a39e60c02d782045ce2c0d051a21c422578dd73535852e8e11",
+        "html": "sha256:28904bcbd396d98a9f96f5e93c1f39ba7de11aa101e27db6b36d82547d052fad",
+        "java": "sha256:e1649d2277d5d87e2b1c64b3df90f278ba87d39c99101c6461d1140f6247c1af",
+        "javascript": "sha256:4e0e4bf5d153c9facaf6d486d3a3714ea4d3e98d608581b3c2bc8c581fd87660",
+        "json": "sha256:e4e7271a2dd33245c5ae8c3872d5ca2fea8ada7cc683967740a2a019a835a756",
+        "ocaml": "sha256:4f87d6773ffd918d559c81b57840e9e6579ec16fa6f9ccb23570651fd17f58e2",
+        "php": "sha256:8e26b586783bd2d9788791e4c509b7d9bc075d6f260ae6cbe2b67357b4928990",
+        "powershell": "sha256:9749a3450a9b4b40f898a6e76ca2efa643c9e6b57a734f4b126b4e2750ee380e",
+        "python": "sha256:18b51dd5f57486d93011919732e8b90ee4ba265d763a4ad2a97b7ba2f9629ef3",
+        "regex": "sha256:54ca5163e5357cfd0bd7785ba58828840327b39758b90bbbb706feefd96b8bc7",
+        "ruby": "sha256:5d3403a91611ab00084f88c94ea2755405a290c9024ae9396bde3a89b11a2703",
+        "rust": "sha256:b85274e2f29edd15faa1633884b755b8eb19671bdd45bd91671d86f443968971",
+        "swift": "sha256:762c6f71c0678fba92b13faaa210a48132e01064bca9328665a796e7dd6db0cf"
       },
       "third_party": {
         "0xdea": {
-          "c": "sha256:8024b916c976b6339ad07a497b3be1ae3ebbee6cf2c298f58c17ba5d998a6f2f",
+          "c": "sha256:0b1503e9111f0a2fdd74c0916db56fd86b93d8191c16aa4d7d3ecb151b655206",
           "noisy": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
         },
         "elttam": {
-          "go": "sha256:0fe0de8a0c60c0e65745d684465f4f694d7a1fc5ae1cf9ddf282d7e7b7ec5fdf",
-          "yaml": "sha256:1baf3720460dd808e4deb8fdc539a5853ae22e0199757292f6b9aae352a27f7a"
+          "go": "sha256:83cae5799f3a6dd1761f9aadfc086383432e08e94a9da299baaefabea6fe870a",
+          "yaml": "sha256:0dff2332438fae16d577389cfebb808c92e3f67b0e0133042d7ed120cc44c6fc"
         },
         "opengrep": {
-          "bash": "sha256:4ebd9ec5bb19965bd88dce436734c3632ffb43a598fd79244dfe7e4263fdfb00",
-          "clojure": "sha256:528e1ca2c7400b2d15ea2405a3076b56ba25b5434ef35dbd208c9e2911ccb61f",
-          "csharp": "sha256:2e9e591f052be3d5a35e74909cbc54528c96a1b22c17f9d943d3eef506e3439e",
-          "generic": "sha256:9975ebd480d9e91b1820686f16b553781fb2c25405c58306f4068bb8858d8aa1",
-          "go": "sha256:c34106e7ffb72455904814f14721f93dbbbb853d13584e09c6656bbb90775617",
-          "html": "sha256:0d71823f164d106e05564c09b1b27a858d52193b5b4a22770c4fdc3079c6d6cc",
-          "java": "sha256:32186aa86ded8b0a5442b9da682f2e70b42dd940f5cea3739ce6735d401f2dce",
-          "javascript": "sha256:87c9f742dc3b7e16a12f1a8ce317c8bac68bc702828c29c2794d0931049aa363",
-          "json": "sha256:2b2f17b48708c8f8e9235c2d4714c1ab35261c702526e1ef98a39392bf8a63fd",
-          "kotlin": "sha256:eb9c1cab80f5d73f7c0963901d643e23cb5c36fec7540fc215dc4d17dc65ae02",
-          "ocaml": "sha256:d09f49dbd065dbc3612940958b9f8d289da54fd31a0f41f1f69f558c38b2c5ac",
-          "php": "sha256:8defee9b2e3f22344508aee213a7d2a4678938259fe7414e5b4e53a6a760896e",
-          "problem-based-packs": "sha256:f45b3c4ccd6eb4428d6e480f9a8f93c28bbbef79094bb0c3f25e9eff5e8ffec1",
-          "python": "sha256:9dee3d156a1aa60dc99568fec0994bf1bcc3694011e9a8bb76e80b701bef0721",
-          "ruby": "sha256:65be35f2633e3b0dd9d4b8e190832249ccbdd9f19d582b334f8df01508f92aa1",
-          "scala": "sha256:3bfb019193ec1cbaa71bffe96e41c8d975b2b0f110e22a08a94e5988acb44866",
-          "solidity": "sha256:8f08a730f1dff7ca5b1bf0181a68152b157f9763fbc38374c66efb2482c56468",
-          "swift": "sha256:4ad260f29fc795e0c1605ae847d770057445e3000a5df4edff5a2b9f3288c2c9",
-          "terraform": "sha256:4076c8c5c5ce3d203e192c49e492a36cf6ec8fcce5a88e06ffbeb580cbc6277f",
-          "typescript": "sha256:2644442d6146a10d1dcf30347ae9cad2c83b28190030685644998b6760c6a176",
-          "yaml": "sha256:9705cfa6b801efab687487a5c27c55aafb8ac175ce1bc0bdab8aae8739cad3ea"
+          "bash": "sha256:ee455ad02e4fe8b365dc45e2cd9843df4ee272f46accf539444868bb86216afc",
+          "clojure": "sha256:281c5dcf6aad787709a508adec7bf973b75d8dfca1260549e3016d8115307ecd",
+          "csharp": "sha256:65db3b51176f1ab6e5eeb6a48f9a8f067c9a16c01428cffae12e9020fee7d828",
+          "generic": "sha256:60cdaeecda6e1eb8c0aa8fa8382ae382bb8b63b52476b409e4ba18d03db24556",
+          "go": "sha256:62bb50734822db84e94480b8bf37e754e0356d4eb240b486e07cad0a6bf72583",
+          "html": "sha256:448dc0b141aa5da7f69907184c73b1ffb43f4c6ebb378ff7e0c7ef020a302d77",
+          "java": "sha256:9953425d52518b885beb3e6d29fbabf5b9b5870af632fdf6764570186d9d6602",
+          "javascript": "sha256:517af62884bae3dd12956824060a6ed8d81e06dd2a4b49dfdec56331d8cea5ca",
+          "json": "sha256:8388f138cdeec9c449646222898bf2823f21b1405ae45d3a890ffff262d5a447",
+          "kotlin": "sha256:1bce67794b5d7b566ae6e60d507e46e75187a6ff477451c836888e4870d4f093",
+          "ocaml": "sha256:1c80f0a02c18a23707dd032a09e3b8c8e5225e5ecbaa4d1fc7333da3fbcda6fc",
+          "php": "sha256:37194328b420562c7529c3ade337347bd7122d0ae167c5cb9c4f67c210c79002",
+          "problem-based-packs": "sha256:7a35942edb756a5eb33df5170178de2338d4dd2968c64217ec26e4b453ff0503",
+          "python": "sha256:006cb4f323b735a11e342b604eb877e39f4056fd28d6cf9b214898d96e260c80",
+          "ruby": "sha256:c92515d30182f4adde39ece0040ef6abe58648a09a5a232411fe191f0cd04686",
+          "scala": "sha256:d556dd7ed7db4efa617b23941ab04fbd938d6eb5031be7a649364e2fbb0e6ec2",
+          "solidity": "sha256:23e95c77a06c69a675c8180692b6d6cf164617196821096fdf99c55ca8b50bb4",
+          "swift": "sha256:5924ab75e0319e6aa6db6bd8e27572fcd5da2360c8c1e051fad19bfed8267b6c",
+          "terraform": "sha256:3396a7c11fdc3befa3db7e53a5fca7b828929e0cd4b284ede1589f7571c94f4b",
+          "typescript": "sha256:79cf4f3ede400745c4c60e96cc5ecc6b93fa9ceed6b8035d71d76c651edda5a5",
+          "yaml": "sha256:28fb5e3aa0b2c34e58e8df2c568c1dc3fc260007dc26e38b603f311ab5280b37"
         },
         "trailofbits": {
-          "generic": "sha256:0a44ae45d30a49878b001fc96941c299e7837d7adcc887026b079f8e49ee719c",
-          "go": "sha256:89e4327405aa8741b2db5ca284a66accd9f5730f01e556ba0d4cf9fd2cf50482",
-          "hcl": "sha256:1464b488b1daecf233bde7de9a1644688a82a65380570083c88c4056a161c8ac",
-          "javascript": "sha256:27744b4cc82763e471fdba67b4290756fa0a5805ba6460c31200e140262e3726",
-          "jvm": "sha256:f14ed01051c6629861022634ddb78f3ad1cb99ba0dbd0991e62523259022753b",
-          "python": "sha256:052a319980eacd8bd001f8defbeef5e9f75b9f2ddfc0e9dbe41c803efbe6fbaf",
-          "rs": "sha256:fbc85ca7c63e371f6ea71d1bb25a4b3a10f93d7fb81ff5675ba524e6ad4c1be9",
-          "ruby": "sha256:7cbb07b4e6a010f979e8e3131761753a23c2aae251fafefc072e9b1888bdc130",
-          "swift": "sha256:ab00ea52cdc069801895de9f5054985d8dfbd6c6eb00ccb3bd3c4dbe7df73de1",
-          "yaml": "sha256:c1d3293e7a884b6eb0db15d051c067702822e43d6ab59c933aef82957674a6c9"
+          "generic": "sha256:c699c2324da45d4acf5d5a36b771a512aa487d6cc7a127441d4e78ba024fe80e",
+          "go": "sha256:35a89c5f0e50b2c343d672ef298d1fef4f329e65de4e042dcb44a344cf3c1550",
+          "hcl": "sha256:bf3a98cfd0b3437199cd1d26c98502c298a6844f3bbe630dc7d72d731a1d892a",
+          "javascript": "sha256:0e99ab6c7962bef70e09d07cf15dc8c3680e49aba79dc68b8f20f33655516281",
+          "jvm": "sha256:dc359f602ddd27455def1dcc7d4a7e5e8bb29c2e68b002de355fc468216b42f3",
+          "python": "sha256:1b6a506ff4864d4d1e204bccd0a554af7f92af76fd804e081a9a1380efb8cc36",
+          "rs": "sha256:e163b97c62ff6297d5da2fe4e8db51c8abdf77d93a1508836e88f18a7579bfea",
+          "ruby": "sha256:5d4d02ec9474ba9b2f3643517f58a2c973f0f7b0ae5525b101faf9cc8db0215c",
+          "swift": "sha256:c700c6d51aba1215e25d32b62b87047f39afdd846a1e425989f1e42a07e8a2ec",
+          "yaml": "sha256:be71c1a5235f0baf630e3f123dcf4e91c1a06a572001135ccdc72b46e79c8264"
         }
       }
     },
     "yara": {
-      "antidebug_antivm": "sha256:a0231feb1f78543b6e5896ccffc57a52f2de64353f6479ffc5e6bb3f3eaacfc5",
-      "webshells": "sha256:8bfdf45c52b48fbe68df79b3c3af6d70615753937745060fa34a9db6ab4180ec"
+      "antidebug_antivm": "sha256:77ee36f3cf28171ddb277db5398b355ea8cf2be7835ba073d75f84783da0fa6e",
+      "webshells": "sha256:b26d530f7abe07d0e8a7d358c554d962de964da86feab6818718d08bc8e9ca9c"
     }
   },
-  "verified_at": "2026-08-09T16:05:17Z",
+  "verified_at": "2026-08-10T08:58:51Z",
   "verified_by_workflow": "sync-rules.yml",
-  "version": "v0.0.5"
+  "version": "v0.1.0"
 }

@@ -24,6 +24,7 @@ rules:
       exploitability_score: 80
       risk_score: 84
       risk_justification: Falta csrfPrevention, que es false por defecto en v3; check exacto de ausencia del literal true.
+      finding_type: vulnerability
     patterns:
       - pattern: new ApolloServer({...})
       - pattern-not: |

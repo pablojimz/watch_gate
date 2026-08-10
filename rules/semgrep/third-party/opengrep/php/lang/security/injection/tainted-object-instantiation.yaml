@@ -24,6 +24,7 @@ rules:
     exploitability_score: 80
     risk_score: 89
     risk_justification: Clase instanciada con nombre controlado por atacante; RCE si existe gadget disponible.
+    finding_type: vulnerability
   mode: taint
   pattern-sources:
   - patterns:

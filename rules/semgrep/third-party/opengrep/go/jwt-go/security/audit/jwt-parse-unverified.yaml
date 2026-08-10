@@ -27,6 +27,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: ParseUnverified omite validacion de firma; el propio mensaje reconoce usos legitimos, baja algo la confianza.
+    finding_type: vulnerability
   languages: [go]
   severity: WARNING
   patterns:

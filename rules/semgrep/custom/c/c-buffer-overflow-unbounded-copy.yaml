@@ -24,6 +24,7 @@ rules:
       exploitability_score: 80
       risk_score: 83
       risk_justification: "Copia sin limite de tamano puede corromper memoria y llevar a RCE; patron sintactico sin verificar tamanos reales de buffer; ejecucion normal."
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern: strcpy($DST, $SRC)

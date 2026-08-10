@@ -21,6 +21,7 @@ rules:
       exploitability_score: 80
       risk_score: 89
       risk_justification: sweepToken sin control de acceso; cualquiera puede vaciar tokens del contrato, llamable directamente.
+      finding_type: vulnerability
     patterns:
       - pattern-inside: |
           function sweepToken(...) {

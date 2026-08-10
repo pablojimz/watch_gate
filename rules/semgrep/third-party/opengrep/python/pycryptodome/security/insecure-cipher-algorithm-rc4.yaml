@@ -32,6 +32,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: ARC4.new exacto; cifrado de flujo débil dedicado, sin uso legítimo alternativo conocido.
+    finding_type: vulnerability
   severity: WARNING
   languages:
   - python

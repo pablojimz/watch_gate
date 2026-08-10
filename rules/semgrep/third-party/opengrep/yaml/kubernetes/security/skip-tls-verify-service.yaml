@@ -29,5 +29,6 @@ rules:
     exploitability_score: 100
     risk_score: 78
     risk_justification: insecureSkipTLSVerify:true literal en manifiesto APIService; aplica automaticamente al desplegarse en el cluster.
+    finding_type: vulnerability
   languages: [yaml]
   severity: WARNING

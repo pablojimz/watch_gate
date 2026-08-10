@@ -25,6 +25,7 @@ rules:
       exploitability_score: 80
       risk_score: 72
       risk_justification: "mark_safe() sobre dato no literal desactiva el autoescape y permite XSS; sin taint tracking, solo excluye literal; ejecucion normal."
+      finding_type: vulnerability
     patterns:
       - pattern: mark_safe($HTML)
       - pattern-not: mark_safe("...")

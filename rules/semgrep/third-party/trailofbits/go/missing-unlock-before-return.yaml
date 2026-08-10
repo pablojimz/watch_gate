@@ -22,6 +22,7 @@ rules:
       exploitability_score: 80
       risk_score: 49
       risk_justification: Doble lock/deadlock potencial; bug de fiabilidad, sin RCE.
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern: panic(...)

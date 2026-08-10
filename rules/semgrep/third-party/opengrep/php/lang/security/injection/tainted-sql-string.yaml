@@ -27,6 +27,7 @@ rules:
     exploitability_score: 80
     risk_score: 78
     risk_justification: SQLi por concatenación; taint real + regex de palabras clave SQL + sanitizador de escape.
+    finding_type: vulnerability
   mode: taint
   pattern-sanitizers:
   - pattern-either:

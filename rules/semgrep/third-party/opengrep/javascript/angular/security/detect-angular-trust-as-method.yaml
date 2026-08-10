@@ -26,6 +26,7 @@ rules:
     exploitability_score: 40
     risk_score: 53
     risk_justification: Fuente $scope.$X muy amplia, no necesariamente input de usuario.
+    finding_type: vulnerability
   languages:
   - javascript
   - typescript

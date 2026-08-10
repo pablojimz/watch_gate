@@ -23,6 +23,7 @@ rules:
       exploitability_score: 80
       risk_score: 83
       risk_justification: free() sobre memoria no-heap; técnica house-of-spirit, corrupción de heap explotable.
+      finding_type: vulnerability
     message: >-
       The software calls free() on a pointer to memory that has a short  lifetime and was not allocated using associated heap allocation  functions such as malloc(), calloc(), or realloc().
     severity: ERROR

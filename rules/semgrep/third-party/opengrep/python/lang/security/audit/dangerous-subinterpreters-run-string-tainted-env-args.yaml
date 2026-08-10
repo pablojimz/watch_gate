@@ -80,6 +80,7 @@ rules:
     exploitability_score: 10
     risk_score: 66
     risk_justification: _xxsubinterpreters es API interna/de test de CPython, prácticamente inalcanzable en apps reales; excluye payload literal.
+    finding_type: vulnerability
   severity: WARNING
   languages:
   - python

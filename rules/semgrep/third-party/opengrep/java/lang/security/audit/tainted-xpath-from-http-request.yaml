@@ -40,3 +40,4 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: Fuente muy amplia (cualquier metodo sobre request), reduce precision del taint.
+    finding_type: vulnerability

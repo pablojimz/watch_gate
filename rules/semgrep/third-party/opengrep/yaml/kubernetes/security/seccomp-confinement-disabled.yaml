@@ -36,5 +36,6 @@ rules:
     exploitability_score: 100
     risk_score: 78
     risk_justification: seccompProfile:unconfined literal; desactiva sandboxing de syscalls, aplica al desplegar.
+    finding_type: vulnerability
   languages: [yaml]
   severity: WARNING

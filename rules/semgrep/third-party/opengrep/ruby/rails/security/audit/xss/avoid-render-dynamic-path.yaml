@@ -23,6 +23,7 @@ rules:
     exploitability_score: 80
     risk_score: 89
     risk_justification: params a render action/template/partial/file; LFI de plantillas, taint preciso.
+    finding_type: vulnerability
   message: >-
     Avoid rendering user input. It may be possible for a malicious user to input a path that lets them
     access a template they

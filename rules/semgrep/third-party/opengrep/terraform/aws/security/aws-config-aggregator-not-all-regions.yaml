@@ -46,3 +46,4 @@ rules:
     exploitability_score: 100
     risk_score: 60
     risk_justification: Monitoreo/auditoria incompleta, no expone datos por si mismo.
+    finding_type: vulnerability

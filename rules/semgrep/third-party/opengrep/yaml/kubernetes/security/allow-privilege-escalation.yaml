@@ -66,5 +66,6 @@ rules:
     exploitability_score: 100
     risk_score: 72
     risk_justification: securityContext presente pero sin campo allowPrivilegeEscalation; por defecto permite escalada, aplica al desplegar.
+    finding_type: vulnerability
   languages: [yaml]
   severity: WARNING

@@ -21,6 +21,7 @@ rules:
       exploitability_score: 40
       risk_score: 85
       risk_justification: Funciones de comunicación distribuida usan pickle sobre objetos arbitrarios (RCE); requiere peer malicioso en el grupo.
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern: torch.distributed.broadcast_object_list(...)

@@ -22,6 +22,7 @@ rules:
       exploitability_score: 80
       risk_score: 74
       risk_justification: "Uso tras free es UB explotable para RCE; patron puramente textual sin alcance real de variable (LOW); ejecucion normal."
+      finding_type: vulnerability
     patterns:
       - pattern: |
           free($PTR);

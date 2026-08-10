@@ -50,3 +50,4 @@ rules:
       exploitability_score: 100
       risk_score: 78
       risk_justification: x-openai-isConsequential:false literal en metodo mutante (POST/PUT/PATCH/DELETE); debilita control humano, no es explotacion en si misma.
+      finding_type: vulnerability

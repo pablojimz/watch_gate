@@ -26,6 +26,7 @@ rules:
       exploitability_score: 40
       risk_score: 73
       risk_justification: system/popen/wordexp con arg no literal; excluye literal pero no rastrea origen no confiable.
+      finding_type: vulnerability
     message: >-
       The software constructs an OS command using externally-influenced input,  but it does not neutralize or incorrectly neutralizes special elements  that could modify the intended OS command.
     severity: ERROR

@@ -28,6 +28,7 @@ rules:
     exploitability_score: 40
     risk_score: 62
     risk_justification: InsecureIgnoreHostKey() exacto, sin uso seguro conocido; explotacion requiere atacante en red (MITM).
+    finding_type: vulnerability
   languages: [go]
   severity: WARNING
   pattern: |-

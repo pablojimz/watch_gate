@@ -66,5 +66,6 @@ rules:
     exploitability_score: 100
     risk_score: 78
     risk_justification: TLS<1.2 en CloudFront; excluye exactamente los valores seguros conocidos, config permanente.
+    finding_type: vulnerability
   languages: [hcl]
   severity: WARNING

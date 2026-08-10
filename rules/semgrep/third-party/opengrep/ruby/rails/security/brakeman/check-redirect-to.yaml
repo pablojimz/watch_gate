@@ -81,3 +81,4 @@ rules:
     exploitability_score: 80
     risk_score: 60
     risk_justification: Open redirect; lista de sanitizadores compleja con heurísticas de regex sobre nombre de método.
+    finding_type: vulnerability

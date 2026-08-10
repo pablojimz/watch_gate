@@ -24,6 +24,7 @@ rules:
       exploitability_score: 80
       risk_score: 52
       risk_justification: RNG débil; marca todo uso de rand/srand, mayoría no relacionada con tokens/claves de seguridad.
+      finding_type: vulnerability
     message: >-
       The rand() PRNG should not be used in applications intended to be  portable when good randomness is needed. Instead, the use of random()  is recommended.
     severity: WARNING

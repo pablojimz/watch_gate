@@ -34,6 +34,7 @@ rules:
     exploitability_score: 80
     risk_score: 66
     risk_justification: Crypto/Cryptodome.Hash.MD4.new exacto; librería dedicada a crypto, menos uso no-seguridad que hashlib.
+    finding_type: vulnerability
   options:
     symbolic_propagation: true
   severity: WARNING

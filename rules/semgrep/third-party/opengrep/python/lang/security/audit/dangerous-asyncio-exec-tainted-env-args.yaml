@@ -94,5 +94,6 @@ rules:
     exploitability_score: 40
     risk_score: 73
     risk_justification: Taint os.environ/argv->loop.subprocess_exec; RCE si esos datos realmente vienen de atacante, no garantizado por el código.
+    finding_type: vulnerability
   languages: [python]
   severity: ERROR

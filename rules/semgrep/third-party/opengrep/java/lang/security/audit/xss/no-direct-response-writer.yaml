@@ -30,6 +30,7 @@ rules:
     exploitability_score: 80
     risk_score: 78
     risk_justification: Taint real con getters especificos y sanitizadores HTML reconocidos.
+    finding_type: vulnerability
   languages:
   - java
   mode: taint

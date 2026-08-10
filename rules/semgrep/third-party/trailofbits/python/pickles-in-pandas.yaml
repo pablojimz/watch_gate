@@ -22,6 +22,7 @@ rules:
       exploitability_score: 40
       risk_score: 68
       risk_justification: Incluye to_pickle (escritura), que no es en sí deserialización insegura; mezcla operaciones de distinto riesgo.
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern: pandas.read_pickle(...)

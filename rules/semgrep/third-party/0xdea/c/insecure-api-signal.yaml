@@ -25,6 +25,7 @@ rules:
       exploitability_score: 40
       risk_score: 62
       risk_justification: signal() obsoleta y no reentrante; requiere solapamiento real de señales para condición de carrera.
+      finding_type: vulnerability
     message: >-
       The signal() API should be regarded as deprecated. When possible,
       sigaction() should be used instead, because it allows to precisely

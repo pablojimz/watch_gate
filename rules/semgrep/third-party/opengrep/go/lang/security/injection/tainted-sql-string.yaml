@@ -36,6 +36,7 @@ rules:
     exploitability_score: 80
     risk_score: 78
     risk_justification: Taint request hasta concatenacion/format de SQL con palabras clave; SQLi, alta confianza declarada por el autor.
+    finding_type: vulnerability
   mode: taint
   severity: ERROR
   pattern-sources:

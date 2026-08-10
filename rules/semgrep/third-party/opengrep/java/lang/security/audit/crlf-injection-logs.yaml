@@ -24,6 +24,7 @@ rules:
     exploitability_score: 80
     risk_score: 49
     risk_justification: Forja de logs, sin via de explotacion directa demostrada; $VAL no verificado como no literal via taint real.
+    finding_type: vulnerability
   severity: WARNING
   languages: [java]
   patterns:

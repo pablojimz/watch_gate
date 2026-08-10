@@ -25,5 +25,6 @@ rules:
       exploitability_score: 100
       risk_score: 78
       risk_justification: 'NetworkPolicy con ingress: [{}] permite todo el tráfico; sintaxis YAML inequívoca y activa en cada despliegue.'
+      finding_type: vulnerability
     languages: [generic]
     severity: WARNING

@@ -42,5 +42,6 @@ rules:
     exploitability_score: 80
     risk_score: 95
     risk_justification: assert() con input real de $_GET/POST/etc equivale a eval; sink exacto sin literal.
+    finding_type: vulnerability
   languages: [php]
   severity: ERROR

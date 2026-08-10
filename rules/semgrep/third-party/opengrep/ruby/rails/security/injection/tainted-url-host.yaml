@@ -35,6 +35,7 @@ rules:
     exploitability_score: 40
     risk_score: 62
     risk_justification: SSRF; solo detecta construcción de string con esquema://, no confirma uso en petición de red.
+    finding_type: vulnerability
   mode: taint
   pattern-sanitizers:
   - pattern: SsrfFilter

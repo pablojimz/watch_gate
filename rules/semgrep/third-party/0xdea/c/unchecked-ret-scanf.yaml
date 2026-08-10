@@ -23,6 +23,7 @@ rules:
       exploitability_score: 40
       risk_score: 39
       risk_justification: scanf sin comprobar retorno; impacto propio bajo (metadata impact LOW), requiere entrada malformada.
+      finding_type: vulnerability
     message: >-
       The software does not check the return value from a method or
       function, which can prevent it from detecting unexpected states and

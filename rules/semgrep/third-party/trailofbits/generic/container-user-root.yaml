@@ -18,6 +18,7 @@ rules:
       exploitability_score: 80
       risk_score: 72
       risk_justification: 'FALTA DATO: idem ejecución, conservador=80. Root dentro del contenedor debilita aislamiento sin romper namespace por sí solo.'
+      finding_type: vulnerability
     pattern-either:
       - pattern: docker ... -u root
       - pattern: docker ... -u 0

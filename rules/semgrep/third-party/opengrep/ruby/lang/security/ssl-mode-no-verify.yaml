@@ -32,3 +32,4 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: Constante OpenSSL::SSL::VERIFY_NONE exacta; deshabilita validación de certificado.
+    finding_type: vulnerability

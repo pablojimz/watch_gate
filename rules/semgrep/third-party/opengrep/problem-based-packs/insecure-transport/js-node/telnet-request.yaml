@@ -25,6 +25,7 @@ rules:
     exploitability_score: 80
     risk_score: 52
     risk_justification: Incluye $SERVER.on(...) generico de EventEmitter, no confirma conexion telnet real establecida.
+    finding_type: vulnerability
   languages:
   - javascript
   patterns:

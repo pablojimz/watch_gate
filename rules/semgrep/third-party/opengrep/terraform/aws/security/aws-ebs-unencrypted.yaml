@@ -31,3 +31,4 @@ rules:
     exploitability_score: 100
     risk_score: 78
     risk_justification: Cifrado por defecto de EBS deshabilitado a nivel de cuenta; literal exacto enabled=false.
+    finding_type: vulnerability

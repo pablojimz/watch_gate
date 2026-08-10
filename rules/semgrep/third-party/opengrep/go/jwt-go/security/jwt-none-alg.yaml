@@ -28,6 +28,7 @@ rules:
     exploitability_score: 80
     risk_score: 95
     risk_justification: Constante 'none'/UnsafeAllowNoneSignatureType exacta; bypass de verificacion de firma JWT sin uso seguro conocido.
+    finding_type: vulnerability
   languages: [go]
   severity: ERROR
   patterns:

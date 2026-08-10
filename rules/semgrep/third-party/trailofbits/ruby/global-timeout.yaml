@@ -29,6 +29,7 @@ rules:
       exploitability_score: 80
       risk_score: 40
       risk_justification: Timeout.timeout es mecanismo estándar; regla marca prácticamente todo uso legítimo, sin distinción de riesgo real.
+      finding_type: vulnerability
     pattern-either:
       - pattern: Timeout::timeout(...)
       - pattern: Timeout.timeout(...)

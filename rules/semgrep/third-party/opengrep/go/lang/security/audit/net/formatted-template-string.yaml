@@ -27,6 +27,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: template.HTML con string formateado/concatenado; posible XSS pero sin taint real hacia fuente no confiable.
+    finding_type: vulnerability
   languages: [go]
   severity: WARNING
   patterns:

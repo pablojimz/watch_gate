@@ -63,5 +63,6 @@ rules:
     exploitability_score: 100
     risk_score: 72
     risk_justification: TLS/HTTP inseguro en ALB/ELB listener; regexes de exclusion bastante precisos.
+    finding_type: vulnerability
   languages: [hcl]
   severity: WARNING

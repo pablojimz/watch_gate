@@ -20,6 +20,7 @@ rules:
       exploitability_score: 100
       risk_score: 78
       risk_justification: Task ejecutada como root/Administrator; debilita privilegio mínimo, activo en cada despliegue.
+      finding_type: vulnerability
     patterns:
       - pattern-inside: task "..." { ... }
       - pattern-either:

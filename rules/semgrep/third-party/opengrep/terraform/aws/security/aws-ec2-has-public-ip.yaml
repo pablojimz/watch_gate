@@ -44,5 +44,6 @@ rules:
     exploitability_score: 100
     risk_score: 78
     risk_justification: IP publica en instancia/launch template; aumenta superficie de exposicion, literal exacto.
+    finding_type: vulnerability
   languages: [hcl]
   severity: WARNING

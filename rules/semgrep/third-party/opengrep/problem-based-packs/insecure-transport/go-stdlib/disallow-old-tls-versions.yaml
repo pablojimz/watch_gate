@@ -23,6 +23,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: MinVersion fijado a constante TLS10/TLS11/SSL30 exacta, sin caso seguro.
+    finding_type: vulnerability
   languages: [go]
   patterns:
   - pattern-either:

@@ -21,6 +21,7 @@ rules:
       exploitability_score: 80
       risk_score: 49
       risk_justification: Fuga de goroutine/DoS interno; patrón estructural con exclusiones, sin explotación externa demostrada.
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern: |

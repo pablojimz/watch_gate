@@ -164,5 +164,6 @@ rules:
     exploitability_score: 80
     risk_score: 83
     risk_justification: subprocess con dato web amplio (múltiples frameworks), excluye literales y prefijos shell/python.
+    finding_type: vulnerability
   languages: [python]
   severity: ERROR

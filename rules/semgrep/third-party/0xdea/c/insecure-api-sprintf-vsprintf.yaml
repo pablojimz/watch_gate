@@ -25,6 +25,7 @@ rules:
       exploitability_score: 80
       risk_score: 83
       risk_justification: sprintf/vsprintf sin límite de tamaño; FMT dinámico no verificado, overflow clásico.
+      finding_type: vulnerability
     message: >-
       A buffer overflow condition exists when a program attempts to put
       more data in a buffer than it can hold, or when a program attempts to

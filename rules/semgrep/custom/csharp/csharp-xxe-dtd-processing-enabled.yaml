@@ -24,5 +24,6 @@ rules:
       exploitability_score: 80
       risk_score: 95
       risk_justification: "DTD habilitado permite lectura arbitraria de archivos/SSRF/DoS (roba dato); patron exacto sobre la constante Parse; ejecucion normal al parsear XML no confiable."
+      finding_type: vulnerability
     patterns:
       - pattern: $X.DtdProcessing = DtdProcessing.Parse;

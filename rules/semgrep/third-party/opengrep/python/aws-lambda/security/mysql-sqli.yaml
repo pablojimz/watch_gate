@@ -35,6 +35,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: Taint event->cursor.execute; SQLi si event es hostil, fuente genérica.
+    finding_type: vulnerability
   pattern-sinks:
   - patterns:
     - focus-metavariable: $QUERY

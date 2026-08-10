@@ -29,3 +29,4 @@ rules:
     exploitability_score: 40
     risk_score: 51
     risk_justification: authMechanism='MONGODB-CR' literal; mecanismo obsoleto ya no soportado en MongoDB 4+, más higiene/compatibilidad que vulnerabilidad activa explotable.
+    finding_type: vulnerability

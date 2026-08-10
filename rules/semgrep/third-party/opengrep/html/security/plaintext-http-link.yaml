@@ -21,6 +21,7 @@ rules:
     exploitability_score: 80
     risk_score: 49
     risk_justification: Enlace http literal; no confirma que transporte datos sensibles.
+    finding_type: vulnerability
   patterns:
   - pattern: <a href="$URL">...</a>
   - metavariable-regex:

@@ -24,6 +24,7 @@ rules:
       exploitability_score: 40
       risk_score: 56
       risk_justification: Analizador ReDoS real (no solo heurística de nombres); requiere que input controlado por atacante llegue al regex.
+      finding_type: vulnerability
     message: >-
       The software uses a regular expression with an inefficient, possibly
       exponential worst-case computational complexity that consumes excessive

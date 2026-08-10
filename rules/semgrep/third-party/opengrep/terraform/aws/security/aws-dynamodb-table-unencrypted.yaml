@@ -42,3 +42,4 @@ rules:
     exploitability_score: 100
     risk_score: 45
     risk_justification: DynamoDB ya cifra por defecto con clave AWS; solo falta CMK, heuristica coincide con uso mayoritario seguro.
+    finding_type: vulnerability

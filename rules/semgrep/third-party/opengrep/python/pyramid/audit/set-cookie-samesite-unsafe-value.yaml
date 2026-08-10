@@ -46,5 +46,6 @@ rules:
     exploitability_score: 80
     risk_score: 52
     risk_justification: Regex niega solo 'Lax'; también marca valores más seguros como 'Strict' como inseguros, la propia regla admite falsos positivos.
+    finding_type: vulnerability
   languages: [python]
   severity: WARNING

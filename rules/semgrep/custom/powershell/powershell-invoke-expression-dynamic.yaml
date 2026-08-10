@@ -28,6 +28,7 @@ rules:
       exploitability_score: 80
       risk_score: 74
       risk_justification: "Invoke-Expression ejecuta codigo arbitrario si el string se vuelve dinamico; la regla marca TODO uso, incluidos literales sin riesgo real (maxima tasa de falsos positivos por diseno); ejecucion normal."
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern: Invoke-Expression ...

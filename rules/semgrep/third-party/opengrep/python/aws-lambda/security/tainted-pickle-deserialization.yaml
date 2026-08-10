@@ -50,6 +50,7 @@ rules:
     exploitability_score: 80
     risk_score: 83
     risk_justification: Taint event->pickle.load/loads; deserialización insegura, RCE.
+    finding_type: vulnerability
   languages:
   - python
   severity: WARNING

@@ -29,6 +29,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: ECB exacto vía hazmat; modo de cifrado débil sin caso de uso seguro.
+    finding_type: vulnerability
   severity: WARNING
   languages:
   - python

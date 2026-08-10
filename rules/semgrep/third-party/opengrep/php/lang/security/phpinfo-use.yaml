@@ -25,5 +25,6 @@ rules:
     exploitability_score: 80
     risk_score: 61
     risk_justification: Exposición de información de entorno; función exacta, sin vía de explotación directa.
+    finding_type: vulnerability
   languages: [php]
   severity: ERROR

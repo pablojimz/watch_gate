@@ -23,6 +23,7 @@ rules:
     exploitability_score: 80
     risk_score: 89
     risk_justification: Taint req.*->sandbox.run, ejecución de código controlado por atacante.
+    finding_type: vulnerability
   languages:
   - javascript
   - typescript

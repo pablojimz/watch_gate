@@ -29,6 +29,7 @@ rules:
     exploitability_score: 80
     risk_score: 95
     risk_justification: node-serialize.unserialize con dato taint, gadget RCE conocido.
+    finding_type: vulnerability
   languages:
   - javascript
   - typescript

@@ -23,6 +23,7 @@ rules:
       exploitability_score: 60
       risk_score: 72
       risk_justification: 'FALTA DATO: no se puede saber si los directives protegen auth/rate-limit; se pondera al alza asumiendo posible bypass de autorización.'
+      finding_type: vulnerability
     pattern-either:
       - pattern: |
           new ApolloServer({..., schemaDirectives: ..., ...})

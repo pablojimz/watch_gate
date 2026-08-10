@@ -31,6 +31,7 @@ rules:
       exploitability_score: 80
       risk_score: 72
       risk_justification: MD5 exacto sin caso de uso seguro, se ejecuta en flujo normal.
+      finding_type: vulnerability
     pattern-either:
       - pattern: (MessageDigest/getInstance "MD5")
       - pattern: (MessageDigest/getInstance MessageDigestAlgorithms/MD5)

@@ -24,6 +24,7 @@ rules:
     exploitability_score: 80
     risk_score: 89
     risk_justification: Taint real HttpServletRequest -> File/FileInputStream con sanitizador reconocido.
+    finding_type: vulnerability
   message: >-
     Detected a potential path traversal. A malicious actor
     could control the location of this file, to include going backwards

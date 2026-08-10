@@ -24,6 +24,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: Constante literal 'none' con API exacta, sin ambiguedad.
+    finding_type: vulnerability
   message: >-
     Detected anonymous LDAP bind.
     This permits anonymous users to execute LDAP statements. Consider enforcing
