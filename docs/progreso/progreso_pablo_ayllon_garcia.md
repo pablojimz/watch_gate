@@ -282,17 +282,18 @@ Adicionalmente, se han completado los siguientes hitos de infraestructura, API S
 | 2026-08-04 | Integración de `OSVCache` con SQLite multihilo y soporte de batch queries en OSV.dev | Optimizar las consultas de vulnerabilidades mediante llamadas HTTP `/v1/querybatch` | Equipo WatchGate |
 | 2026-08-05 | Inspección de scripts de instalación sospechosos (`preinstall`/`postinstall`) | Detectar ejecución de comandos arbitrarios en instalaciones de paquetes | Equipo WatchGate |
 | 2026-08-06 | Eliminación de mocks de test en producción y estandarización de severidad | Garantizar estabilidad del código en producción | Javier Martín / Equipo |
+| 2026-08-10 | Incorporación de parsers para Go (`go.mod`) y PHP (`composer.json`) en `deps_layer.py` y `vulnerabilities_layer.py` con datasets de referencia `go.txt` y `packagist.txt` | Cobertura completa de los ecosistemas Go (proxy.golang.org) y PHP (Packagist) | Pablo Ayllón García |
 
 ### Estado actual
 
 - **Funcionalidades implementadas**:
-  - Parsers de parches para `package.json`, `requirements.txt`/`Pipfile`, `PKGBUILD` y `Cargo.toml`.
-  - Verificación de *Typosquatting* mediante `rapidfuzz.distance.Levenshtein` ($0 < d \le 2$) contra referencias en `datasets/typosquat_reference/`.
+  - Parsers de parches para `package.json`, `requirements.txt`/`Pipfile`, `PKGBUILD`, `Cargo.toml`, `go.mod` (Go) y `composer.json` (PHP).
+  - Verificación de *Typosquatting* mediante `rapidfuzz.distance.Levenshtein` ($0 < d \le 2$) contra referencias en `datasets/typosquat_reference/` (`npm.txt`, `pypi.txt`, `aur.txt`, `crates.txt`, `go.txt`, `packagist.txt`).
   - Consultas en lote a la API de OSV.dev (`/v1/querybatch`) acotadas por `max_osv_queries` (default 20, máximo 20) con soporte de caché persistente SQLite (`OSVCache`, TTL 24h).
   - Evaluación precisa de severidad CVSS/OSV (`_is_high_or_critical_vuln`) otorgando score 90 a vulnerabilidades ALTAS/CRÍTICAS y 60 a moderadas.
   - Tolerancia a fallos de red: ante errores de comunicación con OSV, no eleva la nota a rojo sino que asigna nota aclaratoria "No verificable".
   - Detección de scripts de instalación peligrosos (score $\ge 80$) e instalaciones directas desde URL/Git (score $\ge 75$).
-- **Funcionalidades pendientes**: Soporte para ecosistemas adicionales (`go.mod`, `composer.json`).
+- **Funcionalidades pendientes**: Ninguna en la capa de dependencias.
 - **Partes completas**: Parsers de parches, caché SQLite, verificación de typosquatting y mapeo de severidad.
 - **Limitaciones conocidas**: Acotado a los ecosistemas documentados en la spec.
 
