@@ -1,4 +1,4 @@
-"""Tests unitarios para el Servidor MCP JSON-RPC 2.0 y sus 5 herramientas (tests/unit/test_mcp_server.py)."""
+"""Tests unitarios para Servidor MCP JSON-RPC 2.0 y herramientas (tests/unit/test_mcp_server.py)."""
 
 from __future__ import annotations
 
@@ -9,9 +9,7 @@ from watchgate.core.models import (
     AggregatedResult,
     LayerResult,
     Semaforo,
-    ThreatNature,
 )
-from watchgate.mcp.schemas import JsonRpcRequest
 from watchgate.mcp.server import handle_jsonrpc_request
 from watchgate.mcp.tools import execute_mcp_tool, get_mcp_tools_list
 

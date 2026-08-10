@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -41,7 +41,7 @@ class ScoreOut(BaseModel):
     id: int
     score: int = Field(ge=0, le=100)
     semaforo: Semaforo
-    layer_results: dict
+    layer_results: dict[str, Any]
     weights_used: dict[str, float]
     pr_id: str
     repo: str

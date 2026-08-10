@@ -205,14 +205,15 @@ def create_session_token(login: str, github_token: str | None = None) -> str:
     # que mover la sesión a un almacén en servidor (cambio de arquitectura
     # mayor, fuera de alcance de este fix).
     encrypted = jwe.encrypt(signed, _encryption_key(), algorithm="dir", encryption="A256GCM")
-    return encrypted.decode("ascii")
+    return str(encrypted.decode("ascii"))
 
 
 def decode_session_token(token: str) -> dict[str, object]:
     decrypted = jwe.decrypt(token, _encryption_key())
     if decrypted is None:
         raise JWTError("No se pudo descifrar el token de sesión")
-    return jwt.decode(decrypted, _secret(), algorithms=["HS256"])
+    res: dict[str, object] = jwt.decode(decrypted, _secret(), algorithms=["HS256"])
+    return res
 
 
 def set_session_cookie(response: Response, token: str) -> None:
