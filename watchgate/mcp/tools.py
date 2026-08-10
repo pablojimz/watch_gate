@@ -155,6 +155,54 @@ TOOLS: list[McpToolDefinition] = [
             required=["query"],
         ),
     ),
+    McpToolDefinition(
+        name="watchgate_repo_score_history",
+        description=(
+            "Consulta el historial de análisis de riesgo de un repositorio tal como lo ve el "
+            "Dashboard (score, semáforo, desglose por capa y feedback humano de cada PR "
+            "analizado). Requiere WATCHGATE_MCP_API_KEY configurada -- sin identidad de "
+            "organización, no hay datos de dashboard que devolver. LIMITACIÓN CONOCIDA: no "
+            "aplica todavía los roles por repositorio del Dashboard (mantenedor/revisor/admin) "
+            "-- cualquier API Key válida de la organización ve el historial de cualquier repo."
+        ),
+        inputSchema=McpToolParameterSchema(
+            type="object",
+            properties={
+                "repo": {
+                    "type": "string",
+                    "description": "Repositorio en formato 'owner/nombre'.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Número máximo de análisis a devolver (los más recientes).",
+                    "default": 20,
+                },
+            },
+            required=["repo"],
+        ),
+    ),
+    McpToolDefinition(
+        name="watchgate_org_metrics",
+        description=(
+            "Métricas agregadas de postura de seguridad tal como las ve el Dashboard: PRs "
+            "analizados, score medio, distribución de semáforos, feedback humano acumulado y "
+            "desglose por repositorio. Requiere WATCHGATE_MCP_API_KEY configurada. LIMITACIÓN "
+            "CONOCIDA: sin 'repos', agrega TODOS los repositorios del Dashboard, no solo los "
+            "de la organización de la API Key (el Dashboard identifica repos por login de "
+            "GitHub, no por organización -- integrarlo del todo queda pendiente)."
+        ),
+        inputSchema=McpToolParameterSchema(
+            type="object",
+            properties={
+                "repos": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Repositorios a agregar ('owner/nombre'). Si se omite, todos.",
+                },
+            },
+            required=[],
+        ),
+    ),
 ]
 
 
@@ -178,6 +226,10 @@ def execute_mcp_tool(name: str, arguments: dict[str, Any] | None) -> McpToolCall
             return _handle_verify_fix(args)
         elif name == "watchgate_query_threat_kb":
             return _handle_query_threat_kb(args)
+        elif name == "watchgate_repo_score_history":
+            return _handle_repo_score_history(args)
+        elif name == "watchgate_org_metrics":
+            return _handle_org_metrics(args)
         else:
             return McpToolCallResult(
                 content=[McpTextContent(text=f"Herramienta no encontrada: '{name}'")],
@@ -435,3 +487,64 @@ def _handle_query_threat_kb(args: dict[str, Any]) -> McpToolCallResult:
         )
 
     return McpToolCallResult(content=[McpTextContent(text=json.dumps(results, indent=2))])
+
+
+_NO_MCP_IDENTITY_ERROR = (
+    "Esta herramienta necesita una organización -- configura WATCHGATE_MCP_API_KEY "
+    "con una API Key de WatchGate válida (la misma que usarías contra la Engine API) "
+    "antes de usarla."
+)
+
+
+def _handle_repo_score_history(args: dict[str, Any]) -> McpToolCallResult:
+    repo = args.get("repo")
+    limit = int(args.get("limit", 20))
+    if not repo:
+        return McpToolCallResult(
+            content=[McpTextContent(text="Falta el parámetro requerido 'repo'.")],
+            isError=True,
+        )
+
+    with open_session() as session:
+        identity = resolve_mcp_identity(session)
+    if identity is None:
+        return McpToolCallResult(
+            content=[McpTextContent(text=_NO_MCP_IDENTITY_ERROR)],
+            isError=True,
+        )
+
+    from watchgate.dashboard.backend import db as dashboard_db
+
+    with dashboard_db.db_session() as conn:
+        scores = dashboard_db.list_scores(conn, repo)
+
+    output = [s.model_dump(mode="json") for s in scores[:limit]]
+    return McpToolCallResult(content=[McpTextContent(text=json.dumps(output, indent=2))])
+
+
+def _handle_org_metrics(args: dict[str, Any]) -> McpToolCallResult:
+    requested_repos = args.get("repos")
+
+    with open_session() as session:
+        identity = resolve_mcp_identity(session)
+    if identity is None:
+        return McpToolCallResult(
+            content=[McpTextContent(text=_NO_MCP_IDENTITY_ERROR)],
+            isError=True,
+        )
+
+    from watchgate.dashboard.backend import db as dashboard_db
+
+    with dashboard_db.db_session() as conn:
+        if requested_repos:
+            repos = list(requested_repos)
+        else:
+            # `is_admin=True` ignora `user_login` y devuelve TODOS los repos
+            # del Dashboard -- ver limitación documentada en la descripción
+            # de esta tool: el Dashboard identifica repos por login de
+            # GitHub, no por organización, así que sin una lista explícita
+            # de `repos` no hay forma de acotar solo a "los de esta org".
+            repos = dashboard_db.list_repos_for_user(conn, "_mcp_agent", is_admin=True)
+        metrics = dashboard_db.compute_org_metrics(conn, repos)
+
+    return McpToolCallResult(content=[McpTextContent(text=metrics.model_dump_json(indent=2))])

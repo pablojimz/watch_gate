@@ -16,7 +16,7 @@ from watchgate.mcp.tools import execute_mcp_tool, get_mcp_tools_list
 
 def test_mcp_tools_list_schema() -> None:
     tools = get_mcp_tools_list()
-    assert len(tools) == 5
+    assert len(tools) == 7
     names = {t.name for t in tools}
     expected_names = {
         "watchgate_analyze_diff",
@@ -24,6 +24,8 @@ def test_mcp_tools_list_schema() -> None:
         "watchgate_explain_risk",
         "watchgate_verify_fix",
         "watchgate_query_threat_kb",
+        "watchgate_repo_score_history",
+        "watchgate_org_metrics",
     }
     assert names == expected_names
 
@@ -56,7 +58,7 @@ def test_handle_jsonrpc_tools_list() -> None:
     assert resp is not None
     assert resp.id == 3
     tools = resp.result.get("tools", [])
-    assert len(tools) == 5
+    assert len(tools) == 7
 
 
 def test_mcp_tool_precheck() -> None:
@@ -330,3 +332,114 @@ def test_query_threat_kb_passes_none_org_id_without_mcp_api_key(
 
     mock_retrieve.assert_called_once()
     assert mock_retrieve.call_args.kwargs["org_id"] is None
+
+
+# ---------------------------------------------------------------------------
+# watchgate_repo_score_history / watchgate_org_metrics -- datos del Dashboard
+# accesibles a agentes de IA vía MCP
+# ---------------------------------------------------------------------------
+
+
+def _configure_mcp_identity(monkeypatch, tmp_path):
+    """Deja `WATCHGATE_MCP_API_KEY` configurada contra una org/usuario reales
+    en una BD SQLModel de prueba, y devuelve `org_id` para las aserciones."""
+    from sqlmodel import Session, create_engine
+
+    from watchgate.db.connection import init_db
+
+    test_engine = create_engine(f"sqlite:///{tmp_path / 'sqlmodel.db'}")
+    init_db(test_engine)
+    with Session(test_engine) as session:
+        org, _user, raw_token = _seed_org_user_and_key(session)
+        session.commit()
+        org_id = org.id
+
+    monkeypatch.setenv("WATCHGATE_MCP_API_KEY", raw_token)
+    monkeypatch.setattr("watchgate.mcp.auth.default_engine", test_engine)
+    return org_id
+
+
+def _seed_dashboard_score(tmp_path, monkeypatch, *, repo: str, score: int, semaforo: str) -> None:
+    from watchgate.core.models import AggregatedResult, LayerResult
+    from watchgate.core.models import Semaforo as SemaforoEnum
+    from watchgate.dashboard.backend import db as dashboard_db
+
+    monkeypatch.setenv("WATCHGATE_DASHBOARD_DB", str(tmp_path / "dashboard.db"))
+    monkeypatch.delenv("WATCHGATE_DASHBOARD_DATABASE_URL", raising=False)
+    result = AggregatedResult(
+        score=score,
+        semaforo=SemaforoEnum(semaforo),
+        pr_id="1",
+        repo=repo,
+        timestamp="2026-08-10T10:00:00Z",
+        weights_used={"static": 1.0},
+        layer_results={
+            "static": LayerResult(layer_name="static", risk_score=score, justification="x")
+        },
+    )
+    with dashboard_db.db_session() as conn:
+        dashboard_db.insert_aggregated(conn, result, author_login="octocat")
+
+
+def test_repo_score_history_requires_mcp_api_key(monkeypatch) -> None:
+    monkeypatch.delenv("WATCHGATE_MCP_API_KEY", raising=False)
+    result = execute_mcp_tool("watchgate_repo_score_history", {"repo": "acme/webapp"})
+    assert result.isError
+    assert "WATCHGATE_MCP_API_KEY" in result.content[0].text
+
+
+def test_repo_score_history_returns_real_dashboard_data(monkeypatch, tmp_path) -> None:
+    _configure_mcp_identity(monkeypatch, tmp_path)
+    _seed_dashboard_score(tmp_path, monkeypatch, repo="acme/webapp", score=75, semaforo="rojo")
+
+    result = execute_mcp_tool("watchgate_repo_score_history", {"repo": "acme/webapp"})
+    assert not result.isError
+    data = json.loads(result.content[0].text)
+    assert len(data) == 1
+    assert data[0]["score"] == 75
+    assert data[0]["semaforo"] == "rojo"
+    assert data[0]["repo"] == "acme/webapp"
+
+
+def test_repo_score_history_respects_limit(monkeypatch, tmp_path) -> None:
+    _configure_mcp_identity(monkeypatch, tmp_path)
+    for score in (10, 20, 30):
+        _seed_dashboard_score(
+            tmp_path, monkeypatch, repo="acme/webapp", score=score, semaforo="verde"
+        )
+
+    result = execute_mcp_tool("watchgate_repo_score_history", {"repo": "acme/webapp", "limit": 2})
+    assert not result.isError
+    data = json.loads(result.content[0].text)
+    assert len(data) == 2
+
+
+def test_org_metrics_requires_mcp_api_key(monkeypatch) -> None:
+    monkeypatch.delenv("WATCHGATE_MCP_API_KEY", raising=False)
+    result = execute_mcp_tool("watchgate_org_metrics", {})
+    assert result.isError
+    assert "WATCHGATE_MCP_API_KEY" in result.content[0].text
+
+
+def test_org_metrics_aggregates_real_dashboard_data(monkeypatch, tmp_path) -> None:
+    _configure_mcp_identity(monkeypatch, tmp_path)
+    _seed_dashboard_score(tmp_path, monkeypatch, repo="acme/webapp", score=75, semaforo="rojo")
+    _seed_dashboard_score(tmp_path, monkeypatch, repo="acme/otro", score=5, semaforo="verde")
+
+    result = execute_mcp_tool("watchgate_org_metrics", {})
+    assert not result.isError
+    data = json.loads(result.content[0].text)
+    assert data["total_prs"] == 2
+    assert data["repos_count"] == 2
+
+
+def test_org_metrics_scoped_to_explicit_repos_when_given(monkeypatch, tmp_path) -> None:
+    _configure_mcp_identity(monkeypatch, tmp_path)
+    _seed_dashboard_score(tmp_path, monkeypatch, repo="acme/webapp", score=75, semaforo="rojo")
+    _seed_dashboard_score(tmp_path, monkeypatch, repo="acme/otro", score=5, semaforo="verde")
+
+    result = execute_mcp_tool("watchgate_org_metrics", {"repos": ["acme/webapp"]})
+    assert not result.isError
+    data = json.loads(result.content[0].text)
+    assert data["total_prs"] == 1
+    assert data["repos_count"] == 1
