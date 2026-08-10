@@ -25,6 +25,7 @@ rules:
       exploitability_score: 40
       risk_score: 53
       risk_justification: "Carrera TOCTOU permite bypass de control de acceso via symlink swap; patron textual muy amplio (LOW); requiere condicion de carrera local real, no automatica."
+      finding_type: vulnerability
     patterns:
       - pattern: |
           access($PATH, ...);

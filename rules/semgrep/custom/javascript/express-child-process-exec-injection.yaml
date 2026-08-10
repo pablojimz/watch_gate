@@ -24,6 +24,7 @@ rules:
       exploitability_score: 80
       risk_score: 83
       risk_justification: "exec()/execSync() con comando no literal invoca shell y permite inyeccion; sin taint tracking, solo excluye literal; ejecucion normal."
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern: child_process.exec($CMD, ...)

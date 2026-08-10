@@ -32,6 +32,7 @@ rules:
     exploitability_score: 40
     risk_score: 50
     risk_justification: Debilita revocación de sesión; requiere fuga previa del token para importar.
+    finding_type: vulnerability
   languages:
   - javascript
   - typescript

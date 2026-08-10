@@ -25,6 +25,7 @@ rules:
       exploitability_score: 40
       risk_score: 73
       risk_justification: eval()/query() con expresión dinámica (code injection); excluye solo literal, requiere entrada externa.
+      finding_type: vulnerability
     patterns:
       - pattern-inside: |
           import pandas

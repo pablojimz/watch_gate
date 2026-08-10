@@ -32,6 +32,7 @@ rules:
     exploitability_score: 40
     risk_score: 85
     risk_justification: setFeature(...,true) literal explicito, inequivoco; requiere XML externo no confiable.
+    finding_type: vulnerability
   message: >-
     External entities are allowed for $DBFACTORY.
     This is vulnerable to XML external entity attacks. Disable this by setting the feature "http://xml.org/sax/features/external-general-entities"

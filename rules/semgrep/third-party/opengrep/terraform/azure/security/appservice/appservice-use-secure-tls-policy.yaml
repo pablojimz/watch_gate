@@ -33,5 +33,6 @@ rules:
     exploitability_score: 100
     risk_score: 78
     risk_justification: min_tls_version distinto de 1.2 explicito; exclusion de literal exacta.
+    finding_type: vulnerability
   languages: [hcl]
   severity: ERROR

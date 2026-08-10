@@ -24,6 +24,7 @@ rules:
       exploitability_score: 40
       risk_score: 62
       risk_justification: putenv con variable de pila no estática; requiere que el entorno se lea tras el retorno de la función.
+      finding_type: vulnerability
     message: >-
       The software calls putenv() with a variable that has a short lifetime,
       such as a pointer to an automatic variable allocated on the stack. The

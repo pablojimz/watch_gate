@@ -23,6 +23,7 @@ rules:
       exploitability_score: 80
       risk_score: 77
       risk_justification: Keep3r.current() de baja seguridad manipulable con 2 puntos de datos; no verifica el uso posterior del precio.
+      finding_type: vulnerability
     patterns:
       - pattern: $KEEPER.current($TOKENIN, $AMOUNTIN, $TOKENOUT);
     languages:

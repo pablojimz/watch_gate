@@ -25,6 +25,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: HttpClients.execute con URL literal http:// exacto.
+    finding_type: vulnerability
   languages:
   - java
   fix-regex:

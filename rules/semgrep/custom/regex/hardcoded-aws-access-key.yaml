@@ -25,5 +25,6 @@ rules:
       exploitability_score: 100
       risk_score: 89
       risk_justification: "Clave de acceso AWS comprometida en cuanto se commitea (secreto se escapa); formato AKIA/ABIA/ACCA/ASIA+16 alfanumericos es practicamente unico (HIGH); exposicion inmediata y permanente."
+      finding_type: vulnerability
     patterns:
       - pattern-regex: \b(AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16}\b

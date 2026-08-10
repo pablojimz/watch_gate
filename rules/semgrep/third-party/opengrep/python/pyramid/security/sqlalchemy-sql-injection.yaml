@@ -33,6 +33,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: Taint request->order_by/filter/having con format string sin bindparams; SQLi en clausulas ORM.
+    finding_type: vulnerability
   mode: taint
   pattern-sources:
   - patterns:

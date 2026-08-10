@@ -19,6 +19,7 @@ rules:
       exploitability_score: 80
       risk_score: 72
       risk_justification: verify_ssl false / VERIFY_NONE en RestClient; literales y funciones exactas.
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern: "$FUNC(..., :verify_ssl => false, ...)"

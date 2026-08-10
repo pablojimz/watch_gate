@@ -19,6 +19,7 @@ rules:
       exploitability_score: 100
       risk_score: 89
       risk_justification: TLS no verificado en descarga genérica sin checksum; mismo razonamiento que unencrypted-url.
+      finding_type: vulnerability
     patterns:
       - pattern-inside: |
           $GETURL:

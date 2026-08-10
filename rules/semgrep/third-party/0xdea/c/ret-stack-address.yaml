@@ -26,6 +26,7 @@ rules:
       exploitability_score: 40
       risk_score: 62
       risk_justification: Retorno de dirección de variable de pila; el propio mensaje indica típicamente crash, no RCE confirmado.
+      finding_type: vulnerability
     message: >-
       A function returns the address of a stack variable, which will cause
       unintended program behavior, typically in the form of a crash.

@@ -56,6 +56,7 @@ rules:
     exploitability_score: 80
     risk_score: 63
     risk_justification: Cualquier concatenación/f-string/format hacia sqlalchemy.text, sin relación con fuente externa real (no es taint desde request).
+    finding_type: vulnerability
   languages:
   - python
   severity: ERROR

@@ -29,6 +29,7 @@ rules:
     exploitability_score: 80
     risk_score: 66
     risk_justification: tls.Config sin MinVersion; permite negociar protocolos antiguos inseguros.
+    finding_type: vulnerability
   languages: [go]
   severity: WARNING
   patterns:

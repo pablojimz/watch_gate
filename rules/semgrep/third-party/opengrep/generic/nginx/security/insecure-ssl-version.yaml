@@ -41,3 +41,4 @@ rules:
     exploitability_score: 100
     risk_score: 72
     risk_justification: ssl_protocols permite versiones obsoletas; exclusión precisa de combinaciones seguras, config siempre activa.
+    finding_type: vulnerability

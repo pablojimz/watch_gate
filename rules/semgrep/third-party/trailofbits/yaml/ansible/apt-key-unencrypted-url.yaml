@@ -18,6 +18,7 @@ rules:
       exploitability_score: 100
       risk_score: 94
       risk_justification: Descarga sin cifrar de clave de firma apt; MITM puede sustituir clave y habilitar paquetes maliciosos confiados. Requiere posición de red.
+      finding_type: vulnerability
     patterns:
       - pattern-inside: |
           $APTKEY:

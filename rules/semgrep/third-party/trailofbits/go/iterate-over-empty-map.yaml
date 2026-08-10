@@ -21,6 +21,7 @@ rules:
       exploitability_score: 40
       risk_score: 35
       risk_justification: Código redundante; no es vulnerabilidad, requiere que el mapa se llene por vía no cubierta por el patrón.
+      finding_type: vulnerability
     patterns:
       - pattern: |
           $C = make(map[$T1] $T2)

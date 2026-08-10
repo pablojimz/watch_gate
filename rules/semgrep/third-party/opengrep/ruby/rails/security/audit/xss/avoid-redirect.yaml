@@ -20,6 +20,7 @@ rules:
     exploitability_score: 80
     risk_score: 60
     risk_justification: Open redirect vía redirect_to con atributo de modelo/params tainted; sanitizadores específicos.
+    finding_type: vulnerability
   message: >-
     When a redirect uses user input, a malicious user can spoof a website under a trusted URL or access
     restricted parts of

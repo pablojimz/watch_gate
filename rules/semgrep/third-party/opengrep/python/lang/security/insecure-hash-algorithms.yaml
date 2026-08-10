@@ -39,6 +39,7 @@ rules:
     exploitability_score: 80
     risk_score: 52
     risk_justification: hashlib.sha1 sin exclusión alguna; uso muy común también para fines no criptográficos (checksums, dedup).
+    finding_type: vulnerability
   severity: WARNING
   languages:
   - python

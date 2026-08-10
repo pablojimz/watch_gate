@@ -46,6 +46,7 @@ rules:
     exploitability_score: 80
     risk_score: 95
     risk_justification: params/cookies a Marshal.load/CSV.load/Oj.load; RCE por deserialización, sinks exactos.
+    finding_type: vulnerability
   languages:
   - ruby
   severity: ERROR

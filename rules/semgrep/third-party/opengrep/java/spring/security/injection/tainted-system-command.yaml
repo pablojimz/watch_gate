@@ -107,3 +107,4 @@ rules:
     exploitability_score: 80
     risk_score: 89
     risk_justification: Taint real anotaciones Spring hacia ProcessBuilder/Runtime.exec, command injection.
+    finding_type: vulnerability

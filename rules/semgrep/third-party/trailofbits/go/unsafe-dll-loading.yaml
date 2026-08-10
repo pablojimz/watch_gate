@@ -22,6 +22,7 @@ rules:
       exploitability_score: 40
       risk_score: 79
       risk_justification: Carga de DLL vulnerable a DLL hijacking (RCE); requiere que atacante controle ruta de búsqueda.
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern: syscall.LoadDLL(...)

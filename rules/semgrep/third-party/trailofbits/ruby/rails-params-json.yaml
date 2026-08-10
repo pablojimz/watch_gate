@@ -25,6 +25,7 @@ rules:
       exploitability_score: 40
       risk_score: 68
       risk_justification: Uso de params[:_json] habilita parser-juggling; requiere lógica de tipo sensible aguas abajo no verificada.
+      finding_type: vulnerability
     pattern-either:
       - pattern: "params[:_json]"
       - pattern: "params['_json']"

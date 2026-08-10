@@ -39,3 +39,4 @@ rules:
     exploitability_score: 100
     risk_score: 72
     risk_justification: Falta ssl_protocols, usa default inseguro (TLSv1/1.1); patrón preciso, config siempre activa.
+    finding_type: vulnerability

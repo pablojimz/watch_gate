@@ -33,6 +33,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: Constantes SSLv2/v3/TLSv1/TLSv1.1 exactas; protocolo débil/deprecado, sin ambigüedad.
+    finding_type: vulnerability
   languages: [python]
   severity: WARNING
   pattern-either:

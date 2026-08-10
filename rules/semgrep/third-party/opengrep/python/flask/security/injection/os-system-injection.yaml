@@ -30,6 +30,7 @@ rules:
     exploitability_score: 80
     risk_score: 83
     risk_justification: Taint flask.request->os.system; command injection directa, patrón amplio sin verificación de sanitización.
+    finding_type: vulnerability
   pattern-either:
   - patterns:
     - pattern: os.system(...)

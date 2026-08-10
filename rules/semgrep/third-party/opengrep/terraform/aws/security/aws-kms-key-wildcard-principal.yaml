@@ -47,5 +47,6 @@ rules:
     exploitability_score: 100
     risk_score: 89
     risk_justification: kms:* con Principal=* y Resource=*; control total de la clave para cualquiera, literal exacto.
+    finding_type: vulnerability
   languages: [hcl]
   severity: ERROR

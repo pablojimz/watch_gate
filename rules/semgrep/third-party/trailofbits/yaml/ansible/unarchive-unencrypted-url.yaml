@@ -18,6 +18,7 @@ rules:
       exploitability_score: 100
       risk_score: 89
       risk_justification: Descarga y extracción de archivo sin cifrar; contenido puede incluir scripts ejecutados después.
+      finding_type: vulnerability
     patterns:
       - pattern-inside: |
           $UNARCHIVE:

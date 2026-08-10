@@ -23,6 +23,7 @@ rules:
     exploitability_score: 80
     risk_score: 89
     risk_justification: Input a File/Dir/IO/Kernel.load/delete/open; path traversal y hasta ejecución de código vía load.
+    finding_type: vulnerability
   message: >-
     Using user input when accessing files is potentially dangerous. A malicious actor could use this to
     modify or access files

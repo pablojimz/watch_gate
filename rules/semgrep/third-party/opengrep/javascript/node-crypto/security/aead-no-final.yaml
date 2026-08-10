@@ -24,6 +24,7 @@ rules:
     exploitability_score: 80
     risk_score: 66
     risk_justification: Falta de decipher.final() omite verificación de tag de autenticación.
+    finding_type: vulnerability
   languages:
   - javascript
   - typescript

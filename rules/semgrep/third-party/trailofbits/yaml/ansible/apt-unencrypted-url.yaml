@@ -18,6 +18,7 @@ rules:
       exploitability_score: 100
       risk_score: 94
       risk_justification: Descarga .deb sin cifrar; MITM puede sustituir paquete y lograr ejecución de código como root al instalar.
+      finding_type: vulnerability
     patterns:
       - pattern-inside: |
           $APT:

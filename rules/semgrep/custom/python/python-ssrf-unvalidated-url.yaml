@@ -23,6 +23,7 @@ rules:
       exploitability_score: 80
       risk_score: 63
       risk_justification: "SSRF hacia metadatos de nube/servicios internos permite robo indirecto de credenciales (requiere cadena adicional); excluye solo literal completo, marca la mayoria del uso normal de requests/urllib (LOW, mucho ruido); ejecucion normal."
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern: requests.$METHOD($URL, ...)

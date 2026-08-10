@@ -19,6 +19,7 @@ rules:
       exploitability_score: 80
       risk_score: 72
       risk_justification: Verificación SSL deshabilitada en cliente Faraday; literales exactos, sin ambigüedad.
+      finding_type: vulnerability
     pattern-either:
       - pattern: "Faraday.new(..., ssl: { ..., verify: false, ... }, ...)"
       - pattern: "Faraday.new(..., ssl: { ..., verify_hostname: false, ... }, ...)"

@@ -76,3 +76,4 @@ rules:
     exploitability_score: 80
     risk_score: 89
     risk_justification: Taint real HttpServletRequest -> ProcessBuilder/exec; command injection = RCE.
+    finding_type: vulnerability

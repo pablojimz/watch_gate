@@ -25,5 +25,6 @@ rules:
       exploitability_score: 80
       risk_score: 84
       risk_justification: "Exposicion de /env, /heapdump y /shutdown filtra secretos (secreto se escapa); regex exacta sobre include:'*' (HIGH); expuesto mientras la app corre normalmente."
+      finding_type: vulnerability
     patterns:
       - pattern-regex: (?i)include:\s*["']?\*["']?\s*$

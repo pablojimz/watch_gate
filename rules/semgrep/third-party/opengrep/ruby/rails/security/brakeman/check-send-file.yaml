@@ -46,3 +46,4 @@ rules:
     exploitability_score: 80
     risk_score: 89
     risk_justification: params/cookies/request.env a send_file; lectura arbitraria de archivos, taint real.
+    finding_type: vulnerability

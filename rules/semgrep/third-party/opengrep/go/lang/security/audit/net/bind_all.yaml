@@ -28,6 +28,7 @@ rules:
     exploitability_score: 80
     risk_score: 40
     risk_justification: Bind a 0.0.0.0/puerto vacio; patron habitual y esperado en despliegues en contenedor, sin exploit demostrado.
+    finding_type: vulnerability
   pattern-either:
   - pattern: tls.Listen($NETWORK, "=~/^0.0.0.0:.*$/", ...)
   - pattern: net.Listen($NETWORK, "=~/^0.0.0.0:.*$/", ...)

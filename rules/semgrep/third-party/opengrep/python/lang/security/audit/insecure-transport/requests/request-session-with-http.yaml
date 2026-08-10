@@ -56,3 +56,4 @@ rules:
       exploitability_score: 80
       risk_score: 72
       risk_justification: Igual, http literal exacto en requests.Session().
+      finding_type: vulnerability

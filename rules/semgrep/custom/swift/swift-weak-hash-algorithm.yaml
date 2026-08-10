@@ -23,6 +23,7 @@ rules:
       exploitability_score: 80
       risk_score: 72
       risk_justification: "MD5/SHA1 criptograficamente rotos (candado debil); nombres exactos de funcion/namespace, sin ambiguedad (HIGH); ejecucion normal."
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern: Insecure.MD5.hash(...)

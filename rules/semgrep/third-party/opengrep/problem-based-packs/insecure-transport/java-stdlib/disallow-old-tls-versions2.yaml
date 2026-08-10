@@ -23,6 +23,7 @@ rules:
     exploitability_score: 80
     risk_score: 66
     risk_justification: Regex sobre valor literal de property jdk.tls.client.protocols, bastante preciso pero basado en texto.
+    finding_type: vulnerability
   languages: [java]
   patterns:
   - pattern: $VALUE. ... .setProperty("jdk.tls.client.protocols", "$PATTERNS");

@@ -24,6 +24,7 @@ rules:
       exploitability_score: 40
       risk_score: 42
       risk_justification: assert puede ser no-op en builds release; regex genérica sobre cualquier macro assert-like con comparación.
+      finding_type: vulnerability
     message: >-
       Most codebases define assertion macros which compile to a no-op on
       non-debug builds. If assertions are the only line of defense against

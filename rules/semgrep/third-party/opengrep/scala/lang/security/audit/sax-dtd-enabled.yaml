@@ -74,3 +74,4 @@ rules:
     exploitability_score: 40
     risk_score: 79
     risk_justification: SAXParser/SAXReader/SAXBuilder sin deshabilitar entidades externas; exclusiones cubren fix típico, requiere XML malicioso.
+    finding_type: vulnerability

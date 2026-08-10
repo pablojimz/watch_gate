@@ -23,6 +23,7 @@ rules:
     exploitability_score: 80
     risk_score: 95
     risk_justification: Callable construido con input externo pasado a call_user_func y similares; RCE directo.
+    finding_type: vulnerability
   languages: [php]
   mode: taint
   pattern-sources:

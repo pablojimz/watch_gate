@@ -27,6 +27,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: MinVersion=VersionSSL30 literal; protocolo SSLv3 obsoleto e inseguro.
+    finding_type: vulnerability
   languages: [go]
   severity: WARNING
   fix-regex:

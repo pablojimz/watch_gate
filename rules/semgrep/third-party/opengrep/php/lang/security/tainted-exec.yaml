@@ -41,6 +41,7 @@ rules:
     exploitability_score: 80
     risk_score: 95
     risk_justification: 'Duplicado de tainted-exec de injection/: superglobales a exec/system/popen; RCE directo.'
+    finding_type: vulnerability
   languages: [php]
   severity: ERROR
 

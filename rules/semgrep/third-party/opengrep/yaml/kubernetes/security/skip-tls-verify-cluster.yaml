@@ -29,5 +29,6 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: insecure-skip-tls-verify:true literal en kubeconfig; requiere uso activo de ese contexto para tener efecto.
+    finding_type: vulnerability
   languages: [yaml]
   severity: WARNING

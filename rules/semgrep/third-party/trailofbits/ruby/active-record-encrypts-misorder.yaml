@@ -21,6 +21,7 @@ rules:
       exploitability_score: 80
       risk_score: 66
       risk_justification: Orden encrypts/serialize incorrecto rompe cifrado esperado; patrón secuencial preciso, sin uso legítimo conocido.
+      finding_type: vulnerability
     patterns:
       - pattern-inside: |
           class $CLS < ApplicationRecord

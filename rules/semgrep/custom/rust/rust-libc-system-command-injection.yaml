@@ -23,6 +23,7 @@ rules:
       exploitability_score: 80
       risk_score: 95
       risk_justification: "libc::system() reintroduce invocacion de shell pese a que Command::new no lo hace por defecto; patron multi-linea especifico con exclusion de literal (HIGH); ejecucion normal."
+      finding_type: vulnerability
     patterns:
       - pattern: |
           let $CSTR = CString::new($ARG).unwrap();

@@ -53,5 +53,6 @@ rules:
     exploitability_score: 80
     risk_score: 74
     risk_justification: Comando OS; fuente incluye CUALQUIER argumento de método (no solo externo), heurística muy amplia.
+    finding_type: vulnerability
   severity: WARNING
   languages: [ruby]

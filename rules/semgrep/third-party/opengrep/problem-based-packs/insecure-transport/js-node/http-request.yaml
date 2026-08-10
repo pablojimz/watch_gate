@@ -24,6 +24,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: Modulo http nativo siempre es texto plano; literal http:// confirma uso inseguro.
+    finding_type: vulnerability
   languages:
   - javascript
   patterns:

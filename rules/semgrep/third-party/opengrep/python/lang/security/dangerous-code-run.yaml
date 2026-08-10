@@ -155,6 +155,7 @@ rules:
     exploitability_score: 40
     risk_score: 73
     risk_justification: RCE vía InteractiveConsole/Interpreter con datos web; excluye payload literal, pero uso de esta clase es poco común en producción.
+    finding_type: vulnerability
   severity: WARNING
   languages:
   - python

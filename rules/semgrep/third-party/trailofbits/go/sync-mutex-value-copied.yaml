@@ -21,6 +21,7 @@ rules:
       exploitability_score: 80
       risk_score: 72
       risk_justification: Copia de sync.Mutex vía value receiver anula por completo la exclusión mutua; sin caso de uso seguro.
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern: |

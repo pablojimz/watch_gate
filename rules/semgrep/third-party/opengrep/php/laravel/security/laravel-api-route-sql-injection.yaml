@@ -42,3 +42,4 @@ rules:
     exploitability_score: 80
     risk_score: 78
     risk_justification: Arg de closure de ruta a DB::raw(); sanitizador reconoce forma parametrizada segura.
+    finding_type: vulnerability

@@ -23,6 +23,7 @@ rules:
       exploitability_score: 80
       risk_score: 83
       risk_justification: "Process.Start con shell y args no literales permite inyeccion de comandos; sin taint tracking, solo excluye literal; ejecucion normal."
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern: Process.Start($FILE, $ARGS)

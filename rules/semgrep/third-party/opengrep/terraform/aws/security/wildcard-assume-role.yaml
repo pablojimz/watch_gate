@@ -39,5 +39,6 @@ rules:
     exploitability_score: 100
     risk_score: 89
     risk_justification: sts:AssumeRole con Principal AWS=*; cualquiera con el account ID puede asumir el rol, literal exacto.
+    finding_type: vulnerability
   languages: [hcl]
   severity: ERROR

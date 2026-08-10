@@ -33,6 +33,7 @@ rules:
     exploitability_score: 80
     risk_score: 78
     risk_justification: event->query/prepare de mysql2; sanitizador escape() reconocido.
+    finding_type: vulnerability
   pattern-sinks:
   - patterns:
     - pattern: $QUERY

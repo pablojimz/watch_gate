@@ -30,6 +30,7 @@ rules:
     exploitability_score: 80
     risk_score: 78
     risk_justification: Variable exacta desde getParameter usada directamente en write(), origen externo confirmado.
+    finding_type: vulnerability
   severity: ERROR
   patterns:
   - pattern-inside: $TYPE $FUNC(..., HttpServletResponse $RESP, ...) { ... }

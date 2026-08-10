@@ -30,6 +30,7 @@ rules:
     exploitability_score: 80
     risk_score: 83
     risk_justification: Path traversal/LFI en open() con dato de request; $W amplio (cualquier atributo de request).
+    finding_type: vulnerability
   pattern-either:
   - patterns:
     - pattern: open(...)

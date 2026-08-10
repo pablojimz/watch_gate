@@ -19,6 +19,7 @@ rules:
       exploitability_score: 80
       risk_score: 74
       risk_justification: Solo detecta llamada a _checkOnERC721Received sin verificar orden CEI; coincide con implementación estándar OZ mayormente segura.
+      finding_type: vulnerability
     patterns:
       - pattern: _checkOnERC721Received(...)
     languages:

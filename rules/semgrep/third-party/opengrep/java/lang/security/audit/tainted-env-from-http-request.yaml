@@ -47,3 +47,4 @@ rules:
     exploitability_score: 40
     risk_score: 68
     risk_justification: Origen externo confirmado, pero impacto real depende de que variable/programa se ejecute (condicion adicional).
+    finding_type: vulnerability

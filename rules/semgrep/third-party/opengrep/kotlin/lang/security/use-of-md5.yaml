@@ -27,6 +27,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: Algoritmo MD5 por nombre exacto.
+    finding_type: vulnerability
   pattern-either:
   - pattern: |
       $VAR = $MD.getInstance("MD5")

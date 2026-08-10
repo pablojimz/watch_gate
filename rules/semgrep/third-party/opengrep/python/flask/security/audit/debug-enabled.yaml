@@ -28,6 +28,7 @@ rules:
     exploitability_score: 40
     risk_score: 74
     risk_justification: debug=True exacto; werkzeug debugger puede dar RCE pero requiere desplegarse así en producción (flag de debug).
+    finding_type: vulnerability
   severity: WARNING
   languages:
   - python

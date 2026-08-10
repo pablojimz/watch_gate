@@ -25,6 +25,7 @@ rules:
     exploitability_score: 40
     risk_score: 58
     risk_justification: Sink evaluate/compileScript ~ eval, pero fuente es cualquier parámetro de función.
+    finding_type: vulnerability
   languages:
   - javascript
   - typescript

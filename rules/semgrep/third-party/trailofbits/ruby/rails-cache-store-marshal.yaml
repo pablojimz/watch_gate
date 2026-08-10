@@ -27,6 +27,7 @@ rules:
       exploitability_score: 40
       risk_score: 79
       risk_justification: Serializer con fallback a Marshal (RCE si hay inyección en caché vía SSRF); requiere capacidad de inyección del atacante.
+      finding_type: vulnerability
     patterns:
       - pattern-inside: |
           Rails.application.configure do

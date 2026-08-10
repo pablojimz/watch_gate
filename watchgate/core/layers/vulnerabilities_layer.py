@@ -41,6 +41,8 @@ from watchgate.core.layers._shared import (
     DEPENDENCY_MANIFEST_FILENAMES,
     DependencyChange,
     parse_cargo_toml,
+    parse_composer_json,
+    parse_go_mod,
     parse_package_json,
     parse_pkgbuild,
     parse_requirements_txt,
@@ -355,6 +357,10 @@ class VulnerabilitiesLayer(AnalysisLayer):
                 parsed = parse_pkgbuild(hunk)
             elif fname == "Cargo.toml":
                 parsed = parse_cargo_toml(hunk)
+            elif fname == "go.mod":
+                parsed = parse_go_mod(hunk)
+            elif fname == "composer.json":
+                parsed = parse_composer_json(hunk)
             for ch in parsed:
                 ch.manifest_path = file_change.path
             all_changes.extend(parsed)

@@ -32,6 +32,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: Taint event->concat string con keywords SQL; SQLi clásica por concatenación.
+    finding_type: vulnerability
   mode: taint
   pattern-sinks:
   - patterns:

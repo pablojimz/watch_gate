@@ -28,6 +28,7 @@ rules:
       exploitability_score: 80
       risk_score: 95
       risk_justification: "SpEL con T() permite RCE (CVE-2022-22963, CVE-2018-1273 confirmadas); excluye literal completo, patron claro (HIGH); ejecucion normal."
+      finding_type: vulnerability
     patterns:
       - pattern: $PARSER.parseExpression($EXPR)
       - pattern-not: $PARSER.parseExpression("...")

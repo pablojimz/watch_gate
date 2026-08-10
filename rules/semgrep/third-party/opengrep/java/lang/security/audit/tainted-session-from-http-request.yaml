@@ -72,3 +72,4 @@ rules:
     exploitability_score: 80
     risk_score: 55
     risk_justification: Violacion de limite de confianza sin via de explotacion directa demostrada.
+    finding_type: vulnerability

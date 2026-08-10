@@ -29,6 +29,7 @@ rules:
       exploitability_score: 80
       risk_score: 49
       risk_justification: Nombre de cookie por defecto solo facilita fingerprinting.
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern-inside: |
@@ -78,6 +79,7 @@ rules:
       exploitability_score: 80
       risk_score: 60
       risk_justification: 'FALTA DATO: no se sabe si se sirve por HTTP; asumo exposición mixta (conservador).'
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern-inside: |
@@ -145,6 +147,7 @@ rules:
       exploitability_score: 80
       risk_score: 60
       risk_justification: 'FALTA DATO: no se sabe si existe vector XSS que explote esto; asumo que sí (conservador).'
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern-inside: |
@@ -213,6 +216,7 @@ rules:
       exploitability_score: 40
       risk_score: 39
       risk_justification: Falta de 'domain' es higiene, impacto bajo por sí solo.
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern-inside: |
@@ -280,6 +284,7 @@ rules:
       exploitability_score: 40
       risk_score: 39
       risk_justification: Falta de 'path' es higiene, impacto bajo por sí solo.
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern-inside: |
@@ -347,6 +352,7 @@ rules:
       exploitability_score: 40
       risk_score: 39
       risk_justification: Cookie persistente sin expiración, riesgo menor.
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern-inside: |

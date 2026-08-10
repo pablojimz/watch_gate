@@ -18,6 +18,7 @@ rules:
       exploitability_score: 100
       risk_score: 66
       risk_justification: Caracteres de control bidi Unicode (trojan source); regex exacta, presente siempre en el código fuente.
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern-regex: ‪         # left-to-right embedding (LRE)

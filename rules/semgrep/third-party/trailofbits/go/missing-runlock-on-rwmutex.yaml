@@ -22,6 +22,7 @@ rules:
       exploitability_score: 80
       risk_score: 49
       risk_justification: Deadlock potencial por RUnlock faltante; bug de fiabilidad/DoS interno, no explotación directa.
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern: panic(...)

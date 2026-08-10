@@ -25,6 +25,7 @@ rules:
     exploitability_score: 80
     risk_score: 89
     risk_justification: Taint location.*->eval/new Function/setTimeout string, XSS/code injection en navegador.
+    finding_type: vulnerability
   languages:
   - javascript
   - typescript

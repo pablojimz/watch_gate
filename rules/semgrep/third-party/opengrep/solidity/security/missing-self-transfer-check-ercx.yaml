@@ -28,6 +28,7 @@ rules:
     exploitability_score: 80
     risk_score: 89
     risk_justification: Falta check from!=to en _update; permite inflar balance en self-transfer, incidente real reciente citado.
+    finding_type: vulnerability
   patterns:
   - pattern-either:
     - pattern: |

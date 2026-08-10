@@ -24,6 +24,7 @@ rules:
       exploitability_score: 40
       risk_score: 42
       risk_justification: "Dependencia git/unpinned bypasea verificacion de integridad del registro (candado roto, no ejecucion directa); muchas git URLs son legitimas y controladas (LOW); solo se materializa si en un futuro install el ref fue manipulado (repojacking)."
+      finding_type: vulnerability
     patterns:
       - pattern: '"$PKG": $VALUE'
       - metavariable-regex:

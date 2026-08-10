@@ -20,6 +20,7 @@ rules:
       exploitability_score: 40
       risk_score: 73
       risk_justification: register_custom_ops_library dinámico carga código nativo (RCE); requiere ruta no confiable.
+      finding_type: vulnerability
     patterns:
       - pattern-inside: |
           $SESSION = onnxruntime.SessionOptions(...)

@@ -54,5 +54,6 @@ rules:
     exploitability_score: 100
     risk_score: 56
     risk_justification: Falta Easy Auth de App Service; muchas apps autentican a nivel de codigo, heuristica amplia matchea uso normal.
+    finding_type: vulnerability
   languages: [hcl]
   severity: ERROR

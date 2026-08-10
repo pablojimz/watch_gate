@@ -131,6 +131,7 @@ rules:
     exploitability_score: 10
     risk_score: 66
     risk_justification: _xxsubinterpreters interno de test, prácticamente inalcanzable en apps reales.
+    finding_type: vulnerability
   severity: WARNING
   languages:
   - python

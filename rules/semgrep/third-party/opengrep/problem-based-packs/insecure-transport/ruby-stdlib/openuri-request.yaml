@@ -22,6 +22,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: URI.open/parse con literal http:// o ftp:// exacto.
+    finding_type: vulnerability
   languages:
   - ruby
   pattern-either:

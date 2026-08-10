@@ -40,3 +40,4 @@ rules:
     exploitability_score: 100
     risk_score: 66
     risk_justification: Auditoria de DocumentDB deshabilitada; informativo, sin explotacion directa.
+    finding_type: vulnerability
