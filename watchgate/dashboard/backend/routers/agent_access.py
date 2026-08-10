@@ -13,20 +13,14 @@ el mismo mecanismo que ya usa la Engine API -- Bearer o X-API-Key, ninguna
 ruta de autenticación nueva), NUNCA por la cookie de sesión del Dashboard:
 son rutas para llamar por programa, no para el navegador.
 
-LIMITACIÓN CONOCIDA, la misma que en las tools MCP -- documentada aquí y en
-el propio `docs/manual_mcp.md`, no oculta: el Dashboard controla el acceso
-por login de GitHub y un rol por repositorio (`repo_roles`, resuelto por
-`require_role` en `auth.py`), mientras que una API Key de la Engine API se
-resuelve por organización, no por login de GitHub -- son dos sistemas de
-identidad que nunca se unificaron. Estos endpoints, a diferencia de sus
-equivalentes autenticados por cookie en `scores.py`/`metrics.py`, NO
-aplican `require_role`: cualquier API Key válida (de cualquier
-organización) ve el historial/métricas de CUALQUIER repositorio del
-Dashboard. Aceptable para el caso de uso de hoy (una única organización
-usando su propio Dashboard), pero antes de exponer esto en un despliegue
-multi-organización de verdad hace falta resolver un login real a partir de
-la API Key (o, más simple, exigir un scope dedicado y aceptar que sigue
-siendo "toda la organización", nunca por repo).
+El login de GitHub del Dashboard y la API Key de la Engine API siguen
+siendo dos sistemas de identidad distintos (uno por `org_id`, el otro por
+login), pero ya no es un bypass: cada endpoint resuelve `user.name` como
+login y comprueba el rol real asignado en `repo_roles` (vía
+`database.get_role`/`user_is_org_admin`, la misma fuente que usa
+`require_role` en `auth.py` para las rutas autenticadas por cookie) antes
+de devolver nada de un repo -- una API Key sin rol en un repo recibe 403,
+igual que un usuario sin rol en el Dashboard normal.
 """
 
 from __future__ import annotations
