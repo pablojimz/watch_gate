@@ -33,7 +33,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from watchgate.api.auth import get_current_user_from_api_key
 from watchgate.dashboard.backend import db as database
@@ -53,7 +53,18 @@ def repo_score_history(
     _identity: ApiKeyIdentity,
     limit: int = 20,
 ) -> list[ScoreOut]:
+    _key, user, _org = _identity
+    user_login = user.name
+
     with database.db_session() as conn:
+        is_admin = database.user_is_org_admin(conn, user_login)
+        if not is_admin:
+            role = database.get_role(conn, user_login, repo)
+            if role is None:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Permiso denegado: Sin rol asignado en '{repo}'",
+                )
         scores = database.list_scores(conn, repo)
     return scores[:limit]
 
@@ -63,13 +74,16 @@ def org_metrics(
     _identity: ApiKeyIdentity,
     repos: Annotated[list[str] | None, Query()] = None,
 ) -> OrgMetrics:
+    _key, user, _org = _identity
+    user_login = user.name
+
     with database.db_session() as conn:
+        is_admin = database.user_is_org_admin(conn, user_login)
         if repos:
-            selected = repos
+            authorized_repos = [
+                r for r in repos if is_admin or database.get_role(conn, user_login, r) is not None
+            ]
+            selected = authorized_repos
         else:
-            # `is_admin=True` ignora el login y devuelve TODOS los repos del
-            # Dashboard -- ver la limitación documentada en el docstring del
-            # módulo (sin un login de GitHub real resuelto de la API Key, no
-            # hay forma de acotar "solo los repos de esta organización").
-            selected = database.list_repos_for_user(conn, "_agent_access", is_admin=True)
+            selected = database.list_repos_for_user(conn, user_login, is_admin=is_admin)
         return database.compute_org_metrics(conn, selected)
