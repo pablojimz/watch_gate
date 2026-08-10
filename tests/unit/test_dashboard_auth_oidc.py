@@ -58,7 +58,9 @@ def test_oidc_login_redirects_when_configured(oidc_app, monkeypatch):
 
     mock_client = MagicMock()
     mock_redirect = AsyncMock()
-    mock_redirect.return_value = RedirectResponse(url="https://keycloak.example.com/auth", status_code=307)
+    mock_redirect.return_value = RedirectResponse(
+        url="https://keycloak.example.com/auth", status_code=307
+    )
     mock_client.authorize_redirect = mock_redirect
 
     with patch.object(auth_oidc.oauth, "create_client", return_value=mock_client):
