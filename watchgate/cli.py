@@ -117,6 +117,19 @@ def _build_parser() -> argparse.ArgumentParser:
         help=f"Ruta al índice ChromaDB (default: {DEFAULT_INDEX_PATH})",
     )
 
+    # Command: mcp
+    mcp_parser = subparsers.add_parser("mcp", help="Servidor Model Context Protocol (MCP)")
+    mcp_subparsers = mcp_parser.add_subparsers(dest="mcp_subcommand", help="Subcomandos MCP")
+    mcp_serve_parser = mcp_subparsers.add_parser(
+        "serve", help="Arranca el servidor MCP de WatchGate en el transporte especificado"
+    )
+    mcp_serve_parser.add_argument(
+        "--transport",
+        choices=["stdio"],
+        default="stdio",
+        help="Transporte de comunicación MCP (default: stdio)",
+    )
+
     argcomplete.autocomplete(parser)
     return parser
 
@@ -280,6 +293,12 @@ def _cmd_rag_reindex(args: argparse.Namespace) -> int:
         return 3
 
 
+def _cmd_mcp_serve(args: argparse.Namespace) -> int:
+    from watchgate.mcp.server import run_stdio_server
+
+    return run_stdio_server()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -290,6 +309,11 @@ def main(argv: list[str] | None = None) -> int:
         if args.rag_subcommand == "reindex":
             return _cmd_rag_reindex(args)
         parser.parse_args(["rag", "--help"])
+        return 2
+    if args.subcommand == "mcp":
+        if args.mcp_subcommand == "serve":
+            return _cmd_mcp_serve(args)
+        parser.parse_args(["mcp", "--help"])
         return 2
 
     parser.print_help()

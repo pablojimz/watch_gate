@@ -25,6 +25,8 @@ from watchgate.core.models import AggregatedResult, LayerResult, RiskCategory, S
 from watchgate.dashboard.backend import db_postgres
 from watchgate.dashboard.backend.db_postgres import PostgresConnection
 from watchgate.dashboard.backend.schemas import (
+    AgentMetricRow,
+    AgentUsageMetrics,
     FeedbackValue,
     LlmSettingsIn,
     LlmSettingsOut,
@@ -1194,4 +1196,56 @@ def seed_demo(conn: DBConnection) -> None:
             require_feedback_on_high=True,
             source="repo",
         ),
+    )
+
+
+def compute_agent_metrics(conn: DBConnection) -> AgentUsageMetrics:
+    try:
+        rows = conn.execute(
+            "SELECT agent_id, score FROM pr_scores WHERE agent_id IS NOT NULL AND agent_id != ''"
+        ).fetchall()
+    except Exception:
+        rows = []
+
+    agent_data: dict[str, dict[str, Any]] = {}
+    for r in rows:
+        agent_id = str(r["agent_id"])
+        bucket = agent_data.setdefault(agent_id, {"count": 0, "score_sum": 0.0})
+        bucket["count"] += 1
+        bucket["score_sum"] += float(r["score"])
+
+    token_usage: dict[str, int] = {}
+    try:
+        tu_rows = conn.execute("SELECT user_id, tokens_used FROM user_token_usage").fetchall()
+        for tr in tu_rows:
+            u_id = str(tr["user_id"])
+            token_usage[u_id] = token_usage.get(u_id, 0) + int(tr["tokens_used"])
+    except Exception:
+        pass
+
+    agent_rows: list[AgentMetricRow] = []
+    total_tokens = sum(token_usage.values())
+
+    all_agent_ids = set(agent_data.keys()).union(token_usage.keys())
+    if not all_agent_ids:
+        all_agent_ids = {"default-agent"}
+
+    for aid in sorted(all_agent_ids):
+        info = agent_data.get(aid, {"count": 0, "score_sum": 0.0})
+        cnt = info["count"]
+        avg_s = round(info["score_sum"] / cnt, 1) if cnt > 0 else 0.0
+        toks = token_usage.get(aid, 0)
+        agent_rows.append(
+            AgentMetricRow(
+                agent_id=aid,
+                tokens_used=toks,
+                analyses_count=cnt,
+                avg_score=avg_s,
+            )
+        )
+
+    return AgentUsageMetrics(
+        total_tokens_used=total_tokens,
+        agents_count=len(agent_rows),
+        by_agent=agent_rows,
     )
