@@ -202,6 +202,19 @@ class OrgMetrics(BaseModel):
     trend: list[TrendPoint]
 
 
+class AgentMetricRow(BaseModel):
+    agent_id: str
+    tokens_used: int
+    analyses_count: int
+    avg_score: float
+
+
+class AgentUsageMetrics(BaseModel):
+    total_tokens_used: int
+    agents_count: int
+    by_agent: list[AgentMetricRow]
+
+
 LlmProvider = Literal["anthropic", "gemini", "openai", "local"]
 
 

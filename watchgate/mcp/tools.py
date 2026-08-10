@@ -1,0 +1,388 @@
+"""Implementación de herramientas MCP de seguridad de WatchGate (watchgate/mcp/tools.py)."""
+
+from __future__ import annotations
+
+import json
+from typing import Any
+
+from watchgate.api.schemas.agent import (
+    build_agent_guidance,
+    compute_finding_signature,
+)
+from watchgate.config import WatchGateConfig, load_config
+from watchgate.core.diffparser import parse_diff, parse_diff_from_text
+from watchgate.core.models import AggregatedResult, Finding, LayerResult
+from watchgate.core.pipeline import run_full_analysis
+from watchgate.core.rag.retriever import retrieve_relevant_context
+from watchgate.mcp.schemas import (
+    McpTextContent,
+    McpToolCallResult,
+    McpToolDefinition,
+    McpToolParameterSchema,
+)
+
+TOOLS: list[McpToolDefinition] = [
+    McpToolDefinition(
+        name="watchgate_analyze_diff",
+        description=(
+            "Realiza un análisis completo de riesgo de seguridad sobre un diff o parche Git. "
+            "Combina análisis estático, dependencias, reputación del autor y evaluación "
+            "semántica con LLM/RAG, retornando el semáforo y la guía para el agente."
+        ),
+        inputSchema=McpToolParameterSchema(
+            type="object",
+            properties={
+                "diff_text": {
+                    "type": "string",
+                    "description": "Texto del diff o parche unificado a analizar.",
+                },
+                "base": {
+                    "type": "string",
+                    "description": "Commit o rama base (si no se provee diff_text directo).",
+                    "default": "main",
+                },
+                "head": {
+                    "type": "string",
+                    "description": "Commit o rama head (si no se provee diff_text directo).",
+                    "default": "HEAD",
+                },
+                "repo_path": {
+                    "type": "string",
+                    "description": "Ruta al repositorio Git local.",
+                    "default": ".",
+                },
+                "metadata": {
+                    "type": "object",
+                    "description": "Metadatos adicionales del análisis (ej: pr_id, repo, autor).",
+                },
+            },
+            required=[],
+        ),
+    ),
+    McpToolDefinition(
+        name="watchgate_precheck",
+        description=(
+            "Evaluación ultrarrápida (<100ms) de riesgo utilizando únicamente capas deterministas "
+            "(análisis estático, dependencias, reputación). Cero consumo de tokens LLM. "
+            "Ideal para verificaciones instantáneas durante la edición de código."
+        ),
+        inputSchema=McpToolParameterSchema(
+            type="object",
+            properties={
+                "diff_text": {
+                    "type": "string",
+                    "description": "Texto del parche unificado a evaluar rápidamente.",
+                },
+                "repo_path": {
+                    "type": "string",
+                    "description": "Ruta al repositorio Git local.",
+                    "default": ".",
+                },
+            },
+            required=["diff_text"],
+        ),
+    ),
+    McpToolDefinition(
+        name="watchgate_explain_risk",
+        description=(
+            "Genera un desglose explicativo detallado del nivel de riesgo, desglosando "
+            "puntuaciones por capa, hallazgos concretos, justificaciones del LLM y factores "
+            "determinantes para que el agente entienda exactamente el origen del riesgo."
+        ),
+        inputSchema=McpToolParameterSchema(
+            type="object",
+            properties={
+                "diff_text": {
+                    "type": "string",
+                    "description": "Texto del diff o parche a analizar y explicar.",
+                },
+                "analysis_json": {
+                    "type": "string",
+                    "description": "JSON de AggregatedResult previo para explicar el riesgo.",
+                },
+            },
+            required=[],
+        ),
+    ),
+    McpToolDefinition(
+        name="watchgate_verify_fix",
+        description=(
+            "Compara un diff original (con alertas de seguridad) contra un nuevo diff candidato "
+            "corregido por el agente. Utiliza firmas sintácticas estables para determinar si "
+            "los hallazgos fueron resueltos con éxito."
+        ),
+        inputSchema=McpToolParameterSchema(
+            type="object",
+            properties={
+                "original_diff": {
+                    "type": "string",
+                    "description": "Texto del diff original que produjo hallazgos de seguridad.",
+                },
+                "candidate_diff": {
+                    "type": "string",
+                    "description": "Texto del nuevo diff candidato corregido por el agente.",
+                },
+                "repo_path": {
+                    "type": "string",
+                    "description": "Ruta al repositorio local.",
+                    "default": ".",
+                },
+            },
+            required=["original_diff", "candidate_diff"],
+        ),
+    ),
+    McpToolDefinition(
+        name="watchgate_query_threat_kb",
+        description=(
+            "Consulta la base de conocimientos vectorial RAG de WatchGate sobre patrones "
+            "de ataque conocidos, vulnerabilidades históricas y técnicas de MITRE ATT&CK."
+        ),
+        inputSchema=McpToolParameterSchema(
+            type="object",
+            properties={
+                "query": {
+                    "type": "string",
+                    "description": "Consulta de seguridad (ej: 'trojan source', 'dependency').",
+                },
+                "k": {
+                    "type": "integer",
+                    "description": "Número máximo de fragmentos relevantes a retornar.",
+                    "default": 3,
+                },
+            },
+            required=["query"],
+        ),
+    ),
+]
+
+
+def get_mcp_tools_list() -> list[McpToolDefinition]:
+    """Retorna el catálogo de herramientas MCP expuestas por WatchGate."""
+    return TOOLS
+
+
+def execute_mcp_tool(name: str, arguments: dict[str, Any] | None) -> McpToolCallResult:
+    """Ejecuta una herramienta MCP por nombre pasando sus argumentos."""
+    args = arguments or {}
+
+    try:
+        if name == "watchgate_analyze_diff":
+            return _handle_analyze_diff(args)
+        elif name == "watchgate_precheck":
+            return _handle_precheck(args)
+        elif name == "watchgate_explain_risk":
+            return _handle_explain_risk(args)
+        elif name == "watchgate_verify_fix":
+            return _handle_verify_fix(args)
+        elif name == "watchgate_query_threat_kb":
+            return _handle_query_threat_kb(args)
+        else:
+            return McpToolCallResult(
+                content=[McpTextContent(text=f"Herramienta no encontrada: '{name}'")],
+                isError=True,
+            )
+    except Exception as exc:
+        return McpToolCallResult(
+            content=[McpTextContent(text=f"Error ejecutando la herramienta '{name}': {exc}")],
+            isError=True,
+        )
+
+
+def _handle_analyze_diff(args: dict[str, Any]) -> McpToolCallResult:
+    diff_text = args.get("diff_text")
+    repo_path = args.get("repo_path", ".")
+    metadata = args.get("metadata") or {}
+
+    config = load_config()
+
+    if diff_text:
+        diff = parse_diff_from_text(diff_text=diff_text, repo_path=repo_path)
+    else:
+        base = args.get("base", "main")
+        head = args.get("head", "HEAD")
+        diff = parse_diff(repo_path=repo_path, base_sha=base, head_sha=head)
+
+    analysis_res = run_full_analysis(diff=diff, metadata=metadata, config=config)
+    guidance = build_agent_guidance(analysis_res)
+
+    output = {
+        "analysis": analysis_res.model_dump(),
+        "guidance": guidance.model_dump(),
+    }
+    return McpToolCallResult(content=[McpTextContent(text=json.dumps(output, indent=2))])
+
+
+def _handle_precheck(args: dict[str, Any]) -> McpToolCallResult:
+    diff_text = args.get("diff_text", "")
+    repo_path = args.get("repo_path", ".")
+
+    diff = parse_diff_from_text(diff_text=diff_text, repo_path=repo_path)
+
+    base_config = load_config()
+    cfg_dict = base_config.model_dump()
+    weights = dict(cfg_dict.get("weights", {}))
+    weights["semantic"] = 0.0
+    cfg_dict["weights"] = weights
+    fast_config = WatchGateConfig(**cfg_dict)
+
+    analysis_res = run_full_analysis(diff=diff, metadata={"precheck": True}, config=fast_config)
+
+    # Indicar explícitamente que la capa semántica fue omitida por precheck
+    updated_layer_results = dict(analysis_res.layer_results)
+    updated_layer_results["semantic"] = LayerResult(
+        layer_name="semantic",
+        risk_score=0,
+        justification="",
+        skipped=True,
+        skip_reason="Deshabilitada para precheck ultrarrápido",
+    )
+    analysis_res = analysis_res.model_copy(update={"layer_results": updated_layer_results})
+
+    guidance = build_agent_guidance(analysis_res)
+    output = {
+        "analysis": analysis_res.model_dump(),
+        "guidance": guidance.model_dump(),
+    }
+    return McpToolCallResult(content=[McpTextContent(text=json.dumps(output, indent=2))])
+
+
+def _handle_explain_risk(args: dict[str, Any]) -> McpToolCallResult:
+    analysis_json = args.get("analysis_json")
+    diff_text = args.get("diff_text")
+
+    if analysis_json:
+        data = json.loads(analysis_json)
+        res = AggregatedResult.model_validate(data)
+    elif diff_text:
+        diff = parse_diff_from_text(diff_text=diff_text)
+        config = load_config()
+        res = run_full_analysis(diff=diff, metadata={}, config=config)
+    else:
+        msg = "Debe proporcionar 'diff_text' o 'analysis_json' para explicar el riesgo."
+        return McpToolCallResult(
+            content=[McpTextContent(text=msg)],
+            isError=True,
+        )
+
+    explanation_lines = [
+        "=== Explicación de Riesgo WatchGate ===",
+        f"Puntuación Global de Riesgo: {res.score}/100",
+        f"Semáforo: {res.semaforo.value.upper()}",
+        f"Resumen de Amenazas: {res.threat_summary}",
+        "",
+        "--- Desglose por Capas ---",
+    ]
+
+    for layer_name, layer_res in res.layer_results.items():
+        if layer_res.skipped:
+            explanation_lines.append(
+                f"• [{layer_name.upper()}] OMITIDA (Razón: {layer_res.skip_reason})"
+            )
+            continue
+
+        explanation_lines.append(f"• [{layer_name.upper()}] Nota: {layer_res.risk_score}/100")
+        if layer_res.justification:
+            explanation_lines.append(f"  Justificación: {layer_res.justification}")
+        if layer_res.findings:
+            explanation_lines.append(f"  Hallazgos ({len(layer_res.findings)}):")
+            for f in layer_res.findings:
+                msg_line = f"    - [{f.severity.upper()}] {f.rule_id} en {f.file_path}"
+                if f.line:
+                    msg_line += f":{f.line}"
+                msg_line += f": {f.message}"
+                explanation_lines.append(msg_line)
+
+    guidance = build_agent_guidance(res)
+    explanation_lines.extend(
+        [
+            "",
+            "--- Guía para el Agente ---",
+            f"Acción recomendada: {guidance.recommended_action}",
+            f"Resumen: {guidance.summary_for_agent}",
+        ]
+    )
+
+    if guidance.actionable_steps:
+        explanation_lines.append("Pasos concretos de corrección:")
+        for idx, step in enumerate(guidance.actionable_steps, start=1):
+            line_str = f":{step.line}" if step.line else ""
+            step_str = (
+                f"  {idx}. [{step.file_path}{line_str}] {step.problem} -> {step.suggested_action}"
+            )
+            explanation_lines.append(step_str)
+
+    return McpToolCallResult(content=[McpTextContent(text="\n".join(explanation_lines))])
+
+
+def _handle_verify_fix(args: dict[str, Any]) -> McpToolCallResult:
+    original_diff = args.get("original_diff", "")
+    candidate_diff = args.get("candidate_diff", "")
+    repo_path = args.get("repo_path", ".")
+
+    config = load_config()
+
+    orig_diff_obj = parse_diff_from_text(diff_text=original_diff, repo_path=repo_path)
+    orig_res = run_full_analysis(diff=orig_diff_obj, metadata={}, config=config)
+
+    cand_diff_obj = parse_diff_from_text(diff_text=candidate_diff, repo_path=repo_path)
+    cand_res = run_full_analysis(diff=cand_diff_obj, metadata={}, config=config)
+
+    orig_findings: dict[str, Finding] = {}
+    for layer in orig_res.layer_results.values():
+        if layer.skipped:
+            continue
+        for f in layer.findings:
+            sig = compute_finding_signature(f)
+            orig_findings[sig] = f
+
+    cand_signatures: set[str] = set()
+    remaining_findings: list[Finding] = []
+    for layer in cand_res.layer_results.values():
+        if layer.skipped:
+            continue
+        for f in layer.findings:
+            sig = compute_finding_signature(f)
+            cand_signatures.add(sig)
+            remaining_findings.append(f)
+
+    resolved_findings = [f for sig, f in orig_findings.items() if sig not in cand_signatures]
+    risk_reduced = cand_res.score < orig_res.score or len(resolved_findings) > 0
+
+    output = {
+        "risk_reduced": risk_reduced,
+        "previous_score": orig_res.score,
+        "new_score": cand_res.score,
+        "resolved_findings_count": len(resolved_findings),
+        "resolved_findings": [f.model_dump() for f in resolved_findings],
+        "remaining_findings_count": len(remaining_findings),
+        "remaining_findings": [f.model_dump() for f in remaining_findings],
+    }
+
+    return McpToolCallResult(content=[McpTextContent(text=json.dumps(output, indent=2))])
+
+
+def _handle_query_threat_kb(args: dict[str, Any]) -> McpToolCallResult:
+    query = args.get("query", "")
+    k = int(args.get("k", 3))
+
+    fragments = retrieve_relevant_context(diff_summary=query, k=k)
+
+    if not fragments:
+        no_frag_msg = (
+            f"No se encontraron fragmentos relevantes en la base "
+            f"de conocimientos para la consulta '{query}'."
+        )
+        return McpToolCallResult(content=[McpTextContent(text=no_frag_msg)])
+
+    results = []
+    for frag in fragments:
+        results.append(
+            {
+                "case_name": frag.case_name,
+                "origin": frag.origin,
+                "verdict": frag.verdict,
+                "text": frag.text,
+            }
+        )
+
+    return McpToolCallResult(content=[McpTextContent(text=json.dumps(results, indent=2))])
