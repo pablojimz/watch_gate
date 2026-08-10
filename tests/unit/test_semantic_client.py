@@ -12,6 +12,10 @@ from watchgate.core.layers._semantic.client import (
     AnthropicClient,
     SemanticParsingError,
 )
+from watchgate.core.layers._semantic.prompting import (
+    _CACHE_BREAKPOINT_MARKER,
+    build_system_prompt,
+)
 from watchgate.core.layers._semantic.tools import FORCE_FINAL_ANSWER_MESSAGE
 from watchgate.core.models import Confidence, RiskCategory
 
@@ -202,3 +206,64 @@ def test_raises_instead_of_looping_forever_if_model_keeps_requesting_tools():
 
     # exactamente max_tool_calls + 3 turnos, no un número sin acotar
     assert len(fake.messages.calls) == 6
+
+
+def test_system_prompt_with_cache_marker_is_sent_as_two_blocks_with_cache_control():
+    """Optimización de coste: el prompt real de `build_system_prompt()` lleva
+    el marcador de `_CACHE_BREAKPOINT_MARKER` entre el bloque estático
+    (instrucciones + few-shot) y el variable (fecha/RAG/contexto). Anthropic
+    exige marcar `cache_control` explícitamente por bloque -- sin este split,
+    no se cachea nada."""
+    system_prompt = build_system_prompt(
+        project_type="Python", languages="python", recent_activity_summary="-", rag_context=[]
+    )
+    fake = _FakeAnthropic([_response(_text_block(_valid_json()))])
+    client = AnthropicClient(client=fake)
+
+    client.complete_structured(
+        system_prompt, "user", tools=[], tool_executor=lambda n, i: None, max_tool_calls=3
+    )
+
+    sent_system = fake.messages.calls[0]["system"]
+    assert isinstance(sent_system, list)
+    assert len(sent_system) == 2
+    assert sent_system[0]["cache_control"] == {"type": "ephemeral"}
+    assert "cache_control" not in sent_system[1]
+    # El bloque cacheado es justo la parte estática -- nunca contiene el
+    # marcador en sí, y el bloque variable no lleva las instrucciones fijas.
+    assert _CACHE_BREAKPOINT_MARKER not in sent_system[0]["text"]
+    assert _CACHE_BREAKPOINT_MARKER not in sent_system[1]["text"]
+    assert "Eres un analista de seguridad" in sent_system[0]["text"]
+
+
+def test_system_prompt_without_cache_marker_is_sent_as_a_plain_string():
+    """Sin el marcador (un `system_prompt` a mano, como en el resto de tests
+    de este fichero) el comportamiento es exactamente el de antes -- un
+    string plano, sin ningún bloque de caché."""
+    fake = _FakeAnthropic([_response(_text_block(_valid_json()))])
+    client = AnthropicClient(client=fake)
+
+    client.complete_structured(
+        "sys sin marcador", "user", tools=[], tool_executor=lambda n, i: None, max_tool_calls=3
+    )
+
+    assert fake.messages.calls[0]["system"] == "sys sin marcador"
+
+
+def test_cache_control_block_reused_on_the_invalid_json_retry_call():
+    """La segunda llamada (reintento tras JSON inválido) debe usar el mismo
+    `system` ya troceado -- no reconstruirlo ni, peor, mandar el marcador
+    crudo sin trocear en el reintento."""
+    system_prompt = build_system_prompt(
+        project_type="Python", languages="python", recent_activity_summary="-", rag_context=[]
+    )
+    bad = _response(_text_block("no es json"))
+    good = _response(_text_block(_valid_json(risk_score=20, category="ofuscacion")))
+    fake = _FakeAnthropic([bad, good])
+    client = AnthropicClient(client=fake)
+
+    client.complete_structured(
+        system_prompt, "user", tools=[], tool_executor=lambda n, i: None, max_tool_calls=3
+    )
+
+    assert fake.messages.calls[0]["system"] == fake.messages.calls[1]["system"]
