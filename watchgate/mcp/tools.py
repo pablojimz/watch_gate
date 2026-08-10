@@ -184,9 +184,9 @@ TOOLS: list[McpToolDefinition] = [
             "Consulta el historial de análisis de riesgo de un repositorio tal como lo ve el "
             "Dashboard (score, semáforo, desglose por capa y feedback humano de cada PR "
             "analizado). Requiere WATCHGATE_MCP_API_KEY configurada -- sin identidad de "
-            "organización, no hay datos de dashboard que devolver. LIMITACIÓN CONOCIDA: no "
-            "aplica todavía los roles por repositorio del Dashboard (mantenedor/revisor/admin) "
-            "-- cualquier API Key válida de la organización ve el historial de cualquier repo."
+            "organización, no hay datos de dashboard que devolver. Respeta el rol del usuario "
+            "por repositorio del Dashboard (mantenedor/revisor/admin): sin rol asignado en el "
+            "repo solicitado, devuelve error de permiso denegado."
         ),
         inputSchema=McpToolParameterSchema(
             type="object",
@@ -209,10 +209,10 @@ TOOLS: list[McpToolDefinition] = [
         description=(
             "Métricas agregadas de postura de seguridad tal como las ve el Dashboard: PRs "
             "analizados, score medio, distribución de semáforos, feedback humano acumulado y "
-            "desglose por repositorio. Requiere WATCHGATE_MCP_API_KEY configurada. LIMITACIÓN "
-            "CONOCIDA: sin 'repos', agrega TODOS los repositorios del Dashboard, no solo los "
-            "de la organización de la API Key (el Dashboard identifica repos por login de "
-            "GitHub, no por organización -- integrarlo del todo queda pendiente)."
+            "desglose por repositorio. Requiere WATCHGATE_MCP_API_KEY configurada. Sin "
+            "'repos', agrega los repositorios del Dashboard visibles para el usuario según su "
+            "rol (todos si es admin_organizacion); con 'repos', filtra a los que tenga rol "
+            "asignado."
         ),
         inputSchema=McpToolParameterSchema(
             type="object",
