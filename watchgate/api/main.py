@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import logging
 import re
+import threading
+import time
 from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
 from typing import Any
@@ -75,6 +77,49 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+
+_RATE_LIMIT_WINDOW_SECONDS = 60.0
+_MAX_REQUESTS_PER_WINDOW = 60
+_request_timestamps: dict[str, list[float]] = {}
+_rate_limit_lock = threading.Lock()
+
+
+@app.middleware("http")
+async def rate_limiting_middleware(
+    request: Request, call_next: Callable[[Request], Any]
+) -> Response:
+    """Middleware de rate limiting por ventana deslizante (máx 60 req/min)."""
+    if request.url.path.startswith("/api/v1/"):
+        client_ip = request.client.host if request.client else "unknown"
+        raw_key = (
+            request.headers.get("X-API-Key")
+            or request.headers.get("Authorization")
+            or client_ip
+        )
+        client_key = f"{client_ip}:{raw_key[:16]}"
+
+        now = time.time()
+        with _rate_limit_lock:
+            history = _request_timestamps.setdefault(client_key, [])
+            _request_timestamps[client_key] = [
+                t for t in history if now - t < _RATE_LIMIT_WINDOW_SECONDS
+            ]
+            if len(_request_timestamps[client_key]) >= _MAX_REQUESTS_PER_WINDOW:
+                return JSONResponse(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    content={
+                        "detail": (
+                            f"Límite de tasa excedido (máximo {_MAX_REQUESTS_PER_WINDOW} "
+                            "peticiones/minuto)."
+                        )
+                    },
+                    headers={"Retry-After": "60"},
+                )
+            _request_timestamps[client_key].append(now)
+
+    response: Response = await call_next(request)
+    return response
 
 
 @app.middleware("http")
