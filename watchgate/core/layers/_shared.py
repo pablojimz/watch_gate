@@ -14,7 +14,15 @@ from pydantic import BaseModel
 # Nombres de fichero (no rutas completas) que WatchGate reconoce como
 # manifiestos de gestión de dependencias.
 DEPENDENCY_MANIFEST_FILENAMES: frozenset[str] = frozenset(
-    {"package.json", "requirements.txt", "Pipfile", "PKGBUILD", "Cargo.toml"}
+    {
+        "package.json",
+        "requirements.txt",
+        "Pipfile",
+        "PKGBUILD",
+        "Cargo.toml",
+        "go.mod",
+        "composer.json",
+    }
 )
 
 
@@ -241,6 +249,133 @@ def parse_cargo_toml(diff_hunk: str) -> list[DependencyChange]:
                     is_direct_url=is_direct,
                 )
             )
+    return changes
+
+
+_GO_MOD_REQUIRE_SINGLE_REGEX = re.compile(
+    r"^\+\s*require\s+([A-Za-z0-9._\-/]+)\s+(v[A-Za-z0-9._\-+]+)"
+)
+_GO_MOD_REQUIRE_LINE_REGEX = re.compile(
+    r"^\+\s*([A-Za-z0-9._\-/]+)\s+(v[A-Za-z0-9._\-+]+)"
+)
+_GO_MOD_REPLACE_REGEX = re.compile(
+    r"^\+\s*replace\s+([A-Za-z0-9._\-/]+)(?:\s+v[^\s]+)?\s*=>\s*(.+)"
+)
+
+
+def parse_go_mod(diff_hunk: str) -> list[DependencyChange]:
+    """Parsea adiciones de dependencias en diffs de go.mod."""
+    changes: list[DependencyChange] = []
+    for line in diff_hunk.splitlines():
+        if not line.startswith("+") or line.startswith("++"):
+            continue
+
+        rep_match = _GO_MOD_REPLACE_REGEX.search(line)
+        if rep_match:
+            mod_name = rep_match.group(1)
+            target = rep_match.group(2).strip()
+            is_direct = target.startswith((".", "/", "../")) or "git" in target or "http" in target
+            changes.append(
+                DependencyChange(
+                    ecosystem="Go",
+                    name=mod_name,
+                    new_version=target,
+                    is_new=True,
+                    is_direct_url=is_direct,
+                )
+            )
+            continue
+
+        req_single = _GO_MOD_REQUIRE_SINGLE_REGEX.search(line)
+        if req_single:
+            mod_name = req_single.group(1)
+            version = req_single.group(2)
+            changes.append(
+                DependencyChange(
+                    ecosystem="Go",
+                    name=mod_name,
+                    new_version=version,
+                    is_new=True,
+                    is_direct_url=False,
+                )
+            )
+            continue
+
+        req_line = _GO_MOD_REQUIRE_LINE_REGEX.search(line)
+        if req_line:
+            mod_name = req_line.group(1)
+            version = req_line.group(2)
+            if mod_name not in ("module", "go", "toolchain", "require", "replace", "exclude"):
+                changes.append(
+                    DependencyChange(
+                        ecosystem="Go",
+                        name=mod_name,
+                        new_version=version,
+                        is_new=True,
+                        is_direct_url=False,
+                    )
+                )
+
+    return changes
+
+
+_COMPOSER_DEP_REGEX = re.compile(
+    r'^\+\s*"([a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+)":\s*"([^"]+)"'
+)
+_COMPOSER_SCRIPT_REGEX = re.compile(
+    r'^\+\s*"(pre-install-cmd|post-install-cmd|post-autoload-dump|post-create-project-cmd)":\s*(?:"([^"]+)"|\[(.*?)\])'
+)
+
+
+def parse_composer_json(diff_hunk: str) -> list[DependencyChange]:
+    """Parsea adiciones de dependencias y scripts en diffs de composer.json."""
+    changes: list[DependencyChange] = []
+    install_scripts: list[str] = []
+
+    for line in diff_hunk.splitlines():
+        if not line.startswith("+") or line.startswith("++"):
+            continue
+
+        script_match = _COMPOSER_SCRIPT_REGEX.search(line)
+        if script_match:
+            cmd = script_match.group(2) or script_match.group(3) or ""
+            install_scripts.append(f"{script_match.group(1)}: {cmd}")
+            continue
+
+        dep_match = _COMPOSER_DEP_REGEX.search(line)
+        if dep_match:
+            pkg_name = dep_match.group(1)
+            pkg_version = dep_match.group(2)
+            is_direct = (
+                pkg_version.startswith(("git@", "http://", "https://", "file://", "dev-"))
+                or "github.com" in pkg_version
+                or pkg_version.endswith(".git")
+            )
+            changes.append(
+                DependencyChange(
+                    ecosystem="Packagist",
+                    name=pkg_name,
+                    new_version=pkg_version,
+                    is_new=True,
+                    is_direct_url=is_direct,
+                )
+            )
+
+    if install_scripts:
+        combined_script = "; ".join(install_scripts)
+        if changes:
+            for change in changes:
+                change.install_script = combined_script
+        else:
+            changes.append(
+                DependencyChange(
+                    ecosystem="Packagist",
+                    name="composer.json (scripts)",
+                    is_new=False,
+                    install_script=combined_script,
+                )
+            )
+
     return changes
 
 
