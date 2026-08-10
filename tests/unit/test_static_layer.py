@@ -457,7 +457,9 @@ def test_analyze_combines_semgrep_and_yara_via_max_never_sum(tmp_path) -> None:
         ]
     )
 
-    semgrep_findings = [{"tool": "semgrep", "rule_id": "some-rule", "message": "x", "risk_score": 30}]
+    semgrep_findings = [
+        {"tool": "semgrep", "rule_id": "some-rule", "message": "x", "risk_score": 30}
+    ]
     with (
         patch.object(layer, "_get_rules_dir", return_value=tmp_path),
         patch.object(layer, "_run_semgrep_on_file", return_value=semgrep_findings),

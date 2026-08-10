@@ -21,9 +21,9 @@ try:
     import psycopg
     from psycopg.rows import DictRow, dict_row
 except ImportError:
-    psycopg = None  # type: ignore[assignment]
-    DictRow = Any  # type: ignore[misc, assignment]
-    dict_row = None  # type: ignore[assignment]
+    psycopg = None
+    DictRow = Any
+    dict_row = None
 
 _PLACEHOLDER_RE = re.compile(r"\?")
 
@@ -39,12 +39,12 @@ class PostgresCursor:
     def fetchone(self) -> DictRow | None:
         return self._cursor.fetchone()
 
-    def fetchall(self) -> list[DictRow]:
-        return self._cursor.fetchall()
+    def fetchall(self) -> list[Any]:
+        return list(self._cursor.fetchall())
 
     @property
     def rowcount(self) -> int:
-        return self._cursor.rowcount
+        return int(self._cursor.rowcount)
 
 
 class PostgresConnection:

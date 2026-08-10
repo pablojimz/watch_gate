@@ -590,7 +590,10 @@ class StaticLayer(AnalysisLayer):
                         findings.extend(
                             self._run_semgrep_on_file(temp_file.name, language, rules_dir=rules_dir)
                         )
-                    findings.extend(self._run_yara_on_text(file_change.diff_hunk, rules_dir=rules_dir))
+                    yara_res = self._run_yara_on_text(
+                        file_change.diff_hunk, rules_dir=rules_dir
+                    )
+                    findings.extend(yara_res)
 
                     for f in findings:
                         f["file_path"] = file_change.path

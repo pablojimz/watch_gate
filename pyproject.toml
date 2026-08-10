@@ -81,11 +81,11 @@ ignore = ["UP042"]
 
 [tool.mypy]
 strict = true
-files = ["watchgate/core"]
+files = ["watchgate"]
 
 [[tool.mypy.overrides]]
 # Librerías externas sin marcador py.typed o stubs globales.
-module = ["google.*", "yaml", "chromadb", "sentence_transformers", "langchain_text_splitters.*", "anthropic", "unidiff", "unidiff.*", "argcomplete", "rich.*"]
+module = ["google.*", "yaml", "chromadb", "sentence_transformers", "langchain_text_splitters.*", "anthropic", "unidiff", "unidiff.*", "argcomplete", "rich.*", "yara", "psycopg", "psycopg.*", "jose", "jose.*", "authlib.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
