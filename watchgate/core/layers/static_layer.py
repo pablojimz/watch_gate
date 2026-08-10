@@ -614,7 +614,12 @@ class StaticLayer(AnalysisLayer):
         )
 
         category = RiskCategory.OFUSCACION if max_risk_score >= 50 else RiskCategory.NINGUNA
-        confidence = Confidence.MEDIA if max_risk_score > 0 else Confidence.BAJA
+        if max_risk_score >= 70:
+            confidence = Confidence.ALTA
+        elif max_risk_score > 0:
+            confidence = Confidence.MEDIA
+        else:
+            confidence = Confidence.BAJA
 
         structured_findings = [
             Finding(
