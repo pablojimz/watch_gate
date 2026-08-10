@@ -206,6 +206,56 @@ def test_has_new_dependencies_detects_package_json():
     assert _has_new_dependencies(diff2) is False
 
 
+def test_has_new_dependencies_detects_requirements_txt():
+    diff = _diff_with_paths(("requirements.txt", "+ requests==2.31.0"))
+    assert _has_new_dependencies(diff) is True
+
+
+def test_has_new_dependencies_detects_pipfile():
+    diff = _diff_with_paths(("Pipfile", '+ requests = "*"'))
+    assert _has_new_dependencies(diff) is True
+
+
+def test_has_new_dependencies_detects_pkgbuild():
+    diff = _diff_with_paths(("PKGBUILD", "+ depends=('glibc')"))
+    assert _has_new_dependencies(diff) is True
+
+
+def test_has_new_dependencies_detects_cargo_toml():
+    diff = _diff_with_paths(("Cargo.toml", '+ serde = "1.0"'))
+    assert _has_new_dependencies(diff) is True
+
+
+def test_has_new_dependencies_detects_go_mod():
+    diff = _diff_with_paths(("go.mod", "+ require github.com/pkg/errors v0.9.1"))
+    assert _has_new_dependencies(diff) is True
+
+
+def test_has_new_dependencies_detects_composer_json():
+    diff = _diff_with_paths(("composer.json", '+ "monolog/monolog": "^2.0"'))
+    assert _has_new_dependencies(diff) is True
+
+
+def test_has_new_dependencies_matches_by_exact_basename():
+    """El nombre de fichero se compara tras el último '/' y debe coincidir
+    exactamente con la lista -- un manifiesto en un subdirectorio se sigue
+    detectando, pero un nombre parecido que no sea exacto no cuenta."""
+    diff = _diff_with_paths(("vendor/Cargo.toml", '+ serde = "1.0"'))
+    assert _has_new_dependencies(diff) is True
+
+    diff2 = _diff_with_paths(("Cargo.toml.bak", '+ serde = "1.0"'))
+    assert _has_new_dependencies(diff2) is False
+
+
+def test_has_new_dependencies_ignores_unsupported_ecosystem_manifest():
+    """Un manifiesto de un ecosistema no soportado (aquí, Ruby/Bundler) no
+    debe contar, aunque el nombre también "suene" a fichero de dependencias
+    -- la función es una intersección exacta contra
+    DEPENDENCY_MANIFEST_FILENAMES, no una heurística por parecido."""
+    diff = _diff_with_paths(("Gemfile", '+ gem "rails", "7.0.0"'))
+    assert _has_new_dependencies(diff) is False
+
+
 def test_shortcircuit_handles_skipped_partial_layers():
     """Capas parciales omitidas no influyen en la media ponderada."""
     weights = {"static": 0.50, "deps": 0.20, "reputation": 0.10, "semantic": 0.20}
