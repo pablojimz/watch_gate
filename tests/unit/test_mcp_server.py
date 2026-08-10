@@ -16,7 +16,7 @@ from watchgate.mcp.tools import execute_mcp_tool, get_mcp_tools_list
 
 def test_mcp_tools_list_schema() -> None:
     tools = get_mcp_tools_list()
-    assert len(tools) == 7
+    assert len(tools) == 8
     names = {t.name for t in tools}
     expected_names = {
         "watchgate_analyze_diff",
@@ -26,6 +26,7 @@ def test_mcp_tools_list_schema() -> None:
         "watchgate_query_threat_kb",
         "watchgate_repo_score_history",
         "watchgate_org_metrics",
+        "watchgate_submit_feedback",
     }
     assert names == expected_names
 
@@ -58,7 +59,7 @@ def test_handle_jsonrpc_tools_list() -> None:
     assert resp is not None
     assert resp.id == 3
     tools = resp.result.get("tools", [])
-    assert len(tools) == 7
+    assert len(tools) == 8
 
 
 def test_mcp_tool_precheck() -> None:
@@ -183,7 +184,9 @@ def _seed_org_user_and_key(session, *, org_quota: int = 100_000):
     from watchgate.db.repository import create_api_key, create_organization, create_user
 
     org = create_organization(session, name="Org MCP", monthly_token_quota=org_quota)
-    user = create_user(session, email="mcp@example.com", name="MCP User", org_id=org.id)
+    user = create_user(
+        session, email="mcp@example.com", name="MCP User", role="admin_organizacion", org_id=org.id
+    )
     _api_key, raw_token = create_api_key(session, user_id=user.id, org_id=org.id)
     return org, user, raw_token
 
@@ -378,7 +381,7 @@ def _seed_dashboard_score(tmp_path, monkeypatch, *, repo: str, score: int, semaf
         },
     )
     with dashboard_db.db_session() as conn:
-        dashboard_db.insert_aggregated(conn, result, author_login="octocat")
+        return dashboard_db.insert_aggregated(conn, result, author_login="octocat")
 
 
 def test_repo_score_history_requires_mcp_api_key(monkeypatch) -> None:
@@ -442,4 +445,19 @@ def test_org_metrics_scoped_to_explicit_repos_when_given(monkeypatch, tmp_path) 
     assert not result.isError
     data = json.loads(result.content[0].text)
     assert data["total_prs"] == 1
-    assert data["repos_count"] == 1
+
+
+def test_mcp_tool_submit_feedback(monkeypatch, tmp_path) -> None:
+    _configure_mcp_identity(monkeypatch, tmp_path)
+    score_id = _seed_dashboard_score(
+        tmp_path, monkeypatch, repo="acme/webapp", score=20, semaforo="verde"
+    )
+
+    result = execute_mcp_tool(
+        "watchgate_submit_feedback", {"score_id": score_id, "feedback": "correcto"}
+    )
+    assert not result.isError
+    data = json.loads(result.content[0].text)
+    assert data["status"] == "success"
+    assert data["score_id"] == score_id
+    assert data["feedback"] == "correcto"

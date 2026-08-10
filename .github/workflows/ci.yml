@@ -80,3 +80,47 @@ jobs:
       # Vite, así que como mínimo detecta errores de tipos/compilación antes
       # de fusionar.
       - run: npm run build
+
+  postgres-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: watchgate
+          POSTGRES_PASSWORD: watchgate_password
+          POSTGRES_DB: watchgate_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install poetry
+      - run: poetry install --no-interaction
+      - name: Run pytest on PostgreSQL
+        env:
+          WATCHGATE_DASHBOARD_DATABASE_URL: postgresql://watchgate:watchgate_password@localhost:5432/watchgate_test
+        run: poetry run python -m pytest tests/unit/test_db_postgres.py
+
+  trivy-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker Image
+        run: docker build -f docker/engine-api.Dockerfile -t watchgate-engine:latest .
+      - name: Scan Docker Image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'watchgate-engine:latest'
+          format: 'table'
+          exit-code: '0'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'

@@ -11,7 +11,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import final
 
-import tiktoken
+try:
+    import tiktoken
+except ImportError:
+    tiktoken = None
 
 from watchgate.core.layers._semantic.client import SemanticOutput
 from watchgate.core.models import FileChange, LayerResult, NormalizedDiff
