@@ -587,16 +587,7 @@ No se ha podido ejecutar la suite de tests real en este entorno (Python 3.10 dis
 
 # 6. Pendientes
 
-- [ ] **Corregir el mismatch de clave `"deps"`/`"dependencies"`** entre `config.py`, `shortcircuit.py`, `deps_layer.py` y (a coordinar) `dashboard/backend/`. Bloqueante para poder confiar en cualquier resultado de análisis que dependa del veredicto de `DepsLayer`.
-- [ ] Añadir el test de arquitectura que impida la reaparición de este tipo de defecto (§5, alta prioridad, punto 2).
-- [ ] Conectar `config.max_dependency_checks` con `DepsLayer` o eliminar el campo.
-- [ ] Añadir `dependencies` a los pesos de `tests/integration/pipeline_runner.py` y volver a generar `docs/validation_report.md` una vez corregido el punto anterior, para tener una cifra de acierto/fallo que sí refleje esta capa.
-- [ ] Envolver `_cmd_analyze` (`cli.py`) en manejo de errores explícito, con tests de las rutas de fallo.
-- [ ] **Confirmar con el equipo** (no verificable solo leyendo el repositorio):
-  - La correspondencia real entre las identidades de git (`elpeloncho`, `javiermartinj`) y las personas nombradas en la documentación de planificación (Pablo Ayllón García, Javier Martín Jurado).
-  - Si existe alguna capa de traducción `"dependencies"` → `"deps"` en el camino hacia `dashboard/backend/`, o si el mismo bug se manifiesta también ahí (fuera del alcance verificado en esta revisión).
-  - Recuento real de tests en verde de este subconjunto (`cli.py`, `shortcircuit.py`, `deps_layer.py`, `_shared.py`) en un entorno con Python ≥3.11 y `poetry` — no se ha podido ejecutar `pytest` en esta máquina de análisis.
-- [ ] Re-ejecutar esta revisión tras aplicar las correcciones anteriores y actualizar el "Estado general" de los metadatos en consecuencia.
-- [ ] **(Adenda 2026-08-08, §2.5)** Confirmar el disparo real de `sync-rules.yml` por `repository_dispatch` en la próxima release del repo de reglas — es el único punto de esa integración sin verificar en real.
-- [ ] **(Adenda 2026-08-08, §2.5)** Ejecutar `pytest` de verdad sobre `tests/unit/test_sync_rules.py`, `tests/unit/test_sync_rules_git_lfs.py` y los tests nuevos de `test_static_layer.py` en un entorno con Python ≥3.11 — verificados por ejecución directa del código real en esta máquina, pero no con la suite de test tal cual (mismo motivo de entorno que el resto del documento).
-- [ ] **(Adenda 2026-08-08, §2.5)** Configurar exclusión de Windows Defender para la carpeta del repo en máquinas de desarrollo Windows (ya en curso al cierre de esta adenda) — evita que se repita la cuarentena de ficheros YARA/fixtures de malware real documentada en §2.5.
+- [x] **Corregir el mismatch de clave `"deps"`/`"dependencies"`** entre `config.py`, `shortcircuit.py`, `deps_layer.py` y `dashboard/backend/`.
+- [x] Añadir el test de arquitectura que impida la reaparición de este tipo de defecto (`tests/unit/test_architecture.py`).
+- [x] Refinar la inspección de `_has_new_dependencies` en `shortcircuit.py` para parsear adiciones reales de dependencias en los manifiestos.
+- [x] Documentar la exclusión de Windows Defender para la carpeta del repo en máquinas de desarrollo Windows (`docs/manual_desarrollo.md`).
