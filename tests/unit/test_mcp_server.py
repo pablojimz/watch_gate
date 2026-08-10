@@ -62,6 +62,35 @@ def test_handle_jsonrpc_tools_list() -> None:
     assert len(tools) == 8
 
 
+def test_handle_jsonrpc_invalid_structure_and_method() -> None:
+    # Structure not a dict
+    resp = handle_jsonrpc_request("not a dict")  # type: ignore[arg-type]
+    assert resp is not None
+    assert resp.error["code"] == -32600
+
+    # Unsupported method
+    resp_method = handle_jsonrpc_request({"jsonrpc": "2.0", "id": 10, "method": "unknown/method"})
+    assert resp_method is not None
+    assert resp_method.error["code"] == -32601
+
+    # Notification initialized returns None
+    assert handle_jsonrpc_request({"jsonrpc": "2.0", "method": "notifications/initialized"}) is None
+
+
+def test_handle_jsonrpc_tool_call_internal_error() -> None:
+    with patch("watchgate.mcp.server.execute_mcp_tool", side_effect=ValueError("Fallo interno")):
+        req = {
+            "jsonrpc": "2.0",
+            "id": 99,
+            "method": "tools/call",
+            "params": {"name": "watchgate_precheck"},
+        }
+        resp = handle_jsonrpc_request(req)
+        assert resp is not None
+        assert resp.error["code"] == -32603
+        assert "Fallo interno" in resp.error["message"]
+
+
 def test_mcp_tool_precheck() -> None:
     diff_text = """--- a/test.py
 +++ b/test.py
