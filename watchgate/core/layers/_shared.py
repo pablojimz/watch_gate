@@ -51,6 +51,23 @@ class DependencyChange(BaseModel):
 
 _PKG_JSON_DEP_REGEX = re.compile(r'^\+\s*"([^"]+)":\s*"([^"]+)"')
 _PKG_JSON_SCRIPT_REGEX = re.compile(r'^\+\s*"(preinstall|postinstall|install)":\s*"([^"]+)"')
+_PKG_JSON_NON_DEP_KEYS = frozenset(
+    {
+        "name",
+        "version",
+        "description",
+        "main",
+        "author",
+        "license",
+        "private",
+        "type",
+        "repository",
+        "bugs",
+        "homepage",
+        "keywords",
+        "scripts",
+    }
+)
 
 
 def _is_npm_url_version(version_str: str) -> bool:
@@ -90,6 +107,8 @@ def parse_package_json(diff_hunk: str) -> list[DependencyChange]:
         if dep_match:
             dep_name = dep_match.group(1)
             dep_version = dep_match.group(2)
+            if dep_name in _PKG_JSON_NON_DEP_KEYS:
+                continue
             is_direct = _is_npm_url_version(dep_version)
             changes.append(
                 DependencyChange(
