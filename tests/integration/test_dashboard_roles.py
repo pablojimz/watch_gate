@@ -21,27 +21,18 @@ from watchgate.dashboard.backend import db as database  # noqa: E402
 from watchgate.dashboard.backend.main import create_app  # noqa: E402
 
 
-def _isolate_db_connection_engine(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """`create_app()` dispara, en su `lifespan`, `init_db()` de
-    `watchgate/db/connection.py` (esquema de API keys/agentes, aparte del
-    que gestiona `watchgate/dashboard/backend/db.py` con `sqlite3` crudo).
-    `default_engine` de ese módulo es un singleton construido una sola vez
-    al importarse -- fijar `WATCHGATE_DATABASE_URL` por test no tiene
-    ningún efecto una vez importado, así que sin parchear `default_engine`
-    directamente, cada test de este fichero termina tocando el mismo
-    `.watchgate/app.db` real y compartido del checkout local (no un
-    fixture aislado), exactamente el mismo patrón que ya documenta y evita
-    `tests/integration/test_dashboard_api_keys.py`."""
+def _isolate_db_connection_engine(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     fresh_engine = create_engine(
         f"sqlite:///{tmp_path / 'app.db'}",
         connect_args={"check_same_thread": False},
     )
     monkeypatch.setattr(db_connection, "default_engine", fresh_engine)
+    return fresh_engine
 
 
 @pytest.fixture()
-def client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> TestClient:
-    _isolate_db_connection_engine(monkeypatch, tmp_path)
+def client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[TestClient]:
+    fresh_engine = _isolate_db_connection_engine(monkeypatch, tmp_path)
     db_path = tmp_path / "dashboard.db"
     os.environ["WATCHGATE_DASHBOARD_DB"] = str(db_path)
 
@@ -81,6 +72,8 @@ def client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> TestClient:
     app = create_app()
     with TestClient(app) as test_client:
         yield test_client
+
+    fresh_engine.dispose()
 
 
 def _login(client: TestClient, login: str, role: str) -> None:

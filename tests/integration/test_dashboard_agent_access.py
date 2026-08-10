@@ -40,19 +40,22 @@ def _app_with_fresh_schema(monkeypatch: pytest.MonkeyPatch, tmp_path):
 
     from watchgate.dashboard.backend.main import create_app
 
-    return create_app()
+    return create_app(), fresh_engine
 
 
 @pytest.fixture()
 def app_and_key(monkeypatch: pytest.MonkeyPatch, tmp_path) -> Iterator[tuple]:  # type: ignore[type-arg]
-    app = _app_with_fresh_schema(monkeypatch, tmp_path)
+    app, fresh_engine = _app_with_fresh_schema(monkeypatch, tmp_path)
     app.dependency_overrides[get_current_user] = lambda: User(login="alice")
     with TestClient(app) as human_client:
         created = human_client.post("/api/keys", json={"name": "Agente CI"})
         assert created.status_code == 201, created.text
         raw_token = created.json()["raw_token"]
     app.dependency_overrides.clear()
-    yield app, raw_token
+    try:
+        yield app, raw_token
+    finally:
+        fresh_engine.dispose()
 
 
 def _seed_score(
