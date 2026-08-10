@@ -56,7 +56,8 @@ async def oidc_login(request: Request) -> Response:
         "http://localhost:8000/api/auth/oidc/callback",
     )
     client = oauth.create_client("oidc")
-    return await client.authorize_redirect(request, redirect_uri)
+    res: Response = await client.authorize_redirect(request, redirect_uri)
+    return res
 
 
 @router.get("/callback")

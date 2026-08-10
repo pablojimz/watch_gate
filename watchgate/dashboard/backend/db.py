@@ -337,7 +337,7 @@ def insert_aggregated(
         new_id = int(row["id"])
     else:
         cur = conn.execute(insert_sql, params)
-        new_id = int(cur.lastrowid)
+        new_id = int(cur.lastrowid or 0)
     conn.commit()
     return new_id
 
@@ -377,7 +377,7 @@ def _row_to_score_out(row: Row) -> ScoreOut:
     return ScoreOut.from_aggregated(
         score_id=int(row["id"]),
         result=result,
-        human_feedback=feedback,  # type: ignore[arg-type]
+        human_feedback=feedback,
         author_login=author,
     )
 
@@ -411,7 +411,10 @@ def get_role(conn: DBConnection, user_login: str, repo: str) -> RoleName | None:
         "SELECT role FROM repo_roles WHERE user_login = ? AND repo = ?",
         (normalize_login(user_login), repo),
     ).fetchone()
-    return None if row is None else row["role"]  # type: ignore[return-value]
+    if row is None:
+        return None
+    res_role: str = row["role"]
+    return cast(RoleName, res_role)
 
 
 def upsert_role(conn: DBConnection, user_login: str, repo: str, role: RoleName) -> None:
