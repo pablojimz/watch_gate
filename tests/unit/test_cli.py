@@ -301,6 +301,16 @@ def test_cli_analyze_stdin_valid_patch(capsys):
     assert "score" in data
 
 
+def test_cli_analyze_invalid_yaml_config_returns_error_code(tmp_path, capsys):
+    bad_config = tmp_path / "invalid.yml"
+    bad_config.write_text("weights: [invalid_yaml_structure: {", encoding="utf-8")
+
+    code = main(["analyze", "--config", str(bad_config)])
+    assert code == 2
+    captured = capsys.readouterr()
+    assert "[Error de Configuración]" in captured.err
+
+
 def test_cli_github_annotations_isolated_to_stderr(tmp_git_repo, capsys):
     repo_dir, base_sha, head_sha = tmp_git_repo
 
