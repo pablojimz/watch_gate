@@ -25,5 +25,6 @@ rules:
       exploitability_score: 40
       risk_score: 74
       risk_justification: "DEBUG=True expone codigo fuente y variables locales en tracebacks (secreto se escapa); patron literal exacto (HIGH); el archivo puede ser de desarrollo local nunca desplegado, activacion real depende del entorno de despliegue."
+      finding_type: vulnerability
     patterns:
       - pattern: DEBUG = True

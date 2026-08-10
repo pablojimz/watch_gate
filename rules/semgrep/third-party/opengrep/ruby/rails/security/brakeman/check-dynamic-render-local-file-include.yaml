@@ -39,3 +39,4 @@ rules:
     exploitability_score: 80
     risk_score: 83
     risk_justification: LFI vía render :file; co-ocurrencia de params[...] dentro del contexto, no dataflow real.
+    finding_type: vulnerability

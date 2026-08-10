@@ -52,5 +52,6 @@ rules:
       exploitability_score: 100
       risk_score: 89
       risk_justification: runAsNonRoot con valor false explícito; contenedor corre como root, agrava impacto de cualquier compromiso.
+      finding_type: vulnerability
     languages: [yaml]
     severity: WARNING

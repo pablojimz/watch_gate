@@ -35,3 +35,4 @@ rules:
     exploitability_score: 100
     risk_score: 62
     risk_justification: Mismo caso que variante yaml; mezcla endpoints leves y graves. FALTA DATO proteccion adicional, asumo ausente.
+    finding_type: vulnerability

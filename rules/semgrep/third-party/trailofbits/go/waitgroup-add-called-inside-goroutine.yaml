@@ -22,6 +22,7 @@ rules:
       exploitability_score: 80
       risk_score: 49
       risk_justification: Race entre Add/Wait causa comportamiento incorrecto; bug de concurrencia, no exploit.
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern: |

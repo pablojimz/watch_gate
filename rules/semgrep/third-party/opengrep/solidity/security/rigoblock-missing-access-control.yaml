@@ -20,6 +20,7 @@ rules:
       exploitability_score: 80
       risk_score: 95
       risk_justification: setMultipleAllowances sin onlyOwner; patrón literal exacto de modifier faltante, incidente real citado.
+      finding_type: vulnerability
     patterns:
       - pattern: function setMultipleAllowances(...) {...}
       - pattern-not: function setMultipleAllowances(...) onlyOwner {...}

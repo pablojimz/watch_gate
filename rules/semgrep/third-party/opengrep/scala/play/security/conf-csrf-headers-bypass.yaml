@@ -78,3 +78,4 @@ rules:
     exploitability_score: 100
     risk_score: 66
     risk_justification: bypassHeaders con X-Requested-With/Csrf-Token sin blacklist adecuada; debilita protección CSRF, config siempre activa.
+    finding_type: vulnerability

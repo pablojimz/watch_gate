@@ -42,3 +42,4 @@ rules:
     exploitability_score: 40
     risk_score: 53
     risk_justification: Falta CheckOrigin explicito, pero el default de gorilla/websocket ya valida origen==host; alto FP.
+    finding_type: vulnerability

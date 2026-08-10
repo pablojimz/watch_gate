@@ -31,6 +31,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: Array de bytes literal usado como IV, deteccion estructural inequivoca.
+    finding_type: vulnerability
   severity: WARNING
   languages: [java]
   pattern-either:

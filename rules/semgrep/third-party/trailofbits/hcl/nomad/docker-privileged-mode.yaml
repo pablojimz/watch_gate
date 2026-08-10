@@ -20,6 +20,7 @@ rules:
       exploitability_score: 100
       risk_score: 78
       risk_justification: Contenedor en modo privilegiado; debilita aislamiento, config de infra activa en cada despliegue.
+      finding_type: vulnerability
     pattern-either:
       - patterns:
           - pattern-inside: |

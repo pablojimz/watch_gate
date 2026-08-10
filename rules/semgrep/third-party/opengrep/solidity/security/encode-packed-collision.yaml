@@ -18,6 +18,7 @@ rules:
       exploitability_score: 80
       risk_score: 78
       risk_justification: abi.encodePacked con args de longitud variable; colisión de hash puede romper lógica de auth/whitelist, llamable directamente.
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern-inside: |

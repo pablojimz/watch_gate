@@ -27,6 +27,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: Taint req.*->concat HTML con sanitizador heurístico basado en nombre de función.
+    finding_type: vulnerability
   languages:
   - javascript
   - typescript

@@ -24,6 +24,7 @@ rules:
       exploitability_score: 40
       risk_score: 53
       risk_justification: Capturar el retorno de strlcpy/strlcat es justo el patrón recomendado para detectar truncamiento; heurística muy amplia.
+      finding_type: vulnerability
     message: >-
       The strlcpy() and strlcat() functions return the total length of the
       string they tried to create. For strlcpy() that means the length of

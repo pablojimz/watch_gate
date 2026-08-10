@@ -28,6 +28,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: Taint request/routevar->return de string formateado; XSS reflejado, taint genérico sin sanitizador.
+    finding_type: vulnerability
   languages:
   - python
   severity: WARNING

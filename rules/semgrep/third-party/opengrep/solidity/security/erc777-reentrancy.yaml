@@ -19,6 +19,7 @@ rules:
       exploitability_score: 80
       risk_score: 74
       risk_justification: Solo detecta llamada a tokensReceived sin verificar orden CEI; heurística muy amplia, coincide con uso normal.
+      finding_type: vulnerability
     patterns:
       - pattern: $X.tokensReceived(...);
     languages:

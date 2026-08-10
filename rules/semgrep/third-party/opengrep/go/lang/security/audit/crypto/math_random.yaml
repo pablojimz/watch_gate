@@ -20,6 +20,7 @@ rules:
     exploitability_score: 80
     risk_score: 52
     risk_justification: Uso de math/rand detectado sin verificar contexto de seguridad; heuristica muy amplia, math/rand se usa tambien para fines no criptograficos.
+    finding_type: vulnerability
   message: Do not use `math/rand`. Use `crypto/rand` instead.
   languages: [go]
   severity: WARNING

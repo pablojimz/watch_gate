@@ -28,6 +28,7 @@ rules:
     exploitability_score: 40
     risk_score: 74
     risk_justification: IMDSv1 permitido en instancia EC2; pivote SSRF hacia robo de credenciales, requiere cadena adicional.
+    finding_type: vulnerability
   pattern-either:
     # Legacy rule for backwards compatibility
   - patterns:

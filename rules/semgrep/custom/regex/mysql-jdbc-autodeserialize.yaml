@@ -25,5 +25,6 @@ rules:
       exploitability_score: 40
       risk_score: 85
       risk_justification: "autoDeserialize=true permite RCE si el servidor MySQL es malicioso o hay MITM (CVEs confirmadas); regex muy especifica e inequivoca (HIGH); requiere ademas un servidor/atacante en posicion de controlar la respuesta, no es automatico."
+      finding_type: vulnerability
     patterns:
       - pattern-regex: (?i)jdbc:mysql://.+[?&]autoDeserialize=true

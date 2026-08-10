@@ -32,6 +32,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: DES/DES3 exacto, cifrado roto/débil conocido.
+    finding_type: vulnerability
   options:
     symbolic_propagation: true
   severity: WARNING

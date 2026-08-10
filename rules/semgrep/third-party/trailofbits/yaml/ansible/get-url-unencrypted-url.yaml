@@ -19,6 +19,7 @@ rules:
       exploitability_score: 100
       risk_score: 89
       risk_justification: Descarga genérica sin cifrar y sin checksum (regla ya excluye casos con checksum); impacto depende del uso posterior del archivo.
+      finding_type: vulnerability
     patterns:
       - pattern-inside: |
           $GETURL:

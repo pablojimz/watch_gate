@@ -29,6 +29,7 @@ rules:
     exploitability_score: 80
     risk_score: 89
     risk_justification: Taint real event->exec/spawn, event suele ser controlable por invocador.
+    finding_type: vulnerability
   languages:
   - javascript
   - typescript

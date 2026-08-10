@@ -26,6 +26,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: Net::Telnet.new / Net::SSH::Telnet.new, constructor exclusivo de protocolo sin cifrar.
+    finding_type: vulnerability
   languages:
   - ruby
   pattern-either:

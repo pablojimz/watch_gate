@@ -26,6 +26,7 @@ rules:
     exploitability_score: 80
     risk_score: 40
     risk_justification: bind a 0.0.0.0/'::'/''; uso muy frecuente e intencional en servidores, severidad INFO del propio autor.
+    finding_type: vulnerability
   languages: [python]
   severity: INFO
   pattern-either:

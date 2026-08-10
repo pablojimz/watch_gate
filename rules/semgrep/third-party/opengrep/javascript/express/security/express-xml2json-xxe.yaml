@@ -31,6 +31,7 @@ rules:
     exploitability_score: 80
     risk_score: 83
     risk_justification: 'FALTA DATO: mismo caso xml2json/expat, asumo comportamiento vulnerable por defecto.'
+    finding_type: vulnerability
   languages:
   - javascript
   - typescript

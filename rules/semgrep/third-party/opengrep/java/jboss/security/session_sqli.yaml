@@ -52,3 +52,4 @@ rules:
     exploitability_score: 40
     risk_score: 62
     risk_justification: $X es parametro de metodo cualquiera, sin confirmar origen externo no confiable.
+    finding_type: vulnerability

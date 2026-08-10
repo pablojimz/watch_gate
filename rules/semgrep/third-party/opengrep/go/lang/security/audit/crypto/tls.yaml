@@ -28,6 +28,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: CipherSuite debil listado explicitamente en config TLS; constantes exactas.
+    finding_type: vulnerability
   languages: [go]
   severity: WARNING
   pattern-either:

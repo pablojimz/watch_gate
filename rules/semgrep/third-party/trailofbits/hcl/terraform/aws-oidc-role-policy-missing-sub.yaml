@@ -22,6 +22,7 @@ rules:
       exploitability_score: 100
       risk_score: 100
       risk_justification: Falta condición `sub`; cualquier repo GitHub puede asumir el rol AWS, bypass total de autorización.
+      finding_type: vulnerability
     patterns:
       - pattern-inside: |
           {

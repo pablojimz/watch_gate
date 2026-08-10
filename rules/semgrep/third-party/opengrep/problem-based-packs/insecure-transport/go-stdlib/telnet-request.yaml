@@ -23,6 +23,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: Llamada exacta a telnet.DialToAndCall, protocolo sin cifrar por diseno.
+    finding_type: vulnerability
   languages:
   - go
   pattern: |

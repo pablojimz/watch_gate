@@ -24,6 +24,7 @@ rules:
     exploitability_score: 80
     risk_score: 83
     risk_justification: PathParam directo a new File; no valida si hay sanitizacion intermedia en el cuerpo.
+    finding_type: vulnerability
   message: >-
     Detected a potential path traversal. A malicious actor
     could control the location of this file, to include going backwards

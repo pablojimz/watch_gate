@@ -26,6 +26,7 @@ rules:
     exploitability_score: 80
     risk_score: 52
     risk_justification: Uso de MD5; función exacta pero MD5 se usa mayoritariamente para fines no criptográficos (cache/checksum).
+    finding_type: vulnerability
   languages:
   - ruby
   severity: WARNING

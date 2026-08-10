@@ -95,6 +95,7 @@ rules:
     exploitability_score: 40
     risk_score: 73
     risk_justification: Taint os.environ/argv->create_subprocess_shell; RCE condicionada a que el origen sea realmente hostil.
+    finding_type: vulnerability
   languages:
   - python
   severity: ERROR

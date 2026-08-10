@@ -19,6 +19,7 @@ rules:
       exploitability_score: 80
       risk_score: 89
       risk_justification: _transfer sin validar sender/approved; exclusiones cubren checks legítimos comunes, llamable vía transferFrom público.
+      finding_type: vulnerability
     patterns:
       - pattern-inside: |
           function _transfer(...) {

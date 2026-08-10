@@ -27,6 +27,7 @@ rules:
     exploitability_score: 80
     risk_score: 78
     risk_justification: Taint real HttpServletRequest -> DirContext.search con exclusion de filtro literal.
+    finding_type: vulnerability
   severity: WARNING
   languages: [java]
   mode: taint

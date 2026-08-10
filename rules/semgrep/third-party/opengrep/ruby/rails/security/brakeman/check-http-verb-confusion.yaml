@@ -39,3 +39,4 @@ rules:
     exploitability_score: 80
     risk_score: 60
     risk_justification: if request.get? sin elsif; confusión de verbos HTTP puede saltar controles según contenido de ramas.
+    finding_type: vulnerability

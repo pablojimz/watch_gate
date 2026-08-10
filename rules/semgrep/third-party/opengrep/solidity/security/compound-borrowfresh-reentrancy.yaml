@@ -21,6 +21,7 @@ rules:
       exploitability_score: 40
       risk_score: 79
       risk_justification: Update de estado tras doTransferOut; reentrancy clásica explotada realmente (Ola Finance), requiere callback malicioso.
+      finding_type: vulnerability
     patterns:
       - pattern-inside: |
           function borrowFresh(...) {

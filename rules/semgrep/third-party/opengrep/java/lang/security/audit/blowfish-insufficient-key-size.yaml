@@ -27,6 +27,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: Comparacion numerica exacta de tamano de clave, sin ambiguedad.
+    finding_type: vulnerability
   message: >-
     Using less than 128 bits for Blowfish is considered insecure. Use 128 bits
     or more, or switch to use AES instead.

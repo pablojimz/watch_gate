@@ -36,3 +36,4 @@ rules:
     exploitability_score: 40
     risk_score: 30
     risk_justification: Uso de campo Director en ReverseProxy; patron estandar pre-Go1.20, mayoria de usos legitimos, riesgo indirecto de headers.
+    finding_type: vulnerability

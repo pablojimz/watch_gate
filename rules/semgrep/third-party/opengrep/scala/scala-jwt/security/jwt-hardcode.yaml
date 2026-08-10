@@ -30,6 +30,7 @@ rules:
     exploitability_score: 100
     risk_score: 89
     risk_justification: Secreto HMAC hardcodeado literal en Algorithm.HMAC*; expuesto en código fuente siempre.
+    finding_type: vulnerability
   pattern-either:
   - pattern: |
       com.auth0.jwt.algorithms.Algorithm.HMAC256("...");

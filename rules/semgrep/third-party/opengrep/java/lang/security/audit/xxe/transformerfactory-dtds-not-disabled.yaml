@@ -33,6 +33,7 @@ rules:
       exploitability_score: 40
       risk_score: 79
       risk_justification: Taint de ausencia de hardening en TransformerFactory; requiere XML externo no confiable.
+      finding_type: vulnerability
     message: DOCTYPE declarations are enabled for this TransformerFactory. This is vulnerable to XML external entity attacks. Disable this by setting the attributes "accessExternalDTD" and "accessExternalStylesheet" to "".
     mode: taint
     pattern-sources:

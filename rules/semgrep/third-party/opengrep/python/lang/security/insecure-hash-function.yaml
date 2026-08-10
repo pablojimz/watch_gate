@@ -33,6 +33,7 @@ rules:
     exploitability_score: 80
     risk_score: 52
     risk_justification: hashlib.new('MD4'/'MD5') por regex; patrón amplio de hashlib genérico, coincide con usos no-seguridad frecuentes.
+    finding_type: vulnerability
   languages: [python]
   severity: WARNING
   pattern-either:

@@ -26,6 +26,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: Tamaño de clave RSA <2048 vía comparación numérica exacta; debilita cifrado.
+    finding_type: vulnerability
   patterns:
   - pattern-either:
     - pattern: OpenSSL::PKey::RSA.generate($SIZE,...)

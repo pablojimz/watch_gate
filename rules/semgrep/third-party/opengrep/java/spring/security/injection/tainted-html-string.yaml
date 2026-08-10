@@ -34,6 +34,7 @@ rules:
     exploitability_score: 80
     risk_score: 78
     risk_justification: Taint real anotaciones Spring, sink ResponseEntity, sanitizadores HTML definidos.
+    finding_type: vulnerability
   mode: taint
   pattern-sources:
   - label: INPUT

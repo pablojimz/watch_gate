@@ -28,6 +28,7 @@ rules:
     exploitability_score: 80
     risk_score: 95
     risk_justification: algorithm='none' literal exacto; permite forjar tokens y bypass total de verificación de firma JWT.
+    finding_type: vulnerability
   languages: [python]
   severity: ERROR
   pattern-either:

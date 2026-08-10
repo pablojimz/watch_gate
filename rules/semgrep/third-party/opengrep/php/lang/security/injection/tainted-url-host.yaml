@@ -36,6 +36,7 @@ rules:
     exploitability_score: 40
     risk_score: 62
     risk_justification: SSRF; solo detecta construcción de URL con host tainted, no confirma uso en llamada de red.
+    finding_type: vulnerability
   mode: taint
   pattern-sources:
   - patterns:

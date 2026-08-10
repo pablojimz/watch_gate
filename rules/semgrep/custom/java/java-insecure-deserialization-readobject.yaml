@@ -26,6 +26,7 @@ rules:
       exploitability_score: 80
       risk_score: 83
       risk_justification: "readObject() sobre datos no confiables permite RCE via gadget chain; sin taint tracking del origen del stream; ejecucion normal."
+      finding_type: vulnerability
     patterns:
       - pattern: $OIS.readObject()
       - pattern-not-inside: |

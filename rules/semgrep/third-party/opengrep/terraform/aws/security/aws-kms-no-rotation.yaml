@@ -56,3 +56,4 @@ rules:
     exploitability_score: 100
     risk_score: 66
     risk_justification: Rotacion de clave KMS deshabilitada; heuristica no distingue claves asimetricas (rotacion no aplica), posibles FP.
+    finding_type: vulnerability

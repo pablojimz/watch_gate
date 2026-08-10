@@ -24,6 +24,7 @@ rules:
       exploitability_score: 80
       risk_score: 83
       risk_justification: "system()/popen() con dato no literal permite inyeccion de comandos; sin verificacion de origen del dato; se activa en ejecucion normal."
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern: system($CMD)

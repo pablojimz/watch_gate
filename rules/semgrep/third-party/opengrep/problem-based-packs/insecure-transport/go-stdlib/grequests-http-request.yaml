@@ -24,6 +24,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: Llamada a funcion http con literal http:// exacto.
+    finding_type: vulnerability
   languages: [go]
   patterns:
   - pattern-either:

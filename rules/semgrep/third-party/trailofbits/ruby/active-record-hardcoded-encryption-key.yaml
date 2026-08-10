@@ -19,6 +19,7 @@ rules:
       exploitability_score: 100
       risk_score: 89
       risk_justification: Clave de cifrado ActiveRecord hardcodeada; secreto expuesto en código sin necesitar ejecución.
+      finding_type: vulnerability
     pattern-either:
       - pattern: config.active_record.encryption.primary_key = "..."
       - pattern: config.active_record.encryption.primary_key = [..., "...", ...]

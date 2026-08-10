@@ -19,6 +19,7 @@ rules:
       exploitability_score: 80
       risk_score: 95
       risk_justification: Desactiva validaciones de respuesta SAML; permite forjar/replay de aserciones, bypass de autenticación equivalente a RCE de auth.
+      finding_type: vulnerability
     pattern-either:
       - pattern: "OneLogin::RubySaml::Response.new($RESPONSE, {..., skip_audience: true, ...})"
       - pattern: "OneLogin::RubySaml::Response.new($RESPONSE, {..., skip_authnstatement: true, ...})"

@@ -24,6 +24,7 @@ rules:
     exploitability_score: 40
     risk_score: 42
     risk_justification: 'Mismo problema: parametro String generico sin confirmar origen web.'
+    finding_type: vulnerability
   severity: WARNING
   languages: [java]
   pattern-either:

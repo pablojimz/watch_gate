@@ -29,6 +29,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: bits<2048 comparación numérica exacta (pycryptodome).
+    finding_type: vulnerability
   options:
     symbolic_propagation: true
   languages: [python]

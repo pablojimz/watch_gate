@@ -26,6 +26,7 @@ rules:
     exploitability_score: 40
     risk_score: 64
     risk_justification: Deno.run = command injection, pero fuente es cualquier parámetro de función.
+    finding_type: vulnerability
   languages:
   - javascript
   - typescript

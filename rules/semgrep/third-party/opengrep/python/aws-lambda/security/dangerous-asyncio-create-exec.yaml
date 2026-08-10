@@ -55,6 +55,7 @@ rules:
     exploitability_score: 80
     risk_score: 83
     risk_justification: Taint event->asyncio subprocess_exec; RCE si event es de atacante; no distingue tipo de trigger Lambda.
+    finding_type: vulnerability
   languages:
   - python
   severity: ERROR

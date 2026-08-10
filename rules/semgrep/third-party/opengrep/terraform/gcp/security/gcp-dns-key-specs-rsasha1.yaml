@@ -56,5 +56,6 @@ rules:
     exploitability_score: 100
     risk_score: 78
     risk_justification: DNSSEC con algoritmo RSASHA1 debil; literal exacto, aunque requiere que ambas claves lo usen (posibles falsos negativos, no afecta confianza de lo detectado).
+    finding_type: vulnerability
   languages: [hcl]
   severity: WARNING

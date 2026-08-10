@@ -22,6 +22,7 @@ rules:
       exploitability_score: 100
       risk_score: 68
       risk_justification: "FALTA DATO: idem, 'token'/VAULT_TOKEN puede ser secrets.* legítimo; conservador=secreto expuesto."
+      finding_type: vulnerability
     patterns:
       - pattern-inside: |
           uses: "$ACTION"

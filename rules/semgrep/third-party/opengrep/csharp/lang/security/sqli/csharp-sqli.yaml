@@ -56,6 +56,7 @@ rules:
       exploitability_score: 40
       risk_score: 62
       risk_justification: Taint hacia SqlCommand/CommandText; fuente es cualquier string param, sin taint real a HTTP.
+      finding_type: vulnerability
     languages:
       - csharp
     severity: ERROR

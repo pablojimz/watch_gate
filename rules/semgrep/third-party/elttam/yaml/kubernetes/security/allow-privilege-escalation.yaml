@@ -61,5 +61,6 @@ rules:
       exploitability_score: 100
       risk_score: 89
       risk_justification: Falta allowPrivilegeEscalation:false (valor por defecto inseguro); habilita escalada vía binarios setuid/setgid dentro del contenedor.
+      finding_type: vulnerability
     languages: [yaml]
     severity: WARNING

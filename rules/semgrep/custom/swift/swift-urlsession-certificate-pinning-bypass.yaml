@@ -26,5 +26,6 @@ rules:
       exploitability_score: 80
       risk_score: 60
       risk_justification: "Confianza incondicional en el certificado del servidor permite MITM (TLS apagado); patron literal muy especifico, variantes de bypass no capturadas (MEDIUM); ejecucion normal."
+      finding_type: vulnerability
     patterns:
       - pattern: 'completionHandler(.useCredential, URLCredential(trust: challenge.protectionSpace.serverTrust!))'

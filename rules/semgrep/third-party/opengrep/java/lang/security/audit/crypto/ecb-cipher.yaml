@@ -24,6 +24,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: Regex ECB sobre literal de modo cifrado, preciso.
+    finding_type: vulnerability
   message: >-
     Cipher in ECB mode is detected. ECB mode produces the same output for the same
     input each time

@@ -21,6 +21,7 @@ rules:
       exploitability_score: 80
       risk_score: 49
       risk_justification: Escritura concurrente en map provoca panic fatal (DoS) si se activa; bug de concurrencia.
+      finding_type: vulnerability
     patterns:
       - pattern: |
           $MAP[$KEY] = $VALUE

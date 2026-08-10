@@ -20,6 +20,7 @@ rules:
       exploitability_score: 80
       risk_score: 56
       risk_justification: 'httponly/secure false son claramente inseguros, pero incluir same_site: :lax (default razonable) reduce precisión del patrón.'
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern-inside: cookies[$ANY] = ...

@@ -24,6 +24,7 @@ rules:
     exploitability_score: 80
     risk_score: 83
     risk_justification: Taint flask.request->exec(); RCE directa vía código de atacante.
+    finding_type: vulnerability
   pattern-either:
   - patterns:
     - pattern: exec(...)

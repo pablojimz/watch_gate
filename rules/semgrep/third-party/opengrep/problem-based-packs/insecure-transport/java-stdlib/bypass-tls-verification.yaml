@@ -26,6 +26,7 @@ rules:
     exploitability_score: 80
     risk_score: 60
     risk_justification: Excluye solo si checkServerTrusted lanza 2 excepciones concretas; no valida logica real de verificacion segura.
+    finding_type: vulnerability
   languages: [java]
   patterns:
   - pattern: |

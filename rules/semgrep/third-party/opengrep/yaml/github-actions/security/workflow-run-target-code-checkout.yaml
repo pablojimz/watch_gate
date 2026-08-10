@@ -35,6 +35,7 @@ rules:
     exploitability_score: 40
     risk_score: 73
     risk_justification: Checkout de codigo de PR en workflow_run con acceso a secretos; requiere un paso posterior que ejecute ese codigo, no confirmado por el patron.
+    finding_type: vulnerability
   patterns:
   - pattern-inside: |
       on:

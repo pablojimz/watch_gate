@@ -19,6 +19,7 @@ rules:
       exploitability_score: 80
       risk_score: 83
       risk_justification: Chequeo de allowance en posición/orden incorrecto en burnFrom; permite quemar tokens ajenos, incidente real citado.
+      finding_type: vulnerability
     patterns:
       - pattern-inside: |
           function $BURN(..., address $FROM, ...) {

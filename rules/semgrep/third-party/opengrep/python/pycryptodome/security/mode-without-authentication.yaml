@@ -28,6 +28,7 @@ rules:
     exploitability_score: 80
     risk_score: 60
     risk_justification: AES con CBC/CTR/CFB/OFB sin HMAC.new inmediato después; puede existir autenticación por otra vía no detectada.
+    finding_type: vulnerability
   patterns:
   - pattern-either:
     - patterns:

@@ -22,6 +22,7 @@ rules:
       exploitability_score: 80
       risk_score: 55
       risk_justification: RNG de NumPy en Dataset causa augmentations duplicadas; bug de calidad ML, no vulnerabilidad de seguridad real.
+      finding_type: vulnerability
     patterns:
       - pattern: |
           class $X(torch.utils.data.Dataset):

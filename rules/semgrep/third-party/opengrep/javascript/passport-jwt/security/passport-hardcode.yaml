@@ -35,6 +35,7 @@ rules:
     exploitability_score: 100
     risk_score: 89
     risk_justification: Secreto literal en clientSecret/secretOrKey pasado a estrategia passport-*, expuesto en código.
+    finding_type: vulnerability
   languages:
   - javascript
   - typescript

@@ -32,6 +32,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: Blowfish exacto vía Cryptodome/Crypto.Cipher.
+    finding_type: vulnerability
   options:
     symbolic_propagation: true
   severity: WARNING

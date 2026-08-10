@@ -23,6 +23,7 @@ rules:
       exploitability_score: 100
       risk_score: 66
       risk_justification: "Contenedor corre como root, amplia el radio de una vulnerabilidad de escape (candado roto, no explotable por si sola); heuristica estructural sobre ausencia de USER; se aplica en cada build sin intervencion."
+      finding_type: vulnerability
     patterns:
       - pattern: |
           FROM $IMAGE

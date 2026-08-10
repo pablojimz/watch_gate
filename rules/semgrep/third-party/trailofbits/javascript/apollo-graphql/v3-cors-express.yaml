@@ -25,6 +25,7 @@ rules:
       exploitability_score: 80
       risk_score: 72
       risk_justification: Falta config CORS, default wildcard; no descarta CORS aplicado por middleware externo no visible al patrón.
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern-inside: |
@@ -65,6 +66,7 @@ rules:
       exploitability_score: 80
       risk_score: 78
       risk_justification: Taint mode con heurísticas precisas (origin true, regex sin escapar/ancla, 'null'); CORS mal configurado clásico.
+      finding_type: vulnerability
     mode: taint
 
     pattern-sources:

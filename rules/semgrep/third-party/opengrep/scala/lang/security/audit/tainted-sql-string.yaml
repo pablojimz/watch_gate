@@ -29,6 +29,7 @@ rules:
     exploitability_score: 40
     risk_score: 62
     risk_justification: Taint hacia concatenación SQL desde param de función tipo controlador; fuente genérica, no confirma exposición HTTP real.
+    finding_type: vulnerability
   pattern-sources:
   - patterns:
     - pattern: $PARAM

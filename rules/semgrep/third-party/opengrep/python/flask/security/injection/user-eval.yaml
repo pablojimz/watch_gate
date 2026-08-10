@@ -24,6 +24,7 @@ rules:
     exploitability_score: 80
     risk_score: 83
     risk_justification: eval() con datos de request Flask, RCE directa vía taint sin sanitizers.
+    finding_type: vulnerability
   pattern-either:
   - patterns:
     - pattern: eval(...)

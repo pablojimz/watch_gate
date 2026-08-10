@@ -40,6 +40,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: 'XSS: event vuelca en body de respuesta HTML de Lambda.'
+    finding_type: vulnerability
   languages:
   - python
   severity: WARNING

@@ -23,6 +23,7 @@ rules:
       exploitability_score: 100
       risk_score: 83
       risk_justification: Trust policy OIDC de GitHub sin condition de repo; cualquier repo de GitHub puede asumir el rol.
+      finding_type: vulnerability
     message: "`$POLICY` is missing a `condition` block which scopes users of this policy to specific GitHub repositories. Without this, `$POLICY` is open to all users on GitHub. Add a `condition` block on the variable `token.actions.githubusercontent.com:sub` which scopes it to prevent this."
     languages:
       - hcl
