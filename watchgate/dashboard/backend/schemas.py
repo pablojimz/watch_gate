@@ -48,6 +48,13 @@ class ScoreOut(BaseModel):
     timestamp: str
     author_login: str | None = None
     human_feedback: FeedbackValue | None = None
+    # Conteo de hallazgos por naturaleza ("malicioso"/"vulnerabilidad"/
+    # "incertidumbre") agregado de TODAS las capas de la PR -- mismo campo
+    # y misma semántica que AggregatedResult.threat_summary, ya usado en
+    # el comentario de PR y la salida de consola (ver comment_template.py
+    # / formatters/console.py), para que el dashboard muestre el mismo
+    # desglose 🚨/⚠️/❓.
+    threat_summary: dict[str, int] = Field(default_factory=dict)
 
     @classmethod
     def from_aggregated(
@@ -68,6 +75,7 @@ class ScoreOut(BaseModel):
             timestamp=result.timestamp,
             author_login=author_login,
             human_feedback=human_feedback,
+            threat_summary=result.threat_summary,
         )
 
 
