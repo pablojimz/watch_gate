@@ -34,7 +34,7 @@ _TEMPLATE_SOURCE = (
     "{% endif %}\n"
     "{% for name, result in layer_results.items() -%}\n"
     "{{ name | capitalize }}: {{ result.risk_score }}/100  "
-    "(peso {{ weights_used.get(name, 0) }})"
+    "(peso {{ effective_weights.get(name, weights_used.get(name, 0)) }})"
     "{% if result.skipped %} — omitida: {{ result.skip_reason }}{% endif %}\n"
     "{% endfor %}\n"
     "{%- if 'semantic' in layer_results and not layer_results['semantic'].skipped %}\n"
@@ -56,6 +56,7 @@ def render_comment(result: AggregatedResult) -> str:
         score=result.score,
         layer_results=result.layer_results,
         weights_used=result.weights_used,
+        effective_weights=result.effective_weights or result.weights_used,
         recomendacion=_RECOMENDACION[result.semaforo],
         threat_summary=result.threat_summary,
     )

@@ -9,7 +9,7 @@ import sqlite3
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import final
+from typing import Any, final
 
 try:
     import tiktoken
