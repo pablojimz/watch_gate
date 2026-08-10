@@ -14,12 +14,14 @@ from watchgate.core.diffparser import parse_diff, parse_diff_from_text
 from watchgate.core.models import AggregatedResult, Finding, LayerResult
 from watchgate.core.pipeline import run_full_analysis
 from watchgate.core.rag.retriever import retrieve_relevant_context
+from watchgate.mcp.auth import open_session, resolve_mcp_identity
 from watchgate.mcp.schemas import (
     McpTextContent,
     McpToolCallResult,
     McpToolDefinition,
     McpToolParameterSchema,
 )
+from watchgate.service.quota import QuotaService
 
 TOOLS: list[McpToolDefinition] = [
     McpToolDefinition(
@@ -188,6 +190,38 @@ def execute_mcp_tool(name: str, arguments: dict[str, Any] | None) -> McpToolCall
         )
 
 
+def _run_analysis_with_optional_quota(
+    diff: Any, metadata: dict[str, Any], config: WatchGateConfig
+) -> AggregatedResult:
+    """Ejecuta el análisis real -- por `QuotaService` si `WATCHGATE_MCP_API_KEY`
+    resuelve una identidad válida (cuota mensual respetada, coste registrado,
+    `org_id` propagado al RAG distribuido, igual que la API REST de agentes),
+    o directo si no hay identidad configurada (uso local sin organización,
+    sin límites -- el comportamiento de siempre).
+
+    Hallazgo real de revisión: antes esta tool llamaba a `run_full_analysis`
+    siempre directo, sin pasar nunca por `QuotaService` -- ningún límite de
+    presupuesto mensual ni `org_id` que aislara el feedback humano del RAG
+    distribuido entre organizaciones, a diferencia de la API REST de agentes
+    (`/api/v1/agent/*`), que sí lo hacía."""
+    with open_session() as session:
+        identity = resolve_mcp_identity(session)
+        if identity is None:
+            return run_full_analysis(diff=diff, metadata=metadata, config=config)
+
+        api_key, user, org = identity
+        quota_service = QuotaService(session)
+        result, _is_degraded = quota_service.analyze_with_quota(
+            diff=diff,
+            metadata=metadata,
+            config=config,
+            org_id=org.id,
+            user_id=user.id,
+            agent_id=api_key.default_agent_name,
+        )
+        return result
+
+
 def _handle_analyze_diff(args: dict[str, Any]) -> McpToolCallResult:
     diff_text = args.get("diff_text")
     repo_path = args.get("repo_path", ".")
@@ -202,7 +236,7 @@ def _handle_analyze_diff(args: dict[str, Any]) -> McpToolCallResult:
         head = args.get("head", "HEAD")
         diff = parse_diff(repo_path=repo_path, base_sha=base, head_sha=head)
 
-    analysis_res = run_full_analysis(diff=diff, metadata=metadata, config=config)
+    analysis_res = _run_analysis_with_optional_quota(diff, metadata, config)
     guidance = build_agent_guidance(analysis_res)
 
     output = {
@@ -322,10 +356,10 @@ def _handle_verify_fix(args: dict[str, Any]) -> McpToolCallResult:
     config = load_config()
 
     orig_diff_obj = parse_diff_from_text(diff_text=original_diff, repo_path=repo_path)
-    orig_res = run_full_analysis(diff=orig_diff_obj, metadata={}, config=config)
+    orig_res = _run_analysis_with_optional_quota(orig_diff_obj, {}, config)
 
     cand_diff_obj = parse_diff_from_text(diff_text=candidate_diff, repo_path=repo_path)
-    cand_res = run_full_analysis(diff=cand_diff_obj, metadata={}, config=config)
+    cand_res = _run_analysis_with_optional_quota(cand_diff_obj, {}, config)
 
     orig_findings: dict[str, Finding] = {}
     for layer in orig_res.layer_results.values():
@@ -365,7 +399,22 @@ def _handle_query_threat_kb(args: dict[str, Any]) -> McpToolCallResult:
     query = args.get("query", "")
     k = int(args.get("k", 3))
 
-    fragments = retrieve_relevant_context(diff_summary=query, k=k)
+    # Hallazgo real de revisión: sin `org_id`, `retrieve_relevant_context`
+    # consulta la colección de feedback humano SIN filtrar -- en RAG
+    # distribuido (`WATCHGATE_CHROMA_URL` compartido entre organizaciones),
+    # esta tool devolvía el feedback de TODAS las organizaciones mezclado,
+    # sin el aislamiento que ya tiene la API REST (`quota.py`). El corpus
+    # público (`attack_patterns`) sigue sin filtrar nunca -- es
+    # intencionalmente compartido, esto solo afecta al feedback propio.
+    with open_session() as session:
+        identity = resolve_mcp_identity(session)
+        # `.id` leído DENTRO del `with`: fuera, con la sesión ya cerrada,
+        # acceder a un atributo de un objeto ORM expirado/detached lanza
+        # `DetachedInstanceError` -- bug real que se coló aquí mismo en la
+        # primera versión de este fix, atrapado por el test de este caso.
+        org_id = identity[2].id if identity is not None else None
+
+    fragments = retrieve_relevant_context(diff_summary=query, k=k, org_id=org_id)
 
     if not fragments:
         no_frag_msg = (
