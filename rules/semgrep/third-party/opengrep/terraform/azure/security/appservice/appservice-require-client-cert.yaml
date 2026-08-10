@@ -45,5 +45,6 @@ rules:
     exploitability_score: 100
     risk_score: 45
     risk_justification: Falta mTLS de cliente; la mayoria de apps no usan este mecanismo, heuristica amplia.
+    finding_type: vulnerability
   languages: [hcl]
   severity: INFO

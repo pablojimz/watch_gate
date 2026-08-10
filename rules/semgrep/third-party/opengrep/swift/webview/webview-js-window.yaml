@@ -26,6 +26,7 @@ rules:
     exploitability_score: 80
     risk_score: 45
     risk_justification: Higiene de configuración WebView; regex de exclusión frágil (comentarios nosemgrep del propio autor).
+    finding_type: vulnerability
   languages:
   - swift
   patterns:

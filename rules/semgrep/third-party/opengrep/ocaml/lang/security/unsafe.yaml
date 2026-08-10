@@ -52,3 +52,4 @@ rules:
       exploitability_score: 40
       risk_score: 42
       risk_justification: Lista amplia de funciones Unsafe.*, muchas con uso legítimo en código de rendimiento.
+      finding_type: vulnerability

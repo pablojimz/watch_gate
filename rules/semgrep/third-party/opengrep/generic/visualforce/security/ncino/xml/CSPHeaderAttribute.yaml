@@ -30,6 +30,7 @@ rules:
       exploitability_score: 100
       risk_score: 72
       risk_justification: Falta cspHeader=true en apex:page; debilita mitigación XSS, config siempre activa.
+      finding_type: vulnerability
     patterns:
       - pattern: <apex:page...>...</apex:page>
       - pattern-not: <apex:page...cspHeader="true"...>...</apex:page>

@@ -20,6 +20,7 @@ rules:
       exploitability_score: 80
       risk_score: 45
       risk_justification: Heurística genérica de nil-check tras llamada; posible panic, patrón amplio ($FOO.$BAR cualquiera).
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern: |

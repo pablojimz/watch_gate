@@ -19,6 +19,7 @@ rules:
       exploitability_score: 100
       risk_score: 89
       risk_justification: Token de Vault hardcodeado en provider Terraform; secreto expuesto en repo/estado.
+      finding_type: vulnerability
     patterns:
       - pattern-inside: provider "vault" { ... }
       - pattern: token = "..."

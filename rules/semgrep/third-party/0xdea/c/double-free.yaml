@@ -26,6 +26,7 @@ rules:
       exploitability_score: 80
       risk_score: 83
       risk_justification: free() duplicado sin reasignación intermedia; corrupción de memoria clásica y explotable.
+      finding_type: vulnerability
     message: >-
       The software calls free() twice on the same memory address, potentially  leading to memory corruption. This corruption can cause the program to  crash or cause two later calls to malloc() to return the same pointer.
     severity: ERROR

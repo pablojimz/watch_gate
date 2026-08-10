@@ -36,3 +36,4 @@ rules:
     exploitability_score: 80
     risk_score: 60
     risk_justification: Uso de :except en skip_before_action (lista negra); patrón exacto pero no siempre inseguro.
+    finding_type: vulnerability

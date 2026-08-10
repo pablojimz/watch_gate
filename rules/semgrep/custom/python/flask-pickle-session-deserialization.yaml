@@ -25,6 +25,7 @@ rules:
       exploitability_score: 40
       risk_score: 73
       risk_justification: "pickle.loads() sobre cookie/sesion/request permite RCE si el atacante controla los bytes; la explotabilidad real depende de que la clave de firma este comprometida o el backend no este firmado, condicion no garantizada por defecto en Flask."
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern: pickle.loads(request.cookies.get(...))

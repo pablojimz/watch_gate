@@ -41,3 +41,4 @@ rules:
     exploitability_score: 100
     risk_score: 78
     risk_justification: Tags de imagen mutables; equivalente a dependencia sin pin de integridad, literal exacto.
+    finding_type: vulnerability

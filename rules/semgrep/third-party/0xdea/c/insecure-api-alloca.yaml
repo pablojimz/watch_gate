@@ -25,6 +25,7 @@ rules:
       exploitability_score: 40
       risk_score: 62
       risk_justification: alloca() sin bounds checking; requiere tamaño grande/controlado externamente para desbordar la pila.
+      finding_type: vulnerability
     message: >-
       Use of alloca() is unsafe because it cannot ensure that the pointer  returned points to a valid and usable block of memory. The allocation  made may exceed the bounds of the stack, or even go further into other  objects in memory, and alloca() cannot determine such an error.
     severity: ERROR

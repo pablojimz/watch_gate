@@ -33,6 +33,7 @@ rules:
     exploitability_score: 40
     risk_score: 85
     risk_justification: Desactivacion explicita literal de proteccion XXE; requiere que se parsee XML externo no confiable en este despliegue.
+    finding_type: vulnerability
   message: >-
     DOCTYPE declarations are enabled for $DBFACTORY.
     Without prohibiting external entity declarations, this is vulnerable to XML external entity attacks.

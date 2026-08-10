@@ -35,6 +35,7 @@ rules:
     exploitability_score: 80
     risk_score: 78
     risk_justification: Taint req.*->knex raw/whereRaw, con sanitizador parseInt.
+    finding_type: vulnerability
   languages:
   - javascript
   - typescript

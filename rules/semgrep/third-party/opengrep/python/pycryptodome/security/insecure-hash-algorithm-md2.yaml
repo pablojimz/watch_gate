@@ -33,6 +33,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: MD2 exacto, hash roto y no colision-resistente.
+    finding_type: vulnerability
   options:
     symbolic_propagation: true
   severity: WARNING

@@ -35,3 +35,4 @@ rules:
     exploitability_score: 100
     risk_score: 78
     risk_justification: Falta encryption_key en CodeBuild; debilita control de cifrado, check exacto.
+    finding_type: vulnerability

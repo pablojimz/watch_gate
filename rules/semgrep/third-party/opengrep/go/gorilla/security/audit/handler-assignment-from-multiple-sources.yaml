@@ -19,6 +19,7 @@ rules:
     exploitability_score: 40
     risk_score: 36
     risk_justification: Heuristica de posible bug logico (doble asignacion), no exploit demostrado; impacto incierto entre higiene y auth bypass.
+    finding_type: vulnerability
   mode: taint
   pattern-sources:
   - patterns:

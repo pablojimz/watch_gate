@@ -25,6 +25,7 @@ rules:
     exploitability_score: 80
     risk_score: 66
     risk_justification: Taint req.*->header X-Frame-Options, debilita protección anti-clickjacking.
+    finding_type: vulnerability
   languages:
   - javascript
   - typescript

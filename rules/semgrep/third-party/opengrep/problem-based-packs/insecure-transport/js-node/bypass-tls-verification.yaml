@@ -28,6 +28,7 @@ rules:
     exploitability_score: 80
     risk_score: 60
     risk_justification: Env var exacta es precisa, pero alternativa {rejectUnauthorized:false} es objeto suelto sin confirmar uso real en peticion TLS.
+    finding_type: vulnerability
   languages:
   - javascript
   - typescript

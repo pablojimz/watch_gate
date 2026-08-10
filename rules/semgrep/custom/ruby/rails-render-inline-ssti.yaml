@@ -25,5 +25,6 @@ rules:
       exploitability_score: 80
       risk_score: 95
       risk_justification: "render inline: con interpolacion compila ERB en caliente, permite SSTI/RCE; patron de interpolacion claro (HIGH); ejecucion normal."
+      finding_type: vulnerability
     patterns:
       - pattern: 'render inline: "...#{$X}..."'

@@ -23,6 +23,7 @@ rules:
     exploitability_score: 80
     risk_score: 74
     risk_justification: 'FALTA DATO: no se sabe si la fuente es no confiable; asumo que sí (E alto). $FUNC sin restringir a load/loads incluye dump/dumps seguros.'
+    finding_type: vulnerability
   languages:
   - python
   message: >-
@@ -61,6 +62,7 @@ rules:
     exploitability_score: 80
     risk_score: 74
     risk_justification: 'FALTA DATO: fuente no confiable no garantizada, asumo que sí (E alto). $FUNC sin filtrar deserialización, módulo legado py2.'
+    finding_type: vulnerability
   languages:
   - python
   message: >-
@@ -96,6 +98,7 @@ rules:
     exploitability_score: 80
     risk_score: 74
     risk_justification: 'FALTA DATO: fuente no confiable no garantizada, asumo que sí (E alto). $FUNC sin filtrar incluye funciones de serialización segura.'
+    finding_type: vulnerability
   languages:
   - python
   message: >-
@@ -132,6 +135,7 @@ rules:
     exploitability_score: 80
     risk_score: 74
     risk_justification: 'FALTA DATO: fuente no confiable no garantizada, asumo que sí (E alto). shelve.$FUNC coincide con el uso normal (shelve.open).'
+    finding_type: vulnerability
   languages:
   - python
   message: >-

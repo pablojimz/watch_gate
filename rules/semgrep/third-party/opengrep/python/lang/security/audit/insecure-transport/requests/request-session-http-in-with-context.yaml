@@ -58,5 +58,6 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: URL http:// literal exacta detectada por regex, excluye localhost/127.0.0.1.
+    finding_type: vulnerability
   languages: [python]
   severity: INFO

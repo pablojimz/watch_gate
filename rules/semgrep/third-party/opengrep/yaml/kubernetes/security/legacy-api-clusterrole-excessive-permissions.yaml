@@ -47,3 +47,4 @@ rules:
       exploitability_score: 100
       risk_score: 88
       risk_justification: ClusterRole con apiGroups[''] y wildcard '*' en verbs/resources; control admin sobre API core, patron puede mezclar reglas RBAC distintas.
+      finding_type: vulnerability

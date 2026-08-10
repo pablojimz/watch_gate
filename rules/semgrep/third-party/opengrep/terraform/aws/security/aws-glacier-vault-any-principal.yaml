@@ -46,5 +46,6 @@ rules:
     exploitability_score: 100
     risk_score: 83
     risk_justification: Wildcard Allow en policy de Glacier Vault; expone archivos a cualquier principal.
+    finding_type: vulnerability
   languages: [hcl]
   severity: ERROR

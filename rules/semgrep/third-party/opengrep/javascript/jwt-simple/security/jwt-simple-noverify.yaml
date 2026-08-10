@@ -33,6 +33,7 @@ rules:
     exploitability_score: 80
     risk_score: 95
     risk_justification: decode() con noVerify true/string, acepta tokens sin verificar firma.
+    finding_type: vulnerability
   languages:
   - javascript
   - typescript

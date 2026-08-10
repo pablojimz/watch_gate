@@ -18,4 +18,5 @@ rules:
       exploitability_score: 100
       risk_score: 89
       risk_justification: Desactiva validación de certificado WinRM; MITM puede interceptar/alterar canal de administración remota de Windows.
+      finding_type: vulnerability
     pattern: "ansible_winrm_server_cert_validation: ignore"

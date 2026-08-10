@@ -39,3 +39,4 @@ rules:
       exploitability_score: 80
       risk_score: 84
       risk_justification: allow_origins con '*' literal detectado por taint; CORS totalmente abierto, sin ambigüedad.
+      finding_type: vulnerability

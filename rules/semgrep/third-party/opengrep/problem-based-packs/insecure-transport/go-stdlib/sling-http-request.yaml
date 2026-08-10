@@ -24,6 +24,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: Cliente sling con URL literal http://, verbos restringidos.
+    finding_type: vulnerability
   languages: [go]
   pattern-either:
   - patterns:

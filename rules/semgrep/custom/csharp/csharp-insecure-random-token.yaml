@@ -24,6 +24,7 @@ rules:
       exploitability_score: 80
       risk_score: 60
       risk_justification: "System.Random es predecible para tokens de seguridad (candado debil); heuristica de nombre de variable via regex; se usa en ejecucion normal."
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern: $TYPE $TOKEN = new Random(...).Next(...);

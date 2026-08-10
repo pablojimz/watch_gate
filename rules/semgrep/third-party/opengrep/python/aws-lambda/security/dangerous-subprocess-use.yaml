@@ -38,6 +38,7 @@ rules:
     exploitability_score: 80
     risk_score: 83
     risk_justification: subprocess shell=True con event; hay sanitizers (shlex/pipes.quote) pero taint genérico.
+    finding_type: vulnerability
   languages:
   - python
   severity: ERROR

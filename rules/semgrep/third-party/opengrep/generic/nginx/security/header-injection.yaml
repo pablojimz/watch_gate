@@ -41,3 +41,4 @@ rules:
     exploitability_score: 40
     risk_score: 62
     risk_justification: Variable de path reflejada en add_header; requiere inyección CRLF real, nginx puede mitigar parcialmente.
+    finding_type: vulnerability

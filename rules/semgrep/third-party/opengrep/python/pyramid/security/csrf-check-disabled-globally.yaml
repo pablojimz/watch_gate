@@ -38,3 +38,4 @@ rules:
     exploitability_score: 80
     risk_score: 84
     risk_justification: require_csrf=False global exacto; desprotege todos los métodos no seguros de CSRF en toda la app.
+    finding_type: vulnerability

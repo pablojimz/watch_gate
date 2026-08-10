@@ -23,6 +23,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: SQLi; sink mezcla métodos *Raw (peligrosos) con métodos de query builder normalmente seguros.
+    finding_type: vulnerability
   severity: WARNING
   message: >-
     Detected a SQL query based on user input.

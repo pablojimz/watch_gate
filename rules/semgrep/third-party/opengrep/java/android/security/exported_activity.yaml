@@ -40,3 +40,4 @@ rules:
     exploitability_score: 100
     risk_score: 56
     risk_justification: Activity exportada; riesgo real depende de si maneja datos sensibles, no explota por sí sola.
+    finding_type: vulnerability

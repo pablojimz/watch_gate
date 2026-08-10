@@ -33,6 +33,7 @@ rules:
     exploitability_score: 80
     risk_score: 95
     risk_justification: Algoritmo 'none' incluido explícitamente en verify, bypass de firma.
+    finding_type: vulnerability
   languages:
   - javascript
   - typescript

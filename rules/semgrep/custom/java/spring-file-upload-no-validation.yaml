@@ -26,6 +26,7 @@ rules:
       exploitability_score: 60
       risk_score: 78
       risk_justification: "Subida de webshell sin validar extension permite RCE; patron textual sin ver validaciones en otro punto del codigo; entre E=80 (ejecucion normal) y E=40 (requiere directorio servible/ejecutable por el servidor, condicion de entorno) -> punto medio E=60."
+      finding_type: vulnerability
     patterns:
       - pattern: |
           $TYPE $DEST = $UPLOADDIR + $FILE.getOriginalFilename();

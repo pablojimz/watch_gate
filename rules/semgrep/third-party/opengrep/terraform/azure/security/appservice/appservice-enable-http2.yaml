@@ -52,5 +52,6 @@ rules:
     exploitability_score: 100
     risk_score: 45
     risk_justification: HTTP2 deshabilitado (default); hallazgo menor, matchea la mayoria de configs normales.
+    finding_type: vulnerability
   languages: [hcl]
   severity: INFO

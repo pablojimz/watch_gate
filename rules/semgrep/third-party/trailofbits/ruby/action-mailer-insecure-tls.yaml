@@ -22,6 +22,7 @@ rules:
       exploitability_score: 80
       risk_score: 72
       risk_justification: SMTP con verify_mode NONE o starttls solo oportunista; literales exactos, sin conexión TLS garantizada.
+      finding_type: vulnerability
     pattern-either:
       - pattern: "ActionMailer::Base.smtp_settings = { ..., openssl_verify_mode: OpenSSL::SSL::VERIFY_NONE, ... }"
       - pattern: "ActionMailer::Base.smtp_settings = { ..., openssl_verify_mode: 'none', ... }"

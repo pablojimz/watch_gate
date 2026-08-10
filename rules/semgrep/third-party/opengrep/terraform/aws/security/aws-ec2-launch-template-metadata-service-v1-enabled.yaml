@@ -56,3 +56,4 @@ rules:
     exploitability_score: 40
     risk_score: 74
     risk_justification: IMDSv1 habilitado; pivote clasico via SSRF para robar credenciales, requiere cadena adicional (SSRF).
+    finding_type: vulnerability

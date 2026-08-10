@@ -65,3 +65,4 @@ rules:
     exploitability_score: 80
     risk_score: 78
     risk_justification: XSS vía print(); mismo patrón que echoed-request con sanitizadores explícitos.
+    finding_type: vulnerability

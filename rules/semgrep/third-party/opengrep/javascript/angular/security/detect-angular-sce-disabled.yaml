@@ -27,6 +27,7 @@ rules:
     exploitability_score: 90
     risk_score: 75
     risk_justification: Desactiva SCE global, llamada exacta sin ambigüedad, activa en cada arranque.
+    finding_type: vulnerability
   languages:
   - javascript
   - typescript

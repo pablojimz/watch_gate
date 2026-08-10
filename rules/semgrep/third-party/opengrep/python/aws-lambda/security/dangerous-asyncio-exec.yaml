@@ -52,6 +52,7 @@ rules:
     exploitability_score: 80
     risk_score: 83
     risk_justification: Command injection via asyncio.subprocess_exec con event de Lambda; taint sin exclusión de literales.
+    finding_type: vulnerability
   languages:
   - python
   severity: ERROR

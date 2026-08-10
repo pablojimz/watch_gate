@@ -28,6 +28,7 @@ rules:
     exploitability_score: 80
     risk_score: 89
     risk_justification: Taint req.*->res.render nombre de plantilla, path traversal a ficheros locales.
+    finding_type: vulnerability
   languages:
   - javascript
   - typescript

@@ -32,6 +32,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: ARC2.new exacto; cifrado débil dedicado, sin uso legítimo alternativo conocido.
+    finding_type: vulnerability
   options:
     symbolic_propagation: true
   severity: WARNING

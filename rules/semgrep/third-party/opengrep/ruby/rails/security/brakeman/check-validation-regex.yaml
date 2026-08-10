@@ -39,3 +39,4 @@ rules:
     exploitability_score: 40
     risk_score: 56
     risk_justification: Regex de validación sin anclas \A/\Z; bypass posible solo si la validación es de uso security-sensitive.
+    finding_type: vulnerability

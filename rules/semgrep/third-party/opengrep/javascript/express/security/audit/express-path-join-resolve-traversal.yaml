@@ -27,6 +27,7 @@ rules:
     exploitability_score: 80
     risk_score: 89
     risk_justification: Taint req.*->path.join/resolve, path traversal con lectura/escritura arbitraria.
+    finding_type: vulnerability
   languages:
   - javascript
   - typescript

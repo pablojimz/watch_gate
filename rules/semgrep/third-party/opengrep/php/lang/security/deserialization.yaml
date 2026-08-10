@@ -36,4 +36,5 @@ rules:
     exploitability_score: 80
     risk_score: 95
     risk_justification: extract() con array indexado de $_GET/POST/FILES permite sobrescritura arbitraria de variables.
+    finding_type: vulnerability
   severity: ERROR

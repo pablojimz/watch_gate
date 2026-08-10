@@ -27,6 +27,7 @@ rules:
       exploitability_score: 80
       risk_score: 95
       risk_justification: "render_template_string con string no literal compila Jinja2 en caliente, permite SSTI/RCE; excluye literal completo, patron claro (HIGH); ejecucion normal."
+      finding_type: vulnerability
     patterns:
       - pattern: render_template_string($TEMPLATE, ...)
       - pattern-not: render_template_string("...", ...)

@@ -36,6 +36,7 @@ rules:
     exploitability_score: 80
     risk_score: 95
     risk_justification: event hacia YAML/Marshal/CSV.load; deserialización insegura clásica en Ruby, RCE.
+    finding_type: vulnerability
   pattern-sinks:
   - patterns:
     - pattern: $SINK

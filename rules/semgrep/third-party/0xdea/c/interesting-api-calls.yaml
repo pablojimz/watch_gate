@@ -29,6 +29,7 @@ rules:
       exploitability_score: 80
       risk_score: 40
       risk_justification: Rango amplísimo de funciones 'interesantes' vía regex para auditoría manual (candidate points), no vulnerabilidad confirmada.
+      finding_type: vulnerability
     message: >-
       Locate all calls to interesting and potentially insecure API
       functions (candidate points). The auditor can backtrace from these

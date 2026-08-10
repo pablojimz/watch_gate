@@ -24,6 +24,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: Uso de FTPClient.connect (clase dedicada a FTP) o URL literal ftp://.
+    finding_type: vulnerability
   languages:
   - java
   fix-regex:

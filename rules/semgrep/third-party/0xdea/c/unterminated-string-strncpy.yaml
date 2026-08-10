@@ -25,6 +25,7 @@ rules:
       exploitability_score: 80
       risk_score: 77
       risk_justification: "Midpoint 75/100: strncpy sin verificar NUL; mensaje del autor indica fuga de info 'casi segura' y posible overflow."
+      finding_type: vulnerability
     message: >-
       If there is no NUL character byte in the first n bytes of the source
       string, strncpy() and stpncpy() do not NUL-terminate the destination

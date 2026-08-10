@@ -24,6 +24,7 @@ rules:
       exploitability_score: 80
       risk_score: 72
       risk_justification: "Nivel de accesibilidad debil del Keychain permite lectura con dispositivo bloqueado o en backups sin cifrar (candado roto); constantes exactas, sin ambiguedad (HIGH); ejecucion normal."
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern: kSecAttrAccessibleAlways

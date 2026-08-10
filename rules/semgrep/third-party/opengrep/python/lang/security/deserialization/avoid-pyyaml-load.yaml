@@ -24,6 +24,7 @@ rules:
     exploitability_score: 40
     risk_score: 85
     risk_justification: yaml.Loader/UnsafeLoader/CLoader/unsafe_load exacto, con exclusión de ruamel; deserialización insegura y RCE si el YAML procesado viene de fuente no confiable, condición no garantizada por el código.
+    finding_type: vulnerability
   languages:
   - python
   message: >-

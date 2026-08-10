@@ -32,6 +32,7 @@ rules:
     exploitability_score: 40
     risk_score: 53
     risk_justification: 'Fuente: cualquier parámetro string de función, no necesariamente input no confiable.'
+    finding_type: vulnerability
   languages:
   - typescript
   severity: WARNING

@@ -36,6 +36,7 @@ rules:
     exploitability_score: 80
     risk_score: 83
     risk_justification: os.system/popen con event, sin sanitizers, taint directo.
+    finding_type: vulnerability
   languages:
   - python
   severity: ERROR

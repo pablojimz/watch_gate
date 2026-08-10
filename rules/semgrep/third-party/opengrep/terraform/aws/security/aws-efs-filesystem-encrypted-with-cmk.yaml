@@ -38,5 +38,6 @@ rules:
     exploitability_score: 100
     risk_score: 45
     risk_justification: EFS ya cifrado; solo falta CMK propio, caso mayoritario legitimo.
+    finding_type: vulnerability
   languages: [hcl]
   severity: WARNING

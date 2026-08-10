@@ -69,3 +69,4 @@ rules:
     exploitability_score: 40
     risk_score: 50
     risk_justification: ReDoS; no valida si el patrón envolvente realmente causa backtracking catastrófico.
+    finding_type: vulnerability

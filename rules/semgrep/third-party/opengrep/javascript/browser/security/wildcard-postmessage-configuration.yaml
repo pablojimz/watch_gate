@@ -23,6 +23,7 @@ rules:
     exploitability_score: 80
     risk_score: 84
     risk_justification: postMessage(...,'*') literal exacto, expone datos a cualquier origen.
+    finding_type: vulnerability
   languages:
   - javascript
   - typescript

@@ -23,6 +23,7 @@ rules:
       exploitability_score: 40
       risk_score: 51
       risk_justification: Reconocimiento de hook de deserialización custom; requiere JSON.load con create_additions sobre dato no confiable en otra parte.
+      finding_type: vulnerability
     patterns:
       - pattern-inside: |
           class $CLS

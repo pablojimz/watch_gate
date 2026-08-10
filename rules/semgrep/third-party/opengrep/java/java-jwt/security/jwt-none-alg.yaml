@@ -28,6 +28,7 @@ rules:
     exploitability_score: 80
     risk_score: 95
     risk_justification: Algorithm.none() es forja total de token, funcion exacta sin uso legitimo.
+    finding_type: vulnerability
   languages: [java]
   severity: ERROR
   pattern-either:

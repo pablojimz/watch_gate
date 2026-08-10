@@ -52,5 +52,6 @@ rules:
     exploitability_score: 100
     risk_score: 78
     risk_justification: runAsNonRoot:false literal y explicito; permite ejecucion como root, aplica al desplegar.
+    finding_type: vulnerability
   languages: [yaml]
   severity: INFO

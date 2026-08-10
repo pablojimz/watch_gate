@@ -65,4 +65,5 @@ rules:
     exploitability_score: 80
     risk_score: 78
     risk_justification: params/cookies con propagador << hacia texto de consulta en exec/exec_params de pg.
+    finding_type: vulnerability
   severity: WARNING

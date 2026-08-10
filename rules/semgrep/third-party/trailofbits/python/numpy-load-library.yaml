@@ -20,6 +20,7 @@ rules:
       exploitability_score: 40
       risk_score: 73
       risk_justification: Carga de librería nativa dinámica (RCE); excluye solo literal doble, requiere ruta no confiable.
+      finding_type: vulnerability
     patterns:
       - pattern: numpy.ctypeslib.load_library(...)
       - pattern-not: numpy.ctypeslib.load_library("...", "...")

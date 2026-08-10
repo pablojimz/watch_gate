@@ -21,6 +21,7 @@ rules:
       exploitability_score: 80
       risk_score: 49
       risk_justification: Posible nil-deref tras reasignación en manejo de error; bug de fiabilidad, sin vía de explotación clara.
+      finding_type: vulnerability
     patterns:
       - pattern: |
           ..., $X, ..., $ERR = ...

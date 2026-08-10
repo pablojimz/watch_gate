@@ -31,6 +31,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: SQLi por concatenación de string con keyword SQL inicial validado por regex.
+    finding_type: vulnerability
   severity: ERROR
   languages:
   - python

@@ -25,6 +25,7 @@ rules:
     exploitability_score: 40
     risk_score: 56
     risk_justification: Import de net/http/cgi vulnerable a httpoxy; requiere entorno CGI expuesto a headers no confiables.
+    finding_type: vulnerability
   languages: [go]
   severity: WARNING
   pattern-either:

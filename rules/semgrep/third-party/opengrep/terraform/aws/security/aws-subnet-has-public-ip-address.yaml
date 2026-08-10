@@ -49,3 +49,4 @@ rules:
     exploitability_score: 100
     risk_score: 72
     risk_justification: map_public_ip_on_launch=true o default subnet; aumenta superficie de exposicion.
+    finding_type: vulnerability

@@ -50,5 +50,6 @@ rules:
     exploitability_score: 100
     risk_score: 78
     risk_justification: require_ssl/ssl_mode ausentes en Cloud SQL; chequeo literal exacto de ambos parametros.
+    finding_type: vulnerability
   languages: [hcl]
   severity: WARNING

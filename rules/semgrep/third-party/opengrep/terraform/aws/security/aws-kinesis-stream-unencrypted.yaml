@@ -43,3 +43,4 @@ rules:
     exploitability_score: 100
     risk_score: 78
     risk_justification: Kinesis no cifra por defecto sin KMS; literal exacto, riesgo real.
+    finding_type: vulnerability

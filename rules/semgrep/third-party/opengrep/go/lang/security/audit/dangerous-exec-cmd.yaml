@@ -86,5 +86,6 @@ rules:
     exploitability_score: 40
     risk_score: 73
     risk_justification: exec.Cmd con Path/Args no literal; posible command injection si el dato viene de usuario, no confirmado por el patron.
+    finding_type: vulnerability
   severity: ERROR
   languages: [go]

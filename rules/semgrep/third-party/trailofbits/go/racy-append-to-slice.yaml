@@ -21,6 +21,7 @@ rules:
       exploitability_score: 80
       risk_score: 49
       risk_justification: Data race en slice compartido entre goroutines; corrupción de datos, no exploit directo.
+      finding_type: vulnerability
     patterns:
       - pattern: |
           $SLICE = append($SLICE, $ITEM)

@@ -21,6 +21,7 @@ rules:
       exploitability_score: 40
       risk_score: 79
       risk_justification: extractall sin filtro members (path traversal clásico); patrón exacto y bien excluido, requiere tar no confiable.
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern: |

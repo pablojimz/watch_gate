@@ -24,6 +24,7 @@ rules:
       exploitability_score: 80
       risk_score: 72
       risk_justification: memset con longitud 0 por argumentos invertidos, se vuelve no-op; patrón literal exacto, no borra datos sensibles.
+      finding_type: vulnerability
     message: >-
       The invocation of memset() is easy to get wrong. The second argument
       is the character and the third argument is the size, but sometimes

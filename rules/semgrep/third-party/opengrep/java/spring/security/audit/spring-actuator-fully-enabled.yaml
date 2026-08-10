@@ -34,3 +34,4 @@ rules:
     exploitability_score: 100
     risk_score: 89
     risk_justification: 'FALTA DATO: no consta proteccion adicional (Spring Security); asumo ausente (conservador). Config literal exacta.'
+    finding_type: vulnerability

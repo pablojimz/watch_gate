@@ -25,6 +25,7 @@ rules:
       exploitability_score: 80
       risk_score: 61
       risk_justification: atoi/atol/atof sin manejo de error; higiene de código, patrón exacto sobre funciones muy comunes y en general no explotable.
+      finding_type: vulnerability
     message: >-
       The atoi(), atol(), atof(), and similar functions don't handle errors.
       They don't check for integer overflow and can return a negative value.  They have undefined behavior if the value of the result cannot be  represented. They return 0 (or 0.0) if the string does not represent  an integer (or decimal), which is indistinguishable from a correctly  formatted, zero-denoting input string.

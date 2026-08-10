@@ -27,6 +27,7 @@ rules:
     exploitability_score: 80
     risk_score: 89
     risk_justification: Taint event->vm.runInContext/Script, equivalente a code injection.
+    finding_type: vulnerability
   languages:
   - javascript
   - typescript

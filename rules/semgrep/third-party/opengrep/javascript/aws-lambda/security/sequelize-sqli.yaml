@@ -32,6 +32,7 @@ rules:
     exploitability_score: 80
     risk_score: 78
     risk_justification: Taint event->sequelize.query como texto crudo.
+    finding_type: vulnerability
   languages:
   - javascript
   - typescript

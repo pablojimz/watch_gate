@@ -34,6 +34,7 @@ rules:
     exploitability_score: 80
     risk_score: 78
     risk_justification: Taint request hasta HTML construido manualmente con fmt y tag detectado; XSS, con sanitizador EscapeString reconocido.
+    finding_type: vulnerability
   mode: taint
   pattern-sources:
   - patterns:

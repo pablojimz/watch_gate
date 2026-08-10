@@ -54,3 +54,4 @@ rules:
     exploitability_score: 80
     risk_score: 89
     risk_justification: Input a constantize/const_get; resolución de clase arbitraria, potencial RCE.
+    finding_type: vulnerability

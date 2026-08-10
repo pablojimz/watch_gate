@@ -35,6 +35,7 @@ rules:
       exploitability_score: 40
       risk_score: 79
       risk_justification: XXE por config insegura de SAX; requiere XML atacante llegue al parser.
+      finding_type: vulnerability
     message: >-
       DOCTYPE declarations are enabled for javax.xml.parsers.SAXParserFactory.
       Without prohibiting external entity declarations, this is vulnerable to XML external entity attacks.

@@ -28,6 +28,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: Taint request->Response directo (body/text/ubody); bypass de autoescape de Pyramid, XSS.
+    finding_type: vulnerability
   languages:
   - python
   severity: ERROR

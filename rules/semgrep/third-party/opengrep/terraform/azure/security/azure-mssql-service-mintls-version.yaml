@@ -35,5 +35,6 @@ rules:
     exploitability_score: 100
     risk_score: 78
     risk_justification: minimum_tls_version literal 1.0/1.1 en MSSQL; enumeracion exacta.
+    finding_type: vulnerability
   languages: [hcl]
   severity: WARNING

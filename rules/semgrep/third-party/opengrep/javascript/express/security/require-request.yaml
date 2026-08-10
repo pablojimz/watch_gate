@@ -27,6 +27,7 @@ rules:
     exploitability_score: 40
     risk_score: 79
     risk_justification: Taint req.*->require(), requiere que exista fichero cargable por el atacante.
+    finding_type: vulnerability
   languages:
   - javascript
   - typescript

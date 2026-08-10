@@ -23,6 +23,7 @@ rules:
       exploitability_score: 80
       risk_score: 72
       risk_justification: "MD5/SHA-1 son criptograficamente rotos (candado debil); nombres de algoritmo exactos, sin ambiguedad (HIGH); se usa en ejecucion normal."
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern: MessageDigest.getInstance("MD5")

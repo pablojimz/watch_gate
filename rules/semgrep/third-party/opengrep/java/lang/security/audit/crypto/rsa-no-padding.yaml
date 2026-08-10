@@ -30,6 +30,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: Regex exacta RSA/None/NoPadding, sin ambiguedad.
+    finding_type: vulnerability
   message: >-
     Using RSA without OAEP mode weakens the encryption.
   severity: WARNING

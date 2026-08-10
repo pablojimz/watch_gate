@@ -27,5 +27,6 @@ rules:
       exploitability_score: 80
       risk_score: 95
       risk_justification: "permit!() desactiva toda proteccion de mass-assignment, permite modificar cualquier atributo incluido rol/admin (toma control); sin caso de uso seguro conocido, patron exacto (HIGH); ejecucion normal."
+      finding_type: vulnerability
     patterns:
       - pattern: $PARAMS.permit!

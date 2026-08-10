@@ -21,6 +21,7 @@ rules:
       exploitability_score: 40
       risk_score: 30
       risk_justification: unwrap/expect en función que retorna Result; lint muy ruidoso, mayoría de usos son benignos, requiere que el None/Err sea alcanzable.
+      finding_type: vulnerability
     patterns:
       - pattern-either:
           - pattern: $EXPR.unwrap()

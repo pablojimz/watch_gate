@@ -20,6 +20,7 @@ rules:
       exploitability_score: 100
       risk_score: 78
       risk_justification: Verificación de hostname TLS deshabilitada o ausente (default inseguro); config de infra siempre activa.
+      finding_type: vulnerability
     patterns:
       - pattern-inside: |
           tls {

@@ -24,6 +24,7 @@ rules:
     exploitability_score: 80
     risk_score: 72
     risk_justification: Net::HTTP con URI literal http://, lista cerrada de verbos.
+    finding_type: vulnerability
   languages:
   - ruby
   patterns:
