@@ -440,9 +440,7 @@ def _row_to_score_out(row: Row) -> ScoreOut:
         findings = [Finding.model_validate(f) for f in extra.get("findings", [])]
         category = RiskCategory(extra["category"]) if extra.get("category") else None
         confidence = Confidence(extra["confidence"]) if extra.get("confidence") else None
-        threat_nature = (
-            ThreatNature(extra["threat_nature"]) if extra.get("threat_nature") else None
-        )
+        threat_nature = ThreatNature(extra["threat_nature"]) if extra.get("threat_nature") else None
 
         layer_results[name] = LayerResult(
             layer_name=name,

@@ -468,3 +468,26 @@ def test_analyze_combines_semgrep_and_yara_via_max_never_sum(tmp_path) -> None:
 
     # max(30, 83) = 83, NUNCA 30 + 83 = 113
     assert res.risk_score == 83
+
+
+def test_infer_threat_nature_from_semgrep_metadata_variations() -> None:
+    fn = static_layer_module._infer_threat_nature_from_semgrep
+
+    # 1. Metadata explícita
+    assert fn({"metadata": {"threat_nature": "malicioso"}}, "r1") == ThreatNature.MALICIOUS
+    assert fn({"metadata": {"threat_nature": "vulnerabilidad"}}, "r1") == ThreatNature.VULNERABILITY
+
+    # 2. Keywords en categoría o id de regla
+    assert fn({"metadata": {"category": "backdoor"}}, "rule1") == ThreatNature.MALICIOUS
+    assert fn({"metadata": {"subcategory": "trojan"}}, "rule1") == ThreatNature.MALICIOUS
+    assert fn({}, "custom.malware.detector") == ThreatNature.MALICIOUS
+
+    # 3. Defectos / Vulnerabilidades normales
+    assert fn({"metadata": {"category": "security"}}, "owasp.sqli") == ThreatNature.VULNERABILITY
+    assert fn(None, "custom.rule") == ThreatNature.VULNERABILITY
+
+
+def test_get_rules_dir_env_var_override(monkeypatch, tmp_path) -> None:
+    layer = StaticLayer()
+    monkeypatch.setenv("WATCHGATE_SEMGREP_RULES_DIR", str(tmp_path))
+    assert layer._get_rules_dir() == tmp_path

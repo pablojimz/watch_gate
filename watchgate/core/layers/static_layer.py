@@ -135,8 +135,13 @@ THIRD_PARTY_LANGUAGE_MAP: dict[str, list[tuple[str, str]]] = {
 }
 
 
-def _infer_threat_nature_from_semgrep(finding_extra: dict[str, Any], rule_id: str) -> ThreatNature:
+def _infer_threat_nature_from_semgrep(
+    finding_extra: dict[str, Any] | None, rule_id: str
+) -> ThreatNature:
     """Infiere la naturaleza de la amenaza a partir de la metadata de la regla Semgrep."""
+    if not isinstance(finding_extra, dict):
+        finding_extra = {}
+
     metadata = finding_extra.get("metadata", {})
     if not isinstance(metadata, dict):
         metadata = {}
@@ -614,7 +619,12 @@ class StaticLayer(AnalysisLayer):
         )
 
         category = RiskCategory.OFUSCACION if max_risk_score >= 50 else RiskCategory.NINGUNA
-        confidence = Confidence.MEDIA if max_risk_score > 0 else Confidence.BAJA
+        if max_risk_score >= 70:
+            confidence = Confidence.ALTA
+        elif max_risk_score > 0:
+            confidence = Confidence.MEDIA
+        else:
+            confidence = Confidence.BAJA
 
         structured_findings = [
             Finding(
