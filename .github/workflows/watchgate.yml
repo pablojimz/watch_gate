@@ -6,28 +6,14 @@ jobs:
   analyze:
     runs-on: ubuntu-latest
     steps:
+      # Checkout mínimo, solo para que `uses: ./` pueda resolver el propio
+      # action.yml de este repo -- la Action hace su propio checkout
+      # completo (fetch-depth: 0) como primer paso interno. Este es
+      # exactamente el mismo flujo que seguiría un repo externo real con
+      # `uses: pablojimz/watch_gate@main`, así que este workflow sirve de
+      # dogfooding real de action.yml, no solo de la lógica interna.
       - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.11" }
-      - name: Cache WatchGate Rules and OSV (~/.watchgate)
-        uses: actions/cache@v4
+      - name: WatchGate
+        uses: ./
         with:
-          path: ~/.watchgate
-          key: watchgate-cache-${{ runner.os }}-${{ hashFiles('rules/.rules-version') }}
-          restore-keys: |
-            watchgate-cache-${{ runner.os }}-
-      # NOTA: el paquete todavía no está publicado en PyPI -- hasta que lo
-      # esté, "pip install watchgate" fallaría aquí. En el propio repo de
-      # WatchGate se instala desde el checkout; un consumidor externo real
-      # necesitaría `pip install watchgate` una vez exista la publicación.
-      - run: pip install .
-      # `watchgate analyze` (CLI genérica) no sabe hablar con GitHub --
-      # el adaptador (adapters/github_action/main.py) es quien resuelve
-      # reputación real vía la API, publica el comentario en el PR y marca
-      # el check run. Lee base/head del propio evento (GITHUB_EVENT_PATH),
-      # no hace falta pasarlos por línea de comandos.
-      - run: python -m watchgate.adapters.github_action.main
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          WATCHGATE_LLM_API_KEY: ${{ secrets.WATCHGATE_LLM_API_KEY }}
+          llm-api-key: ${{ secrets.WATCHGATE_LLM_API_KEY }}
