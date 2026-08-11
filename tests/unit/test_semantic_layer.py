@@ -544,6 +544,25 @@ def test_skips_when_llm_never_returns_valid_json(rag_index_path):
     assert result.skip_reason == "LLM no devolvió JSON válido tras 2 intentos"
 
 
+def test_skips_with_real_error_message_when_llm_api_call_fails(rag_index_path):
+    """Regresión: un fallo real de la API del LLM (límite de tokens, rate
+    limit, red...) se reportaba con el mismo skip_reason genérico que "no hay
+    clave de API configurada" (_NO_LLM_CONFIG_SKIP_REASON), indistinguible de
+    un despliegue mal configurado. Reproducido con un caso real: un diff con
+    un fichero de 3.7 MB hacía que Gemini devolviera 400 INVALID_ARGUMENT
+    (límite de tokens de entrada superado) y el resultado no dejaba ver que
+    la API sí había respondido, solo que con un error concreto."""
+    fake_llm = _FakeLLMClient(error=ValueError("400 INVALID_ARGUMENT: input token count exceeds"))
+    cost_control = _FakeCostController()
+    layer = SemanticLayer(fake_llm, cost_control, rag_index_path=rag_index_path)
+
+    result = layer.analyze(_sample_diff(), {"repo": "owner/repo"})
+
+    assert result.skipped is True
+    assert "input token count exceeds" in result.skip_reason
+    assert "requiere clave de API" not in result.skip_reason
+
+
 def test_tool_executor_dispatches_fetch_referenced_file(tmp_path, rag_index_path):
     import subprocess
 
