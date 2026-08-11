@@ -27,6 +27,14 @@
 # alcanzables desde fuera y todo pase por el proxy.
 
 services:
+  engine-api:
+    environment:
+      WATCHGATE_LOG_FORMAT: json
+
+  dashboard-backend:
+    environment:
+      WATCHGATE_LOG_FORMAT: json
+
   reverse-proxy:
     image: caddy:2.8-alpine
     environment:
@@ -42,6 +50,27 @@ services:
       - "80:80"
       - "443:443"
 
+  # pg_dumpall diario (03:00 UTC por defecto, ver WATCHGATE_BACKUP_CRON) de
+  # las dos bases del cluster Postgres -- antes no había ningún backup, el
+  # volumen postgres_data era la única copia de los datos. Rotación de
+  # WATCHGATE_BACKUP_RETENTION_DAYS días (14 por defecto). Restaurar: ver
+  # docs/despliegue.md.
+  postgres-backup:
+    build:
+      context: docker/postgres-backup
+    environment:
+      PGHOST: postgres
+      PGUSER: watchgate
+      PGPASSWORD: watchgate
+      WATCHGATE_BACKUP_CRON: ${WATCHGATE_BACKUP_CRON:-0 3 * * *}
+      WATCHGATE_BACKUP_RETENTION_DAYS: ${WATCHGATE_BACKUP_RETENTION_DAYS:-14}
+    volumes:
+      - postgres_backups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   caddy_data:
   caddy_config:
+  postgres_backups:

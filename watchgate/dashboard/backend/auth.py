@@ -7,7 +7,7 @@ import os
 import secrets
 import time
 from datetime import UTC, datetime, timedelta
-from typing import Annotated
+from typing import Annotated, Any
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -63,21 +63,43 @@ def _ingest_token() -> str | None:
     return os.environ.get("WATCHGATE_DASHBOARD_INGEST_TOKEN")
 
 
-# Rate limiting de /api/auth/login -- en memoria de proceso, sin
-# dependencias nuevas. No hay ninguna librería de rate limiting en todo el
-# backend del dashboard ni de la Engine API, y `password_login` no tenía
-# ningún límite de intentos: fuerza bruta sin bloqueo de cuenta, sin
-# backoff. Limitación honesta: esto es por proceso, no compartido entre
-# workers/réplicas -- con un solo proceso (el despliegue actual del
-# proyecto) protege de verdad; con varias réplicas detrás de un balanceador
-# habría que mover esto a un almacén compartido (Redis u otro), fuera de
-# alcance de este fix.
+# Rate limiting de /api/auth/login -- en memoria de proceso por defecto
+# (_LOGIN_ATTEMPTS), sin dependencias nuevas obligatorias. No había ningún
+# límite de intentos: fuerza bruta sin bloqueo de cuenta, sin backoff.
+#
+# Limitación que tenía esto en memoria: no compartido entre
+# workers/réplicas -- con un solo proceso protege de verdad, con varias
+# réplicas detrás de un balanceador cada una lleva su propio contador. Si
+# WATCHGATE_REDIS_URL está configurada, el conteo se mueve a Redis (un
+# sorted set por login, score = timestamp, para la misma ventana
+# deslizante que la versión en memoria -- ZREMRANGEBYSCORE poda lo que ya
+# venció, ZCARD cuenta lo que queda, EXPIRE limpia claves de logins que ya
+# no reintentan) y sí queda compartido entre réplicas. Sin esa variable,
+# el comportamiento es exactamente el de antes -- no es un cambio rupturista.
 _LOGIN_ATTEMPTS: dict[str, list[float]] = {}
 _LOGIN_RATE_LIMIT_WINDOW_SECONDS = 300.0
 _LOGIN_RATE_LIMIT_MAX_ATTEMPTS = 5
 
 
-def _check_login_rate_limit(login: str) -> None:
+def _get_redis_client() -> Any | None:
+    """`None` si `WATCHGATE_REDIS_URL` no está configurada (caso por
+    defecto) -- sin caché a nivel de módulo a propósito: construir un
+    `redis.Redis` es barato (conexión perezosa, no conecta aquí), y así
+    los tests pueden monkeypatchear esta función directamente sin pelear
+    con un singleton ya inicializado de una ejecución anterior."""
+    redis_url = os.environ.get("WATCHGATE_REDIS_URL")
+    if not redis_url:
+        return None
+    import redis as redis_module
+
+    return redis_module.Redis.from_url(redis_url, decode_responses=True, socket_connect_timeout=2)
+
+
+def _redis_rate_limit_key(login: str) -> str:
+    return f"watchgate:login-rate-limit:{normalize_login(login)}"
+
+
+def _memory_count_recent_attempts(login: str) -> int:
     key = normalize_login(login)
     now = time.monotonic()
     recent = [t for t in _LOGIN_ATTEMPTS.get(key, []) if now - t < _LOGIN_RATE_LIMIT_WINDOW_SECONDS]
@@ -85,7 +107,25 @@ def _check_login_rate_limit(login: str) -> None:
         _LOGIN_ATTEMPTS[key] = recent
     else:
         _LOGIN_ATTEMPTS.pop(key, None)
-    if len(recent) >= _LOGIN_RATE_LIMIT_MAX_ATTEMPTS:
+    return len(recent)
+
+
+def _redis_count_recent_attempts(client: Any, login: str) -> int:
+    key = _redis_rate_limit_key(login)
+    now = time.time()
+    client.zremrangebyscore(key, 0, now - _LOGIN_RATE_LIMIT_WINDOW_SECONDS)
+    count: int = client.zcard(key)
+    return count
+
+
+def _check_login_rate_limit(login: str) -> None:
+    client = _get_redis_client()
+    count = (
+        _redis_count_recent_attempts(client, login)
+        if client
+        else _memory_count_recent_attempts(login)
+    )
+    if count >= _LOGIN_RATE_LIMIT_MAX_ATTEMPTS:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Demasiados intentos fallidos. Espera unos minutos e inténtalo de nuevo.",
@@ -93,12 +133,22 @@ def _check_login_rate_limit(login: str) -> None:
 
 
 def _record_failed_login_attempt(login: str) -> None:
-    key = normalize_login(login)
-    _LOGIN_ATTEMPTS.setdefault(key, []).append(time.monotonic())
+    client = _get_redis_client()
+    if client:
+        key = _redis_rate_limit_key(login)
+        now = time.time()
+        client.zadd(key, {str(now): now})
+        client.expire(key, int(_LOGIN_RATE_LIMIT_WINDOW_SECONDS))
+    else:
+        _LOGIN_ATTEMPTS.setdefault(normalize_login(login), []).append(time.monotonic())
 
 
 def _clear_login_attempts(login: str) -> None:
-    _LOGIN_ATTEMPTS.pop(normalize_login(login), None)
+    client = _get_redis_client()
+    if client:
+        client.delete(_redis_rate_limit_key(login))
+    else:
+        _LOGIN_ATTEMPTS.pop(normalize_login(login), None)
 
 
 def ensure_safe_startup_config() -> None:

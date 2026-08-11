@@ -13,6 +13,11 @@
 #
 # Build:  docker build -f docker/engine-api.Dockerfile -t watchgate-engine-api .
 # Run:    docker run -p 8080:8080 --env-file .env watchgate-engine-api
+#
+# Incluye alembic.ini/alembic/ -- este es el servicio desde el que se
+# aplican las migraciones del esquema SQLModel (watchgate/db/):
+#   docker compose exec engine-api alembic upgrade head
+# Ver docs/despliegue.md.
 
 FROM python:3.11-slim AS builder
 
@@ -41,6 +46,8 @@ RUN poetry install --only main --extras analysis --no-root --no-directory
 
 COPY watchgate ./watchgate
 COPY README.md ./
+COPY alembic.ini ./
+COPY alembic ./alembic
 RUN poetry install --only main --extras analysis
 
 
@@ -59,6 +66,8 @@ COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/watchgate /app/watchgate
 COPY --from=builder /app/README.md /app/README.md
 COPY --from=builder /app/pyproject.toml /app/pyproject.toml
+COPY --from=builder /app/alembic.ini /app/alembic.ini
+COPY --from=builder /app/alembic /app/alembic
 
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1
