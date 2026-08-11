@@ -47,4 +47,9 @@ def build_llm_client(provider: str | None = None) -> LLMClient:
         return GeminiClient(model=model)
 
     base_url = os.environ.get("WATCHGATE_LLM_BASE_URL", _DEFAULT_LOCAL_BASE_URL)
-    return OpenAICompatibleClient(base_url=base_url, model=model)
+    api_key = (
+        os.environ.get("WATCHGATE_LLM_API_KEY")
+        or os.environ.get("OPENAI_API_KEY")
+        or os.environ.get("OPENROUTER_API_KEY")
+    )
+    return OpenAICompatibleClient(base_url=base_url, model=model, api_key=api_key)
