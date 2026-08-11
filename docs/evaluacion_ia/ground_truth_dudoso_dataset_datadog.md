@@ -172,12 +172,41 @@ dirección -- que es exactamente lo que se hizo.
   calibración mal fundamentados. Este documento es la prueba de que esa
   verificación previa era necesaria: 5 de los 8 fallos originales no eran
   bugs de WatchGate.
-- `docs/validation_report.md` ya se regeneró contra la API real tras
-  arreglar los primeros 4 casos: 189/193 (97%), arriba desde 185/193.
-  `tvi-cli_55` (el 5º) se descubrió precisamente en esa regeneración y se
-  arregló después -- pendiente de una regeneración más para reflejar
-  también ese arreglo.
 - ~~Revisar si vale la pena separar en `layer.py` el `skip_reason` de "sin
   configuración de LLM" del de "error real de la API"~~ -- hecho, ver
   sección anterior. Antes un límite de tokens superado, un rate limit, o
   una clave real ausente eran indistinguibles en el resultado.
+
+## Dos regeneraciones de `docs/validation_report.md`, dos números distintos (189 y 187 de 193)
+
+Tras arreglar los 5 casos de ground truth, se regeneró el informe dos
+veces (misma suite, mismo código, contra la API real ambas veces):
+189/193 (97%) la primera, 187/193 (96%) la segunda, ~24h después. Los 5
+casos arreglados en este documento **siguen arreglados** en las dos --
+ninguno de los 5 aparece en los divergentes de ninguna de las dos tandas.
+Lo que cambia es el conjunto de casos `real_*` (PRs benignos reales) que
+disparan un falso positivo -- casi sin solape entre una tanda y otra
+(`real_pallets_jinja_2098` falló en la primera y pasó en la segunda;
+`real_pallets_flask_5492`/`real_pallets_jinja_2105`/`real_click_deprecate_isolated_fs`
+fallaron solo en la segunda). Es la varianza de auto-consistencia
+documentada en `_semantic/layer.py` operando sobre casos cerca de un
+umbral -- confirmado también con `malreal_pypi_compromised_lib_lightning_5`
+(uno de los 5 ya arreglados), que pasó en la primera tanda (rojo/70) y
+salió amarillo/40 -- justo en el umbral -- en la segunda.
+
+Dos casos SÍ se repiten en ambas tandas con resultado estable, lo que los
+hace candidatos más creíbles a ser un problema real de calibración en vez
+de ruido:
+
+- `false_positive_candidate`: mismo veredicto (rojo) las dos veces, cuando
+  se esperaba amarillo. Fixture diseñado a propósito para esto
+  (`eval()` con namespace restringido).
+- `malreal_pypi_malicious_intent_mirrorbot_10`: falla las dos veces
+  (verde 39, luego verde 15 -- alejándose del umbral en vez de oscilar
+  cerca de él, lo que apunta a una detección real que no engancha, no a
+  ruido). Backdoor de carga de cookies de sesión sin validar.
+
+No investigado más a fondo todavía -- pendiente de decidir si merece la
+pena revisar estos dos en detalle (incluyendo, para `mirrorbot_10`,
+comprobar si es un 6º caso de la misma familia de ground truth no fiable
+de este documento).
