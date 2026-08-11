@@ -2,32 +2,49 @@ name: WatchGate
 on:
   pull_request:
     types: [opened, synchronize]
+
+permissions:
+  # checks:write -- publicar el Check Run (entrypoint.sh, paso 7).
+  # pull-requests:read -- leer metadata del PR vía la API de GitHub si
+  # hiciera falta en un paso posterior; el diff en sí se calcula con git
+  # puro, no con esta API.
+  checks: write
+  pull-requests: read
+
 jobs:
   analyze:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.11" }
-      - name: Cache WatchGate Rules and OSV (~/.watchgate)
-        uses: actions/cache@v4
         with:
-          path: ~/.watchgate
-          key: watchgate-cache-${{ runner.os }}-${{ hashFiles('rules/.rules-version') }}
-          restore-keys: |
-            watchgate-cache-${{ runner.os }}-
-      # NOTA: el paquete todavía no está publicado en PyPI -- hasta que lo
-      # esté, "pip install watchgate" fallaría aquí. En el propio repo de
-      # WatchGate se instala desde el checkout; un consumidor externo real
-      # necesitaría `pip install watchgate` una vez exista la publicación.
-      - run: pip install .
-      # `watchgate analyze` (CLI genérica) no sabe hablar con GitHub --
-      # el adaptador (adapters/github_action/main.py) es quien resuelve
-      # reputación real vía la API, publica el comentario en el PR y marca
-      # el check run. Lee base/head del propio evento (GITHUB_EVENT_PATH),
-      # no hace falta pasarlos por línea de comandos.
-      - run: python -m watchgate.adapters.github_action.main
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          WATCHGATE_LLM_API_KEY: ${{ secrets.WATCHGATE_LLM_API_KEY }}
+          # fetch-depth: 0 -- git merge-base (entrypoint.sh, paso 1) necesita
+          # el histórico completo, no solo el último commit. Sin esto,
+          # entrypoint.sh igualmente hace `git fetch --unshallow` como red de
+          # seguridad, pero pedirlo aquí evita ese fetch extra en cada run.
+          fetch-depth: 0
+
+      # Cliente ligero: calcula el diff con git puro y delega TODO el
+      # análisis (Semgrep + YARA + capa semántica) al Engine API
+      # centralizado -- no instala el paquete Python "watchgate" en el
+      # runner (ver action.yml / entrypoint.sh en la raíz de este repo y
+      # docs/planificacion/... para el porqué: watchgate.core.layers
+      # importa incondicionalmente chromadb/sentence-transformers/torch a
+      # nivel de módulo, reventando cualquier imagen ligera).
+      #
+      # `uses: ./` referencia la Action de este mismo repo (dogfooding) --
+      # un consumidor externo usaría `uses: pablojimz/watch_gate@<tag>`.
+      - uses: ./
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          # Pendiente de aprovisionar (ver docs/despliegue.md): el Engine
+          # API todavía no está desplegado en ningún sitio alcanzable desde
+          # los runners de GitHub Actions -- hoy solo corre vía
+          # `docker compose up` en local. Hasta que exista una URL real y
+          # una API Key real (WATCHGATE_ENGINE_API_KEY, provisionada con
+          # create_api_key en watchgate/db/repository.py), este job falla
+          # en el paso 4 de entrypoint.sh con un error de red claro, no en
+          # silencio.
+          engine-api-url: ${{ secrets.WATCHGATE_ENGINE_API_URL }}
+          engine-api-key: ${{ secrets.WATCHGATE_ENGINE_API_KEY }}
+          base-ref: main
+          risk-threshold: '70'
