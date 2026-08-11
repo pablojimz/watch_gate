@@ -1,0 +1,120 @@
+name: "WatchGate: revisión de seguridad de PRs con IA"
+description: >-
+  Analiza el riesgo de seguridad de un pull request (código malicioso,
+  vulnerabilidades conocidas, dependencias sospechosas, typosquatting)
+  combinando análisis estático (Semgrep/YARA), dependencias (OSV),
+  reputación del autor y una capa semántica con LLM. Comenta el resultado
+  en el PR y marca un check run; opcionalmente bloquea el merge en rojo.
+author: "WatchGate"
+branding:
+  icon: "shield"
+  color: "blue"
+
+inputs:
+  llm-provider:
+    description: "Proveedor de la capa semántica: anthropic | gemini | local. Sin API key, esta capa se omite (el resto del análisis sigue funcionando)."
+    required: false
+    default: "anthropic"
+  llm-api-key:
+    description: "API key del proveedor LLM elegido. Opcional -- recomendado pasarla desde un secret del repo (${{ secrets.WATCHGATE_LLM_API_KEY }})."
+    required: false
+    default: ""
+  llm-model:
+    description: "Fuerza un modelo concreto. Sin rellenar, cada proveedor usa su default."
+    required: false
+    default: ""
+  llm-base-url:
+    description: "Solo si llm-provider=local: URL de un servidor OpenAI-compatible (Ollama, vLLM...)."
+    required: false
+    default: ""
+  github-token:
+    description: "Token para comentar en el PR y marcar el check run. El token por defecto del job (${{ github.token }}) es suficiente en la mayoría de los casos."
+    required: false
+    default: ${{ github.token }}
+  config-path:
+    description: "Ruta al fichero .watchgate.yml del repo analizado."
+    required: false
+    default: ".watchgate.yml"
+  dashboard-url:
+    description: "URL de un Dashboard de WatchGate donde persistir cada resultado (opcional). Sin rellenar, la Action funciona igual, solo sin historial centralizado."
+    required: false
+    default: ""
+  dashboard-ingest-token:
+    description: "Token compartido para autenticar contra el Dashboard (mismo valor que WATCHGATE_DASHBOARD_INGEST_TOKEN en el propio Dashboard)."
+    required: false
+    default: ""
+  python-version:
+    description: "Versión de Python usada para instalar y ejecutar WatchGate."
+    required: false
+    default: "3.11"
+
+outputs:
+  score:
+    description: "Puntuación de riesgo, 0-100."
+    value: ${{ steps.analyze.outputs.score }}
+  semaforo:
+    description: "verde | amarillo | rojo."
+    value: ${{ steps.analyze.outputs.semaforo }}
+  blocked:
+    description: "'true' si el PR se bloqueó por política (rojo + block_on_red), 'false' en cualquier otro caso."
+    value: ${{ steps.analyze.outputs.blocked }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout del repositorio a analizar (historial completo para el diff)
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Configurar Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Cachear reglas y datasets de WatchGate (~/.watchgate)
+      uses: actions/cache@v4
+      with:
+        path: ~/.watchgate
+        key: watchgate-cache-${{ runner.os }}-${{ inputs.python-version }}
+        restore-keys: |
+          watchgate-cache-${{ runner.os }}-
+
+    - name: Instalar WatchGate
+      shell: bash
+      # Instala directamente desde el propio checkout de esta Action
+      # (github.action_path apunta al código de WatchGate, no al del repo
+      # que se está analizando) -- funciona hoy mismo sin depender de que
+      # el paquete esté publicado en PyPI. El día que lo esté, este paso
+      # puede simplificarse a `pip install watchgate==<version>`.
+      run: pip install "${{ github.action_path }}"
+
+    - name: Analizar el pull request
+      id: analyze
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        WATCHGATE_CONFIG_PATH: ${{ inputs.config-path }}
+        WATCHGATE_LLM_PROVIDER: ${{ inputs.llm-provider }}
+        WATCHGATE_LLM_API_KEY: ${{ inputs.llm-api-key }}
+        WATCHGATE_LLM_MODEL: ${{ inputs.llm-model }}
+        WATCHGATE_LLM_BASE_URL: ${{ inputs.llm-base-url }}
+        WATCHGATE_DASHBOARD_URL: ${{ inputs.dashboard-url }}
+        WATCHGATE_DASHBOARD_INGEST_TOKEN: ${{ inputs.dashboard-ingest-token }}
+      run: |
+        # Los inputs opcionales sin rellenar llegan como variable de
+        # entorno VACÍA, no ausente -- distinto de no haberla exportado en
+        # absoluto. Algunos defaults del propio WatchGate (p. ej.
+        # WATCHGATE_LLM_BASE_URL en llm_factory.py) usan
+        # `os.environ.get(clave, default)`, que solo aplica el default si
+        # la clave falta, no si está vacía -- con la variable exportada
+        # como "" el default nunca se aplicaría. Se eliminan aquí las
+        # vacías para que el comportamiento sea "no configurado", no
+        # "configurado a cadena vacía".
+        for var in WATCHGATE_LLM_API_KEY WATCHGATE_LLM_MODEL WATCHGATE_LLM_BASE_URL \
+                   WATCHGATE_DASHBOARD_URL WATCHGATE_DASHBOARD_INGEST_TOKEN; do
+          if [ -z "${!var}" ]; then
+            unset "$var"
+          fi
+        done
+        python -m watchgate.adapters.github_action.main

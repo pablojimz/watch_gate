@@ -113,6 +113,52 @@ def test_run_posts_comment_and_check_run_with_pr_context_from_event(tmp_path):
     assert exit_code == 0
 
 
+def test_run_writes_score_semaforo_blocked_to_github_output(monkeypatch, tmp_path):
+    """`action.yml` reexpone estos outputs para que un workflow que consuma
+    la Action pueda ramificar sobre el resultado sin parsear el comentario
+    del PR -- `GITHUB_OUTPUT` es el mecanismo real que usa el runner."""
+    output_path = tmp_path / "github_output.txt"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output_path))
+
+    event_path = _write_event(tmp_path)
+    fake_client = MagicMock()
+    fake_client.get_pr_diff_shas.return_value = ("base" * 10, "head" * 10)
+
+    with (
+        patch("watchgate.adapters.github_action.main.GitHubClient", return_value=fake_client),
+        patch("watchgate.adapters.github_action.main.parse_diff", return_value=_fake_diff()),
+        patch(
+            "watchgate.adapters.github_action.main.run_full_analysis",
+            return_value=_fake_result(Semaforo.ROJO, 90),
+        ),
+    ):
+        gha_main.run(event_path, github_token="fake-token")
+
+    contents = output_path.read_text()
+    assert "score=90" in contents
+    assert "semaforo=rojo" in contents
+    assert "blocked=true" in contents
+
+
+def test_run_without_github_output_env_does_not_raise(tmp_path, monkeypatch):
+    monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
+    event_path = _write_event(tmp_path)
+    fake_client = MagicMock()
+    fake_client.get_pr_diff_shas.return_value = ("base" * 10, "head" * 10)
+
+    with (
+        patch("watchgate.adapters.github_action.main.GitHubClient", return_value=fake_client),
+        patch("watchgate.adapters.github_action.main.parse_diff", return_value=_fake_diff()),
+        patch(
+            "watchgate.adapters.github_action.main.run_full_analysis",
+            return_value=_fake_result(Semaforo.VERDE, 5),
+        ),
+    ):
+        exit_code = gha_main.run(event_path, github_token="fake-token")
+
+    assert exit_code == 0
+
+
 def test_run_returns_failure_exit_code_when_red_and_block_on_red(tmp_path):
     event_path = _write_event(tmp_path)
     fake_client = MagicMock()
