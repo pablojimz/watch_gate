@@ -1,0 +1,57 @@
+name: "WatchGate Risk Scoring"
+description: "Multi-layer risk scoring for pull requests via centralized WatchGate Engine API"
+author: "pablojimz"
+
+inputs:
+  github-token:
+    description: "Token con permisos checks:write y pull-requests:read, usado solo para publicar el resultado"
+    required: true
+  engine-api-url:
+    description: "URL base del WatchGate Engine API desplegado (sin barra final, ej: https://api.watchgate.example.com)"
+    required: true
+  engine-api-key:
+    description: "Credencial para autenticarse contra el Engine API (API Key con scope analysis:write)"
+    required: true
+  base-ref:
+    description: "Rama base contra la que calcular el diff con git merge-base (no se usa la API de GitHub para esto)"
+    required: false
+    default: 'main'
+  risk-threshold:
+    description: "Score mínimo (0-100) a partir del cual el check falla"
+    required: false
+    default: '70'
+
+outputs:
+  score:
+    description: "Puntuación final de riesgo (0-100)"
+    value: ${{ steps.watchgate.outputs.score }}
+  result:
+    description: "Resultado completo del análisis en formato JSON devuelto por el Engine API"
+    value: ${{ steps.watchgate.outputs.result }}
+
+runs:
+  using: 'composite'
+  steps:
+    - id: watchgate
+      shell: bash
+      # Composite, a diferencia de 'docker': los inputs NO llegan solos como
+      # INPUT_* al proceso -- eso es automático solo en Actions de tipo
+      # 'docker'/'node'. Aquí hay que mapearlos a mano vía env: para que
+      # entrypoint.sh los lea igual que en el diseño anterior.
+      #
+      # `bash entrypoint.sh`, no `entrypoint.sh` a secas: aunque el bit +x
+      # esté fijado en el índice de git (necesario para un checkout real en
+      # Linux), un repo desarrollado en Windows no puede garantizarlo de
+      # forma fiable en todos los caminos de checkout (confirmado en local
+      # con `act`: NTFS no representa el bit Unix de ejecución, y la copia
+      # del árbol de trabajo al contenedor lo pierde aunque git-bash lo
+      # simule como ejecutable). Invocar el intérprete explícitamente
+      # elimina esa clase entera de fallo "Permission denied", sin depender
+      # de en qué SO se hizo el último checkout.
+      run: bash ${{ github.action_path }}/entrypoint.sh
+      env:
+        INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
+        INPUT_ENGINE_API_URL: ${{ inputs.engine-api-url }}
+        INPUT_ENGINE_API_KEY: ${{ inputs.engine-api-key }}
+        INPUT_BASE_REF: ${{ inputs.base-ref }}
+        INPUT_RISK_THRESHOLD: ${{ inputs.risk-threshold }}

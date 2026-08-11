@@ -52,6 +52,21 @@ ruff = "^0.5"
 mypy = "^1.10"
 import-linter = "^2.0"
 
+# Subconjunto de las capas estáticas (Semgrep, YARA, diffparser vía
+# GitPython) para el Dockerfile de la GitHub Action (raíz del repo), que NO
+# debe empaquetar la capa semántica/RAG (chromadb/sentence-transformers/
+# torch, ~1.5 GB) -- esa capa se llama vía HTTP a un endpoint centralizado.
+# Grupo aparte y opcional para no tocar el grupo "main" (del que depende
+# `poetry install --only main` en docker/engine-api.Dockerfile, que sí
+# necesita el proyecto completo incluida la capa semántica).
+[tool.poetry.group.static]
+optional = true
+
+[tool.poetry.group.static.dependencies]
+GitPython = "3.1.*"
+semgrep = ">=1.78,<2"
+yara-python = ">=4.5,<5"
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"
