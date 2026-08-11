@@ -229,7 +229,7 @@ Arquitectura y spec de implementación cerradas (`docs/WatchGate_spec_implementa
 - [x] Capa de dependencias (OSV, typosquatting) — Pablo Jiménez Castro
 - [x] Adaptador de GitHub Action de referencia (`adapters/github_action/`), incluida la persistencia opcional en el dashboard (paso 8 de la spec §12) y la aplicación opcional de la configuración del dashboard (pesos/umbrales/capas/política/presupuesto de LLM) por repo antes de analizar
 - [x] Dashboard de postura de seguridad (`dashboard/`) — Pablo Jiménez Castro
-- [x] Validación contra el conjunto de casos de prueba (193 casos, 185 dentro de lo esperado (96%) contra la API real — `docs/validation_report.md`; al menos 4 de los divergentes son ground truth no fiable del dataset de origen, no fallos reales de WatchGate, ver `docs/evaluacion_ia/ground_truth_dudoso_dataset_datadog.md`)
+- [x] Validación contra el conjunto de casos de prueba (193 casos, 185 dentro de lo esperado (96%) contra la API real — `docs/validation_report.md`; al menos 3 de los divergentes son ground truth no fiable del dataset de origen, no fallos reales de WatchGate — un cuarto caso, `mflux-streamlit_6`, ya se arregló recuperando el payload real — ver `docs/evaluacion_ia/ground_truth_dudoso_dataset_datadog.md`)
 
 ### Usar WatchGate en otro repositorio (GitHub Action)
 
