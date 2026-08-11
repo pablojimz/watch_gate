@@ -124,25 +124,31 @@ que comparten `setup_bun.js`. El problema era específico de estos 5 casos
 donde el payload real quedó fuera del fichero muestreado, no de la
 categoría `compromised_lib`/`malicious_intent` en general.
 
-## Bug encontrado de paso: errores reales de la API se ocultan como "sin configuración"
+## Bug encontrado de paso (ya arreglado): errores reales de la API se ocultaban como "sin configuración"
 
 Al investigar por qué `tvi-cli_55` pasaba sin que la capa semántica
 aportara nada, se encontró que el modelo se saltó por completo: Gemini
 devolvió `400 INVALID_ARGUMENT: El input supera el máximo de tokens
 permitido (1.048.576)` por el tamaño de `bundle.js`. `layer.py` (línea
-~347) atrapa **cualquier** excepción de la llamada al LLM con un `except
-Exception` genérico y la reporta siempre como
+~347) atrapaba **cualquier** excepción de la llamada al LLM con un
+`except Exception` genérico y la reportaba siempre como
 `_NO_LLM_CONFIG_SKIP_REASON` ("Capa semántica omitida (requiere clave de
 API o configuración de proveedor LLM en el entorno)") -- indistinguible
-de si de verdad no hay clave configurada. El error real solo queda en un
-`logger.info` que casi nadie mira. En este caso concreto no cambia el
+de si de verdad no había clave configurada. El error real solo quedaba en
+un `logger.info` que casi nadie mira. En este caso concreto no cambiaba el
 veredicto (static/deps/vulnerabilities ya llevan el score a rojo sin
-ayuda), pero en producción esto significa que un PR con un fichero
-enorme (un lockfile, una librería vendorizada, un dataset) puede hacer que
-la capa semántica se salte en silencio y el dashboard/log no lo distinga
-de un despliegue mal configurado. No arreglado aquí -- pendiente de
-decidir si vale la pena separar el motivo real del error en el
-`skip_reason` en vez de colapsarlo todo a un mensaje genérico.
+ayuda), pero en producción significaba que un PR con un fichero enorme
+(un lockfile, una librería vendorizada, un dataset) podía hacer que la
+capa semántica se saltara en silencio y el dashboard/log no lo
+distinguiera de un despliegue mal configurado.
+
+**Arreglado**: ese `except Exception` ahora incluye el mensaje real de la
+excepción en el propio `skip_reason` (`"Capa semántica omitida por error
+de la API del proveedor LLM: {exc}"`), en vez de colapsarlo al mensaje
+genérico de "sin configuración". Verificado contra `tvi-cli_55` de verdad
+(el `skip_reason` ahora muestra el `400 INVALID_ARGUMENT` real de Gemini)
+y con un test nuevo en `tests/unit/test_semantic_layer.py`
+(`test_skips_with_real_error_message_when_llm_api_call_fails`).
 
 ## Por qué no se "arregló" tocando `expected.json`
 
@@ -171,7 +177,7 @@ dirección -- que es exactamente lo que se hizo.
   `tvi-cli_55` (el 5º) se descubrió precisamente en esa regeneración y se
   arregló después -- pendiente de una regeneración más para reflejar
   también ese arreglo.
-- Revisar si vale la pena separar en `layer.py` el `skip_reason` de "sin
-  configuración de LLM" del de "error real de la API" (ver sección
-  anterior) -- ahora mismo un límite de tokens superado, un rate limit, o
-  una clave real ausente son indistinguibles en el resultado.
+- ~~Revisar si vale la pena separar en `layer.py` el `skip_reason` de "sin
+  configuración de LLM" del de "error real de la API"~~ -- hecho, ver
+  sección anterior. Antes un límite de tokens superado, un rate limit, o
+  una clave real ausente eran indistinguibles en el resultado.
