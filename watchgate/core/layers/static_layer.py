@@ -67,6 +67,10 @@ from typing import Any
 import yaml
 import yara
 
+from watchgate.core.layers._shared import (
+    scan_diff_hunk_for_prompt_injection,
+    scan_diff_hunk_for_suspicious_patterns,
+)
 from watchgate.core.layers.base import AnalysisLayer, register_layer
 from watchgate.core.models import (
     Confidence,
@@ -824,15 +828,6 @@ class StaticLayer(AnalysisLayer):
 
     def analyze(self, diff: NormalizedDiff, metadata: dict[str, Any]) -> LayerResult:
         rules_dir = self._get_rules_dir()
-        if not rules_dir:
-            return LayerResult(
-                layer_name=self.name,
-                risk_score=0,
-                justification="No se pudieron cargar las reglas de análisis estático.",
-                skipped=True,
-                skip_reason="Reglas Semgrep/YARA no disponibles",
-            )
-
         all_findings: list[dict[str, Any]] = []
 
         # Crear directorio temporal para aislar la escritura de parches (diff_hunks)
@@ -846,39 +841,68 @@ class StaticLayer(AnalysisLayer):
                 ):
                     continue
 
-                # Semgrep necesita saber el lenguaje para elegir qué reglas
-                # cargar -- si no se reconoce la extensión, simplemente no
-                # se ejecuta Semgrep sobre este fichero. YARA en cambio NO
-                # se filtra por lenguaje (ver _run_yara_on_text): un
-                # webshell puede llevar cualquier extensión, o ninguna, así
-                # que se ejecuta sobre TODO fichero de texto no binario.
-                language = self._detect_language(file_change.path)
+                # 1. Escaneo de inyección de prompt independiente del LLM
+                for label, text, line_idx in scan_diff_hunk_for_prompt_injection(
+                    file_change.diff_hunk
+                ):
+                    msg = f"Intento de inyección de prompt detectado en diff ({label}): {text[:80]}"
+                    all_findings.append({
+                        "tool": "prompt_injection",
+                        "rule_id": f"static.prompt_injection.{label}",
+                        "message": msg,
+                        "line": line_idx,
+                        "risk_score": 100,
+                        "threat_nature": ThreatNature.MALICIOUS,
+                        "file_path": file_change.path,
+                    })
 
-                ext = os.path.splitext(file_change.path)[1] or ".txt"
-                temp_file = tempfile.NamedTemporaryFile(
-                    dir=temp_dir, suffix=ext, delete=False, mode="w", encoding="utf-8"
-                )
-                try:
-                    temp_file.write(file_change.diff_hunk)
-                    temp_file.close()
+                # 2. Escaneo Semgrep + YARA (si el directorio de reglas está disponible)
+                semgrep_yara_findings: list[dict[str, Any]] = []
+                if rules_dir:
+                    language = self._detect_language(file_change.path)
+                    ext = os.path.splitext(file_change.path)[1] or ".txt"
+                    temp_file = tempfile.NamedTemporaryFile(
+                        dir=temp_dir, suffix=ext, delete=False, mode="w", encoding="utf-8"
+                    )
+                    try:
+                        temp_file.write(file_change.diff_hunk)
+                        temp_file.close()
 
-                    findings: list[dict[str, Any]] = []
-                    if language:
-                        findings.extend(
-                            self._run_semgrep_on_file(temp_file.name, language, rules_dir=rules_dir)
+                        if language:
+                            semgrep_yara_findings.extend(
+                                self._run_semgrep_on_file(
+                                    temp_file.name, language, rules_dir=rules_dir
+                                )
+                            )
+                        yara_res = self._run_yara_on_text(
+                            file_change.diff_hunk, rules_dir=rules_dir
                         )
-                    yara_res = self._run_yara_on_text(file_change.diff_hunk, rules_dir=rules_dir)
-                    findings.extend(yara_res)
+                        semgrep_yara_findings.extend(yara_res)
 
-                    for f in findings:
-                        f["file_path"] = file_change.path
-                    all_findings.extend(findings)
-                finally:
-                    if os.path.exists(temp_file.name):
-                        try:
-                            os.unlink(temp_file.name)
-                        except Exception:  # noqa: BLE001
-                            pass
+                        for f in semgrep_yara_findings:
+                            f["file_path"] = file_change.path
+                        all_findings.extend(semgrep_yara_findings)
+                    finally:
+                        if os.path.exists(temp_file.name):
+                            try:
+                                os.unlink(temp_file.name)
+                            except Exception:  # noqa: BLE001
+                                pass
+
+                # 3. Escaneo heurístico de emergencia si Semgrep/YARA no produjo hallazgos
+                if not semgrep_yara_findings:
+                    for label, text, line_idx in scan_diff_hunk_for_suspicious_patterns(
+                        file_change.diff_hunk
+                    ):
+                        all_findings.append({
+                            "tool": "heuristic_regex",
+                            "rule_id": f"static.suspicious.{label}",
+                            "message": f"Patrón sospechoso detectado ({label}): {text[:80]}",
+                            "line": line_idx,
+                            "risk_score": 90,
+                            "threat_nature": ThreatNature.MALICIOUS,
+                            "file_path": file_change.path,
+                        })
         finally:
             if os.path.exists(temp_dir):
                 try:
@@ -887,6 +911,14 @@ class StaticLayer(AnalysisLayer):
                     pass
 
         if not all_findings:
+            if not rules_dir:
+                return LayerResult(
+                    layer_name=self.name,
+                    risk_score=0,
+                    justification="No se pudieron cargar las reglas de análisis estático.",
+                    skipped=True,
+                    skip_reason="Reglas Semgrep/YARA no disponibles",
+                )
             return LayerResult(
                 layer_name=self.name,
                 risk_score=0,

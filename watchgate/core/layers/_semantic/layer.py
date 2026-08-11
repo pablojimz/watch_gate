@@ -225,14 +225,31 @@ def _diff_summary(diff: NormalizedDiff) -> str:
     return "\n".join(f"{fc.path}: {fc.diff_hunk[:200]}" for fc in diff.files)
 
 
+class _DummyCostController:
+    def budget_remaining(self, repo: str) -> float:
+        return float("inf")
+
+    def estimate_tokens(self, text: str) -> int:
+        return len(text) // 4
+
+    def get_cached(self, diff_hash: str) -> SemanticOutput | None:
+        return None
+
+    def store_cached(self, diff_hash: str, output: SemanticOutput) -> None:
+        pass
+
+    def record_usage(self, repo: str, tokens: int) -> None:
+        pass
+
+
 @register_layer
 class SemanticLayer(AnalysisLayer):
     name = "semantic"
 
     def __init__(
         self,
-        llm_client: LLMClient,
-        cost_control: CostControllerLike,
+        llm_client: LLMClient | None = None,
+        cost_control: CostControllerLike | None = None,
         max_diff_tokens: int = 6000,
         project_type: str = "desconocido",
         languages: str = "desconocido",
@@ -240,7 +257,9 @@ class SemanticLayer(AnalysisLayer):
         rag_index_path: str = DEFAULT_INDEX_PATH,
     ) -> None:
         self._llm_client = llm_client
-        self._cost_control = cost_control
+        self._cost_control: CostControllerLike = (
+            cost_control if cost_control is not None else _DummyCostController()  # type: ignore[assignment]
+        )
         self._max_diff_tokens = max_diff_tokens
         self._project_type = project_type
         self._languages = languages
@@ -248,9 +267,18 @@ class SemanticLayer(AnalysisLayer):
         self._rag_index_path = rag_index_path
 
     def analyze(self, diff: NormalizedDiff, metadata: dict[str, Any]) -> LayerResult:
+        if self._llm_client is None:
+            return LayerResult(
+                layer_name=self.name,
+                risk_score=0,
+                justification="",
+                skipped=True,
+                skip_reason=_NO_LLM_CONFIG_SKIP_REASON,
+            )
+
         repo = str(metadata.get("repo", ""))
 
-        if self._cost_control.budget_remaining(repo) <= 0:
+        if self._cost_control is not None and self._cost_control.budget_remaining(repo) <= 0:
             return LayerResult(
                 layer_name=self.name,
                 risk_score=0,
@@ -260,7 +288,7 @@ class SemanticLayer(AnalysisLayer):
             )
 
         diff_hash = compute_diff_hash(diff)
-        cached = self._cost_control.get_cached(diff_hash)
+        cached = self._cost_control.get_cached(diff_hash) if self._cost_control else None
         if cached is not None:
             return self._to_layer_result(cached, tool_calls_made=0)
 
@@ -349,6 +377,7 @@ class SemanticLayer(AnalysisLayer):
         diff: NormalizedDiff,
         metadata: dict[str, Any],
     ) -> tuple[SemanticOutput, _ToolCallCounter]:
+        assert self._llm_client is not None
         counter = _ToolCallCounter()
         tool_executor = _build_tool_executor(diff, metadata, counter)
         output = self._llm_client.complete_structured(

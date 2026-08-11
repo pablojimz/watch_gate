@@ -64,10 +64,9 @@ def run_full_analysis(
         )
         try:
             llm_client = build_llm_client()
-            layer_factories["semantic"] = lambda: SemanticLayer(llm_client, cost_control)
         except Exception:  # noqa: BLE001
-            # Si falla el cliente LLM (ej. sin API key), safe_analyze lo aislará.
-            pass
+            llm_client = None
+        layer_factories["semantic"] = lambda: SemanticLayer(llm_client, cost_control)
 
     try:
         if config.shortcircuit_enabled:
