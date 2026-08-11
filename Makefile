@@ -1,7 +1,12 @@
 .PHONY: install lint test run-demo dashboard-backend dashboard-frontend dashboard-install docker-up docker-down
 
 install:
-	poetry install
+	# --all-extras: incluye el extra "analysis" (semgrep/yara/chromadb/
+	# sentence-transformers/anthropic/google-genai) -- necesario para
+	# desarrollo y para correr la suite de tests completa. Ver la nota en
+	# pyproject.toml sobre por qué existe ese extra (imagen Docker del
+	# Dashboard backend más ligera, no un cambio en el flujo de desarrollo).
+	poetry install --all-extras
 
 lint:
 	poetry run ruff check .
