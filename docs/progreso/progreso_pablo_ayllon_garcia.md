@@ -619,6 +619,7 @@ Adicionalmente, se han completado los siguientes hitos de infraestructura, API S
 - **Funcionalidades pendientes**:
   - **Fase 5**: Servidor MCP Nativo en `stdio` (`watchgate/mcp/`) con las 5 herramientas de seguridad.
   - **Fase 6**: Dashboard SaaS (métricas por organización y consumo por agente) y manuales de usuario (`docs/manual_mcp.md` y `docs/manual_git_hooks.md`).
+  - **Monitorización de Repositorios Externos**: Integración asíncrona de webhooks con extracción de diff en texto plano vía API de GitHub y modelos de persistencia para acceso externo (ver `docs/planificacion/monitorizacion_repos_externos.md`).
 - **Partes completas**: Todos los modelos, servicios, esquemas, adaptadores y routers verificados mediante `tests/unit/test_db.py`, `tests/unit/test_db_multitenant.py`, `tests/unit/test_quota_degraded.py`, `tests/unit/test_agent_api.py`, `tests/unit/test_git_hook.py` y `tests/unit/test_webhooks_multiplatform.py`.
 
 #### Arquitectura e integración
@@ -704,6 +705,7 @@ Adicionalmente, se han completado los siguientes hitos de infraestructura, API S
 | Fecha | Cambio realizado | Motivo | Responsable |
 |------|------------------|--------|-------------|
 | 2026-08-07 | Implementación completa de la Engine API con FastAPI, autenticación por API Key SHA-256 (`wg_live_...`), sanitizador criptográfico de logs, middleware de límite de payload (10 MB), endpoint `POST /api/v1/analyze` con `BackgroundTasks` y router de webhooks HMAC `POST /api/v1/webhooks/github` | Despliegue de la arquitectura de servicios separados SaaS | Pablo Ayllón García |
+| 2026-08-11 | Diseño del plan de implementación para monitorización asíncrona de repositorios externos y extracción de diffs vía HTTP. | Extender soporte de Engine API SaaS y Dashboard para monitorizar proyectos externos (e.g. `openclaw`) | Pablo Ayllón García |
 
 #### Estado actual
 - **Funcionalidades implementadas**:
@@ -711,6 +713,8 @@ Adicionalmente, se han completado los siguientes hitos de infraestructura, API S
   - `watchgate/api/auth.py`: Inyección de dependencias `get_current_user_from_api_key` con soporte para headers `Authorization: Bearer wg_live_...` y `X-API-Key: wg_live_...`, verificadas contra hash SHA-256 en la base de datos mediante `verify_api_key`.
   - `watchgate/api/routers/analyze.py`: Endpoint `POST /api/v1/analyze` para ingesta de diffs en texto plano vía `parse_diff_from_text`, invocación síncrona de `run_full_analysis` y guardado asíncrono de puntuaciones y saldo de tokens en segundo plano mediante `BackgroundTasks`.
   - `watchgate/api/routers/webhooks.py`: Endpoint `POST /api/v1/webhooks/github` para recepción de eventos de GitHub App con verificación de firma HMAC-SHA256 `X-Hub-Signature-256`.
+- **Funcionalidades pendientes**:
+  - Conectar `BackgroundTasks` en los webhooks para que invoquen el workflow de descarga del diff (`GitHubClient.get_pull_request_diff`) y lo evalúen de forma asíncrona.
 
 ---
 
