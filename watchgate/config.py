@@ -36,7 +36,7 @@ logger = logging.getLogger("watchgate.config")
 # de ataque a la cadena de suministro) se reparte a la mitad el 0.20 que
 # antes tenía solo "dependencies", dejando el resto exactamente igual que
 # en la memoria.
-_DEFAULT_WEIGHTS: dict[str, float] = {
+DEFAULT_WEIGHTS: dict[str, float] = {
     "static": 0.25,
     "dependencies": 0.10,
     "vulnerabilities": 0.10,
@@ -57,7 +57,7 @@ class WatchGateConfig(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="WATCHGATE_", extra="ignore")
 
-    weights: dict[str, float] = Field(default_factory=lambda: dict(_DEFAULT_WEIGHTS))
+    weights: dict[str, float] = Field(default_factory=lambda: dict(DEFAULT_WEIGHTS))
     thresholds: dict[str, int] = Field(default_factory=lambda: dict(_DEFAULT_THRESHOLDS))
 
     @field_validator("weights", mode="before")
