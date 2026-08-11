@@ -345,14 +345,23 @@ class SemanticLayer(AnalysisLayer):
                 skipped=True,
                 skip_reason=str(exc),
             )
-        except Exception as exc:  # noqa: BLE001
-            logger.info("Capa semántica omitida por cliente LLM no disponible: %s", exc)
+        except Exception as exc:  # noqa: BLE001 - frontera de aislamiento entre capas
+            # Antes esto se reportaba con _NO_LLM_CONFIG_SKIP_REASON, el mismo
+            # mensaje que "no hay clave de API configurada" -- indistinguible
+            # de un error real de la llamada (límite de tokens superado, rate
+            # limit, timeout de red...). Bug real, reproducido: un caso con un
+            # fichero de 3.7 MB en el diff hacía que Gemini devolviera 400
+            # INVALID_ARGUMENT (input token count excede el máximo permitido)
+            # y el resultado decía "sin configuración de proveedor LLM",
+            # llevando a pensar que faltaba una env var cuando la API sí
+            # respondía, solo que con un error real.
+            logger.info("Capa semántica omitida por error de la API del proveedor LLM: %s", exc)
             return LayerResult(
                 layer_name=self.name,
                 risk_score=0,
                 justification="",
                 skipped=True,
-                skip_reason=_NO_LLM_CONFIG_SKIP_REASON,
+                skip_reason=f"Capa semántica omitida por error de la API del proveedor LLM: {exc}",
             )
 
         n_calls = 1
