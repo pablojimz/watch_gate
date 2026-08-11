@@ -69,12 +69,6 @@
     "accepted": "PR aceptado",
     "revoked": "Aceptación revocada"
   },
-  "threatNature": {
-    "malicioso": "Malicioso",
-    "vulnerabilidad": "Vulnerabilidad",
-    "incertidumbre": "Incertidumbre",
-    "limpio": "Limpio"
-  },
   "feedback": {
     "title": "Feedback humano",
     "correct": "Correcto",
@@ -196,6 +190,7 @@
     "malicioso": "Malicioso",
     "vulnerabilidad": "Vulnerabilidad",
     "incertidumbre": "Incertidumbre",
+    "limpio": "Limpio",
     "summaryTitle": "Amenazas detectadas",
     "layerNature": "Naturaleza"
   },
