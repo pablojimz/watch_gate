@@ -1,14 +1,16 @@
 # Ground truth no fiable en algunos casos `malreal_*` (dataset DataDog)
 
 Hallazgo real, verificado descargando el dataset de origen -- no una
-suposición. 4 de los casos `class=malicious` de
+suposición. 5 de los casos `class=malicious` de
 `tests/cases/malreal_*_compromised_lib_*`/`malicious_intent_*` contaban
 como "fallo" en la suite de validación (`tests/integration/test_cases.py`)
 sin que WatchGate estuviera fallando de verdad: el fichero que quedó en el
 fixture de test era código legítimo y benigno, no el payload malicioso real
-del paquete comprometido. **Los 4 ya se han arreglado de verdad** -- ver
+del paquete comprometido. **Los 5 ya se han arreglado de verdad** -- ver
 "Casos resueltos" más abajo -- recuperando el payload real de cada ZIP de
-origen y reconstruyendo la fixture con él.
+origen y reconstruyendo la fixture con él. El 5º (`tvi-cli_55`) no se
+detectó en la revisión inicial -- apareció al regenerar
+`docs/validation_report.md` después de arreglar los otros 4.
 
 ## Cómo se descubrió
 
@@ -78,20 +80,38 @@ tests (`malreal_npm_compromised_lib_*`), y por la misma razón que
 Sustituye a `subprocess_script.py` (código real con licencia Apache de
 PyTorch Lightning, lanzador de procesos multi-nodo estándar).
 
+### `malreal_npm_compromised_lib_tvi-cli_55`
+
+`package.json` (con `"scripts": {"postInstall": "node bundle.js"}` --
+nótese la `I` mayúscula, no coincide con el nombre exacto del hook real de
+npm, `postinstall`) + `bundle.js` (3.7 MB). Prácticamente el mismo payload
+que `graphql-sequelize-teselagen_14` -- primeros ~5 KB idénticos byte a
+byte, misma lógica de credenciales AWS -- misma campaña/familia de
+malware compartiendo payload entre paquetes distintos, no una
+coincidencia. Sustituye a `middleware.ts` (boilerplate de CORS para
+Next.js, parte de las plantillas que `tvi-cli` genera en proyectos nuevos
+-- nunca se ejecuta el propio CLI). Detectado por la capa **estática**
+(Semgrep, reglas `eval_dynamic`/`exec_dynamic`/`permission_escalation`
+sobre el bundle webpack) con risk_score 90 -- suficiente por sí solo para
+rojo, sin necesitar la capa semántica: el diff supera el límite de tokens
+de entrada de Gemini (1.048.576) por el tamaño de `bundle.js`, y la capa
+semántica se salta (ver nota abajo sobre el bug de `layer.py` que oculta
+este tipo de error).
+
 ---
 
-En los 4 casos, `expected.json` no cambió -- ya decía `rojo`/malicioso,
+En los 5 casos, `expected.json` no cambió -- ya decía `rojo`/malicioso,
 correctamente (el paquete sí fue comprometido de verdad). Cada directorio
 tiene un `SAFETY_NOTE.md` con el aviso de manejo del fichero real que
 contiene. Verificado con:
 
 ```
-poetry run pytest tests/integration/test_cases.py -m integration -k "mflux or teselagen or jstoauto or lightning_5"
+poetry run pytest tests/integration/test_cases.py -m integration -k "mflux or teselagen or jstoauto or lightning_5 or tvi-cli"
 ```
 
-Los 4 pasan (`rojo`/malicioso) contra el pipeline completo de 5 capas, con
-la capa semántica activa. Antes del arreglo, los 4 fallaban con
-`verde`/benigno sobre el fichero equivocado.
+Los 5 pasan (`rojo`/malicioso) contra el pipeline completo de 5 capas.
+Antes del arreglo, los 5 fallaban con `verde`/benigno sobre el fichero
+equivocado.
 
 Contraejemplo real, para que quede claro que NO todos los `compromised_lib`
 están mal etiquetados: `malreal_pypi_compromised_lib_durabletask_0`
@@ -100,9 +120,29 @@ están mal etiquetados: `malreal_pypi_compromised_lib_durabletask_0`
 el paquete -- y WatchGate lo detecta correctamente. Lo mismo
 `malreal_pypi_compromised_lib_telnyx_2`/`_4` (`_client.py`, exfiltración
 esteganográfica en un WAV + `exec(base64.b64decode(...))`) y los 5 casos
-que comparten `setup_bun.js`. El problema era específico de estos 4 casos
+que comparten `setup_bun.js`. El problema era específico de estos 5 casos
 donde el payload real quedó fuera del fichero muestreado, no de la
 categoría `compromised_lib`/`malicious_intent` en general.
+
+## Bug encontrado de paso: errores reales de la API se ocultan como "sin configuración"
+
+Al investigar por qué `tvi-cli_55` pasaba sin que la capa semántica
+aportara nada, se encontró que el modelo se saltó por completo: Gemini
+devolvió `400 INVALID_ARGUMENT: El input supera el máximo de tokens
+permitido (1.048.576)` por el tamaño de `bundle.js`. `layer.py` (línea
+~347) atrapa **cualquier** excepción de la llamada al LLM con un `except
+Exception` genérico y la reporta siempre como
+`_NO_LLM_CONFIG_SKIP_REASON` ("Capa semántica omitida (requiere clave de
+API o configuración de proveedor LLM en el entorno)") -- indistinguible
+de si de verdad no hay clave configurada. El error real solo queda en un
+`logger.info` que casi nadie mira. En este caso concreto no cambia el
+veredicto (static/deps/vulnerabilities ya llevan el score a rojo sin
+ayuda), pero en producción esto significa que un PR con un fichero
+enorme (un lockfile, una librería vendorizada, un dataset) puede hacer que
+la capa semántica se salte en silencio y el dashboard/log no lo distinga
+de un despliegue mal configurado. No arreglado aquí -- pendiente de
+decidir si vale la pena separar el motivo real del error en el
+`skip_reason` en vez de colapsarlo todo a un mensaje genérico.
 
 ## Por qué no se "arregló" tocando `expected.json`
 
@@ -115,7 +155,7 @@ dirección -- que es exactamente lo que se hizo.
 
 ## Recomendación
 
-- Estos 4 casos ya no deberían contar como incertidumbre/ground-truth
+- Estos 5 casos ya no deberían contar como incertidumbre/ground-truth
   dudoso en el desglose de `docs/validation_report.md` -- están resueltos
   y deberían aportar señal real de calibración.
 - Antes de invertir esfuerzo en "enseñar" al RAG a reconocer patrones a
@@ -124,8 +164,14 @@ dirección -- que es exactamente lo que se hizo.
   `docs/evaluacion_ia/comparativa_rag_modelos.md` (hallazgo #4) sobre el
   riesgo de crear una superficie de falsos positivos con ejemplos de
   calibración mal fundamentados. Este documento es la prueba de que esa
-  verificación previa era necesaria: 4 de los 8 fallos reportados no eran
+  verificación previa era necesaria: 5 de los 8 fallos originales no eran
   bugs de WatchGate.
-- Pendiente de regenerar `docs/validation_report.md` con
-  `generate_validation_report.py` contra la API real para reflejar el
-  número actualizado (debería subir desde 185/193).
+- `docs/validation_report.md` ya se regeneró contra la API real tras
+  arreglar los primeros 4 casos: 189/193 (97%), arriba desde 185/193.
+  `tvi-cli_55` (el 5º) se descubrió precisamente en esa regeneración y se
+  arregló después -- pendiente de una regeneración más para reflejar
+  también ese arreglo.
+- Revisar si vale la pena separar en `layer.py` el `skip_reason` de "sin
+  configuración de LLM" del de "error real de la API" (ver sección
+  anterior) -- ahora mismo un límite de tokens superado, un rate limit, o
+  una clave real ausente son indistinguibles en el resultado.
