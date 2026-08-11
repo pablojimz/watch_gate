@@ -47,7 +47,8 @@ class GeminiClient(LLMClient):
         if client is None:
             from google import genai
 
-            client = genai.Client(api_key=os.environ.get("WATCHGATE_LLM_API_KEY"))
+            api_key = os.environ.get("WATCHGATE_LLM_API_KEY") or os.environ.get("GEMINI_API_KEY")
+            client = genai.Client(api_key=api_key)
         self._client = client
         self._model = model
 
