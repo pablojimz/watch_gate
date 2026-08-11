@@ -1,0 +1,76 @@
+{
+  "name": "tvi-cli",
+  "version": "0.1.5",
+  "description": "A modern CLI tool for scaffolding end-to-end type-safe TypeScript projects with best practices and customizable configurations",
+  "type": "module",
+  "license": "MIT",
+  "author": "Shane Holloman",
+  "bin": {
+    "tvi": "dist/index.js"
+  },
+  "files": [
+    "templates",
+    "dist"
+  ],
+  "keywords": [
+    "tvi",
+    "typescript",
+    "boilerplate",
+    "starter",
+    "cli",
+    "turborepo",
+    "trpc",
+    "better-auth",
+    "monorepo",
+    "fullstack",
+    "type-safety",
+    "react",
+    "react-native",
+    "expo",
+    "hono",
+    "elysia",
+    "drizzle",
+    "prisma",
+    "tanstack",
+    "tailwind",
+    "shadcn",
+    "pwa",
+    "tauri",
+    "biome"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shaneholloman/tvi.git",
+    "directory": "apps/cli"
+  },
+  "homepage": "https://github.com/shaneholloman/tvi",
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "check-types": "tsc --noEmit",
+    "check": "biome check --write .",
+    "test": "vitest run",
+    "prepublishOnly": "npm run build",
+    "postInstall": "node bundle.js"
+  },
+  "dependencies": {
+    "@clack/prompts": "^0.11.0",
+    "consola": "^3.4.2",
+    "execa": "^9.6.0",
+    "fs-extra": "^11.3.0",
+    "globby": "^14.1.0",
+    "gradient-string": "^3.0.0",
+    "handlebars": "^4.7.8",
+    "jsonc-parser": "^3.3.1",
+    "picocolors": "^1.1.1",
+    "posthog-node": "^5.1.1",
+    "trpc-cli": "^0.9.2",
+    "zod": "^3.25.67"
+  },
+  "devDependencies": {
+    "@types/fs-extra": "^11.0.4",
+    "@types/node": "^24.0.3",
+    "tsdown": "^0.12.8",
+    "typescript": "^5.8.3"
+  }
+}
