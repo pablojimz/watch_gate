@@ -12,6 +12,7 @@ from typing import Any
 
 import httpx
 
+from watchgate.core.layers._shared import parse_requirements_txt
 from watchgate.core.models import NormalizedDiff
 
 _OSV_API_URL = "https://api.osv.dev/v1/query"
@@ -63,32 +64,19 @@ def lookup_package_registry(
 
 
 _REQUIREMENTS_FILE_PATTERN = re.compile(r"(^|/)requirements[\w.-]*\.txt$")
-_REQUIREMENTS_LINE_PATTERN = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)")
 
 
 def detect_new_python_dependencies(diff: NormalizedDiff) -> list[tuple[str, str]]:
     """Detecta paquetes PyPI añadidos en `requirements*.txt` dentro del diff
     (líneas `+` de un hunk), como `(nombre, "PyPI")`.
-
-    Heurística deliberadamente estrecha: un único formato de manifest, sin
-    resolver extras/marcadores de entorno. Parsear manifests de verdad
-    (`pyproject.toml`, `Pipfile`, `package.json`...) es tarea de
-    `deps_layer.py` (Línea 3, §5); esto es un stand-in autónomo para la capa
-    semántica, mismo criterio que `lookup_package_registry` de arriba.
     """
     found: list[tuple[str, str]] = []
     for file_change in diff.files:
         if not _REQUIREMENTS_FILE_PATTERN.search(file_change.path):
             continue
-        for line in file_change.diff_hunk.splitlines():
-            if not line.startswith("+") or line.startswith("++"):
-                continue
-            content = line[1:].strip()
-            if not content or content.startswith("#"):
-                continue
-            match = _REQUIREMENTS_LINE_PATTERN.match(content)
-            if match:
-                found.append((match.group(1), "PyPI"))
+        for dep in parse_requirements_txt(file_change.diff_hunk):
+            if dep.name:
+                found.append((dep.name, "PyPI"))
     return found
 
 

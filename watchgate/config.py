@@ -25,6 +25,8 @@ import yaml
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from watchgate.core.aggregator import DEFAULT_THRESHOLDS
+
 logger = logging.getLogger("watchgate.config")
 
 # Pesos por defecto. El ejemplo de regresión de la memoria (spec §10) fija
@@ -42,7 +44,7 @@ _DEFAULT_WEIGHTS: dict[str, float] = {
     "semantic": 0.40,
 }
 
-_DEFAULT_THRESHOLDS: dict[str, int] = {"yellow": 40, "red": 70}
+_DEFAULT_THRESHOLDS: dict[str, int] = DEFAULT_THRESHOLDS
 
 
 class WatchGateConfig(BaseSettings):
@@ -163,11 +165,9 @@ def apply_cli_overrides(
             thresholds[key] = val
 
     return WatchGateConfig(
-        weights=weights,
-        thresholds=thresholds,
-        max_diff_tokens=config.max_diff_tokens,
-        monthly_budget_tokens=config.monthly_budget_tokens,
-        max_dependency_checks=config.max_dependency_checks,
-        block_on_red=config.block_on_red,
-        shortcircuit_enabled=config.shortcircuit_enabled,
+        **{
+            **config.model_dump(),
+            "weights": weights,
+            "thresholds": thresholds,
+        }
     )
