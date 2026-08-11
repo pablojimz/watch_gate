@@ -3,10 +3,12 @@
 # /api/v1/agent/*, hook pre-receive delegando a un servidor central) para
 # analizar diffs sin tener que instalar la CLI en cada sitio.
 #
-# Build multi-stage: la primera capa instala TODAS las dependencias del
-# proyecto (semgrep, yara-python, chromadb + sentence-transformers/torch
-# para la capa semántica/RAG -- son pesadas, ~1.5 GB, inherentes al
-# proyecto, no a esta imagen) en un venv aislado; la segunda copia solo ese
+# Build multi-stage: la primera capa instala las dependencias base más el
+# extra "analysis" (`--extras analysis`: semgrep, yara-python, chromadb +
+# sentence-transformers/torch para la capa semántica/RAG -- son pesadas,
+# ~1.5 GB, pero este servicio SÍ ejecuta el pipeline de análisis completo,
+# a diferencia del Dashboard backend -- ver docker/dashboard-backend.Dockerfile
+# y la nota en pyproject.toml) en un venv aislado; la segunda copia solo ese
 # venv ya resuelto + el código de la app, sin el toolchain de compilación.
 #
 # Build:  docker build -f docker/engine-api.Dockerfile -t watchgate-engine-api .
@@ -35,11 +37,11 @@ RUN pip install --no-cache-dir poetry
 # aparte del código, para que un cambio en watchgate/*.py no invalide la
 # instalación completa de torch/semgrep/etc. en cada build.
 COPY pyproject.toml poetry.lock ./
-RUN poetry install --only main --no-root --no-directory
+RUN poetry install --only main --extras analysis --no-root --no-directory
 
 COPY watchgate ./watchgate
 COPY README.md ./
-RUN poetry install --only main
+RUN poetry install --only main --extras analysis
 
 
 FROM python:3.11-slim AS runtime
