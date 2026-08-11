@@ -682,7 +682,15 @@ class StaticLayer(AnalysisLayer):
         if not config_paths:
             return results
 
-        command = ["semgrep", "--json", "--quiet", temp_file_path] + config_paths
+        semgrep_bin = shutil.which("semgrep")
+        if not semgrep_bin:
+            venv_semgrep = Path(sys.prefix) / "bin" / "semgrep"
+            if venv_semgrep.exists():
+                semgrep_bin = str(venv_semgrep)
+            else:
+                semgrep_bin = "semgrep"
+
+        command = [semgrep_bin, "--json", "--quiet", temp_file_path] + config_paths
 
         try:
             process = subprocess.run(
