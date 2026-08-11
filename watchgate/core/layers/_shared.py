@@ -557,22 +557,3 @@ def scan_diff_hunk_for_suspicious_patterns(diff_hunk: str) -> list[tuple[str, st
                     findings.append((label, added_text.strip(), line_idx))
         line_idx += 1
     return findings
-
-
-def scan_diff_hunk_for_prompt_injection(diff_hunk: str) -> list[tuple[str, str, int]]:
-    """Analiza líneas añadidas ('+') en un diff hunk buscando patrones de inyección de prompt.
-    Devuelve lista de (pattern_label, matched_text, line_index).
-    """
-    findings: list[tuple[str, str, int]] = []
-    if not diff_hunk:
-        return findings
-
-    line_idx = 1
-    for line in diff_hunk.splitlines():
-        if line.startswith("+") and not line.startswith("++"):
-            added_text = line[1:]
-            for pattern, label in _PROMPT_INJECTION_PATTERNS:
-                if pattern.search(added_text):
-                    findings.append((label, added_text.strip(), line_idx))
-        line_idx += 1
-    return findings
