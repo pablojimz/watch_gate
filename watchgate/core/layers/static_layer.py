@@ -67,10 +67,7 @@ from typing import Any
 import yaml
 import yara
 
-from watchgate.core.layers._shared import (
-    scan_diff_hunk_for_prompt_injection,
-    scan_diff_hunk_for_suspicious_patterns,
-)
+from watchgate.core.layers._shared import scan_diff_hunk_for_suspicious_patterns
 from watchgate.core.layers.base import AnalysisLayer, register_layer
 from watchgate.core.models import (
     Confidence,
@@ -827,6 +824,20 @@ class StaticLayer(AnalysisLayer):
         return results
 
     def analyze(self, diff: NormalizedDiff, metadata: dict[str, Any]) -> LayerResult:
+        # Nota: esta capa NO escanea el diff en busca de "intentos de
+        # inyección de prompt" (frases tipo "ignora las instrucciones
+        # anteriores", "no marques esto") -- se probó y se revirtió (bug
+        # real, reproducido: "// TODO: don't flag this edge case in the
+        # linter, it's intentional", un comentario de código de lo más
+        # normal, disparaba risk_score=100/MALICIOSO sin que ningún LLM
+        # juzgara el contexto). Esos patrones solo son evidencia real de
+        # intención de manipular al analizador cuando el propio texto imita
+        # la sintaxis de una respuesta o instrucción dirigida a un LLM
+        # (rol falso, JSON de respuesta falso, "responde con risk_score
+        # X") -- ver `_apply_prompt_injection_floor` en `_semantic/layer.py`,
+        # que sí tiene ese contexto porque compara contra lo que el propio
+        # LLM concluyó, y solo dispara para el subconjunto estructural de
+        # patrones, no para lenguaje genérico.
         rules_dir = self._get_rules_dir()
         all_findings: list[dict[str, Any]] = []
 
@@ -841,22 +852,7 @@ class StaticLayer(AnalysisLayer):
                 ):
                     continue
 
-                # 1. Escaneo de inyección de prompt independiente del LLM
-                for label, text, line_idx in scan_diff_hunk_for_prompt_injection(
-                    file_change.diff_hunk
-                ):
-                    msg = f"Intento de inyección de prompt detectado en diff ({label}): {text[:80]}"
-                    all_findings.append({
-                        "tool": "prompt_injection",
-                        "rule_id": f"static.prompt_injection.{label}",
-                        "message": msg,
-                        "line": line_idx,
-                        "risk_score": 100,
-                        "threat_nature": ThreatNature.MALICIOUS,
-                        "file_path": file_change.path,
-                    })
-
-                # 2. Escaneo Semgrep + YARA (si el directorio de reglas está disponible)
+                # Escaneo Semgrep + YARA (si el directorio de reglas está disponible)
                 semgrep_yara_findings: list[dict[str, Any]] = []
                 if rules_dir:
                     language = self._detect_language(file_change.path)
@@ -889,20 +885,22 @@ class StaticLayer(AnalysisLayer):
                             except Exception:  # noqa: BLE001
                                 pass
 
-                # 3. Escaneo heurístico de emergencia si Semgrep/YARA no produjo hallazgos
+                # Escaneo heurístico de emergencia si Semgrep/YARA no produjo hallazgos
                 if not semgrep_yara_findings:
                     for label, text, line_idx in scan_diff_hunk_for_suspicious_patterns(
                         file_change.diff_hunk
                     ):
-                        all_findings.append({
-                            "tool": "heuristic_regex",
-                            "rule_id": f"static.suspicious.{label}",
-                            "message": f"Patrón sospechoso detectado ({label}): {text[:80]}",
-                            "line": line_idx,
-                            "risk_score": 90,
-                            "threat_nature": ThreatNature.MALICIOUS,
-                            "file_path": file_change.path,
-                        })
+                        all_findings.append(
+                            {
+                                "tool": "heuristic_regex",
+                                "rule_id": f"static.suspicious.{label}",
+                                "message": f"Patrón sospechoso detectado ({label}): {text[:80]}",
+                                "line": line_idx,
+                                "risk_score": 90,
+                                "threat_nature": ThreatNature.MALICIOUS,
+                                "file_path": file_change.path,
+                            }
+                        )
         finally:
             if os.path.exists(temp_dir):
                 try:

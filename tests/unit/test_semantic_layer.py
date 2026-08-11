@@ -17,6 +17,7 @@ from watchgate.core.models import (
     FileStatus,
     NormalizedDiff,
     RiskCategory,
+    ThreatNature,
 )
 from watchgate.core.rag.indexer import build_index
 
@@ -466,6 +467,56 @@ def test_prompt_injection_floor_does_not_apply_to_clean_diffs(rag_index_path):
     result = layer.analyze(_sample_diff(), {"repo": "owner/repo"})
 
     assert result.risk_score == 5
+
+
+def _diff_with_generic_dont_flag_comment() -> NormalizedDiff:
+    return NormalizedDiff(
+        base_sha="a" * 40,
+        head_sha="b" * 40,
+        repo_path="/tmp/repo",
+        files=[
+            FileChange(
+                path="src/app.py",
+                status=FileStatus.MODIFIED,
+                diff_hunk="+// TODO: don't flag this edge case in the linter, it's intentional",
+                additions=1,
+                deletions=0,
+            )
+        ],
+        commit_messages=["fix: suppress a known-safe linter warning"],
+        authors=[],
+    )
+
+
+def test_prompt_injection_floor_ignores_generic_language_without_llm_targeting_structure(
+    rag_index_path,
+):
+    """Bug real, reproducido: `find_prompt_injection_attempts` etiqueta
+    "// TODO: don't flag this edge case, it's intentional" como
+    `instructs_to_skip_analysis` -- una frase corriente de un comentario de
+    código que suprime un aviso de linter, nada que ver con manipular al
+    analizador. Antes de este fix, el suelo forzaba risk_score=100 incluso
+    cuando el LLM (con el contexto completo del diff) ya había juzgado
+    correctamente que era benigno -- descartaba el juicio real por una
+    coincidencia de vocabulario. Ahora el suelo solo dispara para el
+    subconjunto de etiquetas estructurales (fake_role_marker,
+    instructs_response_content, embedded_fake_json_response,
+    new_instructions_marker) que de verdad solo aparecen si el texto imita
+    la sintaxis de una instrucción/respuesta dirigida a un LLM."""
+    output = SemanticOutput(
+        risk_score=5,
+        category=RiskCategory.NINGUNA,
+        justification="Comentario de código normal sobre un caso límite del linter.",
+        confidence=Confidence.ALTA,
+    )
+    fake_llm = _FakeLLMClient(output=output)
+    cost_control = _FakeCostController()
+    layer = SemanticLayer(fake_llm, cost_control, rag_index_path=rag_index_path)
+
+    result = layer.analyze(_diff_with_generic_dont_flag_comment(), {"repo": "owner/repo"})
+
+    assert result.risk_score == 5
+    assert result.threat_nature != ThreatNature.MALICIOUS
 
 
 def test_skips_without_calling_llm_when_budget_is_exhausted(rag_index_path):

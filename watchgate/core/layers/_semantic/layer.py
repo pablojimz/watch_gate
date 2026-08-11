@@ -97,14 +97,36 @@ def _apply_unverified_content_floor(
 
 # Suelo mecánico independiente del anterior: si el propio diff (o el
 # contenido de un fichero leído con fetch_referenced_file) contiene texto
-# que intenta manipular al LLM -- "ignora las instrucciones anteriores",
-# falsos mensajes de sistema, JSON de respuesta falsificado incrustado en un
-# comentario -- eso es evidencia de intención maliciosa por sí sola, la
-# haya seguido el modelo o no. Un PR legítimo nunca necesita decirle a un
-# revisor (humano o IA) que ignore sus instrucciones; el intento en sí es el
-# hallazgo. 100, no un umbral calculado: no queda margen de duda razonable
-# aquí como sí lo hay con "no se pudo revisar" -- no es una escala de
-# incertidumbre, es una prueba directa.
+# que intenta manipular al LLM -- falsos mensajes de sistema ("system:"),
+# JSON de respuesta falsificado incrustado ('"risk_score": 0, "justification"'),
+# instrucciones explícitas de qué responder ("respond only with risk_score")
+# -- eso es evidencia de intención maliciosa por sí sola, la haya seguido el
+# modelo o no: un PR legítimo nunca tiene motivo para imitar la sintaxis de
+# una respuesta dirigida a un analizador automático. 100, no un umbral
+# calculado: no queda margen de duda razonable aquí.
+#
+# Deliberadamente NO se incluyen aquí las etiquetas de lenguaje genérico de
+# `_PROMPT_INJECTION_PATTERNS` (p. ej. "ignore_previous_instructions",
+# "instructs_to_skip_analysis", "claims_preapproved", "disregard_instructions",
+# "role_override") -- bug real, reproducido: un LLM real, viendo el diff
+# completo, juzgaba correctamente como benigno un comentario de código de lo
+# más normal ("// TODO: don't flag this edge case, it's intentional"), y este
+# suelo descartaba ese juicio y forzaba 100/MALICIOSO solo por la presencia
+# de esas palabras -- exactamente lo contrario de "detectar intención": es
+# buscar palabras sueltas e ignorar el contexto que el propio LLM sí tuvo.
+# Esas frases son demasiado comunes en prosa/comentarios corrientes para ser
+# evidencia fiable por sí solas. Las etiquetas de abajo, en cambio, solo
+# aparecen de forma realista si el texto se escribió a propósito para que lo
+# lea un LLM como si fuera una instrucción o una respuesta -- ahí sí hay
+# intención real, no una coincidencia de vocabulario.
+_STRUCTURAL_LLM_TARGETING_LABELS = frozenset(
+    {
+        "fake_role_marker",
+        "instructs_response_content",
+        "embedded_fake_json_response",
+        "new_instructions_marker",
+    }
+)
 _PROMPT_INJECTION_FLOOR_SCORE = 100
 _NO_LLM_CONFIG_SKIP_REASON = (
     "Capa semántica omitida (requiere clave de API o configuración de proveedor LLM en el entorno)"
@@ -113,7 +135,8 @@ _NO_LLM_CONFIG_SKIP_REASON = (
 
 def _apply_prompt_injection_floor(output: SemanticOutput, scanned_text: str) -> SemanticOutput:
     findings = find_prompt_injection_attempts(scanned_text)
-    if not findings or output.risk_score >= _PROMPT_INJECTION_FLOOR_SCORE:
+    has_structural_evidence = any(label in _STRUCTURAL_LLM_TARGETING_LABELS for label in findings)
+    if not has_structural_evidence or output.risk_score >= _PROMPT_INJECTION_FLOOR_SCORE:
         return output
     return output.model_copy(
         update={
