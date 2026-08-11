@@ -11,6 +11,11 @@
 #
 # Dashboard: http://localhost:5173 (nginx sirviendo el build + proxy /api)
 # Engine API: http://localhost:8080/health
+#
+# Para producción con TLS automático delante de todo (Caddy, Let's Encrypt
+# o certificado autofirmado si no hay dominio público), ver el overlay
+# docker-compose.prod.yml: `docker compose -f docker-compose.yml -f
+# docker-compose.prod.yml up --build -d`.
 
 services:
   postgres:
