@@ -43,7 +43,7 @@ from watchgate.core.layers._shared import (
     parse_manifest_file_change,
 )
 from watchgate.core.layers.base import AnalysisLayer, register_layer
-from watchgate.core.models import Confidence, Finding, LayerResult, NormalizedDiff
+from watchgate.core.models import Confidence, Finding, LayerResult, NormalizedDiff, ThreatNature
 
 logger = logging.getLogger("watchgate.vulnerabilities")
 
@@ -372,9 +372,9 @@ class VulnerabilitiesLayer(AnalysisLayer):
             elif osv_res and osv_res.get("vulns"):
                 vulns = osv_res["vulns"]
                 has_high_crit = any(_is_high_or_critical_vuln(v) for v in vulns)
-                if has_high_crit:
+                if has_high_crit or len(vulns) >= 5:
                     pkg_score = 90
-                    note = f"Vulnerabilidad crítica/alta en OSV ({len(vulns)} vulns)"
+                    note = f"Vulnerabilidad crítica/alta o acumulada en OSV ({len(vulns)} vulns)"
                 else:
                     pkg_score = 60
                     note = f"Vulnerabilidades encontradas en OSV ({len(vulns)} vulnerabilidades)"
@@ -411,4 +411,5 @@ class VulnerabilitiesLayer(AnalysisLayer):
             justification=final_justification,
             findings=structured_findings,
             confidence=confidence,
+            threat_nature=ThreatNature.VULNERABILITY if final_score > 0 else None,
         )

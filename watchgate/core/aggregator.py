@@ -154,6 +154,17 @@ def _apply_malicious_and_uncertain_policy(
     if has_high_confidence_malicious or has_medium_confidence_malicious:
         score = max(score, thresholds["red"])
 
+    # Si alguna capa activa detecta un hallazgo de alta confianza con puntuación elevada (>= red),
+    # el resultado global no debe diluirse por debajo del umbral amarillo.
+    for layer_res in results.values():
+        if (
+            not layer_res.skipped
+            and layer_res.confidence == Confidence.ALTA
+            and layer_res.risk_score >= thresholds["red"]
+            and score < thresholds["yellow"]
+        ):
+            score = thresholds["yellow"]
+
     # Bug real encontrado regenerando el informe de validación (caso
     # `malreal_pypi_malicious_intent_mirrorbot_10`): esta escalada
     # comprobaba `UNVERIFIED_CONTENT_MARKER in fc.diff_hunk` sobre el
