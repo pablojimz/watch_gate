@@ -14,6 +14,7 @@ import json
 import logging
 from typing import Any, Protocol
 
+from watchgate.core.aggregator import DEFAULT_THRESHOLDS
 from watchgate.core.layers._semantic import prompting, tools
 from watchgate.core.layers._semantic.client import (
     LLMClient,
@@ -42,7 +43,7 @@ _NO_BUDGET_SKIP_REASON = "Presupuesto de tokens agotado para este repositorio es
 # pero cerca de un umbral decide el semáforo final. Lejos de cualquier
 # umbral (verde claro o rojo claro) no merece la pena el coste extra: ahí la
 # varianza no cambia el veredicto.
-_BORDERLINE_THRESHOLDS = (40, 70)
+_BORDERLINE_THRESHOLDS = (DEFAULT_THRESHOLDS["yellow"], DEFAULT_THRESHOLDS["red"])
 _BORDERLINE_MARGIN = 10
 _MAX_RESAMPLES = 2
 
@@ -105,7 +106,6 @@ def _apply_unverified_content_floor(
 # aquí como sí lo hay con "no se pudo revisar" -- no es una escala de
 # incertidumbre, es una prueba directa.
 _PROMPT_INJECTION_FLOOR_SCORE = 100
-_NO_BUDGET_SKIP_REASON = "Presupuesto de tokens agotado para este repositorio este mes"
 _NO_LLM_CONFIG_SKIP_REASON = (
     "Capa semántica omitida (requiere clave de API o configuración de proveedor LLM en el entorno)"
 )
