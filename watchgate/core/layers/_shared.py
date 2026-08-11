@@ -8,8 +8,11 @@ ciclo de imports.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 from pydantic import BaseModel
+
+from watchgate.core.models import FileChange
 
 # Nombres de fichero (no rutas completas) que WatchGate reconoce como
 # manifiestos de gestión de dependencias.
@@ -400,6 +403,28 @@ def parse_composer_json(diff_hunk: str) -> list[DependencyChange]:
             )
 
     return changes
+
+
+def parse_manifest_file_change(file_change: FileChange) -> list[DependencyChange]:
+    """Parsea un cambio de fichero si es un manifiesto de dependencias conocido."""
+    fname = Path(file_change.path).name
+    hunk = file_change.diff_hunk
+    parsed: list[DependencyChange] = []
+    if fname == "package.json":
+        parsed = parse_package_json(hunk)
+    elif fname in ("requirements.txt", "Pipfile"):
+        parsed = parse_requirements_txt(hunk)
+    elif fname == "PKGBUILD":
+        parsed = parse_pkgbuild(hunk)
+    elif fname == "Cargo.toml":
+        parsed = parse_cargo_toml(hunk)
+    elif fname == "go.mod":
+        parsed = parse_go_mod(hunk)
+    elif fname == "composer.json":
+        parsed = parse_composer_json(hunk)
+    for ch in parsed:
+        ch.manifest_path = file_change.path
+    return parsed
 
 
 _SUSPICIOUS_PATTERNS: list[tuple[re.Pattern[str], str]] = [

@@ -274,7 +274,7 @@ def _import_local_rules_client() -> Any | None:
     if str(scripts_dir) not in sys.path:
         sys.path.insert(0, str(scripts_dir))
     try:
-        import local_rules_client
+        import local_rules_client  # type: ignore[import-not-found]
     except ImportError:
         return None
     return local_rules_client
@@ -412,7 +412,7 @@ class StaticLayer(AnalysisLayer):
             rules.version,
             view_root,
         )
-        return view_root
+        return view_root  # type: ignore[no-any-return]
 
     def _get_rules_dir(self) -> Path | None:
         """Obtiene la ruta al directorio de reglas Semgrep con sincronización inteligente.

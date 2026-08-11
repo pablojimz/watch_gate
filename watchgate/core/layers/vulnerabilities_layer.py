@@ -40,12 +40,7 @@ import httpx
 from watchgate.core.layers._shared import (
     DEPENDENCY_MANIFEST_FILENAMES,
     DependencyChange,
-    parse_cargo_toml,
-    parse_composer_json,
-    parse_go_mod,
-    parse_package_json,
-    parse_pkgbuild,
-    parse_requirements_txt,
+    parse_manifest_file_change,
 )
 from watchgate.core.layers.base import AnalysisLayer, register_layer
 from watchgate.core.models import Confidence, Finding, LayerResult, NormalizedDiff
@@ -346,24 +341,7 @@ class VulnerabilitiesLayer(AnalysisLayer):
 
         all_changes: list[DependencyChange] = []
         for file_change in manifest_files:
-            fname = Path(file_change.path).name
-            hunk = file_change.diff_hunk
-            parsed: list[DependencyChange] = []
-            if fname == "package.json":
-                parsed = parse_package_json(hunk)
-            elif fname in ("requirements.txt", "Pipfile"):
-                parsed = parse_requirements_txt(hunk)
-            elif fname == "PKGBUILD":
-                parsed = parse_pkgbuild(hunk)
-            elif fname == "Cargo.toml":
-                parsed = parse_cargo_toml(hunk)
-            elif fname == "go.mod":
-                parsed = parse_go_mod(hunk)
-            elif fname == "composer.json":
-                parsed = parse_composer_json(hunk)
-            for ch in parsed:
-                ch.manifest_path = file_change.path
-            all_changes.extend(parsed)
+            all_changes.extend(parse_manifest_file_change(file_change))
 
         # Sin nombre de paquete (p. ej. solo cambió un script de instalación,
         # sin dependencias nuevas) no hay nada que consultar en OSV -- esa
