@@ -18,6 +18,16 @@
 # docker-compose.prod.yml up --build -d`.
 
 services:
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    ports:
+      - "6379:6379"
+
   postgres:
     image: postgres:16-alpine
     environment:
@@ -68,8 +78,15 @@ services:
       WATCHGATE_DATABASE_URL: postgresql+psycopg://watchgate:watchgate@postgres:5432/watchgate
       WATCHGATE_DASHBOARD_CORS_ORIGINS: http://localhost:5173
       WATCHGATE_DASHBOARD_FRONTEND_ORIGIN: http://localhost:5173
+      # Rate limiting de login compartido -- ver watchgate/dashboard/backend/auth.py.
+      # Con una sola réplica (este compose) no hace falta, pero así queda
+      # probado en local contra un Redis real, no solo contra fakeredis en
+      # los tests unitarios.
+      WATCHGATE_REDIS_URL: redis://redis:6379/0
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     ports:
       - "8000:8000"

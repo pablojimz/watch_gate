@@ -24,6 +24,7 @@ from watchgate.dashboard.backend.routers.metrics import router as metrics_router
 from watchgate.dashboard.backend.routers.scores import router as scores_router
 from watchgate.dashboard.backend.routers.ui_settings import router as ui_router
 from watchgate.db.connection import init_db as init_api_keys_db
+from watchgate.logging_config import configure_logging
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,12 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app() -> FastAPI:
+    # Antes que ensure_safe_startup_config()/el warning de dev-mode de
+    # abajo -- ambos loguean durante la propia construcción de la app
+    # (module-level `app = create_app()`, no dentro de `lifespan()`), así
+    # que si esto fuera después esos mensajes se emitirían con el
+    # formato/handler por defecto de Python en vez del elegido aquí.
+    configure_logging("dashboard-backend")
     ensure_safe_startup_config()
     if _dev_mode():
         logger.warning(
