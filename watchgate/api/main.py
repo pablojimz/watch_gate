@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 
 from watchgate.api.routers import agent, analyze, webhooks
 from watchgate.db.connection import init_db
+from watchgate.logging_config import configure_logging
 
 # Límite máximo de payload HTTP: 10 MB
 MAX_PAYLOAD_BYTES = 10 * 1024 * 1024
@@ -65,11 +66,26 @@ def setup_logging_sanitizer() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Ciclo de vida del servidor: inicializa base de datos y sanitizador de logs."""
-    setup_logging_sanitizer()
+    """Ciclo de vida del servidor: base de datos (logging y sanitizador
+    de secretos ya se configuraron a nivel de módulo, antes de construir
+    `app` más abajo -- si se hiciera aquí dentro, el "Waiting for
+    application startup"/primeras líneas de uvicorn saldrían sin el
+    formato elegido, porque uvicorn ya las loguea antes de entrar en el
+    lifespan de la propia app)."""
     init_db()
     yield
 
+
+# A nivel de módulo, antes de construir `app` -- ver docstring de
+# `lifespan()`. `configure_logging()` antes que `setup_logging_sanitizer()`
+# a propósito: esta última añade el filtro de redacción de secretos tanto
+# al logger raíz como a cada handler que exista *en ese momento*
+# (`root_logger.handlers`) -- si se llamara al revés, el handler nuevo de
+# `configure_logging()` no tendría el filtro añadido directamente (el
+# filtro del logger raíz lo cubre igual, pero mejor no depender de esa
+# sutileza de `logging`).
+configure_logging("engine-api")
+setup_logging_sanitizer()
 
 app = FastAPI(
     title="WatchGate Engine API",
