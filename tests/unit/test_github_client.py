@@ -8,7 +8,7 @@ from unittest.mock import Mock, patch
 import httpx
 import pytest
 
-from watchgate.adapters.github_action.github_client import GitHubClient
+from watchgate.adapters.github_client import GitHubClient
 
 
 def _mock_response(json_data, headers: dict[str, str] | None = None) -> Mock:
@@ -36,7 +36,7 @@ def test_get_reputation_metadata_builds_real_signals_from_github_api():
     client = GitHubClient(token="fake-token")
     created_at = (datetime.now(UTC) - timedelta(days=400)).isoformat().replace("+00:00", "Z")
 
-    def fake_get(url, headers=None, params=None, timeout=None):
+    def fake_request(method, url, headers=None, params=None, timeout=None):
         if url.endswith("/users/octocat"):
             return _mock_response({"login": "octocat", "created_at": created_at})
         if url.endswith("/repos/org/repo/commits") and params.get("author") == "octocat":
@@ -44,7 +44,7 @@ def test_get_reputation_metadata_builds_real_signals_from_github_api():
                 [{"author": {"login": "octocat"}, "commit": {"verification": {"verified": True}}}],
                 headers={"Link": '<...?page=12>; rel="last"'},
             )
-        if url.endswith("/repos/org/repo/commits") and "author" not in params:
+        if url.endswith("/repos/org/repo/commits") and "author" not in (params or {}):
             return _mock_response(
                 [
                     {"commit": {"verification": {"verified": False}}},
@@ -53,7 +53,7 @@ def test_get_reputation_metadata_builds_real_signals_from_github_api():
             )
         raise AssertionError(f"URL inesperada: {url} params={params}")
 
-    with patch("httpx.get", side_effect=fake_get):
+    with patch("httpx.request", side_effect=fake_request):
         rep = client.get_reputation_metadata("org", "repo", "octocat")
 
     assert rep.author_login == "octocat"

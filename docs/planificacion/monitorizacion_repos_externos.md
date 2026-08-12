@@ -1,39 +1,40 @@
-# Plan de Implementación: Monitorización de Repositorios Externos
+# Plan de Implementación: Monitorización de Repositorios Externos (Rediseñado)
 
-Este documento detalla el plan para extender la funcionalidad de WatchGate, permitiendo añadir y analizar repositorios externos (como `openclaw/openclaw-server`) de forma centralizada a través del Dashboard y la recepción de webhooks, sin necesidad de clonar repositorios completos en el servidor.
+Este documento detalla el plan para extender la funcionalidad de WatchGate, permitiendo su uso tanto como SaaS (analizando repositorios gestionados vía eventos de la plataforma) como Herramienta de Auditoría Externa Integrada (analizando Pull Requests de terceros sin permisos de administración, visualizado directamente en el dashboard) y mediante scripts.
 
-## Fase 1: Extensión del Modelo de Datos (Dashboard)
+## Fase 1: Modelo de Datos Extensible y Seguro
+Desacoplar las integraciones VCS de la Organización para permitir múltiples tokens y proveedores (GitHub, GitLab, etc.) en un futuro.
+- **Nuevo Modelo `VCSConnection`**: Crear tabla para almacenar conexiones a proveedores (ej. `github`), referenciada a `Organization`.
+  - Campos clave: `provider`, `installation_id`, `access_token` (cifrado).
+- **Cifrado de Secretos**: Implementar cifrado simétrico (ej. Fernet) en la capa de persistencia para el campo `access_token` de `VCSConnection` para prevenir exposición en texto plano. Usar la misma infraestructura de cifrado prevista para `custom_llm_api_key`.
+- **Nuevo Modelo `MonitoredRepo`**: Crear una tabla vinculada a `VCSConnection` y `Organization` que guarde:
+  - Ruta del repositorio (`owner/repo`).
+  - Tipo de monitorización (`managed` para webhooks, `audited` para solo lectura externa).
+  - Estado y última vez escaneado.
 
-El sistema necesita almacenar credenciales para acceder a repositorios externos y asociar repositorios monitorizados a organizaciones.
+## Fase 2: Cliente VCS Resiliente y Extracción de Diffs
+- **Refactorizar `GitHubClient`**: Moverlo a `watchgate/adapters/github_client.py` para uso global.
+- **Manejo de Rate Limits**: Implementar lógica de *backoff* y respeto a las cabeceras `X-RateLimit-Reset` de GitHub para evitar bloqueos por HTTP 429.
+- **Descarga Conjunta (Diff + Metadata) y Límites**: 
+  - Limitar la descarga de Diffs a un máximo de **2MB** para prevenir bloqueos por OOM (Out Of Memory).
+  - `get_pull_request_diff`: Obtener el parche como texto plano (`Accept: application/vnd.github.v3.diff`).
+  - Obtener el JSON de la PR simultáneamente para recuperar la información del autor (necesario para la Capa de Reputación al no tener `.git` local).
 
-- **Actualizar `Organization`**: Añadir un campo `vcs_installation_id` o `vcs_access_token` en `watchgate/db/models.py`.
-- **Nuevo Modelo `MonitoredRepo`**: Crear una tabla vinculada a `Organization` que guarde la ruta del repositorio (`owner/repo`) y el estado de la monitorización.
+## Fase 3: Orquestación Asíncrona (Colas y Workers)
+Reemplazar el uso de `BackgroundTasks` de FastAPI por un sistema robusto y dedicado.
+- **Tecnología de Cola**: Se utilizará **RQ (Redis Queue)** para la encolación de tareas en el entorno de despliegue principal. Para entornos locales/testing se podrá usar modo síncrono.
+- **Worker Independiente**: Desplegar un proceso `worker` en background separado de FastAPI para procesar el pipeline del LLM/RAG.
+- **Actualización Atómica de Cuota**: Asegurar que el descuento de cuota en `UserTokenUsage` se realice atómicamente a nivel base de datos (`UPDATE ... SET tokens_used = tokens_used + X`) para prevenir condiciones de carrera entre workers.
 
-## Fase 2: Interfaz de Usuario y API del Dashboard
+## Fase 4: API, UI y Webhooks Seguros
+- **Validación de Webhooks**: Implementar obligatoriamente la validación criptográfica (`X-Hub-Signature-256`) en los endpoints que reciban eventos de GitHub (`managed`).
+- **Dashboard UI & API**: Crear sección "Repositorios Externos" y "Auditoría".
+- **Reducción de Scope (Auditoría Bajo Demanda)**: Para evitar cargas masivas, el Dashboard no permitirá auditar N PRs de un repositorio de terceros en bloque. La funcionalidad de auditoría en la UI pedirá la URL de **una Pull Request concreta** a auditar, limitando el procesamiento a 1 PR por invocación. Los resultados se guardarán en `pr_scores`.
 
-Permitir a los usuarios del dashboard añadir y gestionar repositorios monitorizados.
+## Fase 5: Soporte para Escaneo Masivo Externo (Script CLI)
+Para los usuarios que deseen auditar decenas de PRs a la vez, se puede crear un script CLI independiente que interactúe iterativamente con la API pública de GitHub y emita los resultados vía `watchgate analyze --diff-stdin`. Esto delega la gestión de rate-limits y concurrencia masiva al cliente, protegiendo los recursos del SaaS.
 
-- **Endpoints REST**: Crear `POST /api/v1/repos/external` y `GET /api/v1/repos/external` en el backend del dashboard (idealmente un router nuevo `repos.py`).
-- **Dashboard UI**: Añadir sección "Monitorizar Repo" en el frontend para ingresar la URL/ruta (`owner/repo`) de forma amigable.
-
-## Fase 3: Extracción de Diffs sin Clonar
-
-Para analizar código externo de manera eficiente y escalable desde el Engine API Server SaaS, se debe descargar únicamente el diff en texto plano.
-
-- **Refactorizar `GitHubClient`**: Mover `github_client.py` de `adapters/github_action/` a `watchgate/adapters/github_client.py` para usarlo globalmente.
-- **Nuevo método `get_pull_request_diff`**: Implementar en `GitHubClient` una llamada a la API (`Accept: application/vnd.github.v3.diff`) para obtener el parche, y utilizar `parse_diff_from_text` (ya existente en `diffparser.py`) para parsearlo sin requerir `git` local.
-
-## Fase 4: Procesamiento Asíncrono de Webhooks
-
-Conectar el Engine API para que cuando se abra o actualice un PR en un repo externo monitorizado, WatchGate procese el evento y asigne las cuotas correctamente.
-
-- **FastAPI BackgroundTasks**: En `watchgate/api/routers/webhooks.py`, el webhook responderá a GitHub/GitLab con `202 Accepted` de inmediato para evitar timeouts.
-- **Flujo de Análisis Asíncrono**:
-  1. Obtener el diff con `GitHubClient.get_pull_request_diff`.
-  2. Parsearlo a un `NormalizedDiff`.
-  3. Ejecutar el pipeline llamando a `QuotaService.analyze_with_quota` para descontar el coste de la organización dueña del repo monitorizado.
-  4. Formatear la salida a Markdown vía `comment_template.py`.
-  5. Publicar el análisis como un comentario en el PR remoto con `GitHubClient.post_comment`.
+*Nota: Se ha proporcionado un script de ejemplo (`audit_external_repos.sh`) como caso de uso externo al repositorio principal.*
 
 ## Asignación
 Esta implementación queda asignada a **Pablo Ayllón García** (Línea 1 - Núcleo, Orquestador y Engine API SaaS).

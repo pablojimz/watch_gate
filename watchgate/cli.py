@@ -179,8 +179,7 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
         logger.debug("Fallo cargando/aplicando configuración", exc_info=True)
         if not args.quiet:
             msg = (
-                f"[Error de Configuración] Archivo de configuración "
-                f"'{args.config}' inválido: {exc}"
+                f"[Error de Configuración] Archivo de configuración '{args.config}' inválido: {exc}"
             )
             print(msg, file=sys.stderr)
         return 2
@@ -198,8 +197,7 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
         if sys.stdin.isatty():
             if not args.quiet:
                 msg = (
-                    "[Error Ingesta] Se activó --diff-stdin pero no hay datos "
-                    "canalizados en stdin."
+                    "[Error Ingesta] Se activó --diff-stdin pero no hay datos canalizados en stdin."
                 )
                 print(msg, file=sys.stderr)
             return 2

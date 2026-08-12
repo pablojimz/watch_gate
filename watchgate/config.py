@@ -92,8 +92,7 @@ def _read_yaml(yaml_path: str) -> dict[str, Any]:
         return {}
     if not isinstance(data, dict):
         raise TypeError(
-            f"{yaml_path}: se esperaba un mapeo YAML en la raíz, "
-            f"se encontró {type(data).__name__}"
+            f"{yaml_path}: se esperaba un mapeo YAML en la raíz, se encontró {type(data).__name__}"
         )
     return data
 

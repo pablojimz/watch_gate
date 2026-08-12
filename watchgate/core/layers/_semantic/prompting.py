@@ -345,9 +345,7 @@ def _excerpt_around_matches(diff_hunk: str, match_lines: list[int]) -> str:
 
 
 def _fetch_tool_hint(file_change: FileChange, head_sha: str) -> str:
-    return (
-        f'fetch_referenced_file(path="{file_change.path}", ref="{head_sha}") ' "para leerlo entero"
-    )
+    return f'fetch_referenced_file(path="{file_change.path}", ref="{head_sha}") para leerlo entero'
 
 
 # Marca literal que aparece en TODO mensaje de "no se ha podido revisar este
