@@ -22,7 +22,7 @@ from typing import Any
 
 import watchgate.core.layers  # noqa: F401 - registrar capas en LAYER_REGISTRY
 from watchgate.adapters.github_action import dashboard_client, dashboard_settings_client
-from watchgate.adapters.github_action.github_client import GitHubClient
+from watchgate.adapters.github_client import GitHubClient
 from watchgate.config import load_config
 from watchgate.core.comment_template import render_comment
 from watchgate.core.diffparser import parse_diff

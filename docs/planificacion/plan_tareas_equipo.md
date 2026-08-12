@@ -51,7 +51,7 @@ En cuanto esto está mergeado, las tres líneas arrancan **en paralelo**.
 - [x] **`cli.py`** (§9, §12) — CLI con subcomandos `watchgate analyze` (análisis de diff, formato Markdown o JSON, cortocircuito) y `watchgate rag reindex`.
   **Hecho cuando:** ejecución de `watchgate analyze` y `watchgate rag reindex` parsea argumentos y ejecuta el pipeline. ✅ Verificado en `tests/unit/test_cli.py`.
 
-- [ ] **Monitorización de Repositorios Externos (Dashboard + API)** — Extender modelo de datos (`Organization`, `MonitoredRepo`), refactorizar `GitHubClient` para bajar diffs en texto plano vía HTTP, e integrar `BackgroundTasks` en los webhooks para analizar repos remotos (como `openclaw/openclaw-server`) y publicar comentarios. (Ver `docs/planificacion/monitorizacion_repos_externos.md`).
+- [x] **Monitorización de Repositorios Externos (Dashboard + API)** — Extender modelo de datos (`VCSConnection`, `MonitoredRepo`), refactorizar `GitHubClient` para bajar diffs en texto plano vía HTTP, e integrar RQ/Redis en los webhooks para analizar repos remotos de forma segura (como `openclaw/openclaw-server`) sin bloquear los workers de FastAPI. (Ver `docs/planificacion/monitorizacion_repos_externos.md`).
 
 ### Línea 2 — Javier Martín Jurado (reputación y semántica) ✅ HECHO
 

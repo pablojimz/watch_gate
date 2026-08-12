@@ -166,7 +166,7 @@ class DepsLayer(AnalysisLayer):
                 layer_name=self.name,
                 risk_score=0,
                 justification=(
-                    "Se modificaron manifiestos pero no se añadieron ni " "cambiaron dependencias."
+                    "Se modificaron manifiestos pero no se añadieron ni cambiaron dependencias."
                 ),
             )
 
