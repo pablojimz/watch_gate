@@ -30,7 +30,7 @@ def run_managed_scan(repo_path: str, pr_number: int, installation_id: str) -> No
         org_id = vcs.org_id
 
         # Descargar Diff y Metadata
-        token = vcs.access_token if vcs.access_token else ""
+        token = vcs.access_token if vcs.access_token else None
         client = GitHubClient(token)
         owner, repo_name = repo_path.split("/", 1)
 
@@ -58,6 +58,19 @@ def run_managed_scan(repo_path: str, pr_number: int, installation_id: str) -> No
             user_id=None,
             agent_id=None,
         )
+
+        # 5. Insertar en la BD del Dashboard para que se pueda visualizar
+        from watchgate.dashboard.backend.db import db_session as dashboard_db_session, insert_aggregated, upsert_role
+        with dashboard_db_session() as dash_conn:
+            result.pr_id = str(pr_number)
+            result.repo = repo_path
+            insert_aggregated(dash_conn, result, author_login=author_login)
+            
+            # Buscamos el usuario de la DB SQLModel asociado para darle permisos en el esquema del Dashboard
+            from watchgate.db.models import User
+            user_obj = session.exec(select(User).where(User.org_id == org_id)).first()
+            if user_obj:
+                upsert_role(dash_conn, user_obj.name, repo_path, "admin_organizacion")
 
         # Actualizar last_scanned_at
         repo_obj = session.exec(
@@ -96,7 +109,7 @@ def run_audit_scan(
     """Tarea principal de auditoría ejecutada por el worker."""
     with next(get_session()) as session:
         # 1. Obtener token si existe
-        token = ""
+        token = None
         if vcs_connection_id:
             vcs = session.exec(
                 select(VCSConnection).where(VCSConnection.id == vcs_connection_id)
@@ -133,6 +146,19 @@ def run_audit_scan(
             user_id=None,
             agent_id=None,
         )
+
+        # 5. Insertar en la BD del Dashboard para que se pueda visualizar
+        from watchgate.dashboard.backend.db import db_session as dashboard_db_session, insert_aggregated, upsert_role
+        with dashboard_db_session() as dash_conn:
+            result.pr_id = str(pr_number)
+            result.repo = repo_path
+            insert_aggregated(dash_conn, result, author_login=author_login)
+            
+            # Buscamos el usuario de la DB SQLModel asociado para darle permisos en el esquema del Dashboard
+            from watchgate.db.models import User
+            user_obj = session.exec(select(User).where(User.org_id == org_id)).first()
+            if user_obj:
+                upsert_role(dash_conn, user_obj.name, repo_path, "admin_organizacion")
 
         # Actualizar last_scanned_at
         repo_obj = session.exec(

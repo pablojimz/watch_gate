@@ -39,12 +39,13 @@ class DiffTooLargeError(Exception):
 
 
 class GitHubClient:
-    def __init__(self, token: str) -> None:
+    def __init__(self, token: str | None = None) -> None:
         self._headers = {
-            "Authorization": f"Bearer {token}",
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
         }
+        if token:
+            self._headers["Authorization"] = f"Bearer {token}"
 
     def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
         """Wrapper interno para peticiones con manejo de rate limits."""
