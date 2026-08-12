@@ -314,3 +314,15 @@ arriba). Antes de invertir esfuerzo en "arreglar" un fallo de esta suite
 -- vía RAG, prompts, o cualquier otro mecanismo -- conviene primero leer
 el fichero real del caso y preguntarse si el fallo es de WatchGate o del
 propio dataset/test.
+
+## Cuarta regeneración: 190/193 (98%), el mejor resultado hasta ahora
+
+Tras arreglar `false_positive_candidate` y documentar `mirrorbot_10`, se
+regeneró el informe una vez más: **190/193 (98%)**. `false_positive_candidate`
+ya no divergía -- confirma que el arreglo de su `expected.json` se
+sostiene contra la API real, no solo en la comprobación puntual. Quedan 3
+divergentes: `mirrorbot_10` (esperado, documentado como no-bug),
+`malreal_pypi_compromised_lib_lightning_5` (varianza de umbral ya
+conocida, uno de los 5 casos de ground truth ya arreglados) y un caso
+nuevo de ruido en `real_pydantic_pydantic_13577` (mismo patrón de falsos
+positivos ocasionales en PRs benignos reales, documentado arriba).
