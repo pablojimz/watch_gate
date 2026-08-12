@@ -187,6 +187,16 @@ export interface AgentUsageMetrics {
   by_agent: AgentMetricRow[]
 }
 
+export interface MonitoredRepoResponse {
+  id: string
+  vcs_connection_id: string | null
+  repo_path: string
+  monitor_type: string
+  status: string
+  last_scanned_at: string | null
+  created_at: string
+}
+
 export const api = {
   me: () => request<MeResponse>('/auth/me'),
   logout: () => request<{ status: string }>('/auth/logout', { method: 'POST' }),
@@ -259,4 +269,15 @@ export const api = {
     }),
   deleteApiKey: (id: string) =>
     request<{ status: string; id: string }>(`/keys/${id}`, { method: 'DELETE' }),
+  listExternalRepos: () => request<MonitoredRepoResponse[]>('/repos/external'),
+  addExternalRepo: (repo_path: string, monitor_type: string, vcs_connection_id?: string | null) => 
+    request<MonitoredRepoResponse>('/repos/external', {
+      method: 'POST',
+      body: JSON.stringify({ repo_path, monitor_type, vcs_connection_id }),
+    }),
+  scanExternalRepo: (id: string, pr_number: number) => 
+    request<{message: string; repo_path: string; pr_number: number}>(`/repos/external/${id}/scan`, {
+      method: 'POST',
+      body: JSON.stringify({ pr_number }),
+    }),
 }

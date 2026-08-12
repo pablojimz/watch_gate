@@ -7,7 +7,10 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from sqlalchemy import Column
 from sqlmodel import Field, SQLModel
+
+from watchgate.db.crypto import EncryptedString
 
 
 class Organization(SQLModel, table=True):
@@ -23,6 +26,40 @@ class Organization(SQLModel, table=True):
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
+class VCSConnection(SQLModel, table=True):
+    """Conexiones a proveedores de Control de Versiones (GitHub, GitLab)."""
+
+    __tablename__ = "vcs_connections"
+
+    id: str = Field(primary_key=True)
+    org_id: str = Field(foreign_key="organizations.id", index=True)
+    provider: str = Field(default="github")  # "github", "gitlab", etc.
+    installation_id: str | None = Field(default=None)
+    access_token: str | None = Field(
+        sa_column=Column(EncryptedString, nullable=True)
+    )  # Cifrado simétricamente
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class MonitoredRepo(SQLModel, table=True):
+    """Repositorios monitorizados (SaaS) o auditados de terceros."""
+
+    __tablename__ = "monitored_repos"
+
+    id: str = Field(primary_key=True)
+    org_id: str = Field(foreign_key="organizations.id", index=True)
+    vcs_connection_id: str | None = Field(
+        foreign_key="vcs_connections.id", index=True, default=None
+    )
+    repo_path: str = Field(index=True)  # ej: "owner/repo"
+    monitor_type: str = Field(
+        default="managed"
+    )  # "managed" (con webhooks) | "audited" (sólo lectura de terceros)
+    status: str = Field(default="active")
+    last_scanned_at: datetime | None = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
 class User(SQLModel, table=True):
     """Usuario registrado de la plataforma WatchGate / SaaS."""
 
@@ -33,7 +70,9 @@ class User(SQLModel, table=True):
     name: str
     role: str = Field(default="revisor")  # "admin_organizacion" | "mantenedor" | "revisor"
     org_id: str | None = Field(default=None, foreign_key="organizations.id", index=True)
-    custom_llm_api_key: str | None = None  # Opcional: Clave cifrada para modalidad BYOK
+    custom_llm_api_key: str | None = Field(
+        sa_column=Column(EncryptedString, nullable=True)
+    )  # Clave cifrada para modalidad BYOK
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 

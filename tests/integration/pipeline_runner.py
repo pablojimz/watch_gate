@@ -42,6 +42,8 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+from watchgate.config import DEFAULT_WEIGHTS
+from watchgate.core.aggregator import DEFAULT_THRESHOLDS
 from watchgate.core.cost_control import CostController
 from watchgate.core.diffparser import parse_diff
 from watchgate.core.layers._semantic.layer import SemanticLayer
@@ -51,15 +53,11 @@ from watchgate.core.orchestrator import LayerFactory, run_analysis
 
 CASES_DIR = Path(__file__).resolve().parents[1] / "cases"
 
-# Mismos pesos por defecto que config.py::_DEFAULT_WEIGHTS.
-_WEIGHTS: dict[str, float] = {
-    "static": 0.25,
-    "dependencies": 0.10,
-    "vulnerabilities": 0.10,
-    "reputation": 0.15,
-    "semantic": 0.40,
-}
-_THRESHOLDS: dict[str, int] = {"yellow": 40, "red": 70}
+# Importados de config.py/aggregator.py en vez de duplicados a mano -- así
+# un cambio real en los pesos/umbrales de producción no puede desincronizar
+# la suite en silencio.
+_WEIGHTS: dict[str, float] = dict(DEFAULT_WEIGHTS)
+_THRESHOLDS: dict[str, int] = dict(DEFAULT_THRESHOLDS)
 
 
 class _RunnerConfig:

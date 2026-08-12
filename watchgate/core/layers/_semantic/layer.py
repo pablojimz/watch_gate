@@ -14,6 +14,7 @@ import json
 import logging
 from typing import Any, Protocol
 
+from watchgate.core.aggregator import DEFAULT_THRESHOLDS
 from watchgate.core.layers._semantic import prompting, tools
 from watchgate.core.layers._semantic.client import (
     LLMClient,
@@ -42,7 +43,7 @@ _NO_BUDGET_SKIP_REASON = "Presupuesto de tokens agotado para este repositorio es
 # pero cerca de un umbral decide el semáforo final. Lejos de cualquier
 # umbral (verde claro o rojo claro) no merece la pena el coste extra: ahí la
 # varianza no cambia el veredicto.
-_BORDERLINE_THRESHOLDS = (40, 70)
+_BORDERLINE_THRESHOLDS = (DEFAULT_THRESHOLDS["yellow"], DEFAULT_THRESHOLDS["red"])
 _BORDERLINE_MARGIN = 10
 _MAX_RESAMPLES = 2
 
@@ -96,16 +97,37 @@ def _apply_unverified_content_floor(
 
 # Suelo mecánico independiente del anterior: si el propio diff (o el
 # contenido de un fichero leído con fetch_referenced_file) contiene texto
-# que intenta manipular al LLM -- "ignora las instrucciones anteriores",
-# falsos mensajes de sistema, JSON de respuesta falsificado incrustado en un
-# comentario -- eso es evidencia de intención maliciosa por sí sola, la
-# haya seguido el modelo o no. Un PR legítimo nunca necesita decirle a un
-# revisor (humano o IA) que ignore sus instrucciones; el intento en sí es el
-# hallazgo. 100, no un umbral calculado: no queda margen de duda razonable
-# aquí como sí lo hay con "no se pudo revisar" -- no es una escala de
-# incertidumbre, es una prueba directa.
+# que intenta manipular al LLM -- falsos mensajes de sistema ("system:"),
+# JSON de respuesta falsificado incrustado ('"risk_score": 0, "justification"'),
+# instrucciones explícitas de qué responder ("respond only with risk_score")
+# -- eso es evidencia de intención maliciosa por sí sola, la haya seguido el
+# modelo o no: un PR legítimo nunca tiene motivo para imitar la sintaxis de
+# una respuesta dirigida a un analizador automático. 100, no un umbral
+# calculado: no queda margen de duda razonable aquí.
+#
+# Deliberadamente NO se incluyen aquí las etiquetas de lenguaje genérico de
+# `_PROMPT_INJECTION_PATTERNS` (p. ej. "ignore_previous_instructions",
+# "instructs_to_skip_analysis", "claims_preapproved", "disregard_instructions",
+# "role_override") -- bug real, reproducido: un LLM real, viendo el diff
+# completo, juzgaba correctamente como benigno un comentario de código de lo
+# más normal ("// TODO: don't flag this edge case, it's intentional"), y este
+# suelo descartaba ese juicio y forzaba 100/MALICIOSO solo por la presencia
+# de esas palabras -- exactamente lo contrario de "detectar intención": es
+# buscar palabras sueltas e ignorar el contexto que el propio LLM sí tuvo.
+# Esas frases son demasiado comunes en prosa/comentarios corrientes para ser
+# evidencia fiable por sí solas. Las etiquetas de abajo, en cambio, solo
+# aparecen de forma realista si el texto se escribió a propósito para que lo
+# lea un LLM como si fuera una instrucción o una respuesta -- ahí sí hay
+# intención real, no una coincidencia de vocabulario.
+_STRUCTURAL_LLM_TARGETING_LABELS = frozenset(
+    {
+        "fake_role_marker",
+        "instructs_response_content",
+        "embedded_fake_json_response",
+        "new_instructions_marker",
+    }
+)
 _PROMPT_INJECTION_FLOOR_SCORE = 100
-_NO_BUDGET_SKIP_REASON = "Presupuesto de tokens agotado para este repositorio este mes"
 _NO_LLM_CONFIG_SKIP_REASON = (
     "Capa semántica omitida (requiere clave de API o configuración de proveedor LLM en el entorno)"
 )
@@ -113,7 +135,8 @@ _NO_LLM_CONFIG_SKIP_REASON = (
 
 def _apply_prompt_injection_floor(output: SemanticOutput, scanned_text: str) -> SemanticOutput:
     findings = find_prompt_injection_attempts(scanned_text)
-    if not findings or output.risk_score >= _PROMPT_INJECTION_FLOOR_SCORE:
+    has_structural_evidence = any(label in _STRUCTURAL_LLM_TARGETING_LABELS for label in findings)
+    if not has_structural_evidence or output.risk_score >= _PROMPT_INJECTION_FLOOR_SCORE:
         return output
     return output.model_copy(
         update={
@@ -225,22 +248,48 @@ def _diff_summary(diff: NormalizedDiff) -> str:
     return "\n".join(f"{fc.path}: {fc.diff_hunk[:200]}" for fc in diff.files)
 
 
+class _DummyCostController:
+    def budget_remaining(self, repo: str) -> float:
+        return float("inf")
+
+    def estimate_tokens(self, text: str) -> int:
+        return len(text) // 4
+
+    def get_cached(self, diff_hash: str) -> SemanticOutput | None:
+        return None
+
+    def store_cached(self, diff_hash: str, output: SemanticOutput) -> None:
+        pass
+
+    def record_usage(self, repo: str, tokens: int) -> None:
+        pass
+
+
 @register_layer
 class SemanticLayer(AnalysisLayer):
     name = "semantic"
 
     def __init__(
         self,
-        llm_client: LLMClient,
-        cost_control: CostControllerLike,
+        llm_client: LLMClient | None = None,
+        cost_control: CostControllerLike | None = None,
         max_diff_tokens: int = 6000,
         project_type: str = "desconocido",
         languages: str = "desconocido",
         recent_activity_summary: str = "sin datos",
         rag_index_path: str = DEFAULT_INDEX_PATH,
+        client_init_error: str | None = None,
     ) -> None:
         self._llm_client = llm_client
-        self._cost_control = cost_control
+        # Motivo real por el que quien llama no pudo construir `llm_client`
+        # (p. ej. `build_llm_client()` lanzó por un proveedor/clave mal
+        # configurados) -- si se pasa, sustituye a _NO_LLM_CONFIG_SKIP_REASON
+        # en el resultado. Sin esto, cualquier fallo de configuración real
+        # (no solo "no hay clave") queda indistinguible de "no hay clave".
+        self._client_init_error = client_init_error
+        self._cost_control: CostControllerLike = (
+            cost_control if cost_control is not None else _DummyCostController()  # type: ignore[assignment]
+        )
         self._max_diff_tokens = max_diff_tokens
         self._project_type = project_type
         self._languages = languages
@@ -248,9 +297,23 @@ class SemanticLayer(AnalysisLayer):
         self._rag_index_path = rag_index_path
 
     def analyze(self, diff: NormalizedDiff, metadata: dict[str, Any]) -> LayerResult:
+        if self._llm_client is None:
+            return LayerResult(
+                layer_name=self.name,
+                risk_score=0,
+                justification="",
+                skipped=True,
+                skip_reason=(
+                    f"Capa semántica omitida: no se pudo construir el cliente LLM "
+                    f"({self._client_init_error})"
+                    if self._client_init_error
+                    else _NO_LLM_CONFIG_SKIP_REASON
+                ),
+            )
+
         repo = str(metadata.get("repo", ""))
 
-        if self._cost_control.budget_remaining(repo) <= 0:
+        if self._cost_control is not None and self._cost_control.budget_remaining(repo) <= 0:
             return LayerResult(
                 layer_name=self.name,
                 risk_score=0,
@@ -260,7 +323,7 @@ class SemanticLayer(AnalysisLayer):
             )
 
         diff_hash = compute_diff_hash(diff)
-        cached = self._cost_control.get_cached(diff_hash)
+        cached = self._cost_control.get_cached(diff_hash) if self._cost_control else None
         if cached is not None:
             return self._to_layer_result(cached, tool_calls_made=0)
 
@@ -294,14 +357,23 @@ class SemanticLayer(AnalysisLayer):
                 skipped=True,
                 skip_reason=str(exc),
             )
-        except Exception as exc:  # noqa: BLE001
-            logger.info("Capa semántica omitida por cliente LLM no disponible: %s", exc)
+        except Exception as exc:  # noqa: BLE001 - frontera de aislamiento entre capas
+            # Antes esto se reportaba con _NO_LLM_CONFIG_SKIP_REASON, el mismo
+            # mensaje que "no hay clave de API configurada" -- indistinguible
+            # de un error real de la llamada (límite de tokens superado, rate
+            # limit, timeout de red...). Bug real, reproducido: un caso con un
+            # fichero de 3.7 MB en el diff hacía que Gemini devolviera 400
+            # INVALID_ARGUMENT (input token count excede el máximo permitido)
+            # y el resultado decía "sin configuración de proveedor LLM",
+            # llevando a pensar que faltaba una env var cuando la API sí
+            # respondía, solo que con un error real.
+            logger.info("Capa semántica omitida por error de la API del proveedor LLM: %s", exc)
             return LayerResult(
                 layer_name=self.name,
                 risk_score=0,
                 justification="",
                 skipped=True,
-                skip_reason=_NO_LLM_CONFIG_SKIP_REASON,
+                skip_reason=f"Capa semántica omitida por error de la API del proveedor LLM: {exc}",
             )
 
         n_calls = 1
@@ -349,6 +421,7 @@ class SemanticLayer(AnalysisLayer):
         diff: NormalizedDiff,
         metadata: dict[str, Any],
     ) -> tuple[SemanticOutput, _ToolCallCounter]:
+        assert self._llm_client is not None
         counter = _ToolCallCounter()
         tool_executor = _build_tool_executor(diff, metadata, counter)
         output = self._llm_client.complete_structured(

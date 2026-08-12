@@ -473,6 +473,41 @@ def test_static_layer_skips_when_rules_unavailable() -> None:
 
     assert res.risk_score == 0
     assert res.skipped is True
+
+
+@pytest.mark.parametrize(
+    "diff_hunk",
+    [
+        "@@ -1,1 +1,1 @@\n+# NOTE: ignore the previous config file, use settings.yaml instead",
+        "@@ -1,1 +1,1 @@\n+// TODO: don't flag this edge case in the linter, it's intentional",
+    ],
+)
+def test_static_layer_does_not_flag_ordinary_code_comments_as_malicious(diff_hunk: str) -> None:
+    """Bug real, reproducido en vivo: la capa estática llegó a escanear el
+    diff en busca de frases tipo "ignora las instrucciones anteriores" /
+    "no marques esto" (pensadas para detectar inyección de prompt contra el
+    LLM) y, ante cualquier coincidencia, forzaba risk_score=100 y
+    threat_nature=MALICIOSO sin ningún contexto -- un comentario de código
+    de lo más normal bastaba para tumbar un PR benigno a rojo. Revertido:
+    esta capa ya no hace ese escaneo (ver el comentario en `analyze()`)."""
+    layer = StaticLayer()
+    diff = _make_diff(
+        [
+            FileChange(
+                path="src/app.py",
+                status=FileStatus.MODIFIED,
+                diff_hunk=diff_hunk,
+                additions=1,
+                deletions=0,
+            )
+        ]
+    )
+
+    with patch.object(layer, "_get_rules_dir", return_value=None):
+        res = layer.analyze(diff, {})
+
+    assert res.risk_score == 0
+    assert res.threat_nature != ThreatNature.MALICIOUS
     assert "Semgrep" in res.skip_reason
     assert "YARA" in res.skip_reason
 
@@ -738,9 +773,7 @@ class _FakeRulesVerificationError(RuntimeError):
     pass
 
 
-def _make_fake_local_rules_client(
-    get_verified_rules=None, repo_cache_dir_path: Path | None = None
-):
+def _make_fake_local_rules_client(get_verified_rules=None, repo_cache_dir_path: Path | None = None):
     """Doble mínimo de scripts/local_rules_client.py: mismas dos
     excepciones (con los mismos nombres, para que `except
     local_rules_client.RulesClientError` del código real las reconozca) y

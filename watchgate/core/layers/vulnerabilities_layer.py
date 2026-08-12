@@ -40,15 +40,10 @@ import httpx
 from watchgate.core.layers._shared import (
     DEPENDENCY_MANIFEST_FILENAMES,
     DependencyChange,
-    parse_cargo_toml,
-    parse_composer_json,
-    parse_go_mod,
-    parse_package_json,
-    parse_pkgbuild,
-    parse_requirements_txt,
+    parse_manifest_file_change,
 )
 from watchgate.core.layers.base import AnalysisLayer, register_layer
-from watchgate.core.models import Confidence, Finding, LayerResult, NormalizedDiff
+from watchgate.core.models import Confidence, Finding, LayerResult, NormalizedDiff, ThreatNature
 
 logger = logging.getLogger("watchgate.vulnerabilities")
 
@@ -346,24 +341,7 @@ class VulnerabilitiesLayer(AnalysisLayer):
 
         all_changes: list[DependencyChange] = []
         for file_change in manifest_files:
-            fname = Path(file_change.path).name
-            hunk = file_change.diff_hunk
-            parsed: list[DependencyChange] = []
-            if fname == "package.json":
-                parsed = parse_package_json(hunk)
-            elif fname in ("requirements.txt", "Pipfile"):
-                parsed = parse_requirements_txt(hunk)
-            elif fname == "PKGBUILD":
-                parsed = parse_pkgbuild(hunk)
-            elif fname == "Cargo.toml":
-                parsed = parse_cargo_toml(hunk)
-            elif fname == "go.mod":
-                parsed = parse_go_mod(hunk)
-            elif fname == "composer.json":
-                parsed = parse_composer_json(hunk)
-            for ch in parsed:
-                ch.manifest_path = file_change.path
-            all_changes.extend(parsed)
+            all_changes.extend(parse_manifest_file_change(file_change))
 
         # Sin nombre de paquete (p. ej. solo cambió un script de instalación,
         # sin dependencias nuevas) no hay nada que consultar en OSV -- esa
@@ -394,9 +372,9 @@ class VulnerabilitiesLayer(AnalysisLayer):
             elif osv_res and osv_res.get("vulns"):
                 vulns = osv_res["vulns"]
                 has_high_crit = any(_is_high_or_critical_vuln(v) for v in vulns)
-                if has_high_crit:
+                if has_high_crit or len(vulns) >= 5:
                     pkg_score = 90
-                    note = f"Vulnerabilidad crítica/alta en OSV ({len(vulns)} vulns)"
+                    note = f"Vulnerabilidad crítica/alta o acumulada en OSV ({len(vulns)} vulns)"
                 else:
                     pkg_score = 60
                     note = f"Vulnerabilidades encontradas en OSV ({len(vulns)} vulnerabilidades)"
@@ -433,4 +411,5 @@ class VulnerabilitiesLayer(AnalysisLayer):
             justification=final_justification,
             findings=structured_findings,
             confidence=confidence,
+            threat_nature=ThreatNature.VULNERABILITY if final_score > 0 else None,
         )

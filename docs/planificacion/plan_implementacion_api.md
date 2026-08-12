@@ -80,7 +80,7 @@ watchgate/
 │   ├── auth.py                          # Middleware de API Keys (wg_live_...) & Scopes
 │   ├── dependencies.py                  # Inyección de dependencias
 │   ├── routers/
-│   │   ├── analyze.py                   # POST /api/v1/analyze (con BackgroundTasks)
+│   │   ├── analyze.py                   # POST /api/v1/analyze
 │   │   └── webhooks.py                  # POST /api/v1/webhooks/github (HMAC verification)
 │   └── services/
 │       ├── api_key_service.py           # Validación SHA-256 de claves
@@ -187,7 +187,7 @@ class PRScore(SQLModel, table=True):
 
 # 5. Persistencia Asíncrona y Desempeño HTTP (`POST /api/v1/analyze`)
 
-Para minimizar la latencia de respuesta en la API HTTP, la persistencia en base de datos del resultado (`pr_scores`) y la actualización del saldo de tokens (`user_token_usage`) **se ejecutan de forma asíncrona mediante `BackgroundTasks` de FastAPI**:
+Para maximizar la resiliencia en la API HTTP, la persistencia en base de datos del resultado (`pr_scores`) y la actualización del saldo de tokens (`user_token_usage`) **se ejecutan de forma atómica en el mismo hilo pero sin bloqueos pesados mediante `QuotaService`, mientras que la ingesta pesada asíncrona pasa por `RQ` y Redis**:
 
 ```python
 @router.post("/api/v1/analyze", response_model=AggregatedResult)
@@ -260,7 +260,7 @@ Autenticados mediante Cookies de Sesión JWT (OAuth/OIDC):
 - [ ] **Fase 3: Construcción del Engine API (`watchgate/api/`)**
   - Crear `watchgate/api/main.py` con middleware de filtro de logs criptográfico y límite de payload de 10 MB.
   - Implementar `auth.py` con autenticación por API Key SHA-256.
-  - Crear `routers/analyze.py` con ejecución asíncrona mediante `BackgroundTasks`.
+  - Crear `routers/analyze.py` con delegación eficiente y sin bloqueos asfixiantes.
 
 - [ ] **Fase 4: Soporte de RAG Distribuido Interno (`WATCHGATE_CHROMA_URL`)**
   - Actualizar `retriever.py` e `indexer.py` para soportar `chromadb.HttpClient` en la red privada cuando exista la variable de entorno interna `WATCHGATE_CHROMA_URL`. Los clientes externos no tienen acceso al RAG; la consulta es 100 % privada entre la Engine API y el clúster vectorial.

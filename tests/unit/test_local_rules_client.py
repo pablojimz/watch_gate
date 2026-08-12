@@ -233,9 +233,7 @@ def test_get_verified_rules_no_keys_requested_skips_git_entirely(monkeypatch, ca
     monkeypatch.setattr(
         lrc, "_ensure_repo_cache", lambda *a, **k: pytest.fail("no debería tocar Git")
     )
-    monkeypatch.setattr(
-        lrc, "_sync_worktree", lambda *a, **k: pytest.fail("no debería tocar Git")
-    )
+    monkeypatch.setattr(lrc, "_sync_worktree", lambda *a, **k: pytest.fail("no debería tocar Git"))
 
     result = lrc.get_verified_rules(languages=[], third_party=[], include_yara=False)
     assert result.version == "v0.0.2"
