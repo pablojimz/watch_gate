@@ -52,3 +52,38 @@ def test_unknown_provider_raises_a_clear_error(monkeypatch):
     monkeypatch.setenv("WATCHGATE_LLM_PROVIDER", "cohere")
     with pytest.raises(ValueError, match="Proveedor LLM desconocido"):
         build_llm_client()
+
+
+def test_gemini_key_with_default_anthropic_provider_raises_a_clear_error(monkeypatch):
+    """Regresión, reproducida: WATCHGATE_LLM_API_KEY con una clave real de
+    Gemini (prefijo AIzaSy) pero sin WATCHGATE_LLM_PROVIDER (por defecto
+    "anthropic") construía un AnthropicClient con esa clave -- fallaba con un
+    error de autenticación genérico contra la API de Anthropic, "la misma
+    clave" que el usuario sabe que es correcta, solo que para el proveedor
+    equivocado. Ahora debe fallar aquí, con un mensaje que señale el
+    desajuste, en vez de mucho más tarde con un 401 opaco."""
+    monkeypatch.delenv("WATCHGATE_LLM_PROVIDER", raising=False)
+    monkeypatch.setenv("WATCHGATE_LLM_API_KEY", "AIzaSyD-fake-gemini-key-1234567890abcd")
+
+    with pytest.raises(ValueError, match="formato de una clave de 'gemini'"):
+        build_llm_client()
+
+
+def test_anthropic_key_with_gemini_provider_raises_a_clear_error(monkeypatch):
+    monkeypatch.setenv("WATCHGATE_LLM_PROVIDER", "gemini")
+    monkeypatch.setenv("WATCHGATE_LLM_API_KEY", "sk-ant-api03-fake-key-1234567890")
+
+    with pytest.raises(ValueError, match="formato de una clave de 'anthropic'"):
+        build_llm_client()
+
+
+def test_key_with_unrecognized_format_does_not_block_construction(monkeypatch):
+    """Una clave que no coincide con ningún prefijo conocido (proxy interno,
+    clave de empresa con formato propio, etc.) no debe bloquearse -- solo se
+    detectan desajustes cuando hay una señal fiable, no la ausencia de una."""
+    monkeypatch.setenv("WATCHGATE_LLM_PROVIDER", "anthropic")
+    monkeypatch.setenv("WATCHGATE_LLM_API_KEY", "unrecognized-format-key")
+
+    client = build_llm_client()
+
+    assert isinstance(client, AnthropicClient)
