@@ -21,8 +21,10 @@ from watchgate.dashboard.backend.routers.feedback import router as feedback_rout
 from watchgate.dashboard.backend.routers.keys import router as keys_router
 from watchgate.dashboard.backend.routers.llm_settings import router as llm_router
 from watchgate.dashboard.backend.routers.metrics import router as metrics_router
+from watchgate.dashboard.backend.routers.repos import router as repos_router
 from watchgate.dashboard.backend.routers.scores import router as scores_router
 from watchgate.dashboard.backend.routers.ui_settings import router as ui_router
+from watchgate.dashboard.backend.routers.webhooks import router as webhooks_router
 from watchgate.db.connection import init_db as init_api_keys_db
 from watchgate.logging_config import configure_logging
 
@@ -94,6 +96,8 @@ def create_app() -> FastAPI:
     app.include_router(metrics_router, prefix="/api")
     app.include_router(llm_router, prefix="/api")
     app.include_router(ui_router, prefix="/api")
+    app.include_router(repos_router, prefix="/api")
+    app.include_router(webhooks_router, prefix="/api")
 
     @app.get("/api/health")
     def health() -> dict[str, str]:
