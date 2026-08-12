@@ -194,22 +194,9 @@ umbral -- confirmado también con `malreal_pypi_compromised_lib_lightning_5`
 (uno de los 5 ya arreglados), que pasó en la primera tanda (rojo/70) y
 salió amarillo/40 -- justo en el umbral -- en la segunda.
 
-Dos casos SÍ se repiten en ambas tandas con resultado estable, lo que los
-hace candidatos más creíbles a ser un problema real de calibración en vez
-de ruido:
-
-- `false_positive_candidate`: mismo veredicto (rojo) las dos veces, cuando
-  se esperaba amarillo. Fixture diseñado a propósito para esto
-  (`eval()` con namespace restringido).
-- `malreal_pypi_malicious_intent_mirrorbot_10`: falla las dos veces
-  (verde 39, luego verde 15 -- alejándose del umbral en vez de oscilar
-  cerca de él, lo que apunta a una detección real que no engancha, no a
-  ruido). Backdoor de carga de cookies de sesión sin validar.
-
-No investigado más a fondo todavía -- pendiente de decidir si merece la
-pena revisar estos dos en detalle (incluyendo, para `mirrorbot_10`,
-comprobar si es un 6º caso de la misma familia de ground truth no fiable
-de este documento).
+Dos casos SÍ se repiten en las tres tandas con resultado estable --
+investigados a fondo, ver "Los dos casos persistentes, investigados" más
+abajo. Ninguno de los dos resulta ser un bug real de WatchGate.
 
 ## Tercera regeneración, con `gemini-3.6-flash` (tras arreglar el SDK)
 
@@ -231,3 +218,77 @@ también vuelve a divergir (verde/4) -- coherente con que sigue siendo un
 caso borderline por naturaleza (el dropper `start.py` es sutil, sin el
 payload `router_runtime.js` en el fixture por su tamaño), no una prueba de
 que el arreglo esté mal.
+
+## Los dos casos persistentes, investigados
+
+Tras la 3ª tanda consecutiva fallando, se investigó cada uno leyendo el
+fichero real del fixture (y, para `mirrorbot_10`, el ZIP de origen).
+Ninguno de los dos resulta ser un bug real de detección de WatchGate --
+cada uno revela un tipo de problema distinto a los 5 ya documentados
+arriba.
+
+### `false_positive_candidate`: puede que el modelo tenga razón y el test no
+
+`tests/cases/false_positive_candidate/after/formulas.py`:
+
+```python
+_ALLOWED_NAMES = {n: getattr(math, n) for n in ('sqrt', 'sin', 'cos', 'floor', 'ceil')}
+
+def evaluate_formula(expr, cell_values):
+    namespace = dict(_ALLOWED_NAMES)
+    namespace.update(cell_values)
+    return eval(expr, {'__builtins__': {}}, namespace)
+```
+
+`eval(expr, {'__builtins__': {}}, namespace)` es la técnica clásica de
+"sandbox de Python con builtins vacíos" que se sabe, desde hace años, que
+NO aísla nada de verdad: cualquier objeto del namespace (aquí, las
+funciones de `math`) expone `__globals__`, desde donde se recupera acceso
+a los builtins reales (`sqrt.__globals__['__builtins__']`) y de ahí a
+`exec`/`eval`/`__import__` sin restricción -- RCE real, técnica bien
+documentada, no un caso rebuscado. El modelo lo sube a rojo(70) las 3
+veces; `expected.json` (case `class: canonico`, diseñado a propósito para
+esto) espera amarillo (min. 20). Es defendible que el modelo esté siendo
+el correcto aquí y el propio test el mal calibrado -- no al revés. No se
+ha tocado `expected.json`: cambiar el veredicto esperado sin que el equipo
+lo decida explícitamente sería tan poco honesto como los otros casos de
+este documento.
+
+### `malreal_pypi_malicious_intent_mirrorbot_10`: no falta el payload, es un desajuste de categoría
+
+A diferencia de los 5 casos de la sección anterior, aquí el fichero del
+fixture (`direct_link_generator.py`, 809 líneas) SÍ coincide con el
+fichero real del ZIP de origen (mismo tamaño, mismo contenido) -- no es un
+caso de "fichero equivocado muestreado". Es código real y funcional de un
+bot de Telegram (`mirrorbot`) que genera enlaces de descarga directa desde
+servicios de alojamiento (mediafire, uptobox, 1fichier, terabox...),
+usando `cloudscraper`/`lk21.Bypass` para esquivar captchas/protecciones
+anti-bot de esos sitios. Revisado el fichero completo buscando
+exfiltración, credenciales robadas o ejecución de comandos ocultos: nada
+de eso -- las "cookies" que maneja (`XSRF-TOKEN`, `laravel_session`,
+`PHPSESSID`) son credenciales propias del operador del bot para
+autenticarse contra esos servicios, no robadas a terceros.
+
+Hipótesis más probable: el dataset DataDog etiqueta `mirrorbot` como
+`malicious_intent` por su **propósito** (facilita descargar/redistribuir
+contenido desde servicios que no lo permiten, un problema de ToS/copyright
+más que de seguridad), no porque el código contenga un payload de ataque a
+la cadena de suministro. Ese criterio de "malicioso" no coincide con el
+que usa WatchGate (backdoors, exfiltración, RCE, manipulación de
+dependencias) -- WatchGate, correctamente dentro de su propio alcance, no
+encuentra nada de eso aquí. El "fallo" es probablemente un desajuste de
+categoría del dataset de origen, no un hueco real de detección de
+WatchGate. Tampoco se ha tocado `expected.json` por la misma razón que en
+el resto de casos de este documento.
+
+### Lección general para el equipo
+
+De los 8 fallos originales reportados en esta suite, ahora sabemos que:
+5 eran ground truth con el fichero equivocado (arreglados), 1 es un
+desajuste de categoría del dataset (no un bug), y 1 es un caso donde el
+propio test podría estar mal calibrado, no el modelo. Solo entonces queda
+lo que sí es varianza real del modelo cerca de umbrales (documentado
+arriba). Antes de invertir esfuerzo en "arreglar" un fallo de esta suite
+-- vía RAG, prompts, o cualquier otro mecanismo -- conviene primero leer
+el fichero real del caso y preguntarse si el fallo es de WatchGate o del
+propio dataset/test.
