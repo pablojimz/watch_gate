@@ -3,10 +3,10 @@
 ## Metadatos
 
 - Responsable: Pablo Jiménez Castro
-- Última actualización: 2026-08-10
-- Estado general: Componentes funcionales y con tests unitarios propios. La revisión original de este documento (2026-08-07) encontró un defecto de integración confirmado (incompatibilidad de claves `"deps"` vs `"dependencies"`) que impedía que `deps_layer.py` participara en el análisis con la configuración por defecto, y que lo excluía siempre del cortocircuito — **ese defecto ya está resuelto** (ver adenda 2026-08-10 abajo y detalle en §2.2, §2.3 y §3, que se mantienen narrados en pasado como registro histórico). **Adenda 2026-08-08 (§2.5):** implementada, verificada en producción real y documentada la integración consumidora del repo privado de reglas (`sync-rules.yml`, `reconcile-rules.yml`, `scripts/sync_rules.py`) y su conexión con `static_layer.py` (third-party Semgrep + YARA, antes sin usar pese a estar ya sincronizadas). **Adenda 2026-08-10 (§2.2):** cerrado el hueco de cobertura de tests de `_has_new_dependencies` (commit `de963d1`, rama `test/shortcircuit-dependency-coverage`); de paso se confirma que `DEPENDENCY_MANIFEST_FILENAMES` ya no cubre cuatro ecosistemas sino seis (se sumaron `go.mod` y `composer.json` en el commit `792ed33`, posterior a la redacción original de este documento) — el propio TODO de "cuatro ecosistemas" estaba desactualizado respecto al código. **Nota aparte, fuera del alcance de esta pasada:** el mismatch de clave `"deps"`/`"dependencies"` que este documento marca abajo como "Confirmado, prioridad alta" y bloqueante ya no lo es — el código actual de `shortcircuit.py` define `_PARTIAL_LAYER_NAMES = ("static", "dependencies", "deps", "vulnerabilities", "reputation")`, incluyendo ya la clave canónica `"dependencies"` (corregido en el commit `222a3f9`, "unificar claves de capas", 2026-08-07 — anterior incluso a la "Última actualización" previa de este documento). El resto de §2.2, §5 y §6 que describen este bug como abierto no se ha revisado a fondo ni corregido en esta pasada; queda como deuda documental pendiente de una revisión dedicada.
+- Última actualización: 2026-08-11
+- Estado general: Componentes funcionales y con tests unitarios propios. La revisión original de este documento (2026-08-07) encontró un defecto de integración confirmado (incompatibilidad de claves `"deps"` vs `"dependencies"`) que impedía que `deps_layer.py` participara en el análisis con la configuración por defecto, y que lo excluía siempre del cortocircuito — **ese defecto ya está resuelto** (ver adenda 2026-08-10 abajo y detalle en §2.2, §2.3 y §3, que se mantienen narrados en pasado como registro histórico). **Adenda 2026-08-08 (§2.5):** implementada, verificada en producción real y documentada la integración consumidora del repo privado de reglas (`sync-rules.yml`, `reconcile-rules.yml`, `scripts/sync_rules.py`) y su conexión con `static_layer.py` (third-party Semgrep + YARA, antes sin usar pese a estar ya sincronizadas). **Adenda 2026-08-10 (§2.2):** cerrado el hueco de cobertura de tests de `_has_new_dependencies` (commit `de963d1`, rama `test/shortcircuit-dependency-coverage`); de paso se confirma que `DEPENDENCY_MANIFEST_FILENAMES` ya no cubre cuatro ecosistemas sino seis (se sumaron `go.mod` y `composer.json` en el commit `792ed33`, posterior a la redacción original de este documento) — el propio TODO de "cuatro ecosistemas" estaba desactualizado respecto al código. **Nota aparte, fuera del alcance de esta pasada:** el mismatch de clave `"deps"`/`"dependencies"` que este documento marca abajo como "Confirmado, prioridad alta" y bloqueante ya no lo es — el código actual de `shortcircuit.py` define `_PARTIAL_LAYER_NAMES = ("static", "dependencies", "deps", "vulnerabilities", "reputation")`, incluyendo ya la clave canónica `"dependencies"` (corregido en el commit `222a3f9`, "unificar claves de capas", 2026-08-07 — anterior incluso a la "Última actualización" previa de este documento). El resto de §2.2, §5 y §6 que describen este bug como abierto no se ha revisado a fondo ni corregido en esta pasada; queda como deuda documental pendiente de una revisión dedicada. **Adenda 2026-08-11 (§2.6):** diseñada, implementada y verificada de extremo a extremo (contra un Engine API real, no mocks) una GitHub Action tipo `composite` que analiza PRs delegando en el Engine API ya existente — se exploraron y descartaron primero dos diseños basados en Docker (autocontenido, e híbrido estático-local/semántica-remota) antes de llegar al adoptado; de paso se encontraron y corrigieron tres bugs reales (Git LFS ausente en `docker/engine-api.Dockerfile`, timeouts insuficientes en `static_layer.py` con contenido LFS real, y el bit de ejecución de `entrypoint.sh` en checkouts desde Windows). **Todo el trabajo de esta adenda sigue sin commitear** al momento de escribir esto — ver detalle y lista de ficheros en §2.6.
 - Última revisión realizada por: Pablo Jiménez Castro (análisis e implementación asistidos por Claude Code, contraste directo contra el código fuente actual y contra los repos reales en producción, no solo contra documentación previa)
-- Componentes registrados: CLI (`watchgate/cli.py`), Cortocircuito / shortcircuit (`watchgate/core/shortcircuit.py`), Capa de dependencias / deps_layer (`watchgate/core/layers/deps_layer.py`, `watchgate/core/layers/_shared.py`), Integración con el repo de reglas y capa estática (`.github/workflows/sync-rules.yml`, `.github/workflows/reconcile-rules.yml`, `scripts/sync_rules.py`, `scripts/rules_hash.py`, `watchgate/core/layers/static_layer.py` — §2.5)
+- Componentes registrados: CLI (`watchgate/cli.py`), Cortocircuito / shortcircuit (`watchgate/core/shortcircuit.py`), Capa de dependencias / deps_layer (`watchgate/core/layers/deps_layer.py`, `watchgate/core/layers/_shared.py`), Integración con el repo de reglas y capa estática (`.github/workflows/sync-rules.yml`, `.github/workflows/reconcile-rules.yml`, `scripts/sync_rules.py`, `scripts/rules_hash.py`, `watchgate/core/layers/static_layer.py` — §2.5), GitHub Action + Engine API / cliente HTTP ligero (`action.yml`, `entrypoint.sh`, `docker/engine-api.Dockerfile`, `.github/workflows/watchgate.yml` — §2.6)
 
 ---
 
@@ -15,6 +15,8 @@
 Este registro cubre, con el alcance solicitado, tres componentes de WatchGate: la CLI (`cli.py`), el cortocircuito de extremo (`shortcircuit.py`) y la capa de dependencias (`deps_layer.py` + `_shared.py`). No se documentan aquí `static_layer.py`, el dashboard ni el resto de capas salvo lo estrictamente necesario para entender la integración (§2.4).
 
 **Adenda 2026-08-08:** el alcance se amplía con un componente nuevo (§2.5), fuera del reparto original de `plan_tareas_equipo.md` por ser infraestructura posterior: la integración consumidora del repo privado de reglas `pablojimz/Repo-reglas-SEMGREP-y-YARA` (workflows de sincronización + verificación de integridad) y su conexión con `static_layer.py` (que hasta este momento sí estaba fuera del alcance del documento, y ahora se documenta específicamente en lo tocado por este trabajo).
+
+**Adenda 2026-08-11:** el alcance se amplía con un componente nuevo (§2.6), también fuera del reparto original por ser infraestructura de integración posterior: una GitHub Action `composite` que analiza pull requests delegando el análisis completo en el Engine API ya existente (`watchgate/api/routers/analyze.py`), sin instalar el paquete Python `watchgate` en el runner. Incluye el diseño descartado de dos alternativas basadas en Docker, tres bugs reales encontrados y corregidos durante la verificación E2E, y la metodología de prueba local (Docker Compose + `nektos/act`).
 
 **Sobre el reparto de responsabilidad:** `docs/planificacion/plan_tareas_equipo.md` registra que Pablo Ayllón García y Pablo Jiménez Castro **intercambiaron sus líneas** respecto al reparto original. En la tabla vigente de ese documento:
 
@@ -469,6 +471,104 @@ graph TD
 
 - Confirmar el disparo real de `sync-rules.yml` cuando se publique la próxima release del repo de reglas.
 - Considerar el test de arquitectura de consistencia de rutas propuesto arriba.
+
+---
+
+## 2.6 GitHub Action + Engine API — cliente HTTP ligero para analizar PRs (Adenda 2026-08-11)
+
+### Información básica
+
+- Responsable formal: no asignado en `plan_tareas_equipo.md` — infraestructura de integración posterior, igual que §2.5.
+- Ubicación: `action.yml`, `entrypoint.sh` (raíz del repo), `docker/engine-api.Dockerfile`, `watchgate/core/layers/static_layer.py` (cambios puntuales), `.github/workflows/watchgate.yml`.
+- Estado actual: Diseño final adoptado, implementado y verificado de extremo a extremo contra un Engine API real (no mocks) en tres niveles: llamada HTTP directa, ejecución real de `entrypoint.sh`, y el workflow completo interpretado por `act` (emulador local de GitHub Actions). **Todo el trabajo de esta sección está sin commitear** en el momento de escribir este registro — vive en el working tree local, no en ningún commit todavía.
+- Última revisión: 2026-08-11 (esta revisión, sesión completa asistida por Claude Code).
+- Nivel de madurez: Funcional y verificado en local; pendiente de desplegar el Engine API en un entorno alcanzable desde los runners reales de GitHub y de aprovisionar credenciales reales antes de poder proteger un PR real (ver "Próximos pasos").
+
+### Historial de cambios
+
+Nota: a diferencia del resto del documento, esta sección no puede citar commits reales — todo lo descrito aquí es del working tree actual, sin commitear (ver `git status` al momento de escribir esto: `.github/workflows/watchgate.yml`, `docker/engine-api.Dockerfile`, `watchgate/core/layers/static_layer.py` modificados; `action.yml`, `entrypoint.sh` nuevos). Se documenta como una secuencia de decisiones de diseño, cada una con su motivo, porque se descartaron dos diseños completos antes de llegar al actual y esa razón importa para quien retome esto.
+
+| Iteración | Diseño explorado | Resultado |
+|-----------|-------------------|-----------|
+| 1 | Action tipo `docker`, autocontenida: Semgrep+YARA+LLM corriendo dentro del propio contenedor de la Action | Descartada — implica distribuir la API key del LLM a cada repo consumidor, sin control de coste centralizado |
+| 2 | Action tipo `docker`, híbrida: estático local en el contenedor, semántica vía llamada a un endpoint centralizado | Descartada al comprobar que `watchgate/core/layers/__init__.py` importa las 5 capas juntas a nivel de módulo (a propósito, por el bug histórico documentado en §2.2/§2.3 de este mismo registro) — eso incluye la capa semántica, que arrastra chromadb/sentence-transformers/torch al import. Una imagen ligera sin esas dependencias revienta al importar `watchgate.core.pipeline`, con o sin `weights.semantic=0`, porque el import es incondicional |
+| 3 (adoptada) | Action tipo `composite` (sin Docker, sin depender del paquete Python `watchgate` en absoluto): calcula el diff con `git` puro y delega TODO el análisis (estático + semántico) al Engine API ya existente vía `POST /api/v1/analyze` | Adoptada — evita el problema de imports por completo, no necesita imagen Docker propia, reutiliza el pipeline ya construido sin duplicar lógica |
+
+Dentro de la iteración adoptada, el trabajo se dividió en: (1) `action.yml`/`entrypoint.sh` iniciales contra un esquema de payload/respuesta *supuesto*, sin verificar contra el código real; (2) corrección contra el esquema real de `watchgate/api/routers/analyze.py` (ver "Análisis técnico"); (3) reescritura de `.github/workflows/watchgate.yml` (que hasta entonces seguía usando el diseño autocontenido original, `pip install .` + `python -m watchgate.adapters.github_action.main`) para invocar la Action nueva; (4) E2E real contra `docker/engine-api.Dockerfile` levantado con `docker compose` — dos bugs reales encontrados y corregidos (ver "Problemas detectados"); (5) E2E real vía `act` — un tercer bug real encontrado y corregido; (6) metodología de prueba en repos externos documentada, incluido un git hook `pre-push` ligero para feedback inmediato en cada `git push` local sin depender de `act`.
+
+### Estado actual
+
+- **Funcionalidades implementadas** (verificado ejecutando, no solo leyendo el código):
+  - `action.yml`: Action `composite`, 5 inputs (`github-token`/`engine-api-url`/`engine-api-key` obligatorios; `base-ref` default `main`, `risk-threshold` default `70`), 2 outputs (`score`, `result`), un único step `bash ${{ github.action_path }}/entrypoint.sh` con los inputs mapeados a mano a variables `INPUT_*` (composite, a diferencia de `docker`/`node`, no las inyecta sola).
+  - `entrypoint.sh`: `base_sha`/`head_sha` con `git merge-base` (nunca `pull_request.base.sha` del evento — puede quedar desactualizado si la rama base avanzó tras abrir el PR, mezclando cambios ajenos en el diff analizado); diff con `git diff -U3`; corte temprano sin llamar al Engine API si no hay cambios; payload con `jq --rawfile` (sin escapado manual); `POST {engine-api-url}/api/v1/analyze` con `Authorization: Bearer`; validación del `score`; `score`/`result` en `$GITHUB_OUTPUT` con delimitador aleatorio (no `EOF` fijo — la justificación de la capa semántica la escribe un LLM y podría contenerlo); Check Run vía la API REST de GitHub con tabla Markdown del desglose por capa; código de error si el score supera el umbral o si cualquier paso previo falla.
+  - `docker/engine-api.Dockerfile`: `git-lfs` instalado + `git lfs install --system` en runtime (ver "Problemas detectados"); timeout del primer clon de reglas subido de 15s a 90s.
+  - `watchgate/core/layers/static_layer.py`: timeout de cada invocación de Semgrep subido de 20s a 60s (`_SEMGREP_SUBPROCESS_TIMEOUT_SECONDS`); nuevo `_cleanup_partial_clone` que borra un clon de reglas parcial/roto tras fallo o timeout; el timeout de Semgrep ahora se loguea en `WARNING` (antes en `debug`, invisible en los logs por defecto).
+  - `.github/workflows/watchgate.yml`: reescrito para `uses: ./` contra la Action nueva, con `permissions: checks: write, pull-requests: read` explícito.
+- **Verificado en vivo, no solo revisado**:
+  - ShellCheck limpio sobre `entrypoint.sh`; `actionlint` limpio sobre el workflow, resolviendo bien `uses: ./`.
+  - Llamada HTTP real, aislada, contra `POST /api/v1/analyze` de un Engine API real (`docker compose up -d postgres engine-api`), con una organización/usuario/API-key real provisionados a mano vía `watchgate/db/repository.py::create_organization/create_user/create_api_key` dentro del propio contenedor.
+  - `entrypoint.sh` ejecutado de verdad contra ese Engine API, con un fichero de prueba con una clave AWS hardcodeada (patrón de `rules/semgrep/custom/regex/hardcoded-aws-access-key.yaml`) — hallazgo real confirmado (`risk_score=60`) tras corregir los dos bugs de resolución de reglas.
+  - El workflow completo ejecutado con `act pull_request` (imagen `catthehacker/ubuntu:act-latest`), evento `pull_request` sintético, y un GitHub PAT real de solo lectura (revocado tras la prueba) para que `git fetch origin` funcionara como lo haría `actions/checkout@v4` en un runner real — resultado: `score=33`, hallazgo real de `static` detectado, outputs escritos correctamente. El único fallo fue el Check Run (401, token de GitHub deliberadamente falso para no publicar nada en el repo real).
+- **Funcionalidades pendientes**:
+  - El Engine API no está desplegado en ningún sitio alcanzable desde runners reales de GitHub — solo verificado vía `docker compose` en local (`docs/despliegue.md` ya documentaba esto como pendiente, sin proveedor de hosting decidido).
+  - No existe aprovisionamiento de API Keys sin llamar a mano a `watchgate/db/repository.py` — `create_api_key` solo se expone hoy vía el Dashboard backend, tampoco desplegado.
+  - `.github/workflows/watchgate.yml` referencia `${{ secrets.WATCHGATE_ENGINE_API_URL }}`/`${{ secrets.WATCHGATE_ENGINE_API_KEY }}`, que no existen todavía como secrets del repo real.
+
+### Arquitectura e integración
+
+- **Responsabilidad**: cliente HTTP ligero de GitHub Actions para el Engine API ya existente — calcula el diff localmente en el runner (sin dependencias del paquete `watchgate`) y delega el análisis completo al servicio centralizado.
+- **Por qué no reutiliza `watchgate.adapters.github_action.main`** (el adaptador Python que ya existe para este mismo propósito, ver docstring de ese módulo: *"es la pieza que falta para que un análisis calculado con run_full_analysis llegue de verdad a alguien"*): por el mismo motivo de la iteración 2 descartada arriba — importa `watchgate.core.pipeline`, que importa `watchgate.core.layers`, que importa incondicionalmente la capa semántica a nivel de módulo. Por eso esta Action no instala el paquete `watchgate` en absoluto.
+- **Módulos con los que interactúa** (del lado servidor, sin tocarlos desde la Action): `watchgate/api/routers/analyze.py` (`POST /api/v1/analyze` — no `/api/v1/agent/analyze`, que añade un envoltorio `AgentGuidance` innecesario aquí), que llama a `QuotaService.analyze_with_quota` → `run_full_analysis` (mismo pipeline que la CLI y que §2.1).
+- **Dependencias**: `git`, `curl`, `jq` (ya presentes en `ubuntu-latest`) — ninguna dependencia de Python ni de Docker en la propia Action.
+- **Flujo de comunicación**: evento `pull_request` → `actions/checkout@v4` (`fetch-depth: 0`) → `entrypoint.sh` (`git merge-base`/`git diff`) → `POST /api/v1/analyze` → `AggregatedResult` JSON → `$GITHUB_OUTPUT` + Check Run vía API REST de GitHub.
+
+### Análisis técnico
+
+- **Ficheros principales**: `action.yml` (48 líneas), `entrypoint.sh` (~200 líneas).
+- **Esquema real del payload de `AnalyzeRequest`** (confirmado leyendo `watchgate/api/routers/analyze.py`, no asumido): `diff_text`, `base_sha`, `head_sha`, `repo_path`, `commit_messages` (opcional), `authors` (opcional), `metadata` (dict libre, usado aquí para `repo`/`pr_id`), `config_override` (opcional). **No** existe `changed_files` ni `repo`/`pr_number` a nivel raíz — el servidor deriva la lista de ficheros del propio `diff_text`.
+- **Esquema real de la respuesta** (`AggregatedResult`, `watchgate/core/models.py`): `score` (int, raíz), `semaforo`, `layer_results` (dict por nombre de capa, no un array), `weights_used`, `effective_weights`, `pr_id`, `repo`, `timestamp`, `threat_summary`.
+- **Auth real**: `Authorization: Bearer <api-key>` o `X-API-Key: <api-key>` (`watchgate/api/auth.py`), scope `analysis:write`. Token único (`UserAPIKey`, `wg_live_...`/`wg_test_...`) con org/usuario resueltos server-side — el llamador nunca gestiona conceptos de organización.
+- **Decisiones no obvias, comentadas en el propio `entrypoint.sh`**: delimitador aleatorio para `$GITHUB_OUTPUT`; `bash entrypoint.sh` explícito en vez de depender del bit `+x` (ver "Problemas detectados").
+
+### Dependencias
+
+#### Dependencias internas
+- Ninguna del paquete Python `watchgate` — decisión de diseño central de este componente.
+
+#### Dependencias externas
+- `git`, `curl`, `jq` (runner); del lado servidor, `docker/engine-api.Dockerfile` (Semgrep, yara-python, git-lfs).
+
+#### Interfaces utilizadas
+- `POST /api/v1/analyze` (Engine API)
+- `POST /repos/{repo}/check-runs` (API REST de GitHub)
+
+### Problemas detectados
+
+- **[Confirmado, corregido] `docker/engine-api.Dockerfile` no instalaba `git-lfs`.** El repo privado de reglas versiona `.yaml`/`.yar` con Git LFS. `StaticLayer._get_rules_dir()`, en su último recurso (`git clone --depth 1` sin `RULES_REPO_TOKEN`), clonaba solo punteros LFS en texto plano en vez del contenido real, porque `git-lfs` no estaba instalado. Semgrep fallaba en silencio (`SemgrepError: ...was not a mapping`) y `static` reportaba 0 hallazgos sin marcarse `skipped` — indistinguible de un PR limpio. Nótese que §2.5 de este mismo registro ya documentaba conocimiento de Git LFS como prerequisito del equipo (`--skip-smudge` + `lfs pull --include`, usado por `scripts/sync_rules.py`) — ese cuidado no se había extendido al camino de "último recurso" de `static_layer.py`, más antiguo y más simple. Corregido instalando `git-lfs` + `git lfs install --system` en runtime.
+- **[Confirmado, corregido] Timeouts insuficientes para un clon con contenido LFS real.** Ya con `git-lfs` corregido, el primer clon (~800 reglas reales) medía ~30-70s en vivo, superando el timeout del propio `git clone` (15s→90s, `_INITIAL_CLONE_TIMEOUT_SECONDS`) y el de cada invocación de Semgrep (20s→60s, `_SEMGREP_SUBPROCESS_TIMEOUT_SECONDS`) — confirmado con instrumentación temporal (parcheo en caliente del contenedor sin rebuild) que capturó un `subprocess.TimeoutExpired` real a los 20.0s exactos. Un timeout de Semgrep se traducía en 0 hallazgos con apariencia de resultado normal, sin ningún indicio en los logs (nivel `debug`). Corregido subiendo ambos timeouts, añadiendo `_cleanup_partial_clone` (evita que las cachés de PROCESO `_yara_rules_cache`/`_semgrep_finding_type_cache` queden envenenadas para siempre con el resultado vacío de una primera petición fallida), y subiendo el log del timeout de Semgrep a `WARNING`.
+- **[Confirmado, corregido] `entrypoint.sh` sin bit de ejecución.** Detectado con `act` (`Permission denied`), no con las pruebas manuales previas (siempre invocaban `bash entrypoint.sh`). Causa: en Windows, `core.filemode=false` por defecto — un `chmod +x` local no se refleja en el índice de git, y aunque se fuerce con `git update-index --chmod=+x` (que sí bastaría en un checkout real de Linux), la copia del árbol de trabajo que hace `act` en Windows vía Docker no representa el bit Unix de forma fiable (NTFS no lo tiene). Corregido invocando `bash ${{ github.action_path }}/entrypoint.sh` explícitamente, sin depender del bit en ninguna plataforma.
+- **Payload/respuesta asumidos en un borrador de trabajo inicial no coincidían con el código real** (ver "Análisis técnico") — corregido antes de implementar, verificando contra el código en vez de asumir.
+- **Descubierto, no corregido, fuera de alcance de esta sesión**: `Finding` no distingue si un hallazgo de la capa `static` viene de Semgrep o de YARA — ambos se combinan con `max()` bajo un único `layer_name="static"` (regla explícita de la spec §4, "nunca sumar"), y el dato de qué herramienta lo generó se descarta al construir `structured_findings` en `static_layer.py::analyze()`, aunque cada hallazgo interno ya lleva `"tool": "semgrep"`/`"tool": "yara"`. El cambio mínimo sería un campo opcional `tool: str | None` en `Finding` (`watchgate/core/models.py`), sin tocar la agregación del `risk_score` ni el contrato HTTP.
+
+### Posibles mejoras
+
+- Desplegar el Engine API en un entorno real alcanzable desde runners de GitHub (decisión de hosting pendiente, `docs/despliegue.md`).
+- Aprovisionar `WATCHGATE_ENGINE_API_URL`/`WATCHGATE_ENGINE_API_KEY` como secrets reales, y un mecanismo de aprovisionamiento de API Keys que no dependa de una llamada manual a `watchgate/db/repository.py`.
+- Añadir el campo `tool` a `Finding` para el desglose Semgrep/YARA — cambio autocontenido, no bloqueante.
+- Investigar si el corte de red observado una vez durante las pruebas con `act` ("Empty reply from server" contra `host.docker.internal` a mitad de una petición larga) es un patrón reproducible de Docker Desktop/WSL2, o fue puntual — un reintento simple lo resolvió, no se ha profundizado más.
+- El git hook `pre-push` ligero (sin `act`, sin Check Run, con opción de bloquear el push si el score supera el umbral) se creó en un repo de prueba externo (`C:\Users\pasbl\Documents\repos_prueba\prueba_1\.git\hooks\pre-push`), fuera de este repositorio. Documentarlo como script reutilizable dentro de `watch_gate` (p. ej. `scripts/install-pre-push-hook.sh`) para que cualquiera pueda instalarlo sin pedir el contenido de nuevo.
+
+### Estado para otros desarrolladores
+
+- **Partes estables**: el esquema de payload/respuesta contra el Engine API real (verificado, no asumido); el patrón `bash entrypoint.sh` en vez de depender del bit `+x`.
+- **Partes a revisar antes de modificar**: cualquier cambio a `docker/engine-api.Dockerfile` o a `static_layer.py::_get_rules_dir` debe tener en cuenta que las reglas se versionan con Git LFS y que el timeout del clon inicial ya se calibró contra una medición real (~30-70s), no un valor arbitrario.
+- **Conocimientos necesarios**: sintaxis de GitHub Actions (`composite`, `uses: ./`), `nektos/act` para pruebas locales sin gastar minutos de Actions ni depender de un PR real, el esquema de auth por API Key de `watchgate/api/auth.py`.
+- **Tareas pendientes**: ver "Posibles mejoras" y "Funcionalidades pendientes" arriba — ninguna es un bloqueante de código, todas son de despliegue/aprovisionamiento.
+
+### Próximos pasos
+
+- Decidir dónde desplegar el Engine API y provisionar credenciales reales antes de poder proteger un PR real de este repositorio con esta Action.
+- Commitear el trabajo de esta sesión (working tree sin commitear al momento de escribir este registro).
 
 ---
 
