@@ -4,12 +4,11 @@
 # API REST (login, scores, settings, keys...), sin servir ficheros
 # estáticos (ver CORS configurable vía WATCHGATE_DASHBOARD_CORS_ORIGINS).
 #
-# A diferencia de engine-api.Dockerfile, NO se instala el extra "analysis"
+# A diferencia de engine-api.Dockerfile, instalamos el extra "analysis"
 # (semgrep/yara-python/chromadb/sentence-transformers-torch/anthropic/
-# google-genai) -- este servicio nunca importa core.layers/core.pipeline/
-# core.rag ni la capa semántica (verificado por grep antes de separar el
-# extra en pyproject.toml, no es una suposición), así que se ahorra la
-# parte que hace pesada la imagen del Engine API.
+# google-genai) -- este servicio (y particularmente el Worker RQ asociado)
+# sí ejecuta ahora análisis completos de repositorios asíncronamente
+# (ver watchgate/dashboard/backend/tasks.py).
 #
 # Build:  docker build -f docker/dashboard-backend.Dockerfile -t watchgate-dashboard-backend .
 # Run:    docker run -p 8000:8000 --env-file .env watchgate-dashboard-backend
@@ -29,11 +28,11 @@ WORKDIR /app
 RUN pip install --no-cache-dir poetry
 
 COPY pyproject.toml poetry.lock ./
-RUN poetry install --only main --no-root --no-directory
+RUN poetry install --only main --extras analysis --no-root --no-directory
 
 COPY watchgate ./watchgate
 COPY README.md ./
-RUN poetry install --only main
+RUN poetry install --only main --extras analysis
 
 
 FROM python:3.11-slim AS runtime
