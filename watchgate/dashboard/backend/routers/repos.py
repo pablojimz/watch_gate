@@ -9,11 +9,11 @@ from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 
 from watchgate.dashboard.backend.auth import CurrentUser
+from watchgate.dashboard.backend.routers.keys import _get_or_create_db_user
 from watchgate.dashboard.backend.schemas import normalize_login
 from watchgate.dashboard.backend.tasks import get_queue, run_audit_scan
 from watchgate.db.connection import get_db_session
 from watchgate.db.models import MonitoredRepo, VCSConnection
-from watchgate.db.models import User as DBUser
 
 DBSession = Annotated[Session, Depends(get_db_session)]
 
@@ -52,31 +52,37 @@ def add_external_repo(
 ) -> Any:
     """Añade un repositorio externo para monitorización (webhook) o auditoría (sin permisos)."""
 
-    # Check if the user exists in DB and has an org.
-    # CurrentUser gives us dashboard's schema User, we need DBUser to get org_id
     user_login = normalize_login(current_user.login)
-    stmt = select(DBUser).where(DBUser.email == user_login)
-    db_user = session.exec(stmt).first()
+    db_user = _get_or_create_db_user(session, user_login)
 
-    if not db_user or not db_user.org_id:
-        raise HTTPException(
-            status_code=400, detail="El usuario no pertenece a ninguna organización"
-        )
+    # db_user.org_id está garantizado por _get_or_create_db_user
+    org_id = db_user.org_id
+    assert org_id is not None, "El usuario debe tener una organización"
 
     # Si se pasa un vcs_connection_id, verificar que pertenezca a la org
     if data.vcs_connection_id:
         vcs = session.exec(
             select(VCSConnection).where(
-                VCSConnection.id == data.vcs_connection_id, VCSConnection.org_id == db_user.org_id
+                VCSConnection.id == data.vcs_connection_id, VCSConnection.org_id == org_id
             )
         ).first()
         if not vcs:
             raise HTTPException(status_code=404, detail="Conexión VCS no encontrada")
 
+    # Extraer "owner/repo" por si el usuario metió un enlace completo
+    repo_path_cleaned = data.repo_path
+    if repo_path_cleaned.startswith("http"):
+        # Intenta extraer la ruta final (e.g., https://github.com/openclaw/openclaw-server -> openclaw/openclaw-server)
+        import re
+
+        match = re.search(r"github\.com/([^/]+/[^/]+?)(?:\.git|/)?$", repo_path_cleaned)
+        if match:
+            repo_path_cleaned = match.group(1)
+
     # Verificar si ya existe en la org
     existing = session.exec(
         select(MonitoredRepo).where(
-            MonitoredRepo.org_id == db_user.org_id, MonitoredRepo.repo_path == data.repo_path
+            MonitoredRepo.org_id == org_id, MonitoredRepo.repo_path == repo_path_cleaned
         )
     ).first()
 
@@ -87,9 +93,9 @@ def add_external_repo(
 
     new_repo = MonitoredRepo(
         id=str(uuid4()),
-        org_id=db_user.org_id,
+        org_id=org_id,
         vcs_connection_id=data.vcs_connection_id,
-        repo_path=data.repo_path,
+        repo_path=repo_path_cleaned,
         monitor_type=data.monitor_type,
         status="active",
         created_at=datetime.now(UTC),
@@ -108,13 +114,11 @@ def list_external_repos(
 ) -> Any:
     """Lista los repositorios externos de la organización actual."""
     user_login = normalize_login(current_user.login)
-    stmt = select(DBUser).where(DBUser.email == user_login)
-    db_user = session.exec(stmt).first()
+    db_user = _get_or_create_db_user(session, user_login)
+    org_id = db_user.org_id
+    assert org_id is not None
 
-    if not db_user or not db_user.org_id:
-        return []
-
-    repos = session.exec(select(MonitoredRepo).where(MonitoredRepo.org_id == db_user.org_id)).all()
+    repos = session.exec(select(MonitoredRepo).where(MonitoredRepo.org_id == org_id)).all()
 
     return repos
 
@@ -128,16 +132,12 @@ def scan_audited_repo(
 ) -> Any:
     """Encola el escaneo de una PR concreta de un repositorio auditado."""
     user_login = normalize_login(current_user.login)
-    stmt = select(DBUser).where(DBUser.email == user_login)
-    db_user = session.exec(stmt).first()
-
-    if not db_user or not db_user.org_id:
-        raise HTTPException(status_code=400, detail="Organización no encontrada")
+    db_user = _get_or_create_db_user(session, user_login)
+    org_id = db_user.org_id
+    assert org_id is not None
 
     repo = session.exec(
-        select(MonitoredRepo).where(
-            MonitoredRepo.id == repo_id, MonitoredRepo.org_id == db_user.org_id
-        )
+        select(MonitoredRepo).where(MonitoredRepo.id == repo_id, MonitoredRepo.org_id == org_id)
     ).first()
 
     if not repo:
@@ -150,7 +150,7 @@ def scan_audited_repo(
 
     queue = get_queue()
     queue.enqueue(
-        run_audit_scan, repo.repo_path, scan_data.pr_number, db_user.org_id, repo.vcs_connection_id
+        run_audit_scan, repo.repo_path, scan_data.pr_number, org_id, repo.vcs_connection_id
     )
 
     return {
