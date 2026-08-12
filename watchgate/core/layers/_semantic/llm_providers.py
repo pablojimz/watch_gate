@@ -43,7 +43,7 @@ from watchgate.core.layers._semantic.tools import FORCE_FINAL_ANSWER_MESSAGE, To
 class GeminiClient(LLMClient):
     """Implementación contra la API de Google Gemini (SDK `google-genai`)."""
 
-    def __init__(self, client: Any = None, model: str = "gemini-2.5-flash") -> None:
+    def __init__(self, client: Any = None, model: str = "gemini-3.6-flash") -> None:
         if client is None:
             from google import genai
 

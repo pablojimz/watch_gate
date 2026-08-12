@@ -21,7 +21,7 @@ def test_reads_provider_from_environment(monkeypatch):
     monkeypatch.setenv("WATCHGATE_LLM_API_KEY", "fake-key")
     client = build_llm_client()
     assert isinstance(client, GeminiClient)
-    assert client._model == "gemini-2.5-flash"
+    assert client._model == "gemini-3.6-flash"
 
 
 def test_explicit_provider_argument_overrides_environment(monkeypatch):
