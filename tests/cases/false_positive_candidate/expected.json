@@ -1,4 +1,5 @@
 {
-  "semaforo": "amarillo",
-  "min_score": 20
+  "semaforo": ["amarillo", "rojo"],
+  "min_score": 20,
+  "note": "eval(expr, {'__builtins__': {}}, namespace) es una tecnica de sandbox conocida por ser escapable (RCE real via __globals__), no una falsa alarma. El veredicto original (solo amarillo) infravaloraba una vulnerabilidad real; rojo tambien cuenta como deteccion valida. Ver docs/evaluacion_ia/ground_truth_dudoso_dataset_datadog.md."
 }
