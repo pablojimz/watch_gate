@@ -4,11 +4,12 @@
 # API REST (login, scores, settings, keys...), sin servir ficheros
 # estáticos (ver CORS configurable vía WATCHGATE_DASHBOARD_CORS_ORIGINS).
 #
-# Mismas dependencias pesadas que engine-api.Dockerfile (un único paquete
-# `watchgate`, sin extras separados por servicio todavía -- ver nota en
-# docs/despliegue.md) aunque este servicio en concreto no las necesite en
-# tiempo de ejecución; no se ha separado el empaquetado por no ser
-# necesario para tener algo desplegable hoy.
+# A diferencia de engine-api.Dockerfile, NO se instala el extra "analysis"
+# (semgrep/yara-python/chromadb/sentence-transformers-torch/anthropic/
+# google-genai) -- este servicio nunca importa core.layers/core.pipeline/
+# core.rag ni la capa semántica (verificado por grep antes de separar el
+# extra en pyproject.toml, no es una suposición), así que se ahorra la
+# parte que hace pesada la imagen del Engine API.
 #
 # Build:  docker build -f docker/dashboard-backend.Dockerfile -t watchgate-dashboard-backend .
 # Run:    docker run -p 8000:8000 --env-file .env watchgate-dashboard-backend

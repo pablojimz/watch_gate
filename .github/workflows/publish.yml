@@ -1,0 +1,58 @@
+name: Publish to PyPI
+
+# Manual (workflow_dispatch) o al publicar un Release en GitHub -- nunca en
+# cada push. Publicar una versión en PyPI es efectivamente irreversible (no
+# se puede resubir el mismo número de versión aunque se borre), así que este
+# workflow no se dispara solo.
+#
+# Usa PyPI Trusted Publishing (OIDC, pypa/gh-action-pypi-publish) en vez de
+# un token de API guardado como secret -- nada que rotar ni que pueda
+# filtrarse en logs. Requiere UNA configuración manual, una sola vez, en
+# pypi.org: Account settings -> Publishing -> Add a new pending publisher,
+# con owner=pablojimz, repository=watch_gate, workflow=publish.yml,
+# environment=pypi. Ver docs/despliegue.md para el resto de pasos manuales
+# pendientes antes de poder ejecutar esto de verdad (nombre del paquete,
+# licencia).
+#
+# NOTA: en el momento de crear este workflow, el nombre "watchgate" YA
+# ESTÁ OCUPADO en PyPI por un proyecto no relacionado -- publicar bajo este
+# nombre tal cual fallará hasta que se decida un nombre distinto en
+# pyproject.toml (`[project].name`). Este workflow no asume ningún nombre
+# concreto: usa el que esté en pyproject.toml en cada momento.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch: {}
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write # OIDC para Trusted Publishing -- sin esto, la publicación falla
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar Poetry
+        run: pip install poetry
+
+      - name: Verificar que la versión del tag coincide con pyproject.toml
+        if: github.event_name == 'release'
+        run: |
+          tag_version="${GITHUB_REF_NAME#v}"
+          pkg_version="$(poetry version -s)"
+          if [ "$tag_version" != "$pkg_version" ]; then
+            echo "El tag del release ($tag_version) no coincide con la versión de pyproject.toml ($pkg_version)."
+            exit 1
+          fi
+
+      - name: Construir el paquete (sdist + wheel)
+        run: poetry build
+
+      - name: Publicar en PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

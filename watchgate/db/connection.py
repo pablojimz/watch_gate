@@ -60,22 +60,19 @@ def _check_schema_matches_models(target_engine: engine.Engine) -> None:
     esperan.
 
     `SQLModel.metadata.create_all()` (más abajo) solo crea tablas que no
-    existen -- nunca añade columnas nuevas a una tabla ya existente. No hay
-    ningún script de migración real (Alembic o equivalente) en este
-    proyecto todavía. Sin este chequeo, desplegar una versión del código
-    que añade columnas (como `org_id` en la Fase 1 multi-tenant) contra
-    cualquier base de datos con esas tablas ya creadas produce un apagón
-    confuso: `OperationalError: no such column` mucho más tarde, en medio
-    de `create_api_key`/`save_pr_score`, sin relación aparente con el
-    despliegue que lo causó. Se prefiere fallar aquí, en el arranque, con
-    un mensaje que dice exactamente qué falta y qué hacer.
-
-    No intenta migrar nada por su cuenta -- una columna nueva puede
-    necesitar backfill, un `NOT NULL` puede necesitar un valor por
-    defecto pensado, y un cambio de primary key (como el de
-    `semantic_cache` en esa misma fase) no es ni siquiera un `ALTER TABLE
-    ADD COLUMN`. Eso requiere una migración real, no un parche automático
-    en el arranque.
+    existen -- nunca añade columnas nuevas a una tabla ya existente, y
+    Alembic (ver `alembic/`) tampoco se ejecuta solo en cada arranque a
+    propósito (ver `alembic/env.py` y docs/despliegue.md: aplicar
+    migraciones es un paso explícito de despliegue, `alembic upgrade
+    head`, no algo que deba correr sin supervisión en cada boot -- sobre
+    todo con más de una réplica arrancando a la vez contra la misma base
+    de datos). Sin este chequeo, desplegar una versión del código que
+    añade columnas contra una base de datos a la que no se le aplicó la
+    migración produce un apagón confuso: `OperationalError: no such
+    column` mucho más tarde, en medio de `create_api_key`/`save_pr_score`,
+    sin relación aparente con el despliegue que lo causó. Se prefiere
+    fallar aquí, en el arranque, con un mensaje que dice exactamente qué
+    falta y qué hacer.
     """
     inspector = inspect(target_engine)
     existing_tables = set(inspector.get_table_names())
@@ -95,10 +92,11 @@ def _check_schema_matches_models(target_engine: engine.Engine) -> None:
             "La base de datos existente no coincide con el esquema actual de "
             "WatchGate -- faltan columnas que el código espera:\n"
             + "\n".join(problems)
-            + "\nEste proyecto todavía no tiene migraciones automáticas (Alembic o "
-            "equivalente). Aplica manualmente los `ALTER TABLE` necesarios (o, si es "
+            + "\nAplica la migración pendiente con `alembic upgrade head` (o, si es "
             "un entorno de desarrollo sin datos que conservar, borra/recrea la base "
-            "de datos) antes de arrancar esta versión."
+            "de datos) antes de arrancar esta versión. Si la base de datos ya tenía "
+            "estas tablas de antes de adoptar Alembic, primero hace falta "
+            "`alembic stamp head` una sola vez -- ver docs/despliegue.md."
         )
 
 

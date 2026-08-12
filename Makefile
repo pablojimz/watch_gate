@@ -1,7 +1,12 @@
-.PHONY: install lint test run-demo dashboard-backend dashboard-frontend dashboard-install docker-up docker-down
+.PHONY: install lint test run-demo dashboard-backend dashboard-frontend dashboard-install docker-up docker-down migrate migration
 
 install:
-	poetry install
+	# --all-extras: incluye el extra "analysis" (semgrep/yara/chromadb/
+	# sentence-transformers/anthropic/google-genai) -- necesario para
+	# desarrollo y para correr la suite de tests completa. Ver la nota en
+	# pyproject.toml sobre por qué existe ese extra (imagen Docker del
+	# Dashboard backend más ligera, no un cambio en el flujo de desarrollo).
+	poetry install --all-extras
 
 lint:
 	poetry run ruff check .
@@ -35,3 +40,14 @@ docker-up:
 
 docker-down:
 	docker compose down
+
+# Migraciones del esquema SQLModel (watchgate/db/) -- ver docs/despliegue.md
+# para el flujo completo (incluye cómo adoptar Alembic en una base de datos
+# ya existente con `alembic stamp head`). El esquema propio del Dashboard
+# (watchgate/dashboard/backend/db.py) NO usa Alembic, ver alembic/env.py.
+migrate:
+	poetry run alembic upgrade head
+
+# Uso: make migration m="añadir columna x a pr_scores"
+migration:
+	poetry run alembic revision --autogenerate -m "$(m)"

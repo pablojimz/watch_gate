@@ -22,7 +22,7 @@ from typing import Any
 
 import watchgate.core.layers  # noqa: F401 - registrar capas en LAYER_REGISTRY
 from watchgate.adapters.github_action import dashboard_client, dashboard_settings_client
-from watchgate.adapters.github_action.github_client import GitHubClient
+from watchgate.adapters.github_client import GitHubClient
 from watchgate.config import load_config
 from watchgate.core.comment_template import render_comment
 from watchgate.core.diffparser import parse_diff
@@ -87,19 +87,42 @@ def run(
 
     print(f"WatchGate: {result.semaforo.value} ({result.score}/100) -- conclusion={conclusion}")
 
+    _write_github_outputs(score=result.score, semaforo=result.semaforo.value, blocked=is_blocking)
+
     return 1 if is_blocking else 0
+
+
+def _write_github_outputs(*, score: int, semaforo: str, blocked: bool) -> None:
+    """Expone `score`/`semaforo`/`blocked` como outputs de la Action (para
+    que `action.yml` los reexponga y un workflow que consuma esta Action
+    pueda ramificar sobre el resultado, p. ej. `if:
+    steps.watchgate.outputs.blocked == 'true'`).
+
+    `GITHUB_OUTPUT` es una variable que el propio runner de GitHub Actions
+    define automáticamente (ruta a un fichero temporal) -- no está presente
+    fuera de un job real ni en los tests unitarios de este módulo, así que
+    esto es un no-op seguro en cualquier otro contexto, sin necesidad de
+    mockear nada para los tests que no comprueban esta parte."""
+    output_path = os.environ.get("GITHUB_OUTPUT")
+    if not output_path:
+        return
+    with open(output_path, "a", encoding="utf-8") as f:
+        f.write(f"score={score}\n")
+        f.write(f"semaforo={semaforo}\n")
+        f.write(f"blocked={'true' if blocked else 'false'}\n")
 
 
 def main() -> int:
     event_path = os.environ.get("GITHUB_EVENT_PATH")
     github_token = os.environ.get("GITHUB_TOKEN")
+    config_path = os.environ.get("WATCHGATE_CONFIG_PATH", ".watchgate.yml")
     if not event_path:
         print("GITHUB_EVENT_PATH no está definida -- ¿se ejecuta fuera de GitHub Actions?")
         return 1
     if not github_token:
         print("GITHUB_TOKEN no está definida -- no se puede publicar el resultado en el PR.")
         return 1
-    return run(event_path, github_token)
+    return run(event_path, github_token, config_path=config_path)
 
 
 if __name__ == "__main__":

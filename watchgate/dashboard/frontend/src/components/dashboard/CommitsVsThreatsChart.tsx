@@ -11,28 +11,19 @@ import {
 } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { semaforoColor } from '@/lib/utils'
-import type { ScoreOut, ThreatNature } from '@/api/client'
+import type { ScoreOut } from '@/api/client'
 
-const _NATURE_RANK: Record<ThreatNature, number> = {
-  malicioso: 3,
-  vulnerabilidad: 2,
-  incertidumbre: 1,
-}
-
-// Misma jerarquía que `compute_dominant_threat_nature` en el backend
-// (watchgate/core/models.py): un PR con al menos una capa maliciosa cuenta
-// como "malicioso" aunque otra capa solo tenga una vulnerabilidad, y así
-// sucesivamente -- para que un mismo PR no se cuente dos veces al agrupar
-// por día.
-function dominantNature(score: ScoreOut): ThreatNature | null {
-  let best: ThreatNature | null = null
-  for (const layer of Object.values(score.layer_results)) {
-    if (!layer.threat_nature) continue
-    if (!best || _NATURE_RANK[layer.threat_nature] > _NATURE_RANK[best]) {
-      best = layer.threat_nature
-    }
-  }
-  return best
+// El propio agregador (watchgate/core/models.py, campo `threat_summary` de
+// AggregatedResult) ya calcula, por PR, cuántas capas son de cada
+// naturaleza -- misma jerarquía que usa `ThreatSummaryBadges` en la tabla.
+// Un PR cuenta como "malicioso" si threat_summary.malicioso > 0 (aunque
+// otra capa solo tenga una vulnerabilidad), luego "vulnerabilidad", y
+// "limpio" si no hay ninguna naturaleza registrada -- para no reconstruir
+// en el cliente algo que el backend ya resuelve de forma autoritativa.
+function dominantNature(score: ScoreOut): 'malicioso' | 'vulnerabilidad' | 'limpio' {
+  if ((score.threat_summary.malicioso ?? 0) > 0) return 'malicioso'
+  if ((score.threat_summary.vulnerabilidad ?? 0) > 0) return 'vulnerabilidad'
+  return 'limpio'
 }
 
 export function CommitsVsThreatsChart({ scores }: { scores: ScoreOut[] }) {
@@ -42,10 +33,7 @@ export function CommitsVsThreatsChart({ scores }: { scores: ScoreOut[] }) {
   for (const score of scores) {
     const day = score.timestamp.slice(0, 10)
     const row = byDay.get(day) ?? { day, limpio: 0, vulnerabilidad: 0, malicioso: 0 }
-    const nature = dominantNature(score)
-    if (nature === 'malicioso') row.malicioso += 1
-    else if (nature === 'vulnerabilidad') row.vulnerabilidad += 1
-    else row.limpio += 1
+    row[dominantNature(score)] += 1
     byDay.set(day, row)
   }
   const data = [...byDay.values()].sort((a, b) => a.day.localeCompare(b.day))
@@ -74,7 +62,7 @@ export function CommitsVsThreatsChart({ scores }: { scores: ScoreOut[] }) {
               <YAxis allowDecimals={false} tick={{ fontSize: 12 }} width={30} />
               <Tooltip />
               <Legend
-                formatter={(value) => t(`threatNature.${value}`, { defaultValue: String(value) })}
+                formatter={(value) => t(`threat.${value}`, { defaultValue: String(value) })}
               />
               <Bar dataKey="limpio" stackId="a" fill={semaforoColor('verde')} name="limpio" />
               <Bar

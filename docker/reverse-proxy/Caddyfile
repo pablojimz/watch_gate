@@ -1,0 +1,18 @@
+{$WATCHGATE_DOMAIN:localhost} {
+	encode gzip
+
+	# Engine API SaaS (agentes de IA, GitHub Action externa) -- ver
+	# watchgate/api/main.py, prefijo real de todas sus rutas públicas.
+	@api path /api/v1/*
+	handle @api {
+		reverse_proxy engine-api:8080
+	}
+
+	# Todo lo demás va al frontend del Dashboard, que a su vez ya sabe
+	# reenviar /api/* (su propio backend, no el de la Engine API) a
+	# dashboard-backend:8000 -- ver
+	# watchgate/dashboard/frontend/docker/nginx.conf.template.
+	handle {
+		reverse_proxy dashboard-frontend:80
+	}
+}

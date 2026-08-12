@@ -8,8 +8,11 @@ ciclo de imports.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 from pydantic import BaseModel
+
+from watchgate.core.models import FileChange
 
 # Nombres de fichero (no rutas completas) que WatchGate reconoce como
 # manifiestos de gestión de dependencias.
@@ -402,6 +405,28 @@ def parse_composer_json(diff_hunk: str) -> list[DependencyChange]:
     return changes
 
 
+def parse_manifest_file_change(file_change: FileChange) -> list[DependencyChange]:
+    """Parsea un cambio de fichero si es un manifiesto de dependencias conocido."""
+    fname = Path(file_change.path).name
+    hunk = file_change.diff_hunk
+    parsed: list[DependencyChange] = []
+    if fname == "package.json":
+        parsed = parse_package_json(hunk)
+    elif fname in ("requirements.txt", "Pipfile"):
+        parsed = parse_requirements_txt(hunk)
+    elif fname == "PKGBUILD":
+        parsed = parse_pkgbuild(hunk)
+    elif fname == "Cargo.toml":
+        parsed = parse_cargo_toml(hunk)
+    elif fname == "go.mod":
+        parsed = parse_go_mod(hunk)
+    elif fname == "composer.json":
+        parsed = parse_composer_json(hunk)
+    for ch in parsed:
+        ch.manifest_path = file_change.path
+    return parsed
+
+
 _SUSPICIOUS_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"curl\s+[^|\n]+\|\s*(sh|bash)", re.IGNORECASE), "curl_pipe_shell"),
     (re.compile(r"wget\s+[^|\n]+\|\s*(sh|bash)", re.IGNORECASE), "wget_pipe_shell"),
@@ -447,15 +472,14 @@ def analyze_install_script_text(text: str) -> list[str]:
 # `_semantic/layer.py` lo trate con un suelo propio, no como un heurístico
 # de "qué mostrar", ver `find_prompt_injection_attempts`.
 _IGNORE_INSTRUCTIONS_RE = re.compile(
-    # `.{0,30}` en vez de solo un determinante opcional: el español antepone
-    # el sustantivo al adjetivo ("ignora las instrucciones anteriores"), al
-    # revés que el inglés ("ignore previous instructions") -- un hueco corto
-    # y libre entre "ignora"/"ignore" y "anterior"/"previous" cubre ambos
-    # órdenes sin tener que enumerar la gramática de cada idioma.
-    r"ignor[ae]\w*.{0,30}(previous|prior|above|anterior)",
+    r"ignor[ae]\w*.{0,30}(instruction|instrucci[oó]n|prompt|directive|system).{0,30}(previous|prior|above|anterior)|"
+    r"ignor[ae]\w*.{0,30}(previous|prior|above|anterior).{0,30}(instruction|instrucci[oó]n|prompt|directive|system)",
     re.IGNORECASE,
 )
-_DISREGARD_RE = re.compile(r"disregard\s+(all |any |the )?(previous|prior|above)", re.IGNORECASE)
+_DISREGARD_RE = re.compile(
+    r"disregard\s+.*(instruction|prompt|system|directive)",
+    re.IGNORECASE,
+)
 _FAKE_ROLE_MARKER_RE = re.compile(
     r"^\s*(system|assistant|user)\s*:\s*", re.IGNORECASE | re.MULTILINE
 )
@@ -467,13 +491,13 @@ _FAKE_JSON_RESPONSE_RE = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 _CLAIMS_PREAPPROVED_RE = re.compile(
-    r"(this|el) (file|code|fichero|c[oó]digo).{0,30}"
-    r"(is|has been|ya (est[aá]|fue)).{0,20}"
-    r"(verified|approved|safe|verificad|aprobad|segur)",
+    r"(this|el)\s+(file|code|fichero|c[oó]digo|pr|pull\s+request).{0,30}"
+    r"(is|has\s+been|ya\s+(est[aá]|fue)).{0,20}"
+    r"\b(preapproved|approved|verificad[oa]|aprobad[oa]|pre-aprobad[oa]|safe|segur[oa])\b",
     re.IGNORECASE,
 )
 _SKIP_ANALYSIS_RE = re.compile(
-    r"(do not|don'?t|no)\s+(flag|report|analyze|analices|reportes|marques)\s+this",
+    r"(do\s+not|don'?t|no)\s+(flag|report|analyze|analices|reportes|marques)\s+this\s+(pr|pull\s+request|file|fichero|code|c[oó]digo|diff|repo|repository|security|analysis|analisis|review)",
     re.IGNORECASE,
 )
 
@@ -513,3 +537,22 @@ def find_suspicious_lines(text: str) -> list[int]:
     return [
         i for i, line in enumerate(lines) if any(p.search(line) for p, _ in _SUSPICIOUS_PATTERNS)
     ]
+
+
+def scan_diff_hunk_for_suspicious_patterns(diff_hunk: str) -> list[tuple[str, str, int]]:
+    """Analiza líneas añadidas ('+') en un diff hunk buscando patrones de RCE/ofuscación.
+    Devuelve lista de (pattern_label, matched_text, line_index).
+    """
+    findings: list[tuple[str, str, int]] = []
+    if not diff_hunk:
+        return findings
+
+    line_idx = 1
+    for line in diff_hunk.splitlines():
+        if line.startswith("+") and not line.startswith("++"):
+            added_text = line[1:]
+            for pattern, label in _SUSPICIOUS_PATTERNS:
+                if pattern.search(added_text):
+                    findings.append((label, added_text.strip(), line_idx))
+        line_idx += 1
+    return findings

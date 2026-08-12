@@ -25,6 +25,8 @@ import yaml
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from watchgate.core.aggregator import DEFAULT_THRESHOLDS
+
 logger = logging.getLogger("watchgate.config")
 
 # Pesos por defecto. El ejemplo de regresión de la memoria (spec §10) fija
@@ -34,7 +36,7 @@ logger = logging.getLogger("watchgate.config")
 # de ataque a la cadena de suministro) se reparte a la mitad el 0.20 que
 # antes tenía solo "dependencies", dejando el resto exactamente igual que
 # en la memoria.
-_DEFAULT_WEIGHTS: dict[str, float] = {
+DEFAULT_WEIGHTS: dict[str, float] = {
     "static": 0.25,
     "dependencies": 0.10,
     "vulnerabilities": 0.10,
@@ -42,7 +44,7 @@ _DEFAULT_WEIGHTS: dict[str, float] = {
     "semantic": 0.40,
 }
 
-_DEFAULT_THRESHOLDS: dict[str, int] = {"yellow": 40, "red": 70}
+_DEFAULT_THRESHOLDS: dict[str, int] = DEFAULT_THRESHOLDS
 
 
 class WatchGateConfig(BaseSettings):
@@ -55,7 +57,7 @@ class WatchGateConfig(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="WATCHGATE_", extra="ignore")
 
-    weights: dict[str, float] = Field(default_factory=lambda: dict(_DEFAULT_WEIGHTS))
+    weights: dict[str, float] = Field(default_factory=lambda: dict(DEFAULT_WEIGHTS))
     thresholds: dict[str, int] = Field(default_factory=lambda: dict(_DEFAULT_THRESHOLDS))
 
     @field_validator("weights", mode="before")
@@ -90,8 +92,7 @@ def _read_yaml(yaml_path: str) -> dict[str, Any]:
         return {}
     if not isinstance(data, dict):
         raise TypeError(
-            f"{yaml_path}: se esperaba un mapeo YAML en la raíz, "
-            f"se encontró {type(data).__name__}"
+            f"{yaml_path}: se esperaba un mapeo YAML en la raíz, se encontró {type(data).__name__}"
         )
     return data
 
@@ -163,11 +164,9 @@ def apply_cli_overrides(
             thresholds[key] = val
 
     return WatchGateConfig(
-        weights=weights,
-        thresholds=thresholds,
-        max_diff_tokens=config.max_diff_tokens,
-        monthly_budget_tokens=config.monthly_budget_tokens,
-        max_dependency_checks=config.max_dependency_checks,
-        block_on_red=config.block_on_red,
-        shortcircuit_enabled=config.shortcircuit_enabled,
+        **{
+            **config.model_dump(),
+            "weights": weights,
+            "thresholds": thresholds,
+        }
     )

@@ -1,15 +1,10 @@
 import { Dialog } from 'radix-ui'
 import { useTranslation } from 'react-i18next'
-import { ShieldAlert, ShieldQuestion, TriangleAlert, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import type { Finding, ScoreOut } from '@/api/client'
 import { RiskBadge } from '@/components/dashboard/RiskBadge'
+import { ThreatNatureTag, ThreatSummaryBadges } from '@/components/dashboard/ThreatBadges'
 import { cn } from '@/lib/utils'
-
-const _THREAT_ICON = {
-  malicioso: ShieldAlert,
-  vulnerabilidad: TriangleAlert,
-  incertidumbre: ShieldQuestion,
-} as const
 
 function FindingRow({ finding }: { finding: Finding }) {
   const { t } = useTranslation()
@@ -35,7 +30,7 @@ function FindingRow({ finding }: { finding: Finding }) {
       </div>
       <p className="mt-1.5 text-foreground">{finding.message}</p>
       <span className="mt-1 inline-block text-[11px] text-muted-foreground">
-        {t(`threatNature.${finding.threat_nature}`, { defaultValue: finding.threat_nature })}
+        {t(`threat.${finding.threat_nature}`, { defaultValue: finding.threat_nature })}
       </span>
     </div>
   )
@@ -54,13 +49,6 @@ export function ReportModal({
   if (!score) return null
 
   const layers = Object.values(score.layer_results)
-  const threatCounts = layers.reduce(
-    (acc, layer) => {
-      if (layer.threat_nature) acc[layer.threat_nature] = (acc[layer.threat_nature] ?? 0) + 1
-      return acc
-    },
-    {} as Record<string, number>,
-  )
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -88,22 +76,7 @@ export function ReportModal({
             </div>
           </div>
 
-          {Object.keys(threatCounts).length > 0 ? (
-            <div className="mt-4 flex flex-wrap gap-2">
-              {Object.entries(threatCounts).map(([nature, count]) => {
-                const Icon = _THREAT_ICON[nature as keyof typeof _THREAT_ICON] ?? ShieldQuestion
-                return (
-                  <span
-                    key={nature}
-                    className="inline-flex items-center gap-1.5 rounded-full border bg-muted/50 px-2.5 py-1 text-xs font-medium"
-                  >
-                    <Icon className="size-3.5" />
-                    {count} {t(`threatNature.${nature}`, { defaultValue: nature })}
-                  </span>
-                )
-              })}
-            </div>
-          ) : null}
+          <ThreatSummaryBadges summary={score.threat_summary} className="mt-4" />
 
           {score.accepted_by ? (
             <p className="mt-4 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-400">
@@ -118,9 +91,12 @@ export function ReportModal({
             {layers.map((layer) => (
               <div key={layer.layer_name} className="rounded-lg border p-3">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-semibold">
-                    {t(`layers.${layer.layer_name}`, { defaultValue: layer.layer_name })}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold">
+                      {t(`layers.${layer.layer_name}`, { defaultValue: layer.layer_name })}
+                    </span>
+                    {layer.threat_nature ? <ThreatNatureTag nature={layer.threat_nature} /> : null}
+                  </div>
                   <span className="text-sm font-mono text-muted-foreground">
                     {layer.skipped ? t('repo.skipped') : `${layer.risk_score}/100`}
                   </span>
