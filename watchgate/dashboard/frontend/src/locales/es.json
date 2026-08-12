@@ -2,6 +2,7 @@
   "brand": "WatchGate",
   "nav": {
     "repos": "Repositorios",
+    "externalRepos": "Auditoría Externa",
     "metrics": "Métricas",
     "apiKeys": "API Keys",
     "admin": "Configuración",
@@ -206,6 +207,23 @@
     "vulnerabilities": "Vulnerabilidades",
     "reputation": "Reputación",
     "semantic": "Semántica"
+  },
+  "externalRepos": {
+    "title": "Auditoría Externa",
+    "subtitle": "Monitorización y auditoría bajo demanda de repositorios de terceros sin permisos de escritura.",
+    "addRepo": "Añadir repositorio",
+    "repoPathPlaceholder": "ej: openclaw/openclaw-server",
+    "repoPathLabel": "Ruta del repositorio",
+    "monitorTypeLabel": "Tipo",
+    "typeManaged": "Gestionado (Webhook)",
+    "typeAudited": "Auditado (Terceros)",
+    "scanButton": "Forzar Auditoría",
+    "scanPrPlaceholder": "PR Number (ej: 142)",
+    "lastScanned": "Último escaneo",
+    "neverScanned": "Nunca",
+    "scanEnqueued": "Escaneo encolado en segundo plano.",
+    "addSuccess": "Repositorio añadido a la monitorización.",
+    "status": "Estado"
   },
   "metrics": {
     "title": "Métricas generales",

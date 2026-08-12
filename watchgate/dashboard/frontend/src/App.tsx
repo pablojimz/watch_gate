@@ -4,6 +4,7 @@ import { AppLayout } from '@/components/AppLayout'
 import { api, type MeResponse } from '@/api/client'
 import LoginPage from '@/pages/LoginPage'
 import ReposPage from '@/pages/ReposPage'
+import ExternalReposPage from '@/pages/ExternalReposPage'
 import RepoPage from '@/pages/RepoPage'
 import FeedbackPage from '@/pages/FeedbackPage'
 import AdminPage from '@/pages/AdminPage'
@@ -52,6 +53,7 @@ export default function App() {
         >
           <Route index element={<Navigate to="/repos" replace />} />
           <Route path="repos" element={<ReposPage />} />
+          <Route path="audits" element={<ExternalReposPage />} />
           <Route path="repos/:owner/:name" element={<RepoPage />} />
           <Route path="repos/:owner/:name/feedback" element={<FeedbackPage />} />
           <Route path="metrics" element={<MetricsPage />} />
