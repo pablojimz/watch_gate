@@ -17,7 +17,7 @@ from watchgate.core.layers._semantic.llm_providers import GeminiClient, OpenAICo
 
 _DEFAULT_MODELS = {
     "anthropic": "claude-sonnet-5",
-    "gemini": "gemini-2.5-flash",
+    "gemini": "gemini-3.6-flash",
     "local": "llama3.1",
 }
 # Puerto/ruta por defecto de Ollama sirviendo su API compatible con OpenAI.
