@@ -1,0 +1,76 @@
+# Override de producción: añade TLS automático delante del stack de
+# docker-compose.yml -- antes de esto, el TLS solo estaba documentado a
+# mano (docs/manual_despliegue_prod.md, nginx/Caddy configurados a mano en
+# el host), sin nada versionado que levantar con un solo comando.
+#
+# Uso:
+#   cp .env.example .env   # WATCHGATE_LLM_API_KEY, WATCHGATE_DASHBOARD_SECRET
+#                           # propio, WATCHGATE_DASHBOARD_SECURE_COOKIE=1,
+#                           # WATCHGATE_DASHBOARD_DEV_MODE=0 -- ver checklist
+#                           # de producción en docs/despliegue.md
+#   export WATCHGATE_DOMAIN=watchgate.tuempresa.com   # DNS ya apuntando aquí
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
+#
+# Con un WATCHGATE_DOMAIN público de verdad, Caddy pide el certificado a
+# Let's Encrypt automáticamente la primera vez que alguien accede por HTTPS
+# -- necesita que el puerto 443 sea alcanzable desde internet y que el
+# dominio resuelva a esta máquina. Sin dominio (default "localhost", o en
+# local), Caddy detecta que no es un nombre público y sirve igualmente por
+# HTTPS con un certificado de su propia CA interna -- verificado en vivo
+# (curl -k https://localhost/... responde 200); un navegador lo marcará
+# como no confiable hasta importar esa CA, pero permite probar el enrutado
+# de verdad sin haber comprado ni configurado nada de DNS todavía.
+#
+# Sigue exponiendo los puertos de cada servicio directamente (8080/8000/5173),
+# igual que docker-compose.yml solo -- en un despliegue cloud real, ciérralos
+# a nivel de red (security group/firewall) para que solo 80/443 sean
+# alcanzables desde fuera y todo pase por el proxy.
+
+services:
+  engine-api:
+    environment:
+      WATCHGATE_LOG_FORMAT: json
+
+  dashboard-backend:
+    environment:
+      WATCHGATE_LOG_FORMAT: json
+
+  reverse-proxy:
+    image: caddy:2.8-alpine
+    environment:
+      WATCHGATE_DOMAIN: ${WATCHGATE_DOMAIN:-localhost}
+    volumes:
+      - ./docker/reverse-proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - engine-api
+      - dashboard-frontend
+    ports:
+      - "80:80"
+      - "443:443"
+
+  # pg_dumpall diario (03:00 UTC por defecto, ver WATCHGATE_BACKUP_CRON) de
+  # las dos bases del cluster Postgres -- antes no había ningún backup, el
+  # volumen postgres_data era la única copia de los datos. Rotación de
+  # WATCHGATE_BACKUP_RETENTION_DAYS días (14 por defecto). Restaurar: ver
+  # docs/despliegue.md.
+  postgres-backup:
+    build:
+      context: docker/postgres-backup
+    environment:
+      PGHOST: postgres
+      PGUSER: watchgate
+      PGPASSWORD: watchgate
+      WATCHGATE_BACKUP_CRON: ${WATCHGATE_BACKUP_CRON:-0 3 * * *}
+      WATCHGATE_BACKUP_RETENTION_DAYS: ${WATCHGATE_BACKUP_RETENTION_DAYS:-14}
+    volumes:
+      - postgres_backups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  caddy_data:
+  caddy_config:
+  postgres_backups:

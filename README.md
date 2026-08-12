@@ -229,9 +229,33 @@ Arquitectura y spec de implementación cerradas (`docs/WatchGate_spec_implementa
 - [x] Capa de dependencias (OSV, typosquatting) — Pablo Jiménez Castro
 - [x] Adaptador de GitHub Action de referencia (`adapters/github_action/`), incluida la persistencia opcional en el dashboard (paso 8 de la spec §12) y la aplicación opcional de la configuración del dashboard (pesos/umbrales/capas/política/presupuesto de LLM) por repo antes de analizar
 - [x] Dashboard de postura de seguridad (`dashboard/`) — Pablo Jiménez Castro
-- [x] Validación contra el conjunto de casos de prueba (191 casos, 95% dentro de lo esperado — `docs/validation_report.md`)
+- [x] Validación contra el conjunto de casos de prueba (193 casos, 187-189 dentro de lo esperado (96-97%) contra la API real según la ejecución — `docs/validation_report.md`; varianza real del modelo entre ejecuciones cerca de los umbrales de semáforo, no una regresión, ver la nota de auto-consistencia en `watchgate/core/layers/_semantic/layer.py`; 5 de los divergentes originales eran ground truth no fiable del dataset de origen — fixtures con el fichero equivocado, no fallos reales de WatchGate — y ya se arreglaron recuperando el payload real de cada uno, ver `docs/evaluacion_ia/ground_truth_dudoso_dataset_datadog.md`)
 
-Pendiente antes de un despliegue real: publicar el paquete en PyPI (`pip install watchgate` hoy solo funciona instalando desde el propio checkout, ver `.github/workflows/watchgate.yml`).
+### Usar WatchGate en otro repositorio (GitHub Action)
+
+Ya es usable hoy desde cualquier repositorio externo, sin esperar a que el paquete esté en PyPI: [`action.yml`](action.yml) es una *composite action* que se instala directamente desde su propio checkout (`pip install "${{ github.action_path }}"`), no desde PyPI.
+
+```yaml
+# .github/workflows/watchgate.yml en el repo que quieres proteger
+on:
+  pull_request:
+    types: [opened, synchronize]
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: pablojimz/watch_gate@main
+        with:
+          llm-api-key: ${{ secrets.WATCHGATE_LLM_API_KEY }}
+```
+
+Ver los `inputs`/`outputs` completos (proveedor LLM, Dashboard, `.watchgate.yml` en otra ruta...) en el propio `action.yml`. El workflow interno de este repo (`.github/workflows/watchgate.yml`) consume la Action de esta misma forma (`uses: ./`), así que hace de test real de que `action.yml` funciona en cada PR.
+
+Pendiente antes de un despliegue realmente terceros-friendly: registrar la Action en el GitHub Marketplace, y publicar el paquete en PyPI bajo un nombre distinto (`watchgate` ya está registrado por un proyecto sin relación -- decisión de equipo pendiente, no técnica). Instalar vía la Action de arriba no depende de ninguna de las dos cosas.
+
+## Licencia
+
+[MIT](LICENSE).
 
 ## Referencias
 

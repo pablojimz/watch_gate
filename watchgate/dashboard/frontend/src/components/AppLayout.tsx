@@ -5,6 +5,7 @@ import {
   LogOut,
   Settings2,
   Shield,
+  Eye,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
@@ -70,6 +71,10 @@ export function AppLayout({ isAdmin }: { isAdmin: boolean }) {
           <NavLink to="/repos" className={navLinkClass}>
             <FolderGit2 className="size-4" strokeWidth={1.75} />
             <span className="hidden sm:inline">{t('nav.repos')}</span>
+          </NavLink>
+          <NavLink to="/audits" className={navLinkClass}>
+            <Eye className="size-4" strokeWidth={1.75} />
+            <span className="hidden sm:inline">{t('nav.externalRepos')}</span>
           </NavLink>
           <NavLink to="/metrics" className={navLinkClass}>
             <BarChart3 className="size-4" strokeWidth={1.75} />

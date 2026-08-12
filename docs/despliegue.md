@@ -40,9 +40,11 @@ Postgres del propio compose (`WATCHGATE_DATABASE_URL`/
 `WATCHGATE_DASHBOARD_DATABASE_URL`) -- es la primera vez que el soporte
 Postgres del proyecto corre contra una instancia real de forma reproducible
 para cualquiera, no solo a mano en el entorno de quien lo implementó
-originalmente. **Sigue sin estar en el pipeline de CI** (`ci.yml` solo usa
-SQLite, más rápido y sin infraestructura extra que levantar en cada push) --
-ver "Pendiente" en `docs/progreso/progreso_javier_martin_jurado.md`.
+originalmente. Ya está también en el pipeline de CI (`postgres-test` en
+`ci.yml`, contra un servicio Postgres real del propio runner) además de
+`docker compose up` -- el resto de jobs de CI siguen usando SQLite para la
+suite completa, más rápido y sin infraestructura extra que levantar en
+cada push.
 
 **Dos bases de datos, no una**: el esquema propio del Dashboard
 (`watchgate/dashboard/backend/db.py`) y el esquema SQLModel compartido
@@ -64,6 +66,34 @@ servicios, los 3 endpoints HTTP (`/health`, `/api/health`, `/`) responden
 200, y un login de desarrollo a través del proxy nginx del frontend
 persiste sesión correctamente contra el backend real.
 
+## TLS / reverse proxy en producción
+
+`docker-compose.prod.yml` añade un servicio `reverse-proxy` (Caddy) delante
+de todo el stack, con TLS automático:
+
+```bash
+export WATCHGATE_DOMAIN=watchgate.tuempresa.com   # DNS ya apuntando aquí
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
+```
+
+Con `WATCHGATE_DOMAIN` apuntando de verdad a la máquina (puerto 443
+alcanzable desde internet), Caddy pide el certificado a Let's Encrypt solo
+la primera vez y lo renueva solo. Sin dominio (o en local, el default es
+`localhost`), sirve igual por HTTPS con un certificado de su propia CA
+interna -- verificado en vivo (`curl -k https://localhost/api/v1/agent/policy`
+llega de verdad a la Engine API, no a un 404); útil para probar el enrutado
+antes de tener DNS configurado, pero un navegador lo marcará como no
+confiable hasta importar esa CA. Rutas: `/api/v1/*` a la Engine API,
+cualquier otra cosa al frontend del Dashboard (que a su vez ya sabe
+reenviar su propio `/api/*` a `dashboard-backend`) -- ver
+`docker/reverse-proxy/Caddyfile`.
+
+Antes se documentaba una configuración manual de nginx/Caddy sobre el host
+(`docs/manual_despliegue_prod.md`) -- sigue siendo válida como referencia
+si prefieres el reverse proxy fuera de Docker, pero ya no es el único
+camino: `docker-compose.prod.yml` da un `up` con el que levantarlo todo
+de una vez.
+
 ## Checklist de producción (`WATCHGATE_DASHBOARD_DEV_MODE=0`)
 
 El propio proceso se niega a arrancar (`ensure_safe_startup_config()` en
@@ -75,7 +105,7 @@ imposible olvidarlos -- pero conviene saber por qué:
   la cookie de sesión -- puede llevar embebido un token de acceso de GitHub.
 - `WATCHGATE_DASHBOARD_SECURE_COOKIE=1`: exige servir por HTTPS de verdad
   (la cookie de sesión no se manda sin el flag `Secure` si esto no está
-  activo).
+  activo) -- el overlay de arriba lo da gratis.
 - `WATCHGATE_DASHBOARD_INGEST_TOKEN`: protege `POST /api/scores` (la vía
   por la que la Action persiste resultados en el dashboard).
 
@@ -88,9 +118,97 @@ Además, ya activo por defecto en cualquier entorno (no solo producción):
   No hace falta ningún cambio para un despliegue de una sola réplica.
 - `init_db()` (tanto Engine API como Dashboard) se niega a arrancar si una
   base de datos ya existente no tiene las columnas que el código actual
-  espera, en vez de fallar en silencio a mitad de una petición cualquiera.
-  No hay migraciones automáticas (Alembo o equivalente) todavía -- si esto
-  salta, hay que aplicar el `ALTER TABLE` indicado a mano.
+  espera, en vez de fallar en silencio a mitad de una petición cualquiera
+  -- ver "Migraciones de esquema" más abajo para resolverlo.
+
+## Migraciones de esquema
+
+Dos esquemas, dos mecanismos distintos -- no se unificaron porque son
+tecnologías distintas (uno SQLAlchemy/SQLModel, el otro SQL crudo) y cada
+uno ya encajaba mejor con su propia herramienta:
+
+**Esquema SQLModel** (`watchgate/db/` -- organizations, users,
+user_api_keys, user_token_usage, semantic_cache, pr_scores; lo usan Engine
+API y la gestión de API keys del Dashboard) usa **Alembic** de verdad
+desde ahora:
+
+```bash
+# Aplicar migraciones pendientes (local o dentro del contenedor):
+make migrate                                    # local
+docker compose exec engine-api alembic upgrade head   # Docker
+
+# Generar una migración nueva tras cambiar watchgate/db/models.py:
+make migration m="descripción del cambio"
+```
+
+**Importante para una base de datos que ya existía antes de adoptar
+Alembic** (cualquier despliegue de antes de esta versión): las tablas ya
+están creadas, así que `alembic upgrade head` no debe volver a crearlas.
+Una sola vez, marca la base de datos como ya al día sin ejecutar nada:
+
+```bash
+docker compose exec engine-api alembic stamp head
+```
+
+Después de eso, `alembic upgrade head` funciona con normalidad para
+cualquier migración futura. Deliberadamente **no se ejecuta sola en cada
+arranque del contenedor** (a diferencia del chequeo de `init_db()`, que sí
+es automático) -- aplicar un cambio de esquema es un paso explícito de
+despliegue, no algo que deba correr sin supervisión, sobre todo si algún
+día hay más de una réplica arrancando a la vez contra la misma base de
+datos (mismo motivo por el que se arregló el deadlock de `db_session()`
+del Dashboard, ver más abajo).
+
+**Esquema propio del Dashboard** (`watchgate/dashboard/backend/db.py` --
+pr_scores, repo_roles, repo_settings, org_settings...) sigue con su
+mecanismo de guardas existente (`init_db()` comprueba columna a columna
+con `PRAGMA table_info`/`information_schema` y aplica `ALTER TABLE
+IF NOT EXISTS` idempotentes) -- SQL crudo, no SQLAlchemy, así que Alembic
+no encaja de forma nativa; el mecanismo actual ya es seguro y automático,
+adaptar esto a Alembic sería una reescritura mayor sin beneficio real hoy.
+
+## Backups de Postgres
+
+`docker-compose.prod.yml` incluye un servicio `postgres-backup`: `pg_dumpall`
+diario (03:00 UTC por defecto) de **las dos bases del cluster** (`watchgate` +
+`watchgate_dashboard`, más los roles) a un único fichero comprimido en el
+volumen `postgres_backups`, con rotación (`WATCHGATE_BACKUP_RETENTION_DAYS`,
+14 días por defecto). Corre un backup inicial nada más arrancar el
+contenedor, no hace falta esperar a la primera medianoche.
+
+```bash
+# Ver los backups guardados:
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec postgres-backup ls -la /backups
+
+# Forzar un backup manual (fuera del cron):
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec postgres-backup /usr/local/bin/backup.sh
+
+# Cambiar la hora/retención:
+export WATCHGATE_BACKUP_CRON="0 3 * * *"       # formato crontab, UTC
+export WATCHGATE_BACKUP_RETENTION_DAYS=30
+```
+
+**Restaurar** (verificado en vivo: backup real -> restauración en un
+Postgres nuevo -> datos reales recuperados, no solo "debería funcionar"):
+
+```bash
+# Sacar el backup del volumen a un fichero local:
+docker compose -f docker-compose.yml -f docker-compose.prod.yml cp \
+  postgres-backup:/backups/watchgate-<timestamp>.sql.gz ./watchgate-backup.sql.gz
+gunzip watchgate-backup.sql.gz
+
+# Contra un Postgres YA VACÍO (pg_dumpall incluye CREATE DATABASE/CREATE
+# ROLE -- no lo ejecutes contra el Postgres que ya está sirviendo tráfico,
+# o los CREATE DATABASE fallarán porque las bases ya existen):
+psql -h <host> -U postgres -f watchgate-backup.sql
+```
+
+No sustituye backups fuera de la propia máquina (a S3 o equivalente) -- el
+volumen `postgres_backups` vive en el mismo host que `postgres_data`, así
+que protege de un error humano/de aplicación (borrar una fila por
+accidente, una migración mal aplicada) pero no de perder la máquina
+entera. Llevarlo a un destino externo queda fuera de lo que puede resolver
+este repo por su cuenta (necesita credenciales de un proveedor real).
 
 ## Variables de entorno
 
@@ -109,22 +227,35 @@ Ver `.env.example` para la lista completa y comentada. Resumen por bloque:
   `core/rag/retriever.py`); el corpus público de casos de ataque conocidos
   es intencionalmente compartido, nunca se filtra.
 - **OAuth GitHub / OIDC**: opcional, solo si se quiere login federado en
-  vez del login de desarrollo o usuario/contraseña local.
+  vez del login de desarrollo o usuario/contraseña local. Requiere un paso
+  manual, una sola vez, en GitHub (no hay forma de automatizarlo desde
+  este repo): *GitHub → Settings → Developer settings → OAuth Apps → New
+  OAuth App*, con *Authorization callback URL* = el valor exacto de
+  `WATCHGATE_GITHUB_REDIRECT_URI` (por defecto
+  `http://localhost:8000/api/auth/github/callback`; en producción, la URL
+  real del Dashboard). GitHub da el *Client ID* y genera el *Client
+  Secret* ahí mismo -- van en `WATCHGATE_GITHUB_CLIENT_ID`/
+  `WATCHGATE_GITHUB_CLIENT_SECRET`.
 
 ## Limitaciones conocidas, honestas
 
-- Sin Postgres provisionado en CI -- validado a mano y ahora también vía
-  `docker compose up`, pero no en cada push.
-- Rate limiting de login en memoria de proceso, no compartido entre
-  réplicas (ver arriba).
-- Sin migraciones automáticas de esquema -- `init_db()` detecta el
-  desajuste y aborta con un mensaje claro, pero aplicar el cambio sigue
-  siendo manual.
-- Las imágenes de Engine API y Dashboard backend instalan el mismo
-  paquete `watchgate` completo (semgrep, yara-python, chromadb +
-  sentence-transformers/torch para la capa semántica/RAG) aunque el
-  Dashboard backend en sí no necesite esas dependencias en tiempo de
-  ejecución -- no se ha separado el empaquetado en extras por servicio.
-  Imagen resultante pesada (~1.5 GB) por esto; no es un bug, es una
-  simplificación consciente para tener algo desplegable, con margen para
-  optimizar más adelante si el tamaño de imagen importa.
+- Rate limiting de login: compartido entre réplicas si `WATCHGATE_REDIS_URL`
+  está configurada (ver arriba); en memoria de proceso si no, que sigue
+  siendo el default (no rompe nada para quien no lo necesita).
+- El esquema propio del Dashboard (a diferencia del esquema SQLModel, ver
+  "Migraciones de esquema" arriba) sigue sin Alembic -- su mecanismo de
+  guardas ya es seguro y automático, pero no genera un historial de
+  migraciones versionado como Alembic.
+- Backups de Postgres: automatizados (`postgres-backup` en
+  `docker-compose.prod.yml`, ver arriba), pero solo en el mismo host que
+  los datos -- sin copia fuera de la máquina (S3 o equivalente).
+- Logs estructurados (`WATCHGATE_LOG_FORMAT=json`) ya activos en
+  producción, pero sin alerting -- nada avisa proactivamente si algo va
+  mal, hay que ir a mirar los logs. Los bugs reales que ha encontrado el
+  equipo hasta ahora se han diagnosticado leyendo `docker compose logs` a
+  mano; con JSON al menos ya es grepable/parseable por un agregador real
+  si se conecta uno.
+- Publicar en PyPI requiere antes decidir un nombre de paquete distinto
+  (`watchgate` ya está registrado por un proyecto sin relación) -- no
+  bloquea usar la GitHub Action (ver `action.yml`, se instala desde su
+  propio checkout, no desde PyPI).

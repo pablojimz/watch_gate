@@ -13,6 +13,7 @@ perdido.
 from __future__ import annotations
 
 import re
+import time
 from datetime import UTC, datetime
 from typing import Any
 
@@ -22,6 +23,7 @@ from watchgate.core.models import ReputationMetadata
 
 _API_BASE = "https://api.github.com"
 _TIMEOUT = 15.0
+_MAX_DIFF_SIZE_BYTES = 2 * 1024 * 1024  # 2 MB
 
 # Cuántos commits recientes del repo se muestrean para decidir si el repo
 # "tiene historial de commits firmados" -- no es viable (ni necesario) mirar
@@ -32,6 +34,10 @@ _SIGNED_HISTORY_SAMPLE_SIZE = 20
 _LINK_LAST_PAGE_RE = re.compile(r'[?&]page=(\d+)>;\s*rel="last"')
 
 
+class DiffTooLargeError(Exception):
+    """El diff descargado supera el límite de tamaño permitido."""
+
+
 class GitHubClient:
     def __init__(self, token: str) -> None:
         self._headers = {
@@ -40,18 +46,102 @@ class GitHubClient:
             "X-GitHub-Api-Version": "2022-11-28",
         }
 
-    def _get(self, path: str, params: dict[str, Any] | None = None) -> httpx.Response:
-        response = httpx.get(
-            f"{_API_BASE}{path}", headers=self._headers, params=params, timeout=_TIMEOUT
+    def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
+        """Wrapper interno para peticiones con manejo de rate limits."""
+        kwargs.setdefault("timeout", _TIMEOUT)
+        kwargs.setdefault("headers", self._headers)
+
+        max_retries = 3
+        for attempt in range(max_retries):
+            response = httpx.request(method, f"{_API_BASE}{path}", **kwargs)
+
+            # Manejo de Rate Limit
+            if response.status_code in (403, 429) and "x-ratelimit-remaining" in response.headers:
+                if int(response.headers["x-ratelimit-remaining"]) == 0:
+                    reset_time = int(response.headers.get("x-ratelimit-reset", time.time() + 60))
+                    sleep_time = max(0, reset_time - int(time.time())) + 1
+                    # No esperar más de 60 segundos por defecto para evitar asfixiar workers
+                    if sleep_time <= 60 and attempt < max_retries - 1:
+                        time.sleep(sleep_time)
+                        continue
+
+            response.raise_for_status()
+            return response
+        raise httpx.HTTPStatusError(
+            "Max retries exceeded for rate limit", request=response.request, response=response
         )
-        response.raise_for_status()
-        return response
+
+    def _get(self, path: str, params: dict[str, Any] | None = None) -> httpx.Response:
+        return self._request("GET", path, params=params)
 
     def get_pr_diff_shas(self, pr_event: dict[str, Any]) -> tuple[str, str]:
         """Extrae `(base_sha, head_sha)` del payload del evento `pull_request`
         (el JSON que GitHub Actions deja en `GITHUB_EVENT_PATH`)."""
         pr = pr_event["pull_request"]
         return pr["base"]["sha"], pr["head"]["sha"]
+
+    def list_recent_pull_requests(
+        self, owner: str, repo: str, per_page: int = 10
+    ) -> list[dict[str, Any]]:
+        """Devuelve las PRs abiertas más recientes de un repositorio."""
+        params = {"state": "open", "sort": "created", "direction": "desc", "per_page": per_page}
+        return list(self._get(f"/repos/{owner}/{repo}/pulls", params=params).json())
+
+    def get_pull_request_diff(self, owner: str, repo: str, pr_number: int) -> str:
+        """Descarga el diff unificado de una PR. Lanza DiffTooLargeError si > 2MB."""
+        headers = {**self._headers, "Accept": "application/vnd.github.v3.diff"}
+        url = f"{_API_BASE}/repos/{owner}/{repo}/pulls/{pr_number}"
+
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                diff_text = ""
+                with httpx.stream("GET", url, headers=headers, timeout=_TIMEOUT) as response:
+                    # Manejo de Rate Limit
+                    if (
+                        response.status_code in (403, 429)
+                        and "x-ratelimit-remaining" in response.headers
+                    ):
+                        if int(response.headers["x-ratelimit-remaining"]) == 0:
+                            reset_time = int(
+                                response.headers.get("x-ratelimit-reset", time.time() + 60)
+                            )
+                            sleep_time = max(0, reset_time - int(time.time())) + 1
+                            if sleep_time <= 60 and attempt < max_retries - 1:
+                                time.sleep(sleep_time)
+                                continue
+                    response.raise_for_status()
+
+                    downloaded = 0
+                    for chunk in response.iter_text():
+                        downloaded += len(chunk.encode("utf-8"))
+                        if downloaded > _MAX_DIFF_SIZE_BYTES:
+                            raise DiffTooLargeError(
+                                f"El diff de la PR #{pr_number} supera el límite de 2MB."
+                            )
+                        diff_text += chunk
+
+                return diff_text
+            except httpx.HTTPStatusError as exc:
+                if attempt == max_retries - 1:
+                    raise exc
+        raise httpx.HTTPStatusError(
+            "Max retries exceeded for rate limit", 
+            request=httpx.Request("GET", url), 
+            response=httpx.Response(429, request=httpx.Request("GET", url))
+        )
+
+    def get_pull_request_metadata(self, owner: str, repo: str, pr_number: int) -> dict[str, Any]:
+        """Descarga los metadatos JSON (author, head, base, etc.) de una PR."""
+        return dict(self._get(f"/repos/{owner}/{repo}/pulls/{pr_number}").json())
+
+    def get_pull_request_data(
+        self, owner: str, repo: str, pr_number: int
+    ) -> tuple[str, dict[str, Any]]:
+        """Descarga el diff y los metadatos JSON de una PR."""
+        metadata = self.get_pull_request_metadata(owner, repo, pr_number)
+        diff_text = self.get_pull_request_diff(owner, repo, pr_number)
+        return diff_text, metadata
 
     def _commit_history_by_author(
         self, owner: str, repo: str, author_login: str

@@ -62,12 +62,15 @@ def run_full_analysis(
             max_diff_tokens=config.max_diff_tokens,
             monthly_budget_tokens=config.monthly_budget_tokens,
         )
+        llm_client = None
+        client_init_error: str | None = None
         try:
             llm_client = build_llm_client()
-            layer_factories["semantic"] = lambda: SemanticLayer(llm_client, cost_control)
-        except Exception:  # noqa: BLE001
-            # Si falla el cliente LLM (ej. sin API key), safe_analyze lo aislará.
-            pass
+        except Exception as exc:  # noqa: BLE001 - un LLM mal configurado no debe tumbar el análisis: se degrada a "capa semántica omitida", no se propaga
+            client_init_error = str(exc)
+        layer_factories["semantic"] = lambda: SemanticLayer(
+            llm_client, cost_control, client_init_error=client_init_error
+        )
 
     try:
         if config.shortcircuit_enabled:

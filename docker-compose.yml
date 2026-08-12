@@ -11,8 +11,23 @@
 #
 # Dashboard: http://localhost:5173 (nginx sirviendo el build + proxy /api)
 # Engine API: http://localhost:8080/health
+#
+# Para producción con TLS automático delante de todo (Caddy, Let's Encrypt
+# o certificado autofirmado si no hay dominio público), ver el overlay
+# docker-compose.prod.yml: `docker compose -f docker-compose.yml -f
+# docker-compose.prod.yml up --build -d`.
 
 services:
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    ports:
+      - "6379:6379"
+
   postgres:
     image: postgres:16-alpine
     environment:
@@ -63,11 +78,37 @@ services:
       WATCHGATE_DATABASE_URL: postgresql+psycopg://watchgate:watchgate@postgres:5432/watchgate
       WATCHGATE_DASHBOARD_CORS_ORIGINS: http://localhost:5173
       WATCHGATE_DASHBOARD_FRONTEND_ORIGIN: http://localhost:5173
+      # Rate limiting de login compartido -- ver watchgate/dashboard/backend/auth.py.
+      # Con una sola réplica (este compose) no hace falta, pero así queda
+      # probado en local contra un Redis real, no solo contra fakeredis en
+      # los tests unitarios.
+      WATCHGATE_REDIS_URL: redis://redis:6379/0
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     ports:
       - "8000:8000"
+
+  dashboard-worker:
+    build:
+      context: .
+      dockerfile: docker/dashboard-backend.Dockerfile
+    command: rq worker --url redis://redis:6379/0
+    env_file:
+      - .env
+    environment:
+      WATCHGATE_DASHBOARD_DATABASE_URL: postgresql://watchgate:watchgate@postgres:5432/watchgate_dashboard
+      WATCHGATE_DATABASE_URL: postgresql+psycopg://watchgate:watchgate@postgres:5432/watchgate
+      WATCHGATE_REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      dashboard-backend:
+        condition: service_started
 
   dashboard-frontend:
     build:
