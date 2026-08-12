@@ -1552,6 +1552,7 @@ cryptography = [
     {version = ">=41.0.5", markers = "python_version >= \"3.14\""},
 ]
 pyasn1-modules = ">=0.2.1"
+requests = {version = ">=2.30.0,<3.0.0", optional = true, markers = "extra == \"requests\""}
 
 [package.extras]
 aiohttp = ["aiohttp (>=3.8.0,<4.0.0) ; python_version < \"3.14\"", "aiohttp (>=3.9.0,<4.0.0) ; python_version >= \"3.14\"", "requests (>=2.30.0,<3.0.0)"]
@@ -1568,22 +1569,33 @@ urllib3 = ["packaging (>=20.0)", "urllib3 (>=1.26.15,<3.0.0)"]
 
 [[package]]
 name = "google-genai"
-version = "0.8.0"
+version = "2.17.0"
 description = "GenAI Python SDK"
 optional = true
-python-versions = ">=3.9"
+python-versions = ">=3.10"
 groups = ["main"]
 markers = "extra == \"analysis\""
 files = [
-    {file = "google_genai-0.8.0-py3-none-any.whl", hash = "sha256:dbaea9054f0e3547d9e5810390304574808d9cb5d77198b8a247f497271c8254"},
-    {file = "google_genai-0.8.0.tar.gz", hash = "sha256:b5730bcb144177cfcf6cfe44ab59611f8dec3f7c44599cfb321d5d71856a910e"},
+    {file = "google_genai-2.17.0-py3-none-any.whl", hash = "sha256:a4835563c60aee646c9c4b261c507aa4a624710d25017012d20dc65abf3d9a54"},
+    {file = "google_genai-2.17.0.tar.gz", hash = "sha256:6b640a2390c82b4a240873eddb9f518c6d2c33244b2de16ed3d14526a6da7f57"},
 ]
 
 [package.dependencies]
-google-auth = ">=2.14.1,<3.0.0.dev0"
-pydantic = ">=2.0.0,<3.0.0.dev0"
-requests = ">=2.28.1,<3.0.0.dev0"
-websockets = ">=13.0,<15.0.dev0"
+anyio = ">=4.8.0,<5.0.0"
+distro = ">=1.7.0,<2"
+google-auth = {version = ">=2.56.0,<3.0.0", extras = ["requests"]}
+httpx = ">=0.28.1,<1.0.0"
+pydantic = ">=2.12.5,<3.0.0"
+requests = ">=2.28.1,<3.0.0"
+sniffio = "*"
+tenacity = ">=8.2.3,<9.2.0"
+typing-extensions = ">=4.14.0,<5.0.0"
+websockets = ">=13.0.0,<17.0"
+
+[package.extras]
+aiohttp = ["aiohttp (>=3.10.11,<4.0.0)"]
+local-tokenizer = ["pillow", "protobuf", "sentencepiece (>=0.2.0)", "torch", "torchvision", "transformers"]
+pyopenssl = ["pyopenssl"]
 
 [[package]]
 name = "googleapis-common-protos"
@@ -7848,4 +7860,4 @@ analysis = ["anthropic", "chromadb", "google-genai", "langchain-text-splitters",
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11"
-content-hash = "502293075c137dedb50d35b1f8765917d4997384402d55f5da696dbca12056fa"
+content-hash = "b01687c0e0fcf54861c5cc1b363a03394246963bba9dc4e210fe7f5b90fbdd50"
