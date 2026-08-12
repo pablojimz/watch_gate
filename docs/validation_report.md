@@ -1,8 +1,8 @@
 # Informe de validación — suite de aceptación (spec §14)
 
-Generado automáticamente el 2026-08-11 22:13 UTC ejecutando `tests/integration/generate_validation_report.py` contra la API real de Gemini. No editar a mano -- regenerar con ese comando para que refleje el código actual. Resultados en bruto de cada caso en `docs/validation_report_raw.json`.
+Generado automáticamente el 2026-08-12 10:21 UTC ejecutando `tests/integration/generate_validation_report.py` contra la API real de Gemini. No editar a mano -- regenerar con ese comando para que refleje el código actual. Resultados en bruto de cada caso en `docs/validation_report_raw.json`.
 
-**Resultado global: 187/193 casos dentro de lo esperado (96%).**
+**Resultado global: 188/193 casos dentro de lo esperado (97%).**
 
 > Score calculado con las 5 capas reales (`static` 0.25, `dependencies` 0.10, `vulnerabilities` 0.10, `reputation` 0.15, `semantic` 0.40) -- ver `tests/integration/pipeline_runner.py` para la nota histórica sobre por qué informes anteriores a este solo reflejaban `reputation`+`semantic`.
 
@@ -10,13 +10,13 @@ Generado automáticamente el 2026-08-11 22:13 UTC ejecutando `tests/integration/
 
 | Clase | Dificultad | N | OK | % OK |
 |---|---|---:|---:|---:|
-| benign | easy | 21 | 20 | 95% |
+| benign | easy | 21 | 21 | 100% |
 | benign | hard | 41 | 40 | 97% |
 | benign | medium | 58 | 58 | 100% |
-| canonico | - | 18 | 16 | 88% |
+| canonico | - | 18 | 17 | 94% |
 | malicious | easy | 21 | 21 | 100% |
 | malicious | hard | 11 | 10 | 90% |
-| malicious | medium | 23 | 22 | 95% |
+| malicious | medium | 23 | 21 | 91% |
 
 ## Resumen de casos maliciosos por naturaleza de amenaza detectada
 
@@ -24,17 +24,16 @@ Desglose de los casos `class=malicious` (mezclan ataques -- código malicioso/ba
 
 | Naturaleza detectada | N | OK | % OK |
 |---|---:|---:|---:|
-| ataque | 49 | 49 | 100% |
-| vulnerabilidad | 4 | 4 | 100% |
+| ataque | 48 | 48 | 100% |
+| vulnerabilidad | 5 | 4 | 80% |
 | incertidumbre | 2 | 0 | 0% |
 
-## Casos que divergen de lo esperado (6)
+## Casos que divergen de lo esperado (5)
 
 | Caso | Esperado | Obtenido | Naturaleza | Categoría | Justificación (semántica) |
 |---|---|---|---|---|---|
-| `real_pallets_flask_5492` | verde/amarillo (min. 0) | rojo (70) | ataque | escalada_privilegios | La actualización de la dependencia `pytest` a la versión `8.2.1` introduce la vulnerabilidad conocida CVE-2025-71176 (GHSA-6w46-j5rx-g56g) que podría permitir a usuarios locales causar una denegación de servicio o escala |
-| `real_pallets_jinja_2105` | verde/amarillo (min. 0) | rojo (70) | ataque | backdoor | Se elimina por completo el job 'provenance' y la invocación a 'slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml' en el workflow de CI, eliminando la generación de metadatos de procedenci |
-| `false_positive_candidate` | amarillo (min. 20) | rojo (70) | ataque | escalada_privilegios | La función `evaluate_formula` añade una llamada a `eval(expr, {'__builtins__': {}}, namespace)` que procesa una expresión `expr` de usuario, lo cual introduce una vulnerabilidad potencial de ejecución remota de código (R |
-| `real_click_deprecate_isolated_fs` | verde/amarillo (min. 0) | rojo (70) | incertidumbre | ofuscacion | El diff contiene únicamente ficheros .pyc (bytecode compilado de Python), que no son legibles por un humano en una revisión de código, y el resto de ficheros están truncados, haciendo que el cambio sea inauditables y ocu |
-| `malreal_pypi_malicious_intent_mirrorbot_10` | amarillo/rojo (min. 35) | verde (15) | incertidumbre | ninguna | El fichero es una extensa colección de funciones para generar enlaces de descarga directa, que utilizan librerías de web scraping y bypass (cloudscraper, lk21, bs4) para interactuar con diversos sitios de alojamiento. Au |
-| `malreal_pypi_compromised_lib_lightning_5` | rojo (min. 55) | amarillo (40) | incertidumbre | backdoor | El script nuevo descarga un ejecutable externo ('bun') desde GitHub y lo usa para ejecutar otro script local ('router_runtime.js') cuyo contenido no está incluido en el diff, introduciendo un punto de incertidumbre y pot |
+| `real_pallets_jinja_2105` | verde/amarillo (min. 0) | rojo (70) | ataque | backdoor | El cambio elimina la generación de proveniencia SLSA (slsa-framework/slsa-github-generator) y el cálculo de hashes en .github/workflows/publish.yaml, desactivando la atestación criptográfica de integridad de las releases |
+| `false_positive_candidate` | amarillo (min. 20) | rojo (70) | ataque | ninguna | Usa eval() para evaluar la expresión de usuario 'expr' en evaluate_formula(), confiando en que {'__builtins__': {}} aísla el entorno, lo cual permite ejecución remota de código (RCE) mediante la navegación por __globals_ |
+| `malreal_pypi_malicious_intent_mirrorbot_10` | amarillo/rojo (min. 35) | verde (13) | incertidumbre | ninguna | El fichero direct_link_generator.py contiene funciones de generación y bypass de enlaces de descarga directa para múltiples servicios de almacenamiento, sin patrones de exfiltración, manipulación de dependencias ni ejecu |
+| `malreal_npm_compromised_lib_posthog-node_2` | rojo (min. 55) | verde (25) | vulnerabilidad | ninguna | El fichero setup_bun.js descarga y ejecuta directamente el instalador oficial de Bun mediante 'curl -fsSL https://bun.sh/install \| bash' si Bun no está instalado, lo que constituye un patrón de ejecución de código remoto |
+| `malreal_pypi_compromised_lib_lightning_5` | rojo (min. 55) | verde (4) | incertidumbre | ninguna | El cambio añade un script ejecutor en Python (start.py) que descarga el runtime Bun desde las releases oficiales de GitHub (oven-sh/bun) como alternativa si no está instalado y ejecuta router_runtime.js, sin exfiltración |
