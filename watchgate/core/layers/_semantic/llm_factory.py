@@ -23,6 +23,40 @@ _DEFAULT_MODELS = {
 # Puerto/ruta por defecto de Ollama sirviendo su API compatible con OpenAI.
 _DEFAULT_LOCAL_BASE_URL = "http://localhost:11434/v1"
 
+# Prefijos de clave estables y documentados por cada proveedor (Anthropic
+# siempre "sk-ant-", Google AI Studio siempre "AIzaSy") -- suficientes para
+# detectar el error real, reproducido: WATCHGATE_LLM_API_KEY con una clave de
+# Gemini pero WATCHGATE_LLM_PROVIDER sin poner (por defecto "anthropic")
+# construye un AnthropicClient con esa clave, que falla con un error de
+# autenticación genérico -- "la misma clave" que el usuario sabe que es
+# correcta, solo que para el proveedor equivocado. Deliberadamente NO se
+# intenta adivinar "local"/OpenAI: su formato de clave ("sk-...", sin más) lo
+# comparten demasiados proveedores/proxies (OpenRouter, vLLM, etc.) para ser
+# una señal fiable.
+_KEY_PREFIX_HINTS: dict[str, str] = {
+    "sk-ant-": "anthropic",
+    "AIzaSy": "gemini",
+}
+
+
+def _guess_provider_from_key(api_key: str | None) -> str | None:
+    if not api_key:
+        return None
+    for prefix, provider in _KEY_PREFIX_HINTS.items():
+        if api_key.startswith(prefix):
+            return provider
+    return None
+
+
+def _check_key_matches_provider(resolved_provider: str, api_key: str | None) -> None:
+    guessed = _guess_provider_from_key(api_key)
+    if guessed is not None and guessed != resolved_provider:
+        raise ValueError(
+            f"WATCHGATE_LLM_PROVIDER={resolved_provider!r}, pero WATCHGATE_LLM_API_KEY "
+            f"tiene el formato de una clave de {guessed!r} (por su prefijo), no de "
+            f"{resolved_provider!r}. ¿Falta poner WATCHGATE_LLM_PROVIDER={guessed!r}?"
+        )
+
 
 def build_llm_client(provider: str | None = None) -> LLMClient:
     """Construye el `LLMClient` configurado.
@@ -42,8 +76,11 @@ def build_llm_client(provider: str | None = None) -> LLMClient:
     model = os.environ.get("WATCHGATE_LLM_MODEL") or _DEFAULT_MODELS[resolved_provider]
 
     if resolved_provider == "anthropic":
+        _check_key_matches_provider(resolved_provider, os.environ.get("WATCHGATE_LLM_API_KEY"))
         return AnthropicClient(model=model)
     if resolved_provider == "gemini":
+        gemini_key = os.environ.get("WATCHGATE_LLM_API_KEY") or os.environ.get("GEMINI_API_KEY")
+        _check_key_matches_provider(resolved_provider, gemini_key)
         return GeminiClient(model=model)
 
     base_url = os.environ.get("WATCHGATE_LLM_BASE_URL", _DEFAULT_LOCAL_BASE_URL)

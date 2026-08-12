@@ -278,8 +278,15 @@ class SemanticLayer(AnalysisLayer):
         languages: str = "desconocido",
         recent_activity_summary: str = "sin datos",
         rag_index_path: str = DEFAULT_INDEX_PATH,
+        client_init_error: str | None = None,
     ) -> None:
         self._llm_client = llm_client
+        # Motivo real por el que quien llama no pudo construir `llm_client`
+        # (p. ej. `build_llm_client()` lanzó por un proveedor/clave mal
+        # configurados) -- si se pasa, sustituye a _NO_LLM_CONFIG_SKIP_REASON
+        # en el resultado. Sin esto, cualquier fallo de configuración real
+        # (no solo "no hay clave") queda indistinguible de "no hay clave".
+        self._client_init_error = client_init_error
         self._cost_control: CostControllerLike = (
             cost_control if cost_control is not None else _DummyCostController()  # type: ignore[assignment]
         )
@@ -296,7 +303,12 @@ class SemanticLayer(AnalysisLayer):
                 risk_score=0,
                 justification="",
                 skipped=True,
-                skip_reason=_NO_LLM_CONFIG_SKIP_REASON,
+                skip_reason=(
+                    f"Capa semántica omitida: no se pudo construir el cliente LLM "
+                    f"({self._client_init_error})"
+                    if self._client_init_error
+                    else _NO_LLM_CONFIG_SKIP_REASON
+                ),
             )
 
         repo = str(metadata.get("repo", ""))
