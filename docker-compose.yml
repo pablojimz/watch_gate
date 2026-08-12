@@ -34,26 +34,7 @@ services:
       POSTGRES_USER: watchgate
       POSTGRES_PASSWORD: watchgate
       POSTGRES_DB: watchgate
-  dashboard-worker:
-    build:
-      context: .
-      dockerfile: docker/dashboard-backend.Dockerfile
-    command: rq worker --url redis://redis:6379/0
-    env_file:
-      - .env
-    environment:
-      WATCHGATE_DASHBOARD_DATABASE_URL: postgresql://watchgate:watchgate@postgres:5432/watchgate_dashboard
-      WATCHGATE_DATABASE_URL: postgresql+psycopg://watchgate:watchgate@postgres:5432/watchgate
-      WATCHGATE_REDIS_URL: redis://redis:6379/0
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      dashboard-backend:
-        condition: service_started
-
-volumes:
+    volumes:
       - postgres_data:/var/lib/postgresql/data
       # Crea además la base "watchgate_dashboard" al arrancar con un volumen
       # vacío -- ver docker/postgres-init/01-create-dashboard-db.sql para el
@@ -109,6 +90,25 @@ volumes:
         condition: service_healthy
     ports:
       - "8000:8000"
+
+  dashboard-worker:
+    build:
+      context: .
+      dockerfile: docker/dashboard-backend.Dockerfile
+    command: rq worker --url redis://redis:6379/0
+    env_file:
+      - .env
+    environment:
+      WATCHGATE_DASHBOARD_DATABASE_URL: postgresql://watchgate:watchgate@postgres:5432/watchgate_dashboard
+      WATCHGATE_DATABASE_URL: postgresql+psycopg://watchgate:watchgate@postgres:5432/watchgate
+      WATCHGATE_REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      dashboard-backend:
+        condition: service_started
 
   dashboard-frontend:
     build:

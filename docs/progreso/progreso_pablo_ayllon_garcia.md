@@ -706,6 +706,7 @@ Adicionalmente, se han completado los siguientes hitos de infraestructura, API S
 |------|------------------|--------|-------------|
 | 2026-08-07 | Implementación completa de la Engine API con FastAPI, autenticación por API Key SHA-256 (`wg_live_...`), sanitizador criptográfico de logs, middleware de límite de payload (10 MB), endpoint `POST /api/v1/analyze` y router de webhooks HMAC `POST /api/v1/webhooks/github` | Despliegue de la arquitectura de servicios separados SaaS | Pablo Ayllón García |
 | 2026-08-11 | Diseño del plan de implementación para monitorización asíncrona de repositorios externos y extracción de diffs vía HTTP. | Extender soporte de Engine API SaaS y Dashboard para monitorizar proyectos externos (e.g. `openclaw`) | Pablo Ayllón García |
+| 2026-08-12 | Implementación Frontend (React) y Backend de la página de Auditoría Externa de Repositorios. Conexión asíncrona con Redis/RQ. | Soporte visual y funcional completo para Auditoría Externa | Pablo Ayllón García |
 
 #### Estado actual
 - **Funcionalidades implementadas**:
