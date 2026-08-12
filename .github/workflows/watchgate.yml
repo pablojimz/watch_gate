@@ -2,18 +2,49 @@ name: WatchGate
 on:
   pull_request:
     types: [opened, synchronize]
+
+permissions:
+  # checks:write -- publicar el Check Run (entrypoint.sh, paso 7).
+  # pull-requests:read -- leer metadata del PR vía la API de GitHub si
+  # hiciera falta en un paso posterior; el diff en sí se calcula con git
+  # puro, no con esta API.
+  checks: write
+  pull-requests: read
+
 jobs:
   analyze:
     runs-on: ubuntu-latest
     steps:
-      # Checkout mínimo, solo para que `uses: ./` pueda resolver el propio
-      # action.yml de este repo -- la Action hace su propio checkout
-      # completo (fetch-depth: 0) como primer paso interno. Este es
-      # exactamente el mismo flujo que seguiría un repo externo real con
-      # `uses: pablojimz/watch_gate@main`, así que este workflow sirve de
-      # dogfooding real de action.yml, no solo de la lógica interna.
       - uses: actions/checkout@v4
-      - name: WatchGate
-        uses: ./
         with:
-          llm-api-key: ${{ secrets.WATCHGATE_LLM_API_KEY }}
+          # fetch-depth: 0 -- git merge-base (entrypoint.sh, paso 1) necesita
+          # el histórico completo, no solo el último commit. Sin esto,
+          # entrypoint.sh igualmente hace `git fetch --unshallow` como red de
+          # seguridad, pero pedirlo aquí evita ese fetch extra en cada run.
+          fetch-depth: 0
+
+      # Cliente ligero: calcula el diff con git puro y delega TODO el
+      # análisis (Semgrep + YARA + capa semántica) al Engine API
+      # centralizado -- no instala el paquete Python "watchgate" en el
+      # runner (ver action.yml / entrypoint.sh en la raíz de este repo y
+      # docs/planificacion/... para el porqué: watchgate.core.layers
+      # importa incondicionalmente chromadb/sentence-transformers/torch a
+      # nivel de módulo, reventando cualquier imagen ligera).
+      #
+      # `uses: ./` referencia la Action de este mismo repo (dogfooding) --
+      # un consumidor externo usaría `uses: pablojimz/watch_gate@<tag>`.
+      - uses: ./
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          # Pendiente de aprovisionar (ver docs/despliegue.md): el Engine
+          # API todavía no está desplegado en ningún sitio alcanzable desde
+          # los runners de GitHub Actions -- hoy solo corre vía
+          # `docker compose up` en local. Hasta que exista una URL real y
+          # una API Key real (WATCHGATE_ENGINE_API_KEY, provisionada con
+          # create_api_key en watchgate/db/repository.py), este job falla
+          # en el paso 4 de entrypoint.sh con un error de red claro, no en
+          # silencio.
+          engine-api-url: ${{ secrets.WATCHGATE_ENGINE_API_URL }}
+          engine-api-key: ${{ secrets.WATCHGATE_ENGINE_API_KEY }}
+          base-ref: main
+          risk-threshold: '70'

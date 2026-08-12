@@ -96,6 +96,31 @@ SEVERITY_SCORE: dict[str, int] = {
 _CACHE_TTL_SECONDS = 86400
 _GIT_TIMEOUT_SECONDS = 5.0
 
+# Timeout del PRIMER clon completo (caso 5 de _get_rules_dir, "último
+# recurso"). 15s bastaba mientras las reglas eran YAML/.yar en texto plano,
+# pero el repo las versiona con Git LFS -- cada fichero es un objeto LFS
+# aparte que se descarga por separado durante el checkout, y con ~800
+# reglas ese primer clon puede tardar bastante más de 15s sin que nada
+# esté realmente roto (verificado en vivo contra un Engine API real:
+# tardó ~35s desde contenedor limpio). Un timeout corto no solo falla la
+# petición en curso -- ver _cleanup_partial_clone para por qué además deja
+# el proceso "envenenado" para las peticiones siguientes.
+_INITIAL_CLONE_TIMEOUT_SECONDS = 90.0
+
+# Timeout de CADA invocación de Semgrep en _run_semgrep_on_file (un
+# subprocess por fichero del diff). 20s basta en caliente (medido en vivo:
+# ~7s con las reglas ya resueltas y en caché de página del SO), pero
+# inmediatamente después del primer clon en frío (ver
+# _INITIAL_CLONE_TIMEOUT_SECONDS) -- ficheros de regla recién escritos por
+# el checkout de Git LFS, sin nada calentado en caché de disco/SO -- se
+# midió en vivo un TimeoutExpired real a los 20.0s exactos contra un Engine
+# API recién arrancado. El resultado no era "0 hallazgos", era una
+# excepción silenciada por el `except Exception` de más abajo, que
+# _run_semgrep_on_file trata igual que "esta regla no aplica" -- la
+# petición entera respondía 200 OK con la capa `static` en 0 sin ningún
+# indicio de que en realidad ni siquiera había terminado de analizar.
+_SEMGREP_SUBPROCESS_TIMEOUT_SECONDS = 60.0
+
 # Puntuación de riesgo si una regla YARA coincide pero, por lo que sea, no
 # trae su propio meta.risk_score (no debería pasar con las reglas
 # generadas por el repo de reglas, pero es defensivo ante una regla
@@ -512,17 +537,59 @@ class StaticLayer(AnalysisLayer):
                 ["git", "clone", "--depth", "1", SEMGREP_RULES_REPO_URL, str(cached_repo_dir)],
                 capture_output=True,
                 text=True,
-                timeout=15.0,
+                timeout=_INITIAL_CLONE_TIMEOUT_SECONDS,
                 check=False,
             )
             if res.returncode == 0 and cached_repo_dir.exists():
                 timestamp_file.write_text(str(now), encoding="utf-8")
                 return cached_repo_dir
             logger.warning("Fallo al clonar reglas Semgrep: %s", res.stderr)
+            self._cleanup_partial_clone(cached_repo_dir)
+            return None
+        except subprocess.TimeoutExpired:
+            logger.warning(
+                "Timeout (%.0fs) clonando el repo de reglas Semgrep -- se descarta el "
+                "clon parcial (ver _cleanup_partial_clone) para que el siguiente intento "
+                "arranque limpio en vez de heredar ficheros de reglas a medio resolver.",
+                _INITIAL_CLONE_TIMEOUT_SECONDS,
+            )
+            self._cleanup_partial_clone(cached_repo_dir)
             return None
         except Exception as exc:  # noqa: BLE001
             logger.warning("Error al clonar repositorio de reglas Semgrep: %r", exc)
+            self._cleanup_partial_clone(cached_repo_dir)
             return None
+
+    def _cleanup_partial_clone(self, cached_repo_dir: Path) -> None:
+        """Borra un clon parcial/roto tras un fallo o timeout del paso 5 de
+        `_get_rules_dir` (último recurso).
+
+        Hallazgo real de un E2E contra un Engine API real (no hipotético):
+        sin esto, un timeout a mitad de clonar deja `cached_repo_dir`
+        existente pero con contenido a medio resolver -- con las reglas
+        versionadas en Git LFS, eso significa ficheros de regla que siguen
+        siendo el puntero LFS en texto plano en vez del YAML/.yar real (Semgrep
+        los rechaza con "was not a mapping"). La siguiente llamada a
+        `_get_rules_dir` ve `cached_repo_dir.exists() == True` y toma la rama
+        "la caché ya existe" (más arriba), que solo hace un `git fetch`
+        ligero -- nunca vuelve a comprobar integridad ni fuerza un clon
+        completo. Peor aún: `_get_semgrep_finding_types`/
+        `_get_compiled_yara_rules` cachean su resultado (vacío o incompleto)
+        en memoria de PROCESO, indexado solo por la ruta resuelta -- una vez
+        envenenado, ese proceso nunca vuelve a intentarlo, aunque el
+        directorio en disco se complete por su cuenta más tarde. Borrar el
+        clon parcial aquí fuerza un clon limpio de verdad en el siguiente
+        intento."""
+        if cached_repo_dir.exists():
+            try:
+                shutil.rmtree(cached_repo_dir, onerror=_handle_remove_read_only)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "No se pudo limpiar el clon parcial de reglas en %s (%r) -- puede "
+                    "quedar contenido a medio resolver hasta que se recree el contenedor.",
+                    cached_repo_dir,
+                    exc,
+                )
 
     def _detect_language(self, file_path: str) -> str | None:
         """Infiere el lenguaje del archivo para mapearlo contra las reglas Semgrep.
@@ -697,7 +764,7 @@ class StaticLayer(AnalysisLayer):
                 command,
                 capture_output=True,
                 text=True,
-                timeout=20.0,
+                timeout=_SEMGREP_SUBPROCESS_TIMEOUT_SECONDS,
                 check=False,
                 encoding="utf-8",
                 errors="replace",
@@ -741,6 +808,21 @@ class StaticLayer(AnalysisLayer):
                         "threat_nature": threat_nature,
                     }
                 )
+        except subprocess.TimeoutExpired:
+            # WARNING, no debug -- un timeout aquí no es "esta regla no
+            # aplicaba", es la capa `static` devolviendo 0 hallazgos con
+            # aspecto de resultado normal (mismo código que "no se encontró
+            # nada sospechoso") mientras en realidad ni siquiera terminó de
+            # analizar. Verificado en vivo: sin este nivel, ese caso exacto
+            # pasaba completamente desapercibido en los logs por defecto del
+            # Engine API (nivel WARNING), indistinguible de un PR limpio.
+            logger.warning(
+                "Semgrep superó el timeout de %.0fs sobre %s -- la capa static puede "
+                "estar reportando 0 hallazgos sin haber terminado de analizar este "
+                "fichero, no porque esté limpio.",
+                _SEMGREP_SUBPROCESS_TIMEOUT_SECONDS,
+                temp_file_path,
+            )
         except Exception as exc:  # noqa: BLE001
             logger.debug("Excepción al ejecutar Semgrep sobre %s: %r", temp_file_path, exc)
 
