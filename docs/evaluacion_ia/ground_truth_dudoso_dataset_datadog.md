@@ -210,3 +210,24 @@ No investigado más a fondo todavía -- pendiente de decidir si merece la
 pena revisar estos dos en detalle (incluyendo, para `mirrorbot_10`,
 comprobar si es un 6º caso de la misma familia de ground truth no fiable
 de este documento).
+
+## Tercera regeneración, con `gemini-3.6-flash` (tras arreglar el SDK)
+
+Cambiar el modelo por defecto de `gemini-2.5-flash` a `gemini-3.6-flash`
+rompió primero por un problema de SDK, no del modelo (`google-genai`
+0.8.0, congelado por un `<1` en `pyproject.toml`, no soporta
+`thought_signature` -- campo nuevo que Gemini 3.x exige en las respuestas
+de function-calling; cualquier caso que necesitara una tool fallaba con
+400 y la capa semántica se saltaba entera). Arreglado subiendo el SDK a
+2.17.0 (commit `a0a79a3`). Con el SDK ya arreglado: **188/193 (97%)**,
+en línea con las dos tandas anteriores con `gemini-2.5-flash`.
+
+De los 5 divergentes de esta tanda, `false_positive_candidate` y
+`malreal_pypi_malicious_intent_mirrorbot_10` siguen ahí -- ya van 3/3
+tandas, con dos modelos distintos, reforzando que son candidatos reales a
+problema de calibración, no ruido de un modelo concreto.
+`malreal_pypi_compromised_lib_lightning_5` (uno de los 5 ya arreglados)
+también vuelve a divergir (verde/4) -- coherente con que sigue siendo un
+caso borderline por naturaleza (el dropper `start.py` es sutil, sin el
+payload `router_runtime.js` en el fixture por su tamaño), no una prueba de
+que el arreglo esté mal.
