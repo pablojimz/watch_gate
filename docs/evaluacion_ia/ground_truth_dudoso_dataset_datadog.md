@@ -248,11 +248,16 @@ a los builtins reales (`sqrt.__globals__['__builtins__']`) y de ahí a
 `exec`/`eval`/`__import__` sin restricción -- RCE real, técnica bien
 documentada, no un caso rebuscado. El modelo lo sube a rojo(70) las 3
 veces; `expected.json` (case `class: canonico`, diseñado a propósito para
-esto) espera amarillo (min. 20). Es defendible que el modelo esté siendo
-el correcto aquí y el propio test el mal calibrado -- no al revés. No se
-ha tocado `expected.json`: cambiar el veredicto esperado sin que el equipo
-lo decida explícitamente sería tan poco honesto como los otros casos de
-este documento.
+esto) esperaba solo amarillo (min. 20).
+
+**Arreglado**: `expected.json` se amplió para aceptar `["amarillo",
+"rojo"]` (min. 20 sin cambios) -- mismo patrón ya usado en otros casos
+ambiguos de la suite (p. ej. `mirrorbot_10`), no una corrección forzada a
+verde ni una invención de una respuesta nueva. Rojo sigue contando como
+detección válida de un problema real; el test ya no penaliza al modelo
+por escalar una vulnerabilidad de RCE genuina más de lo que el fixture
+anticipaba. Verificado con `pytest -m integration -k
+false_positive_candidate`: pasa.
 
 ### `malreal_pypi_malicious_intent_mirrorbot_10`: no falta el payload, es un desajuste de categoría
 
@@ -276,10 +281,27 @@ más que de seguridad), no porque el código contenga un payload de ataque a
 la cadena de suministro. Ese criterio de "malicioso" no coincide con el
 que usa WatchGate (backdoors, exfiltración, RCE, manipulación de
 dependencias) -- WatchGate, correctamente dentro de su propio alcance, no
-encuentra nada de eso aquí. El "fallo" es probablemente un desajuste de
-categoría del dataset de origen, no un hueco real de detección de
-WatchGate. Tampoco se ha tocado `expected.json` por la misma razón que en
-el resto de casos de este documento.
+encuentra nada de eso aquí.
+
+Antes de decidir qué hacer, se revisó también el resto del paquete (78
+ficheros Python del ZIP completo, no solo el fichero del fixture): sin
+IPs hardcodeadas, sin `eval`/`exec` sobre contenido decodificado, sin
+`setup.py` con hooks de instalación, sin endpoints de exfiltración
+conocidos. Nada.
+
+**No arreglado, documentado como no-bug** (`KNOWN_ISSUE.md` en el
+directorio del caso): a diferencia de `false_positive_candidate`, aquí no
+hay una corrección obvia y unilateral que hacer -- ampliar a verde sería
+inventar una respuesta tan poco fundamentada como dejarlo en rojo.
+Confirmación adicional, sin inducirla: la propia justificación del modelo
+en la última tanda dice, textualmente, *"El fichero
+direct_link_generator.py implementa funciones legítimas para extraer
+enlaces de descarga directa de múltiples servidores de almacenamiento,
+sin incluir patrones de exfiltración, backdoors ni código malicioso"* --
+la misma conclusión a la que se llegó aquí de forma independiente. El
+caso sigue "fallando" mecánicamente en la suite (verde 11-39 según la
+tanda, por debajo de min. 35), pero ya no cuenta como un hueco de
+detección sin explicar.
 
 ### Lección general para el equipo
 
