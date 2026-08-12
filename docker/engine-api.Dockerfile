@@ -57,7 +57,22 @@ FROM python:3.11-slim AS runtime
 # (watchgate.core.diffparser) lo necesita en runtime, no solo durante el
 # build -- sin esto, el proceso crashea en el primer import con
 # "Bad git executable" en cuanto cualquier endpoint toca diffparser.
-RUN apt-get update && apt-get install -y --no-install-recommends curl git \
+#
+# git-lfs: esta imagen NO copia rules/ (ver comentario de la etapa
+# builder -- las reglas no son parte del paquete Python). Sin
+# RULES_REPO_TOKEN en el entorno, StaticLayer._get_rules_dir() cae como
+# último recurso a un `git clone --depth 1` del repo de reglas
+# (pablojimz/Repo-reglas-SEMGREP-y-YARA), que versiona los .yaml/.yar con
+# Git LFS. Sin git-lfs instalado, ese clon trae solo los punteros LFS
+# ("version https://git-lfs.github.com/spec/v1...") en vez del contenido
+# real -- Semgrep falla en silencio con "was not a mapping" y la capa
+# `static` reporta 0 hallazgos sin marcarse `skipped`, en vez de fallar
+# alto y visible. `git lfs install --system` registra el filtro de
+# smudge/clean en /etc/gitconfig (aplica a cualquier usuario, incluido
+# "watchgate" más abajo, sin depender de en qué HOME se ejecute) para que
+# cualquier `git clone` posterior resuelva el contenido real de LFS solo.
+RUN apt-get update && apt-get install -y --no-install-recommends curl git git-lfs \
+    && git lfs install --system \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --uid 1000 watchgate
 
