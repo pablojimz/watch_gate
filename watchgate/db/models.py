@@ -84,6 +84,15 @@ class UserAPIKey(SQLModel, table=True):
     id: str = Field(primary_key=True)
     user_id: str = Field(foreign_key="users.id", index=True)
     org_id: str | None = Field(default=None, foreign_key="organizations.id", index=True)
+    # Nullable en el esquema (no rompe filas ya existentes ni exige backfill
+    # en la migración) -- la obligatoriedad de asignar un repo a toda clave
+    # NUEVA se impone en la capa de API (dashboard/backend/routers/keys.py),
+    # no aquí. Claves creadas antes de este campo quedan con NULL
+    # ("legado") y siguen validándose en api/routers/analyze.py contra
+    # MonitoredRepo por org_id, no por esta relación directa.
+    monitored_repo_id: str | None = Field(
+        default=None, foreign_key="monitored_repos.id", index=True
+    )
     default_agent_name: str | None = Field(default=None)
     name: str  # Nombre descriptivo (ej. "Runner CI Producción")
     key_prefix: str  # Primeros caracteres públicos (ej. "wg_live_4a8f")

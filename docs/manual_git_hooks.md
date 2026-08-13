@@ -377,7 +377,7 @@ from watchgate.db.repository import create_organization, create_user, create_api
 with next(get_session()) as session:
     org = create_organization(session, name='Test', org_id='local-test')
     user = create_user(session, email='test@local', name='Test', org_id=org.id)
-    _, token = create_api_key(session, user_id=user.id, org_id=org.id)
+    _, token = create_api_key(session, user_id=user.id, org_id=org.id, monitored_repo_id='local-repo')
     print(token)
 "
 ```

@@ -260,7 +260,14 @@
     "revoke": "Revocar",
     "confirmDelete": "¿Revocar esta clave? Cualquier integración que la use dejará de funcionar.",
     "deleted": "Clave revocada",
-    "empty": "Todavía no has generado ninguna clave."
+    "empty": "Todavía no has generado ninguna clave.",
+    "repoLabel": "Repositorio",
+    "repoPlaceholder": "Selecciona un repositorio…",
+    "repoColumn": "Repositorio",
+    "legacyKey": "Clave legado sin repo",
+    "noReposTitle": "Conecta un repositorio primero",
+    "noReposBody": "Toda clave nueva debe quedar atada a un repositorio concreto. Conecta uno en Auditoría Externa antes de generar una clave.",
+    "goToExternalRepos": "Ir a Auditoría Externa"
   },
   "theme": {
     "light": "Tema claro",

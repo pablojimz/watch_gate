@@ -135,6 +135,10 @@ export interface ApiKey {
   created_at: string
   expires_at: string | null
   last_used_at: string | null
+  // NULL solo en claves legado creadas antes de exigir repo -- toda clave
+  // NUEVA se crea siempre con un repo asignado (ver ApiKeysPage.tsx).
+  monitored_repo_id: string | null
+  repo_path: string | null
 }
 
 export interface CreatedApiKey extends ApiKey {
@@ -262,10 +266,12 @@ export const api = {
       method: 'DELETE',
     }),
   listApiKeys: () => request<ApiKey[]>('/keys'),
-  createApiKey: (name: string) =>
+  // `monitored_repo_id` es obligatorio -- ya no se permiten claves
+  // generales de organización sin repo asignado.
+  createApiKey: (name: string, monitored_repo_id: string) =>
     request<CreatedApiKey>('/keys', {
       method: 'POST',
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name, monitored_repo_id }),
     }),
   deleteApiKey: (id: string) =>
     request<{ status: string; id: string }>(`/keys/${id}`, { method: 'DELETE' }),

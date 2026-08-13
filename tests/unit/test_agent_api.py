@@ -36,7 +36,11 @@ def test_agent_precheck_fast_mode(api_client):
     org = create_organization(session, name="Agent Org")
     user = create_user(session, email="agent@corp.com", name="Agent User", org_id=org.id)
     _, raw_token = create_api_key(
-        session, user_id=user.id, org_id=org.id, default_agent_name="opencode-bot"
+        session,
+        user_id=user.id,
+        org_id=org.id,
+        monitored_repo_id="test-repo-id",
+        default_agent_name="opencode-bot",
     )
 
     diff_text = """diff --git a/app.py b/app.py
@@ -69,7 +73,9 @@ def test_agent_analyze_with_guidance(api_client):
     client, session = api_client
     org = create_organization(session, name="Agent Org 2")
     user = create_user(session, email="bot@corp.com", name="Bot User", org_id=org.id)
-    _, raw_token = create_api_key(session, user_id=user.id, org_id=org.id)
+    _, raw_token = create_api_key(
+        session, user_id=user.id, org_id=org.id, monitored_repo_id="test-repo-id"
+    )
 
     diff_text = """diff --git a/app.py b/app.py
 new file mode 100644
@@ -104,7 +110,9 @@ def test_agent_verify_fix(api_client):
     client, session = api_client
     org = create_organization(session, name="Agent Org 3")
     user = create_user(session, email="fixer@corp.com", name="Fixer", org_id=org.id)
-    _, raw_token = create_api_key(session, user_id=user.id, org_id=org.id)
+    _, raw_token = create_api_key(
+        session, user_id=user.id, org_id=org.id, monitored_repo_id="test-repo-id"
+    )
 
     orig_diff = """diff --git a/package.json b/package.json
 new file mode 100644
@@ -161,7 +169,9 @@ def test_agent_analyze_rejects_key_without_analysis_write_scope(api_client):
     client, session = api_client
     org = create_organization(session, name="Agent Org")
     user = create_user(session, email="readonly@corp.com", name="Readonly Agent", org_id=org.id)
-    _, raw_token = create_api_key(session, user_id=user.id, org_id=org.id, scopes="scores:read")
+    _, raw_token = create_api_key(
+        session, user_id=user.id, org_id=org.id, monitored_repo_id="test-repo-id", scopes="scores:read"
+    )
 
     headers = {"Authorization": f"Bearer {raw_token}"}
     payload = {"diff_text": "diff --git a/app.py b/app.py\n"}
@@ -174,7 +184,9 @@ def test_agent_policy_endpoint_rejects_key_without_scores_read_scope(api_client)
     client, session = api_client
     org = create_organization(session, name="Agent Org")
     user = create_user(session, email="writeonly@corp.com", name="Writeonly Agent", org_id=org.id)
-    _, raw_token = create_api_key(session, user_id=user.id, org_id=org.id, scopes="analysis:write")
+    _, raw_token = create_api_key(
+        session, user_id=user.id, org_id=org.id, monitored_repo_id="test-repo-id", scopes="analysis:write"
+    )
 
     headers = {"Authorization": f"Bearer {raw_token}"}
     response = client.get("/api/v1/agent/policy", headers=headers)
@@ -190,7 +202,9 @@ def test_agent_precheck_rejects_config_override_of_thresholds(api_client):
     client, session = api_client
     org = create_organization(session, name="Agent Org")
     user = create_user(session, email="agent2@corp.com", name="Agent User", org_id=org.id)
-    _, raw_token = create_api_key(session, user_id=user.id, org_id=org.id)
+    _, raw_token = create_api_key(
+        session, user_id=user.id, org_id=org.id, monitored_repo_id="test-repo-id"
+    )
 
     headers = {"Authorization": f"Bearer {raw_token}"}
     payload = {
@@ -207,7 +221,9 @@ def test_agent_analyze_rejects_config_override_of_weights(api_client):
     client, session = api_client
     org = create_organization(session, name="Agent Org")
     user = create_user(session, email="agent3@corp.com", name="Agent User", org_id=org.id)
-    _, raw_token = create_api_key(session, user_id=user.id, org_id=org.id)
+    _, raw_token = create_api_key(
+        session, user_id=user.id, org_id=org.id, monitored_repo_id="test-repo-id"
+    )
 
     headers = {"Authorization": f"Bearer {raw_token}"}
     payload = {
@@ -224,7 +240,9 @@ def test_agent_policy_endpoint(api_client):
     client, session = api_client
     org = create_organization(session, name="Policy Org", monthly_token_quota=500_000)
     user = create_user(session, email="pol@corp.com", name="Policy User", org_id=org.id)
-    _, raw_token = create_api_key(session, user_id=user.id, org_id=org.id)
+    _, raw_token = create_api_key(
+        session, user_id=user.id, org_id=org.id, monitored_repo_id="test-repo-id"
+    )
 
     headers = {"Authorization": f"Bearer {raw_token}"}
     response = client.get("/api/v1/agent/policy", headers=headers)

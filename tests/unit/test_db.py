@@ -67,7 +67,9 @@ def test_create_user_and_api_key() -> None:
     assert user.email == "alice@example.com"
     assert user.role == "mantenedor"
 
-    key_record, raw_token = create_api_key(session, user_id=user.id, name="Test Key")
+    key_record, raw_token = create_api_key(
+        session, user_id=user.id, name="Test Key", monitored_repo_id="test-repo-id"
+    )
 
     assert isinstance(key_record, UserAPIKey)
     assert raw_token.startswith("wg_live_")
@@ -79,7 +81,7 @@ def test_create_user_and_api_key() -> None:
 def test_verify_valid_api_key() -> None:
     session = _get_memory_session()
     user = create_user(session, email="bob@example.com", name="Bob Developer")
-    _, raw_token = create_api_key(session, user_id=user.id)
+    _, raw_token = create_api_key(session, user_id=user.id, monitored_repo_id="test-repo-id")
 
     verified = verify_api_key(session, raw_token)
     assert verified is not None

@@ -10,7 +10,8 @@ from watchgate.dashboard.backend.auth import get_current_user
 from watchgate.dashboard.backend.main import app
 from watchgate.dashboard.backend.routers.keys import _get_or_create_db_user, get_db_session
 from watchgate.dashboard.backend.schemas import User as DashboardUser
-from watchgate.db.repository import get_organization
+from watchgate.db.models import MonitoredRepo
+from watchgate.db.repository import create_organization, get_organization
 
 
 @pytest.fixture
@@ -39,15 +40,30 @@ def dashboard_client(test_db_session):
 def test_create_and_list_keys(dashboard_client):
     client, session = dashboard_client
 
+    # Toda clave nueva debe atarse a un repo ya monitorizado de la propia
+    # organización -- se asegura primero el usuario/org del Dashboard
+    # (idempotente, ver _get_or_create_db_user) para poder crear ese repo.
+    db_user = _get_or_create_db_user(session, "pablo_dev")
+    repo = MonitoredRepo(id="repo-runner-ci", org_id=db_user.org_id, repo_path="acme/runner")
+    session.add(repo)
+    session.commit()
+
     # 1. Crear clave
     response = client.post(
         "/api/keys",
-        json={"name": "Runner CI", "scopes": "analysis:write", "is_test": False},
+        json={
+            "name": "Runner CI",
+            "scopes": "analysis:write",
+            "is_test": False,
+            "monitored_repo_id": repo.id,
+        },
     )
     assert response.status_code == 201
     data = response.json()
     assert data["name"] == "Runner CI"
     assert data["key_prefix"].startswith("wg_live_")
+    assert data["monitored_repo_id"] == repo.id
+    assert data["repo_path"] == "acme/runner"
     assert "raw_token" in data
     assert data["raw_token"].startswith("wg_live_")
     key_id = data["id"]
@@ -58,6 +74,7 @@ def test_create_and_list_keys(dashboard_client):
     keys = response_list.json()
     assert len(keys) == 1
     assert keys[0]["id"] == key_id
+    assert keys[0]["repo_path"] == "acme/runner"
     assert "raw_token" not in keys[0]  # No expone el token crudo
 
     # 3. Eliminar clave
@@ -80,7 +97,16 @@ def test_create_key_persists_a_real_org_not_shared_default_org(dashboard_client)
     usuario debe obtener su propia Organización real y persistida."""
     client, session = dashboard_client
 
-    response = client.post("/api/keys", json={"name": "K1"})
+    # `_get_or_create_db_user` es idempotente -- llamarla aquí para poder
+    # crear de antemano el repo al que atar la clave no cambia el usuario/
+    # organización que `create_key` habría asegurado igualmente por su
+    # cuenta.
+    db_user = _get_or_create_db_user(session, "pablo_dev")
+    repo = MonitoredRepo(id="repo-k1", org_id=db_user.org_id, repo_path="acme/k1")
+    session.add(repo)
+    session.commit()
+
+    response = client.post("/api/keys", json={"name": "K1", "monitored_repo_id": repo.id})
     assert response.status_code == 201
 
     from watchgate.db.repository import create_user
@@ -93,6 +119,35 @@ def test_create_key_persists_a_real_org_not_shared_default_org(dashboard_client)
 
     org = get_organization(session, db_user.org_id)
     assert org is not None  # persistida de verdad, no fabricada en memoria
+
+
+def test_create_key_without_monitored_repo_id_fails_validation(dashboard_client):
+    """Ya no se permiten claves generales de organización -- toda clave
+    nueva debe crearse con un repo asignado. Sin `monitored_repo_id` en el
+    payload, FastAPI rechaza la petición antes de llegar a create_key()."""
+    client, _session = dashboard_client
+
+    response = client.post("/api/keys", json={"name": "Sin repo"})
+    assert response.status_code == 422
+
+
+def test_create_key_with_repo_from_another_org_fails(dashboard_client):
+    """Un repo_id que existe pero pertenece a OTRA organización no debe
+    aceptarse -- si no, cualquier usuario podría atar su clave a un repo
+    ajeno adivinando o filtrando su ID."""
+    client, session = dashboard_client
+
+    other_org = create_organization(session, name="Otra Org")
+    foreign_repo = MonitoredRepo(
+        id="repo-ajeno", org_id=other_org.id, repo_path="otraorg/secreto"
+    )
+    session.add(foreign_repo)
+    session.commit()
+
+    response = client.post(
+        "/api/keys", json={"name": "Intento ajeno", "monitored_repo_id": foreign_repo.id}
+    )
+    assert response.status_code == 400
 
 
 def test_get_or_create_db_user_gives_distinct_users_distinct_orgs(test_db_session):

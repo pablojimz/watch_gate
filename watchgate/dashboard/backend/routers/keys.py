@@ -11,6 +11,7 @@ from sqlmodel import Session, select
 from watchgate.dashboard.backend.auth import CurrentUser
 from watchgate.dashboard.backend.schemas import normalize_login
 from watchgate.db.connection import get_db_session
+from watchgate.db.models import MonitoredRepo
 from watchgate.db.models import User as DBUser
 from watchgate.db.models import UserAPIKey
 from watchgate.db.repository import create_api_key, create_organization, create_user
@@ -27,6 +28,13 @@ class CreateKeyRequest(BaseModel):
         description="Permisos asignados separados por comas",
     )
     is_test: bool = Field(default=False, description="Si es una clave de prueba wg_test_...")
+    # Sin valor por defecto: toda clave NUEVA debe crearse atada a un repo
+    # concreto -- ya no se permite crear claves generales de organización.
+    # Si el cliente no lo manda, FastAPI ya responde 422 antes de llegar a
+    # create_key().
+    monitored_repo_id: str = Field(
+        description="ID del MonitoredRepo (de la organización del usuario) al que queda atada la clave"
+    )
 
 
 class KeyResponse(BaseModel):
@@ -37,6 +45,8 @@ class KeyResponse(BaseModel):
     created_at: str
     expires_at: str | None = None
     last_used_at: str | None = None
+    monitored_repo_id: str | None = None
+    repo_path: str | None = None  # Resuelto para mostrar, None si es clave legado
 
 
 class CreatedKeyResponse(KeyResponse):
@@ -89,8 +99,16 @@ def create_key(
     current_user: CurrentUser,
     session: DBSession,
 ) -> dict[str, Any]:
-    """Genera una nueva API Key para el usuario autenticado."""
+    """Genera una nueva API Key para el usuario autenticado, atada
+    obligatoriamente a un repo de su propia organización."""
     db_user = _get_or_create_db_user(session, current_user.login)
+
+    repo = session.get(MonitoredRepo, body.monitored_repo_id)
+    if repo is None or repo.org_id != db_user.org_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El repo no existe o no pertenece a tu organización.",
+        )
 
     api_key, raw_token = create_api_key(
         session=session,
@@ -99,6 +117,7 @@ def create_key(
         scopes=body.scopes,
         is_test=body.is_test,
         org_id=db_user.org_id,
+        monitored_repo_id=repo.id,
     )
 
     return {
@@ -109,6 +128,8 @@ def create_key(
         "created_at": api_key.created_at.isoformat(),
         "expires_at": api_key.expires_at.isoformat() if api_key.expires_at else None,
         "last_used_at": api_key.last_used_at.isoformat() if api_key.last_used_at else None,
+        "monitored_repo_id": api_key.monitored_repo_id,
+        "repo_path": repo.repo_path,
         "raw_token": raw_token,
     }
 
@@ -124,6 +145,13 @@ def list_keys(
     stmt = select(UserAPIKey).where(UserAPIKey.user_id == db_user.id)
     keys = session.exec(stmt).all()
 
+    # Resuelve repo_path en lote (evita N+1 si el usuario tiene muchas claves).
+    repo_ids = {k.monitored_repo_id for k in keys if k.monitored_repo_id}
+    repos_by_id: dict[str, str] = {}
+    if repo_ids:
+        repo_stmt = select(MonitoredRepo).where(MonitoredRepo.id.in_(repo_ids))  # type: ignore[attr-defined]
+        repos_by_id = {r.id: r.repo_path for r in session.exec(repo_stmt).all()}
+
     return [
         {
             "id": k.id,
@@ -133,6 +161,8 @@ def list_keys(
             "created_at": k.created_at.isoformat(),
             "expires_at": k.expires_at.isoformat() if k.expires_at else None,
             "last_used_at": k.last_used_at.isoformat() if k.last_used_at else None,
+            "monitored_repo_id": k.monitored_repo_id,
+            "repo_path": repos_by_id.get(k.monitored_repo_id) if k.monitored_repo_id else None,
         }
         for k in keys
     ]
