@@ -324,6 +324,7 @@ def test_run_semgrep_on_file_uses_declared_finding_type_over_keyword_heuristic(t
             "results": [
                 {
                     "check_id": "rules.semgrep.custom.powershell.download-and-execute",
+                    "path": "dummy.ps1",
                     "start": {"line": 1},
                     "extra": {
                         "severity": "ERROR",
@@ -366,6 +367,7 @@ def test_run_semgrep_on_file_falls_back_to_heuristic_when_no_finding_type_declar
             "results": [
                 {
                     "check_id": "some.vendor.rules.malware-backdoor-check",
+                    "path": "dummy.py",
                     "start": {"line": 3},
                     "extra": {
                         "severity": "ERROR",
@@ -411,7 +413,7 @@ def test_static_layer_clean_diff() -> None:
         ]
     )
 
-    with patch.object(layer, "_run_semgrep_on_file", return_value=[]):
+    with patch.object(layer, "_run_semgrep_on_files", return_value={}):
         with patch.object(layer, "_get_rules_dir", return_value=Path(tempfile.gettempdir())):
             res = layer.analyze(diff, {})
 
@@ -444,7 +446,13 @@ def test_static_layer_with_findings_takes_max_score() -> None:
         {"tool": "semgrep", "rule_id": "rules.network-call", "message": "curl", "risk_score": 30},
     ]
 
-    with patch.object(layer, "_run_semgrep_on_file", return_value=mock_findings):
+    def _fake_run_semgrep_on_files(temp_paths, language, rules_dir):
+        # `analyze()` agrupa por lenguaje y llama a esto con las rutas
+        # temporales que ÉL genera -- se devuelven los mismos hallazgos
+        # mockeados para cada una, tal como haría Semgrep de verdad.
+        return {p: list(mock_findings) for p in temp_paths}
+
+    with patch.object(layer, "_run_semgrep_on_files", side_effect=_fake_run_semgrep_on_files):
         with patch.object(layer, "_get_rules_dir", return_value=Path(tempfile.gettempdir())):
             res = layer.analyze(diff, {})
 
@@ -671,9 +679,13 @@ def test_analyze_combines_semgrep_and_yara_via_max_never_sum(tmp_path) -> None:
     semgrep_findings = [
         {"tool": "semgrep", "rule_id": "some-rule", "message": "x", "risk_score": 30}
     ]
+
+    def _fake_run_semgrep_on_files(temp_paths, language, rules_dir):
+        return {p: list(semgrep_findings) for p in temp_paths}
+
     with (
         patch.object(layer, "_get_rules_dir", return_value=tmp_path),
-        patch.object(layer, "_run_semgrep_on_file", return_value=semgrep_findings),
+        patch.object(layer, "_run_semgrep_on_files", side_effect=_fake_run_semgrep_on_files),
     ):
         res = layer.analyze(diff, {})
 

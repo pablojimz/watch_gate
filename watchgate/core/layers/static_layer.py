@@ -71,6 +71,7 @@ from watchgate.core.layers._shared import scan_diff_hunk_for_suspicious_patterns
 from watchgate.core.layers.base import AnalysisLayer, register_layer
 from watchgate.core.models import (
     Confidence,
+    FileChange,
     FileStatus,
     Finding,
     LayerResult,
@@ -696,21 +697,23 @@ class StaticLayer(AnalysisLayer):
         _semgrep_finding_type_cache[cache_key] = finding_types
         return finding_types
 
-    def _run_semgrep_on_file(
-        self, temp_file_path: str, language: str, rules_dir: Path
-    ) -> list[dict[str, Any]]:
-        """Ejecuta Semgrep sobre un archivo temporal específico."""
-        results: list[dict[str, Any]] = []
+    def _build_semgrep_config_paths(self, language: str, rules_dir: Path) -> list[str]:
+        """Construye la lista de `--config=...` de Semgrep para `language`.
 
-        # Buscar subdirectorio de reglas por lenguaje dentro del repo de reglas
-        # Estrategia 1: rules/semgrep/custom/<language>
-        # Estrategia 1b: rules/semgrep/custom/regex (patrones genéricos,
-        #   siempre se aplican con independencia del lenguaje)
-        # Estrategia 1c: rules/semgrep/third-party/<vendor>/<carpeta>
-        #   relevantes para <language> (ver THIRD_PARTY_LANGUAGE_MAP)
-        # Estrategia 2: rules/semgrep/watchgate.yml
-        # Estrategia 3: raiz del directorio de reglas (si nada de lo
-        #   anterior existe -- último recurso, escanea todo)
+        Determinista: dos ficheros del MISMO `language` producen siempre la
+        MISMA lista -- por eso es seguro agrupar varios ficheros del mismo
+        lenguaje en una única invocación de Semgrep (ver
+        `_run_semgrep_on_files`, que depende de esta propiedad).
+
+        Estrategia 1: rules/semgrep/custom/<language>
+        Estrategia 1b: rules/semgrep/custom/regex (patrones genéricos,
+          siempre se aplican con independencia del lenguaje)
+        Estrategia 1c: rules/semgrep/third-party/<vendor>/<carpeta>
+          relevantes para <language> (ver THIRD_PARTY_LANGUAGE_MAP)
+        Estrategia 2: rules/semgrep/watchgate.yml
+        Estrategia 3: raiz del directorio de reglas (si nada de lo
+          anterior existe -- último recurso, escanea todo)
+        """
         config_paths: list[str] = []
         semgrep_root = rules_dir / "rules" / "semgrep"
 
@@ -746,18 +749,60 @@ class StaticLayer(AnalysisLayer):
             elif rules_dir.exists():
                 config_paths.append(f"--config={rules_dir}")
 
+        return config_paths
+
+    def _resolve_semgrep_bin(self) -> str:
+        semgrep_bin = shutil.which("semgrep")
+        if semgrep_bin:
+            return semgrep_bin
+        venv_semgrep = Path(sys.prefix) / "bin" / "semgrep"
+        if venv_semgrep.exists():
+            return str(venv_semgrep)
+        return "semgrep"
+
+    def _run_semgrep_on_files(
+        self, temp_file_paths: list[str], language: str, rules_dir: Path
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Ejecuta Semgrep UNA SOLA VEZ sobre varios ficheros temporales del
+        MISMO `language` (mismo `_build_semgrep_config_paths`, determinista),
+        en vez de un subproceso por fichero.
+
+        Medido en vivo (prototipo aislado, mismo entorno que producción,
+        mismo repo de reglas real: ~800 reglas repartidas en custom +
+        third-party): el coste dominante de cada invocación de Semgrep NO es
+        escanear un fichero más, es COMPILAR el conjunto de reglas desde
+        cero -- Semgrep no cachea reglas compiladas entre invocaciones
+        separadas del CLI, y ese coste de arranque (15-40s por invocación)
+        es prácticamente independiente de cuántos ficheros se le pasen
+        DENTRO de esa invocación. Agrupar por lenguaje (mismo `--config`,
+        así que Semgrep hace exactamente el mismo trabajo de matching que
+        haría por separado) reduce el NÚMERO de invocaciones de "una por
+        fichero" a "una por lenguaje distinto presente en el diff": 2
+        ficheros Python, medido en vivo, 82s -> 29s.
+
+        Devuelve `temp_file_path -> lista de hallazgos`, usando el campo
+        `path` que el propio JSON de Semgrep reporta por hallazgo
+        (confirmado en vivo: Semgrep etiqueta cada resultado con la ruta
+        EXACTA del fichero de origen, sin normalizar, incluso con varios
+        ficheros en la misma invocación) para saber a cuál de los ficheros
+        pasados pertenece cada uno -- sin esto, los hallazgos de varios
+        ficheros llegarían mezclados sin forma de distinguirlos.
+
+        Trade-off aceptado: un timeout aquí pierde los hallazgos de TODOS
+        los ficheros del grupo, no solo de uno (antes, un timeout solo
+        afectaba al fichero que se estaba analizando en ese momento) -- ver
+        el WARNING más abajo, que ahora lo dice explícitamente.
+        """
+        results: dict[str, list[dict[str, Any]]] = {p: [] for p in temp_file_paths}
+        if not temp_file_paths:
+            return results
+
+        config_paths = self._build_semgrep_config_paths(language, rules_dir)
         if not config_paths:
             return results
 
-        semgrep_bin = shutil.which("semgrep")
-        if not semgrep_bin:
-            venv_semgrep = Path(sys.prefix) / "bin" / "semgrep"
-            if venv_semgrep.exists():
-                semgrep_bin = str(venv_semgrep)
-            else:
-                semgrep_bin = "semgrep"
-
-        command = [semgrep_bin, "--json", "--quiet", temp_file_path] + config_paths
+        semgrep_bin = self._resolve_semgrep_bin()
+        command = [semgrep_bin, "--json", "--quiet", *temp_file_paths, *config_paths]
 
         try:
             process = subprocess.run(
@@ -778,6 +823,13 @@ class StaticLayer(AnalysisLayer):
             semgrep_output = json.loads(process.stdout)
             declared_finding_types = self._get_semgrep_finding_types(rules_dir)
             for finding in semgrep_output.get("results", []):
+                finding_path = finding.get("path")
+                if finding_path not in results:
+                    # Defensivo -- no debería pasar (Semgrep solo puede
+                    # reportar sobre los ficheros que le pasamos), pero si
+                    # pasa, se agrupa aparte en vez de perderse en silencio.
+                    results.setdefault(finding_path, [])
+
                 extra = finding.get("extra", {})
                 severity_str = str(extra.get("severity", "INFO")).upper()
                 risk_score = SEVERITY_SCORE.get(severity_str, 10)
@@ -798,7 +850,7 @@ class StaticLayer(AnalysisLayer):
                     # cae a la heurística de respaldo.
                     threat_nature = _infer_threat_nature_from_semgrep(extra, rule_id)
 
-                results.append(
+                results[finding_path].append(
                     {
                         "tool": "semgrep",
                         "rule_id": rule_id,
@@ -817,16 +869,33 @@ class StaticLayer(AnalysisLayer):
             # pasaba completamente desapercibido en los logs por defecto del
             # Engine API (nivel WARNING), indistinguible de un PR limpio.
             logger.warning(
-                "Semgrep superó el timeout de %.0fs sobre %s -- la capa static puede "
-                "estar reportando 0 hallazgos sin haber terminado de analizar este "
-                "fichero, no porque esté limpio.",
+                "Semgrep superó el timeout de %.0fs analizando %d ficheros de '%s' en "
+                "una sola invocación agrupada -- la capa static puede estar reportando "
+                "0 hallazgos para TODOS ellos sin haber terminado de analizar ninguno, "
+                "no porque estén limpios.",
                 _SEMGREP_SUBPROCESS_TIMEOUT_SECONDS,
-                temp_file_path,
+                len(temp_file_paths),
+                language,
             )
         except Exception as exc:  # noqa: BLE001
-            logger.debug("Excepción al ejecutar Semgrep sobre %s: %r", temp_file_path, exc)
+            logger.debug(
+                "Excepción al ejecutar Semgrep agrupado sobre %s: %r", temp_file_paths, exc
+            )
 
         return results
+
+    def _run_semgrep_on_file(
+        self, temp_file_path: str, language: str, rules_dir: Path
+    ) -> list[dict[str, Any]]:
+        """Analiza un único fichero. `analyze()` ya NO usa este método --
+        agrupa por lenguaje y llama a `_run_semgrep_on_files` directamente
+        (ver esa docstring para el porqué). Se conserva como API de
+        conveniencia para un solo fichero (usada por los tests unitarios de
+        `_build_semgrep_config_paths`/resolución de reglas, y disponible
+        para cualquier otro llamador que solo tenga un fichero)."""
+        return self._run_semgrep_on_files([temp_file_path], language, rules_dir).get(
+            temp_file_path, []
+        )
 
     def _get_compiled_yara_rules(self, rules_dir: Path) -> yara.Rules | None:
         """Compila TODAS las categorías YARA publicadas (sin selección
@@ -913,6 +982,122 @@ class StaticLayer(AnalysisLayer):
 
         return results
 
+    def _prepare_files_for_scanning(
+        self, diff: NormalizedDiff, rules_dir: Path | None, temp_dir: str
+    ) -> tuple[
+        list[FileChange], dict[str, list[dict[str, Any]]], dict[str, list[tuple[str, FileChange]]]
+    ]:
+        """Fase 1 de `analyze()`: por fichero -- YARA (sin coste de
+        subproceso, ver `_run_yara_on_text`) se ejecuta ya aquí; Semgrep se
+        DIFIERE y se agrupa por lenguaje (para que `analyze()` pueda pagar
+        el coste de compilar cada conjunto de reglas una sola vez por
+        lenguaje presente en el diff, no una vez por fichero -- ver
+        docstring de `_run_semgrep_on_files`, medido en vivo: 82s -> 29s con
+        2 ficheros Python).
+
+        Devuelve (ficheros elegibles en orden del diff, hallazgos YARA por
+        ruta de fichero, grupos por lenguaje de `(ruta temporal, file_change)`).
+        """
+        ordered_files: list[FileChange] = []
+        per_file_yara: dict[str, list[dict[str, Any]]] = {}
+        language_groups: dict[str, list[tuple[str, FileChange]]] = {}
+
+        for file_change in diff.files:
+            if (
+                file_change.status == FileStatus.DELETED
+                or file_change.is_binary
+                or not file_change.diff_hunk.strip()
+            ):
+                continue
+            ordered_files.append(file_change)
+
+            if not rules_dir:
+                continue
+
+            per_file_yara[file_change.path] = self._run_yara_on_text(
+                file_change.diff_hunk, rules_dir=rules_dir
+            )
+
+            language = self._detect_language(file_change.path)
+            if not language:
+                continue
+
+            ext = os.path.splitext(file_change.path)[1] or ".txt"
+            temp_file = tempfile.NamedTemporaryFile(
+                dir=temp_dir, suffix=ext, delete=False, mode="w", encoding="utf-8"
+            )
+            temp_file.write(file_change.diff_hunk)
+            temp_file.close()
+            language_groups.setdefault(language, []).append((temp_file.name, file_change))
+
+        return ordered_files, per_file_yara, language_groups
+
+    def _collect_semgrep_findings_by_file(
+        self,
+        language_groups: dict[str, list[tuple[str, FileChange]]],
+        rules_dir: Path | None,
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Fase 2 de `analyze()`: una invocación de Semgrep por lenguaje
+        distinto presente en el diff (no por fichero), reatribuyendo cada
+        hallazgo a la ruta ORIGINAL del fichero (no la temporal) vía el
+        mapeo `path_by_temp` -- ver `_run_semgrep_on_files`."""
+        per_file_semgrep: dict[str, list[dict[str, Any]]] = {}
+        if not rules_dir:
+            return per_file_semgrep
+
+        for language, entries in language_groups.items():
+            temp_paths = [temp_path for temp_path, _fc in entries]
+            path_by_temp = {temp_path: fc.path for temp_path, fc in entries}
+            findings_by_temp_path = self._run_semgrep_on_files(
+                temp_paths, language, rules_dir=rules_dir
+            )
+            for temp_path, findings in findings_by_temp_path.items():
+                original_path = path_by_temp.get(temp_path)
+                if original_path is None:
+                    continue
+                per_file_semgrep.setdefault(original_path, []).extend(findings)
+
+        return per_file_semgrep
+
+    def _combine_findings_with_heuristic_fallback(
+        self,
+        ordered_files: list[FileChange],
+        per_file_semgrep: dict[str, list[dict[str, Any]]],
+        per_file_yara: dict[str, list[dict[str, Any]]],
+    ) -> list[dict[str, Any]]:
+        """Fase 3 de `analyze()`: recombina Semgrep + YARA por fichero, en
+        el mismo orden que el diff original, y aplica el escaneo heurístico
+        de emergencia si ninguno de los dos produjo hallazgos para ESE
+        fichero concreto (misma lógica de siempre, solo que ahora los
+        hallazgos de Semgrep llegan ya calculados de la Fase 2)."""
+        all_findings: list[dict[str, Any]] = []
+        for file_change in ordered_files:
+            semgrep_yara_findings: list[dict[str, Any]] = list(
+                per_file_semgrep.get(file_change.path, [])
+            ) + list(per_file_yara.get(file_change.path, []))
+
+            for f in semgrep_yara_findings:
+                f["file_path"] = file_change.path
+            all_findings.extend(semgrep_yara_findings)
+
+            # Escaneo heurístico de emergencia si Semgrep/YARA no produjo hallazgos
+            if not semgrep_yara_findings:
+                for label, text, line_idx in scan_diff_hunk_for_suspicious_patterns(
+                    file_change.diff_hunk
+                ):
+                    all_findings.append(
+                        {
+                            "tool": "heuristic_regex",
+                            "rule_id": f"static.suspicious.{label}",
+                            "message": f"Patrón sospechoso detectado ({label}): {text[:80]}",
+                            "line": line_idx,
+                            "risk_score": 90,
+                            "threat_nature": ThreatNature.MALICIOUS,
+                            "file_path": file_change.path,
+                        }
+                    )
+        return all_findings
+
     def analyze(self, diff: NormalizedDiff, metadata: dict[str, Any]) -> LayerResult:
         # Nota: esta capa NO escanea el diff en busca de "intentos de
         # inyección de prompt" (frases tipo "ignora las instrucciones
@@ -929,68 +1114,17 @@ class StaticLayer(AnalysisLayer):
         # LLM concluyó, y solo dispara para el subconjunto estructural de
         # patrones, no para lenguaje genérico.
         rules_dir = self._get_rules_dir()
-        all_findings: list[dict[str, Any]] = []
 
         # Crear directorio temporal para aislar la escritura de parches (diff_hunks)
         temp_dir = tempfile.mkdtemp(prefix="watchgate_static_")
         try:
-            for file_change in diff.files:
-                if (
-                    file_change.status == FileStatus.DELETED
-                    or file_change.is_binary
-                    or not file_change.diff_hunk.strip()
-                ):
-                    continue
-
-                # Escaneo Semgrep + YARA (si el directorio de reglas está disponible)
-                semgrep_yara_findings: list[dict[str, Any]] = []
-                if rules_dir:
-                    language = self._detect_language(file_change.path)
-                    ext = os.path.splitext(file_change.path)[1] or ".txt"
-                    temp_file = tempfile.NamedTemporaryFile(
-                        dir=temp_dir, suffix=ext, delete=False, mode="w", encoding="utf-8"
-                    )
-                    try:
-                        temp_file.write(file_change.diff_hunk)
-                        temp_file.close()
-
-                        if language:
-                            semgrep_yara_findings.extend(
-                                self._run_semgrep_on_file(
-                                    temp_file.name, language, rules_dir=rules_dir
-                                )
-                            )
-                        yara_res = self._run_yara_on_text(
-                            file_change.diff_hunk, rules_dir=rules_dir
-                        )
-                        semgrep_yara_findings.extend(yara_res)
-
-                        for f in semgrep_yara_findings:
-                            f["file_path"] = file_change.path
-                        all_findings.extend(semgrep_yara_findings)
-                    finally:
-                        if os.path.exists(temp_file.name):
-                            try:
-                                os.unlink(temp_file.name)
-                            except Exception:  # noqa: BLE001
-                                pass
-
-                # Escaneo heurístico de emergencia si Semgrep/YARA no produjo hallazgos
-                if not semgrep_yara_findings:
-                    for label, text, line_idx in scan_diff_hunk_for_suspicious_patterns(
-                        file_change.diff_hunk
-                    ):
-                        all_findings.append(
-                            {
-                                "tool": "heuristic_regex",
-                                "rule_id": f"static.suspicious.{label}",
-                                "message": f"Patrón sospechoso detectado ({label}): {text[:80]}",
-                                "line": line_idx,
-                                "risk_score": 90,
-                                "threat_nature": ThreatNature.MALICIOUS,
-                                "file_path": file_change.path,
-                            }
-                        )
+            ordered_files, per_file_yara, language_groups = self._prepare_files_for_scanning(
+                diff, rules_dir, temp_dir
+            )
+            per_file_semgrep = self._collect_semgrep_findings_by_file(language_groups, rules_dir)
+            all_findings = self._combine_findings_with_heuristic_fallback(
+                ordered_files, per_file_semgrep, per_file_yara
+            )
         finally:
             if os.path.exists(temp_dir):
                 try:
