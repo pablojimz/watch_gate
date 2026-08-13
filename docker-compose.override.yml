@@ -1,0 +1,129 @@
+# Modo desarrollo: Docker Compose combina este fichero con
+# docker-compose.yml AUTOMÁTICAMENTE (mismo nombre reconocido por el CLI,
+# no hace falta -f ni ninguna otra bandera) siempre que ambos estén en la
+# raíz del repo. Solo monta código fuente como volumen y ajusta comandos
+# para arrancar en modo recarga -- no toca redis/postgres ni las imágenes
+# base, así que sigue haciendo falta construirlas una vez.
+#
+# Flujo de uso:
+#   1. Primera vez (o tras cambiar pyproject.toml/poetry.lock o
+#      package.json/package-lock.json -- eso solo se re-resuelve en el
+#      build, un volumen no reinstala dependencias):
+#        docker compose up --build -d
+#   2. A partir de ahí, mientras solo edites código Python/TypeScript ya
+#      existente:
+#        docker compose up -d
+#      Los cambios en watchgate/ (engine-api, dashboard-backend,
+#      dashboard-worker) y en watchgate/dashboard/frontend/src/ se reflejan
+#      solos en los contenedores ya corriendo -- uvicorn con --reload y
+#      Vite con HMR, sin volver a construir ninguna imagen.
+#
+# Limitación conocida: dashboard-worker (RQ) NO tiene recarga en caliente
+# -- ver el comentario en su servicio más abajo.
+#
+# Para desplegar SIN este modo desarrollo (imagen final, sin volúmenes,
+# comportamiento idéntico al de antes de este fichero), usa
+# docker-compose.prod.yml explícitamente en vez de dejar que Compose
+# recoja este override:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
+
+services:
+  engine-api:
+    environment:
+      # Docker Desktop sobre WINDOWS no propaga eventos inotify nativos a
+      # través del bind mount hacia el contenedor -- verificado en vivo:
+      # sin esto, `uvicorn --reload` (WatchFiles) se queda esperando
+      # eventos que nunca llegan y no recarga nunca, aunque el proceso siga
+      # corriendo sin ningún error visible. WATCHFILES_FORCE_POLLING fuerza
+      # sondeo del sistema de ficheros en vez de depender de esos eventos --
+      # pero ese sondeo tiene un coste real de CPU (medido en vivo: ~70%
+      # sostenido en el proceso equivalente del frontend, ver
+      # VITE_USE_POLLING más abajo) que en Linux nativo NO hace falta pagar
+      # -- ahí Docker SÍ propaga inotify correctamente a través del bind
+      # mount, sin este truco. Por eso es opt-in vía `DEV_FORCE_POLLING`
+      # (variable en tu `.env` local, nunca versionada) en vez de forzarlo
+      # para todo el equipo: por defecto (sin definir la variable) queda
+      # DESACTIVADO, que es el comportamiento correcto en Linux. Actívalo
+      # en tu `.env` (`DEV_FORCE_POLLING=1`) solo si desarrollas en Windows.
+      WATCHFILES_FORCE_POLLING: ${DEV_FORCE_POLLING:-false}
+    volumes:
+      - ./watchgate:/app/watchgate
+    command:
+      - uvicorn
+      - watchgate.api.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8080"
+      - --reload
+
+  dashboard-backend:
+    environment:
+      # Ver el comentario equivalente en engine-api más arriba -- mismo
+      # opt-in vía DEV_FORCE_POLLING, desactivado por defecto (correcto en
+      # Linux nativo).
+      WATCHFILES_FORCE_POLLING: ${DEV_FORCE_POLLING:-false}
+    volumes:
+      - ./watchgate:/app/watchgate
+    command:
+      - uvicorn
+      - watchgate.dashboard.backend.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8000"
+      - --reload
+
+  dashboard-worker:
+    # Mismo código fuente que dashboard-backend, pero SIN --reload: un
+    # worker RQ (rq worker) no tiene ningún mecanismo de recarga en
+    # caliente -- el proceso ya está corriendo un bucle bloqueante
+    # consumiendo la cola, no un servidor HTTP que uvicorn pueda
+    # reiniciar por request. Tras editar watchgate/dashboard/backend/
+    # tasks.py o cualquier capa del motor que el worker use
+    # (watchgate/core/layers/*), hace falta:
+    #   docker compose restart dashboard-worker
+    # para que recoja el código nuevo.
+    volumes:
+      - ./watchgate:/app/watchgate
+
+  dashboard-frontend:
+    build:
+      target: builder
+    command: npm run dev -- --host 0.0.0.0 --port 5173
+    environment:
+      # Dentro del contenedor, 127.0.0.1 (el valor por defecto de
+      # vite.config.ts) es el propio contenedor de Vite, no
+      # dashboard-backend -- hay que apuntar al nombre del servicio en la
+      # red de Docker Compose.
+      VITE_BACKEND_PROXY_TARGET: http://dashboard-backend:8000
+      # Ver el comentario del watcher en vite.config.ts -- sin esto, el
+      # bind mount sobre una ruta de WINDOWS no dispara HMR nunca. Medido en
+      # vivo: activarlo sin más (100ms de intervalo por defecto) sostenía
+      # ~70% de CPU en el proceso de Vite, solo por el sondeo -- ver
+      # `interval` en vite.config.ts, que ya lo mitiga a 1000ms. Aun así,
+      # sigue siendo puro gasto sin beneficio en Linux nativo (ahí inotify
+      # ya funciona solo a través del bind mount), así que es opt-in vía la
+      # misma variable `DEV_FORCE_POLLING` que engine-api/dashboard-backend
+      # -- desactivado por defecto, actívalo en tu `.env` local solo en
+      # Windows.
+      VITE_USE_POLLING: ${DEV_FORCE_POLLING:-0}
+    volumes:
+      - ./watchgate/dashboard/frontend:/app
+      # Volumen con nombre aparte para node_modules: el bind mount de
+      # arriba (./watchgate/dashboard/frontend:/app) tapa TODO /app,
+      # incluido /app/node_modules -- sin este volumen separado se
+      # perderían las dependencias que `npm ci` ya instaló en el build de
+      # la etapa "builder", y Vite fallaría al arrancar.
+      - dashboard_frontend_node_modules:/app/node_modules
+    # Compose combina (no reemplaza) las listas `ports` entre este fichero
+    # y docker-compose.yml -- sin `!override` aquí, el servicio terminaría
+    # con DOS mapeos al host :5173 a la vez ("5173:80" del compose base +
+    # "5173:5173" de aquí), y el segundo fallaría al arrancar por puerto ya
+    # ocupado. `!override` fuerza el reemplazo completo en vez de la fusión
+    # por defecto (verificado con `docker compose config`).
+    ports: !override
+      - "5173:5173"
+
+volumes:
+  dashboard_frontend_node_modules:
