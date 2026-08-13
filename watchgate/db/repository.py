@@ -180,19 +180,30 @@ def create_user(
 def create_api_key(
     session: Session,
     user_id: str,
+    monitored_repo_id: str,
     name: str = "Default Key",
     scopes: str = "analysis:write,scores:read",
     is_test: bool = False,
     org_id: str | None = None,
     default_agent_name: str | None = None,
 ) -> tuple[UserAPIKey, str]:
-    """Crea una nueva API Key para el usuario u organización."""
+    """Crea una nueva API Key para el usuario u organización.
+
+    `monitored_repo_id` es obligatorio (sin default): a partir de este
+    cambio ya no se permite crear claves generales de organización sin repo
+    asignado -- ver `watchgate/api/routers/analyze.py`, que usa este campo
+    para validar que la clave solo analice el repo al que pertenece. El
+    llamador (`dashboard/backend/routers/keys.py::create_key`) es
+    responsable de comprobar antes que el `MonitoredRepo` referenciado
+    existe y pertenece a la organización del usuario.
+    """
     raw_token, key_prefix, key_hash = generate_api_key(is_test=is_test)
 
     api_key = UserAPIKey(
         id=str(uuid.uuid4()),
         user_id=user_id,
         org_id=org_id,
+        monitored_repo_id=monitored_repo_id,
         default_agent_name=default_agent_name,
         name=name,
         key_prefix=key_prefix,

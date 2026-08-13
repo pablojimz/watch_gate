@@ -70,7 +70,9 @@ def test_quota_service_standard_mode() -> None:
     session = _get_memory_session()
     org = create_organization(session, name="Standard Org", monthly_token_quota=100_000)
     user = create_user(session, email="std@example.com", name="Standard User", org_id=org.id)
-    key_rec, _ = create_api_key(session, user_id=user.id, org_id=org.id)
+    key_rec, _ = create_api_key(
+        session, user_id=user.id, org_id=org.id, monitored_repo_id="test-repo-id"
+    )
 
     diff = parse_diff_from_text(
         diff_text="--- a/main.py\n+++ b/main.py\n@@ -1 +1 @@\n-print('hello')\n+print('world')",

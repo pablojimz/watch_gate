@@ -29,7 +29,9 @@ def test_api_key_without_org_falls_back_to_a_persisted_default_org(tmp_path):
     session = _session(tmp_path)
     user = create_user(session, email="legacy@example.com", name="Legacy User")
     # Simula una clave creada fuera del flujo del Dashboard, sin org_id.
-    _api_key, raw_token = create_api_key(session, user_id=user.id, org_id=None)
+    _api_key, raw_token = create_api_key(
+        session, user_id=user.id, org_id=None, monitored_repo_id="test-repo-id"
+    )
 
     result = get_current_user_from_api_key(
         bearer=None,
@@ -53,8 +55,12 @@ def test_api_key_without_org_reuses_the_same_persisted_default_org(tmp_path):
     session = _session(tmp_path)
     user1 = create_user(session, email="legacy1@example.com", name="Legacy1")
     user2 = create_user(session, email="legacy2@example.com", name="Legacy2")
-    _key1, token1 = create_api_key(session, user_id=user1.id, org_id=None)
-    _key2, token2 = create_api_key(session, user_id=user2.id, org_id=None)
+    _key1, token1 = create_api_key(
+        session, user_id=user1.id, org_id=None, monitored_repo_id="test-repo-id-1"
+    )
+    _key2, token2 = create_api_key(
+        session, user_id=user2.id, org_id=None, monitored_repo_id="test-repo-id-2"
+    )
 
     _, _, org1 = get_current_user_from_api_key(bearer=None, header_key=token1, session=session)
     _, _, org2 = get_current_user_from_api_key(bearer=None, header_key=token2, session=session)

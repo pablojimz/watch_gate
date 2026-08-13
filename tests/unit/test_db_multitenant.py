@@ -89,6 +89,7 @@ def test_user_and_api_key_with_organization() -> None:
         session,
         user_id=user.id,
         org_id=org.id,
+        monitored_repo_id="test-repo-id",
         default_agent_name="code-reviewer-bot",
         name="CI Bot Key",
     )

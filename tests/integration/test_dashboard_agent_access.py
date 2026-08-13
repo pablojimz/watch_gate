@@ -14,11 +14,13 @@ from collections.abc import Iterator
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlmodel import create_engine
+from sqlmodel import Session, create_engine
 
 import watchgate.db.connection as db_connection
 from watchgate.dashboard.backend.auth import get_current_user
+from watchgate.dashboard.backend.routers.keys import _get_or_create_db_user
 from watchgate.dashboard.backend.schemas import User
+from watchgate.db.models import MonitoredRepo
 
 _DASHBOARD_ENV = {
     "WATCHGATE_DASHBOARD_DEV_MODE": "1",
@@ -46,9 +48,30 @@ def _app_with_fresh_schema(monkeypatch: pytest.MonkeyPatch, tmp_path):
 @pytest.fixture()
 def app_and_key(monkeypatch: pytest.MonkeyPatch, tmp_path) -> Iterator[tuple]:  # type: ignore[type-arg]
     app, fresh_engine = _app_with_fresh_schema(monkeypatch, tmp_path)
+
     app.dependency_overrides[get_current_user] = lambda: User(login="alice")
     with TestClient(app) as human_client:
-        created = human_client.post("/api/keys", json={"name": "Agente CI"})
+        # El esquema (tabla `users`, etc.) lo crea `init_api_keys_db()` en el
+        # `lifespan` de la app -- solo existe una vez abierto el
+        # `TestClient` (que dispara ese startup), no antes. Toda clave nueva
+        # debe atarse a un repo ya monitorizado -- se asegura primero el
+        # usuario/org de "alice" (idempotente, lo mismo que haría
+        # create_key() por su cuenta) para poder crear ese repo.
+        with Session(fresh_engine) as session:
+            db_user = _get_or_create_db_user(session, "alice")
+            # Id fijo y conocido para poder usarlo tras cerrar la sesión sin
+            # reenganchar la instancia (leer `.id` con la sesión ya cerrada
+            # dispara un refresh sobre un objeto "detached").
+            session.add(
+                MonitoredRepo(
+                    id="repo-agent-ci", org_id=db_user.org_id, repo_path="acme/agent-ci"
+                )
+            )
+            session.commit()
+
+        created = human_client.post(
+            "/api/keys", json={"name": "Agente CI", "monitored_repo_id": "repo-agent-ci"}
+        )
         assert created.status_code == 201, created.text
         raw_token = created.json()["raw_token"]
     app.dependency_overrides.clear()
