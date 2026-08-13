@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Copy, KeyRound, Trash2 } from 'lucide-react'
-import { api, type ApiKey, type CreatedApiKey } from '@/api/client'
+import { api, type ApiKey, type CreatedApiKey, type MonitoredRepoResponse } from '@/api/client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -28,7 +29,9 @@ function formatDate(iso: string | null) {
 export default function ApiKeysPage() {
   const { t } = useTranslation()
   const [keys, setKeys] = useState<ApiKey[] | null>(null)
+  const [repos, setRepos] = useState<MonitoredRepoResponse[] | null>(null)
   const [name, setName] = useState('')
+  const [repoId, setRepoId] = useState('')
   const [creating, setCreating] = useState(false)
   const [revealed, setRevealed] = useState<CreatedApiKey | null>(null)
 
@@ -40,16 +43,30 @@ export default function ApiKeysPage() {
         toast.error(err instanceof Error ? err.message : 'Error')
         setKeys([])
       })
+    void api
+      .listExternalRepos()
+      .then(setRepos)
+      .catch((err: unknown) => {
+        toast.error(err instanceof Error ? err.message : 'Error')
+        setRepos([])
+      })
   }
 
   useEffect(load, [])
 
+  // Mapa id -> repo_path para mostrar el repo de cada clave ya creada sin
+  // depender de que el backend lo resuelva siempre (claves legado no lo
+  // tienen de todas formas).
+  const repoPathById = new Map((repos ?? []).map((r) => [r.id, r.repo_path]))
+
   async function handleCreate() {
+    if (!repoId) return
     setCreating(true)
     try {
-      const created = await api.createApiKey(name.trim() || 'API Key')
+      const created = await api.createApiKey(name.trim() || 'API Key', repoId)
       setRevealed(created)
       setName('')
+      setRepoId('')
       load()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error')
@@ -82,23 +99,55 @@ export default function ApiKeysPage() {
           <CardTitle className="text-base">{t('apiKeys.newTitle')}</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-            <div className="flex-1">
-              <label className="mb-1 block text-sm text-muted-foreground">
-                {t('apiKeys.nameLabel')}
-              </label>
-              <Input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder={t('apiKeys.namePlaceholder')}
-                maxLength={80}
-              />
+          {repos !== null && repos.length === 0 ? (
+            // Sin ningún repo conectado no hay a qué atar la clave -- ya no
+            // existe la opción de "clave general" de organización, así que
+            // no tiene sentido mostrar el formulario.
+            <div className="rounded-md border border-dashed p-4 text-sm">
+              <p className="font-medium">{t('apiKeys.noReposTitle')}</p>
+              <p className="mt-1 text-muted-foreground">{t('apiKeys.noReposBody')}</p>
+              <Button asChild variant="secondary" size="sm" className="mt-3">
+                <Link to="/audits">{t('apiKeys.goToExternalRepos')}</Link>
+              </Button>
             </div>
-            <Button onClick={() => void handleCreate()} disabled={creating}>
-              <KeyRound className="size-4" strokeWidth={1.75} />
-              {t('apiKeys.generate')}
-            </Button>
-          </div>
+          ) : (
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+              <div className="flex-1">
+                <label className="mb-1 block text-sm text-muted-foreground">
+                  {t('apiKeys.nameLabel')}
+                </label>
+                <Input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder={t('apiKeys.namePlaceholder')}
+                  maxLength={80}
+                />
+              </div>
+              <div className="flex-1">
+                <label className="mb-1 block text-sm text-muted-foreground">
+                  {t('apiKeys.repoLabel')}
+                </label>
+                <select
+                  value={repoId}
+                  onChange={(e) => setRepoId(e.target.value)}
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                >
+                  <option value="" disabled>
+                    {t('apiKeys.repoPlaceholder')}
+                  </option>
+                  {(repos ?? []).map((repo) => (
+                    <option key={repo.id} value={repo.id}>
+                      {repo.repo_path}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <Button onClick={() => void handleCreate()} disabled={creating || !repoId}>
+                <KeyRound className="size-4" strokeWidth={1.75} />
+                {t('apiKeys.generate')}
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -144,6 +193,7 @@ export default function ApiKeysPage() {
               <tr>
                 <th className="px-4 py-3 font-medium">{t('apiKeys.nameLabel')}</th>
                 <th className="px-4 py-3 font-medium">{t('apiKeys.keyColumn')}</th>
+                <th className="px-4 py-3 font-medium">{t('apiKeys.repoColumn')}</th>
                 <th className="px-4 py-3 font-medium">{t('apiKeys.createdAt')}</th>
                 <th className="px-4 py-3 font-medium">{t('apiKeys.lastUsed')}</th>
                 <th className="px-4 py-3 text-right font-medium" />
@@ -170,6 +220,11 @@ export default function ApiKeysPage() {
                         <Copy className="size-3.5" strokeWidth={1.75} />
                       </Button>
                     </div>
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {key.repo_path ?? repoPathById.get(key.monitored_repo_id ?? '') ?? (
+                      <span className="italic">{t('apiKeys.legacyKey')}</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
                     {formatDate(key.created_at)}

@@ -6,14 +6,14 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from watchgate.api.auth import require_scope
 from watchgate.api.dependencies import get_db_session
 from watchgate.config import load_config
 from watchgate.core.diffparser import parse_diff_from_text
 from watchgate.core.models import AggregatedResult, CommitAuthor
-from watchgate.db.models import Organization, User, UserAPIKey
+from watchgate.db.models import MonitoredRepo, Organization, User, UserAPIKey
 from watchgate.service.policy import ClientConfigOverrideError, apply_client_config_override
 from watchgate.service.quota import QuotaService
 
@@ -56,6 +56,36 @@ def analyze_pr(
         commit_messages=request.commit_messages,
         authors=request.authors,
     )
+
+    # Puerta 3: una API key solo puede analizar el repo al que pertenece.
+    # `metadata["repo"]` tiene prioridad sobre `repo_path` para ser
+    # consistente con cómo `run_full_analysis` rellena `result.repo` (ver
+    # watchgate/core/pipeline.py, aggregate(repo=metadata.get("repo", ""))).
+    requested_repo = str(request.metadata.get("repo") or request.repo_path or "")
+
+    if api_key.monitored_repo_id is None:
+        # Clave legado (creada antes de este campo): sin relación directa a
+        # un repo, se aplica como red de seguridad mínima la misma
+        # comprobación de antes -- el repo pedido debe estar entre los
+        # monitorizados de la organización de la clave.
+        legacy_stmt = select(MonitoredRepo).where(
+            MonitoredRepo.org_id == org.id, MonitoredRepo.repo_path == requested_repo
+        )
+        if session.exec(legacy_stmt).first() is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    f"El repo '{requested_repo}' no está monitorizado por tu organización."
+                ),
+            )
+    else:
+        key_repo = session.get(MonitoredRepo, api_key.monitored_repo_id)
+        if key_repo is None or key_repo.repo_path != requested_repo:
+            bound_repo_path = key_repo.repo_path if key_repo else "?"
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Esta API key solo es válida para el repo '{bound_repo_path}'.",
+            )
 
     # Carga de configuración base + overrides opcionales de la petición.
     # `apply_client_config_override` rechaza (400) cualquier intento de

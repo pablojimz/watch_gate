@@ -25,11 +25,13 @@ from collections.abc import Iterator
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlmodel import create_engine
+from sqlmodel import Session, create_engine
 
 import watchgate.db.connection as db_connection
 from watchgate.dashboard.backend.auth import get_current_user
+from watchgate.dashboard.backend.routers.keys import _get_or_create_db_user
 from watchgate.dashboard.backend.schemas import User
+from watchgate.db.models import MonitoredRepo
 
 _DASHBOARD_ENV = {
     "WATCHGATE_DASHBOARD_DEV_MODE": "1",
@@ -51,21 +53,44 @@ def _app_with_fresh_schema(monkeypatch: pytest.MonkeyPatch, tmp_path):
 
     from watchgate.dashboard.backend.main import create_app
 
-    return create_app()
+    return create_app(), fresh_engine
+
+
+def _seed_repo(fresh_engine, user_login: str, repo_path: str) -> str:
+    """Toda clave nueva debe atarse a un repo ya monitorizado de la propia
+    organización -- asegura primero el usuario/org (idempotente, lo mismo
+    que haría create_key() por su cuenta) para poder crear ese repo antes
+    de emitir la clave. Devuelve el id del MonitoredRepo creado."""
+    with Session(fresh_engine) as session:
+        db_user = _get_or_create_db_user(session, user_login)
+        repo = MonitoredRepo(
+            id=f"repo-{user_login}-{repo_path.replace('/', '-')}",
+            org_id=db_user.org_id,
+            repo_path=repo_path,
+        )
+        session.add(repo)
+        session.commit()
+        return repo.id
 
 
 @pytest.fixture()
 def client(monkeypatch: pytest.MonkeyPatch, tmp_path) -> Iterator[TestClient]:
-    app = _app_with_fresh_schema(monkeypatch, tmp_path)
+    app, fresh_engine = _app_with_fresh_schema(monkeypatch, tmp_path)
     app.dependency_overrides[get_current_user] = lambda: User(login="alice")
     with TestClient(app) as test_client:
+        # El esquema (tabla `users`, etc.) lo crea `init_api_keys_db()` en el
+        # `lifespan` de la app -- solo existe una vez abierto el `TestClient`
+        # (que dispara ese startup), no antes.
+        _seed_repo(fresh_engine, "alice", "acme/runner-ci")
         yield test_client
     app.dependency_overrides.clear()
 
 
 def test_real_app_startup_creates_api_keys_schema(client: TestClient) -> None:
     """Antes del fix, esto fallaba con 500 (no such table: users)."""
-    created = client.post("/api/keys", json={"name": "Runner CI"})
+    created = client.post(
+        "/api/keys", json={"name": "Runner CI", "monitored_repo_id": "repo-alice-acme-runner-ci"}
+    )
     assert created.status_code == 201, created.text
     body = created.json()
     assert body["raw_token"].startswith("wg_live_")
@@ -79,11 +104,15 @@ def test_real_app_startup_creates_api_keys_schema(client: TestClient) -> None:
 
 def test_keys_are_scoped_per_user(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     """Misma app, mismo motor: bob no debe ver las claves de alice."""
-    app = _app_with_fresh_schema(monkeypatch, tmp_path)
+    app, fresh_engine = _app_with_fresh_schema(monkeypatch, tmp_path)
 
     app.dependency_overrides[get_current_user] = lambda: User(login="alice")
     with TestClient(app) as alice_client:
-        assert alice_client.post("/api/keys", json={"name": "de alice"}).status_code == 201
+        alice_repo_id = _seed_repo(fresh_engine, "alice", "acme/de-alice")
+        response = alice_client.post(
+            "/api/keys", json={"name": "de alice", "monitored_repo_id": alice_repo_id}
+        )
+        assert response.status_code == 201
 
     app.dependency_overrides[get_current_user] = lambda: User(login="bob")
     with TestClient(app) as bob_client:
