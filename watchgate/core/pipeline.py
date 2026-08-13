@@ -1,10 +1,11 @@
 """Pipeline completo reutilizable: cortocircuito + capas reales + agregación.
 
-Extraído de `cli.py` (§9) para que `adapters/github_action/main.py` (§12) lo
+Extraído de `cli.py` (§9) para que `watchgate/api/routers/analyze.py` (POST
+/api/v1/analyze, invocado desde `entrypoint.sh` en la GitHub Action real) lo
 use tal cual, en vez de duplicar el wiring de `cost_control`/`SemanticLayer`/
 `shortcircuit`. La diferencia entre invocaciones está solo en cómo se
-construyen `diff`/`metadata` (git local + argparse en la CLI; evento de
-GitHub + `GitHubClient` en la Action), no en cómo se analiza una vez
+construyen `diff`/`metadata` (git local + argparse en la CLI; payload HTTP
+recibido por el endpoint en la Action), no en cómo se analiza una vez
 construidos.
 """
 
