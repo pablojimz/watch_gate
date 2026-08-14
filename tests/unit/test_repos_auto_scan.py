@@ -31,6 +31,7 @@ def test_db_session(tmp_path):
     test_engine = build_engine(f"sqlite:///{db_file}")
 
     from watchgate.db.connection import SQLModel
+
     SQLModel.metadata.create_all(test_engine)
 
     with Session(test_engine) as session:
@@ -132,7 +133,6 @@ def test_repo_polling_service_poll_all_candidates_enqueues_and_handles_errors(te
         patch("watchgate.dashboard.backend.tasks.get_queue", return_value=mock_queue),
         patch(target_etag) as mock_fetch,
     ):
-        
         mock_fetch.return_value = ([{"number": 101}, {"number": 102}], '"etag_new"')
         enqueued = RepoPollingService.poll_all_candidates()
 
@@ -160,6 +160,7 @@ def test_patch_external_repo_endpoint_and_rbac(test_db_session):
     app.dependency_overrides[get_db_session] = get_test_db
 
     from watchgate.dashboard.backend.routers.keys import _get_or_create_db_user
+
     user_admin = _get_or_create_db_user(test_db_session, "admin@corp.com")
     user_revisor = _get_or_create_db_user(test_db_session, "revisor@corp.com")
     user_revisor.org_id = user_admin.org_id
@@ -181,12 +182,14 @@ def test_patch_external_repo_endpoint_and_rbac(test_db_session):
     # Configurar sesión en la BD del dashboard para require_role
     from watchgate.dashboard.backend.db import db_session as dash_db_session
     from watchgate.dashboard.backend.db import upsert_role
+
     with dash_db_session() as dash_conn:
         upsert_role(dash_conn, "admin@corp.com", "acme/patchrepo", "admin_organizacion")
         upsert_role(dash_conn, "revisor@corp.com", "acme/patchrepo", "revisor")
 
     client = TestClient(app)
     from watchgate.dashboard.backend.auth import create_session_token
+
     token_admin = create_session_token("admin@corp.com")
     token_revisor = create_session_token("revisor@corp.com")
 
@@ -203,7 +206,7 @@ def test_patch_external_repo_endpoint_and_rbac(test_db_session):
     # 3. Usuario admin actualiza correctamente
     response = client.patch(
         "/api/repos/external/repo-patch-1",
-        json={"auto_scan_prs": False, "scan_interval_minutes": 60, "status": "paused"}
+        json={"auto_scan_prs": False, "scan_interval_minutes": 60, "status": "paused"},
     )
     assert response.status_code == 200
     data = response.json()
@@ -221,10 +224,12 @@ def test_add_external_repo_triggers_instant_poll(test_db_session):
     app.dependency_overrides[get_db_session] = get_test_db
 
     from watchgate.dashboard.backend.routers.keys import _get_or_create_db_user
+
     _get_or_create_db_user(test_db_session, "creator@corp.com")
 
     client = TestClient(app)
     from watchgate.dashboard.backend.auth import create_session_token
+
     token = create_session_token("creator@corp.com")
     client.cookies.set("watchgate_session", token)
 
@@ -232,7 +237,7 @@ def test_add_external_repo_triggers_instant_poll(test_db_session):
     with patch(target_poll) as mock_poll:
         response = client.post(
             "/api/repos/external",
-            json={"repo_path": "openclaw/instantrepo", "monitor_type": "audited"}
+            json={"repo_path": "openclaw/instantrepo", "monitor_type": "audited"},
         )
         assert response.status_code == 201
         data = response.json()

@@ -24,6 +24,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Liberar espacio en disco en el runner
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -113,6 +120,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Liberar espacio en disco en el runner
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
       - name: Build Docker Image
         run: docker build -f docker/engine-api.Dockerfile -t watchgate-engine:latest .
       - name: Scan Docker Image with Trivy
