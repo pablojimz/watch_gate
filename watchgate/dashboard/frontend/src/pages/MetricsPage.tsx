@@ -288,7 +288,7 @@ export default function MetricsPage() {
                       <td className="px-4 py-3">{row.feedback_pending}</td>
                       <td className="px-4 py-3 text-right">
                         <Link
-                          to={`/repos/${row.repo}`}
+                          to={`/repos/${encodeURIComponent(row.repo)}`}
                           className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}
                         >
                           {t('repos.open')}
