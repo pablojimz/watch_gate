@@ -21,7 +21,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema."""
-    op.add_column('monitored_repos', sa.Column('auto_scan_prs', sa.Boolean(), nullable=False, server_default=sa.text('1')))
+    op.add_column('monitored_repos', sa.Column('auto_scan_prs', sa.Boolean(), nullable=False, server_default=sa.true()))
     op.add_column('monitored_repos', sa.Column('scan_interval_minutes', sa.Integer(), nullable=False, server_default=sa.text('30')))
     op.add_column('monitored_repos', sa.Column('prs_etag', sqlmodel.sql.sqltypes.AutoString(), nullable=True))
     op.add_column('monitored_repos', sa.Column('last_polled_at', sa.DateTime(), nullable=True))
