@@ -36,7 +36,7 @@ class RepoPollingService:
         }
 
     @classmethod
-    def get_candidate_repos(cls) -> list[dict[str, Any]]:
+    def get_candidate_repos(cls, ignore_interval: bool = False) -> list[dict[str, Any]]:
         """Obtiene la lista de repositorios candidatos cerrando la sesión de DB inmediatamente."""
         now = datetime.now(UTC)
         candidates: list[dict[str, Any]] = []
@@ -51,7 +51,7 @@ class RepoPollingService:
             ).all()
 
             for repo in repos:
-                if repo.last_polled_at:
+                if not ignore_interval and repo.last_polled_at:
                     elapsed = (now - repo.last_polled_at.replace(tzinfo=UTC)).total_seconds() / 60.0
                     if elapsed < repo.scan_interval_minutes:
                         continue
@@ -178,9 +178,9 @@ class RepoPollingService:
         return cls._poll_single_candidate(candidate)
 
     @classmethod
-    def poll_all_candidates(cls) -> int:
+    def poll_all_candidates(cls, ignore_interval: bool = False) -> int:
         """Efectúa el barrido con llamadas HTTP sin bloqueo de transacciones DB."""
-        candidates = cls.get_candidate_repos()
+        candidates = cls.get_candidate_repos(ignore_interval=ignore_interval)
         total_enqueued = 0
 
         for candidate in candidates:
