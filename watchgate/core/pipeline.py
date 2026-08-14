@@ -16,6 +16,7 @@ from watchgate.core.aggregator import aggregate
 from watchgate.core.cost_control import CostController
 from watchgate.core.layers._semantic.layer import SemanticLayer
 from watchgate.core.layers._semantic.llm_factory import build_llm_client
+from watchgate.core.layers.base import safe_analyze
 from watchgate.core.layers.vulnerabilities_layer import VulnerabilitiesLayer
 from watchgate.core.models import AggregatedResult, LayerResult, NormalizedDiff
 from watchgate.core.orchestrator import LayerFactory, ProgressCallback, run_analysis
@@ -83,8 +84,8 @@ def run_full_analysis(
                 diff=diff,
                 thresholds=config.thresholds,
             )
+            final_results = dict(partial_res.layer_results)
             if shortcircuit_verdict is not None:
-                final_results = dict(partial_res.layer_results)
                 final_results["semantic"] = LayerResult(
                     layer_name="semantic",
                     risk_score=0,
@@ -92,16 +93,26 @@ def run_full_analysis(
                     skipped=True,
                     skip_reason="Cortocircuito de extremo aplicado",
                 )
-                return aggregate(
-                    results=final_results,
-                    weights=config.weights,
-                    diff=diff,
-                    pr_id=str(metadata.get("pr_id", "")),
-                    repo=str(metadata.get("repo", "")),
-                    thresholds=config.thresholds,
+            elif "semantic" in layer_factories:
+                # Sin cortocircuito, solo falta la capa semántica -- las
+                # demás (static/dependencies/vulnerabilities/reputation) ya
+                # se ejecutaron arriba para `partial_res` y NO deben
+                # repetirse. Antes se llamaba `run_analysis(diff, metadata,
+                # config, ...)` completo otra vez aquí, re-ejecutando esas
+                # capas desde cero (subprocesos de Semgrep, consultas OSV,
+                # llamadas de red de reputación) sin ningún beneficio: el
+                # cortocircuito existe para ahorrarse la llamada al LLM, no
+                # para duplicar el resto del trabajo cuando no se dispara.
+                final_results["semantic"] = safe_analyze(
+                    layer_factories["semantic"](), diff, metadata
                 )
-            return run_analysis(
-                diff, metadata, config, layer_factories=layer_factories, on_progress=on_progress
+            return aggregate(
+                results=final_results,
+                weights=config.weights,
+                diff=diff,
+                pr_id=str(metadata.get("pr_id", "")),
+                repo=str(metadata.get("repo", "")),
+                thresholds=config.thresholds,
             )
         return run_analysis(
             diff, metadata, config, layer_factories=layer_factories, on_progress=on_progress
