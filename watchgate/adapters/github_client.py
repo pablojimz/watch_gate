@@ -66,6 +66,10 @@ class GitHubClient:
                         time.sleep(sleep_time)
                         continue
 
+            # Manejo de 304 Not Modified para peticiones condicionales (ETag)
+            if response.status_code == 304:
+                return response
+
             response.raise_for_status()
             return response
         raise httpx.HTTPStatusError(
@@ -87,6 +91,30 @@ class GitHubClient:
         """Devuelve las PRs abiertas más recientes de un repositorio."""
         params = {"state": "open", "sort": "created", "direction": "desc", "per_page": per_page}
         return list(self._get(f"/repos/{owner}/{repo}/pulls", params=params).json())
+
+    def list_recent_pull_requests_with_etag(
+        self, owner: str, repo: str, per_page: int = 10, etag: str | None = None
+    ) -> tuple[list[dict[str, Any]] | None, str | None]:
+        """Consulta PRs abiertas enviando `If-None-Match: <etag>`.
+
+        Retorna:
+        - (None, etag_actual) si responde HTTP 304 Not Modified.
+        - (lista_prs, nuevo_etag) si responde HTTP 200 OK.
+        """
+        headers = dict(self._headers)
+        if etag:
+            headers["If-None-Match"] = etag
+
+        params = {"state": "open", "sort": "created", "direction": "desc", "per_page": per_page}
+        response = self._request(
+            "GET", f"/repos/{owner}/{repo}/pulls", params=params, headers=headers
+        )
+
+        if response.status_code == 304:
+            return None, etag
+
+        new_etag = response.headers.get("ETag")
+        return list(response.json()), new_etag
 
     def get_pull_request_diff(self, owner: str, repo: str, pr_number: int) -> str:
         """Descarga el diff unificado de una PR. Lanza DiffTooLargeError si > 2MB."""

@@ -4,11 +4,11 @@ from datetime import UTC, datetime
 from typing import Annotated, Any
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 
-from watchgate.dashboard.backend.auth import CurrentUser
+from watchgate.dashboard.backend.auth import CurrentUser, require_role
 from watchgate.dashboard.backend.routers.keys import _get_or_create_db_user
 from watchgate.dashboard.backend.schemas import normalize_login
 from watchgate.dashboard.backend.tasks import get_queue, run_audit_scan
@@ -36,8 +36,20 @@ class MonitoredRepoResponse(BaseModel):
     repo_path: str
     monitor_type: str
     status: str
+    auto_scan_prs: bool
+    scan_interval_minutes: int
     last_scanned_at: datetime | None
+    last_polled_at: datetime | None
+    consecutive_errors: int
     created_at: datetime
+
+
+class MonitoredRepoUpdate(BaseModel):
+    auto_scan_prs: bool | None = Field(default=None)
+    scan_interval_minutes: int | None = Field(
+        default=None, description="Intervalo en minutos (ej: 15, 30, 60, 120, 1440)"
+    )
+    status: str | None = Field(default=None, description="'active', 'paused' o 'error'")
 
 
 class ScanRequest(BaseModel):
@@ -158,3 +170,43 @@ def scan_audited_repo(
         "repo_path": repo.repo_path,
         "pr_number": scan_data.pr_number,
     }
+
+
+@router.patch("/{repo_id}", response_model=MonitoredRepoResponse)
+def update_external_repo(
+    repo_id: str,
+    data: MonitoredRepoUpdate,
+    current_user: CurrentUser,
+    session: DBSession,
+    request: Request,
+) -> Any:
+    """Actualiza la configuración de automatización e intervalo de un repositorio externo."""
+    user_login = normalize_login(current_user.login)
+    db_user = _get_or_create_db_user(session, user_login)
+    org_id = db_user.org_id
+    assert org_id is not None
+
+    repo = session.exec(
+        select(MonitoredRepo).where(MonitoredRepo.id == repo_id, MonitoredRepo.org_id == org_id)
+    ).first()
+
+    if not repo:
+        raise HTTPException(status_code=404, detail="Repositorio no encontrado")
+
+    # Verificación de permisos RBAC
+    require_role(current_user, repo.repo_path, min_role="mantenedor", request=request)
+
+    if data.auto_scan_prs is not None:
+        repo.auto_scan_prs = data.auto_scan_prs
+    if data.scan_interval_minutes is not None:
+        if data.scan_interval_minutes < 5:
+            raise HTTPException(status_code=400, detail="El intervalo mínimo es de 5 minutos")
+        repo.scan_interval_minutes = data.scan_interval_minutes
+    if data.status is not None:
+        if data.status not in ("active", "paused", "error"):
+            raise HTTPException(status_code=400, detail="Estado inválido")
+        repo.status = data.status
+
+    session.commit()
+    session.refresh(repo)
+    return repo
