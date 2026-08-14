@@ -163,6 +163,24 @@ _LAYER_COLS = (
     ("semantic", "semantic_score", "semantic_skipped"),
 )
 
+# Columnas que compute_org_metrics() lee de verdad -- a diferencia de
+# _row_to_score_out() (que sí necesita la fila completa, incluido
+# findings_json/semantic_justification, para reconstruir un AggregatedResult
+# real), esta función solo agrega números/etiquetas. `SELECT *` traía esos
+# blobs (hallazgos con fichero/línea/mensaje de cada capa, texto del LLM)
+# para cada fila de TODO el histórico visible del organización -- payload
+# real que ni se deserializaba aquí, solo se descartaba.
+_METRICS_COLUMNS_SQL = ", ".join(
+    (
+        "repo",
+        "timestamp",
+        "score",
+        "semaforo",
+        "human_feedback",
+        *(col for _, score_col, skip_col in _LAYER_COLS for col in (score_col, skip_col)),
+    )
+)
+
 
 def default_db_path() -> Path:
     raw = os.environ.get("WATCHGATE_DASHBOARD_DB")
@@ -947,7 +965,8 @@ def compute_org_metrics(conn: DBConnection, repos: list[str]) -> OrgMetrics:
 
     placeholders = ",".join("?" for _ in repos)
     rows = conn.execute(
-        f"SELECT * FROM pr_scores WHERE repo IN ({placeholders}) ORDER BY timestamp ASC",
+        f"SELECT {_METRICS_COLUMNS_SQL} FROM pr_scores "
+        f"WHERE repo IN ({placeholders}) ORDER BY timestamp ASC",
         repos,
     ).fetchall()
 
