@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-from watchgate.core.rag.indexer import build_index, chunk_document, load_corpus_documents
+from watchgate.core.rag.indexer import (
+    COLLECTION_NAME,
+    build_index,
+    chunk_document,
+    get_chroma_client,
+    load_corpus_documents,
+)
 from watchgate.core.rag.retriever import retrieve_relevant_context
 
 
@@ -33,6 +39,19 @@ def test_build_index_and_retrieve_end_to_end(tmp_path):
     assert len(fragments) == 3
     assert all(f.text.strip() for f in fragments)
     assert all(f.case_name for f in fragments)
+
+
+def test_build_index_uses_cosine_distance_not_the_chromadb_default(tmp_path):
+    """Reproducido en vivo: sin fijar `hnsw:space`, ChromaDB usa su default
+    (L2 al cuadrado), pensado para embeddings arbitrarios -- no para los que
+    produce sentence-transformers (comparables por similitud coseno, según
+    su propio model card). Con L2 las distancias de consultas relevantes e
+    irrelevantes caían en la misma banda estrecha sin separación real."""
+    index_path = str(tmp_path / "rag_index")
+    build_index(index_path=index_path)
+    client = get_chroma_client(index_path=index_path)
+    collection = client.get_collection(COLLECTION_NAME)
+    assert collection.metadata["hnsw:space"] == "cosine"
 
 
 def test_retrieve_relevant_context_returns_empty_list_when_index_missing(tmp_path):
