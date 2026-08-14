@@ -11,9 +11,8 @@ from sqlmodel import Session, select
 from watchgate.dashboard.backend.auth import CurrentUser
 from watchgate.dashboard.backend.schemas import normalize_login
 from watchgate.db.connection import get_db_session
-from watchgate.db.models import MonitoredRepo
+from watchgate.db.models import MonitoredRepo, UserAPIKey
 from watchgate.db.models import User as DBUser
-from watchgate.db.models import UserAPIKey
 from watchgate.db.repository import create_api_key, create_organization, create_user
 
 DBSession = Annotated[Session, Depends(get_db_session)]
