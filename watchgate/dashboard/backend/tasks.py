@@ -62,13 +62,16 @@ def run_managed_scan(repo_path: str, pr_number: int, installation_id: str) -> No
         # 5. Insertar en la BD del Dashboard para que se pueda visualizar
         from watchgate.dashboard.backend.db import db_session as dashboard_db_session
         from watchgate.dashboard.backend.db import insert_aggregated, upsert_role
+
         with dashboard_db_session() as dash_conn:
             result.pr_id = str(pr_number)
             result.repo = repo_path
             insert_aggregated(dash_conn, result, author_login=author_login)
-            
-            # Buscamos el usuario de la DB SQLModel asociado para darle permisos en el esquema del Dashboard
+
+            # Buscamos el usuario de la DB SQLModel asociado para darle
+            # permisos en el esquema del Dashboard
             from watchgate.db.models import User
+
             user_obj = session.exec(select(User).where(User.org_id == org_id)).first()
             if user_obj:
                 upsert_role(dash_conn, user_obj.name, repo_path, "admin_organizacion")
@@ -151,13 +154,16 @@ def run_audit_scan(
         # 5. Insertar en la BD del Dashboard para que se pueda visualizar
         from watchgate.dashboard.backend.db import db_session as dashboard_db_session
         from watchgate.dashboard.backend.db import insert_aggregated, upsert_role
+
         with dashboard_db_session() as dash_conn:
             result.pr_id = str(pr_number)
             result.repo = repo_path
             insert_aggregated(dash_conn, result, author_login=author_login)
-            
-            # Buscamos el usuario de la DB SQLModel asociado para darle permisos en el esquema del Dashboard
+
+            # Buscamos el usuario de la DB SQLModel asociado para darle
+            # permisos en el esquema del Dashboard
             from watchgate.db.models import User
+
             user_obj = session.exec(select(User).where(User.org_id == org_id)).first()
             if user_obj:
                 upsert_role(dash_conn, user_obj.name, repo_path, "admin_organizacion")

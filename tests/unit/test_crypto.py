@@ -12,7 +12,7 @@ def set_env():
     import watchgate.db.crypto
     watchgate.db.crypto._fernet = Fernet('1Vn6eB6nE7xO4yH0JkL4A-9tN1X5mK3bH2P8gV0zM8I=')
 
-from watchgate.db.crypto import decrypt_secret, encrypt_secret
+from watchgate.db.crypto import decrypt_secret, encrypt_secret  # noqa: E402
 
 
 def test_encrypt_decrypt_secret():

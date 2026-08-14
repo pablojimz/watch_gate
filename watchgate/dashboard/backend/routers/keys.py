@@ -32,7 +32,7 @@ class CreateKeyRequest(BaseModel):
     # Si el cliente no lo manda, FastAPI ya responde 422 antes de llegar a
     # create_key().
     monitored_repo_id: str = Field(
-        description="ID del MonitoredRepo (de la organización del usuario) al que queda atada la clave"
+        description="ID del MonitoredRepo (de la organización) al que queda atada la clave"
     )
 
 
