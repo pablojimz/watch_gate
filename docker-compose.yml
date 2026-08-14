@@ -112,6 +112,13 @@ services:
       WATCHGATE_DASHBOARD_DATABASE_URL: postgresql://watchgate:watchgate@postgres:5432/watchgate_dashboard
       WATCHGATE_DATABASE_URL: postgresql+psycopg://watchgate:watchgate@postgres:5432/watchgate
       WATCHGATE_REDIS_URL: redis://redis:6379/0
+    # Este servicio reutiliza la imagen de dashboard-backend, que trae un
+    # HEALTHCHECK apuntando a http://localhost:8000/api/health -- pero aquí
+    # el comando es `rq worker`, no uvicorn, así que nada escucha en ese
+    # puerto. Sin este override, el contenedor se reporta perpetuamente
+    # "unhealthy" aunque el worker esté consumiendo la cola con normalidad.
+    healthcheck:
+      disable: true
     depends_on:
       postgres:
         condition: service_healthy
