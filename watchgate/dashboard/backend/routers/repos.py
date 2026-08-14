@@ -53,7 +53,9 @@ class MonitoredRepoUpdate(BaseModel):
 
 
 class ScanRequest(BaseModel):
-    pr_number: int = Field(description="Número de la Pull Request a auditar")
+    pr_number: int | None = Field(
+        default=None, description="Número de PR a auditar (0 o None para todas las PRs abiertas)"
+    )
 
 
 @router.post("", response_model=MonitoredRepoResponse, status_code=status.HTTP_201_CREATED)
@@ -116,8 +118,8 @@ def add_external_repo(
     session.commit()
     session.refresh(new_repo)
 
-    # Si es repo auditado con auto_scan, iniciar análisis inmediato de sus PRs
-    if new_repo.monitor_type == "audited" and new_repo.auto_scan_prs:
+    # Si tiene auto_scan_prs activo, iniciar análisis inmediato de todas sus PRs abiertas
+    if new_repo.auto_scan_prs:
         from watchgate.service.repo_polling import RepoPollingService
 
         RepoPollingService.poll_repo_by_id(new_repo.id, ignore_interval=True)
@@ -148,7 +150,7 @@ def scan_audited_repo(
     current_user: CurrentUser,
     session: DBSession,
 ) -> Any:
-    """Encola el escaneo de una PR concreta de un repositorio auditado."""
+    """Encola el escaneo de una PR concreta o de todas las PRs abiertas de un repositorio."""
     user_login = normalize_login(current_user.login)
     db_user = _get_or_create_db_user(session, user_login)
     org_id = db_user.org_id
@@ -161,20 +163,24 @@ def scan_audited_repo(
     if not repo:
         raise HTTPException(status_code=404, detail="Repositorio no encontrado")
 
-    if repo.monitor_type != "audited":
-        raise HTTPException(
-            status_code=400, detail="Sólo se puede auditar manualmente repositorios tipo 'audited'"
+    if scan_data.pr_number and scan_data.pr_number > 0:
+        queue = get_queue()
+        queue.enqueue(
+            run_audit_scan, repo.repo_path, scan_data.pr_number, org_id, repo.vcs_connection_id
         )
+        return {
+            "message": "Escaneo de PR encolado",
+            "repo_path": repo.repo_path,
+            "pr_number": scan_data.pr_number,
+        }
 
-    queue = get_queue()
-    queue.enqueue(
-        run_audit_scan, repo.repo_path, scan_data.pr_number, org_id, repo.vcs_connection_id
-    )
+    from watchgate.service.repo_polling import RepoPollingService
 
+    enqueued = RepoPollingService.poll_repo_by_id(repo.id, ignore_interval=True)
     return {
-        "message": "Escaneo de PR encolado",
+        "message": f"Escaneo de todas las PRs abiertas encolado ({enqueued} PRs)",
         "repo_path": repo.repo_path,
-        "pr_number": scan_data.pr_number,
+        "prs_enqueued": enqueued,
     }
 
 

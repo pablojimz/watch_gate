@@ -32,6 +32,24 @@ def test_get_pr_diff_shas_reads_base_and_head_from_event_payload():
     assert head_sha == "bbbb"
 
 
+def test_github_client_list_all_open_pull_requests_paginates():
+    client = GitHubClient("fake_token")
+
+    def fake_get(url, params=None):
+        page = (params or {}).get("page", 1)
+        if page == 1:
+            return _mock_response([{"number": i} for i in range(1, 51)])
+        if page == 2:
+            return _mock_response([{"number": i} for i in range(51, 60)])
+        return _mock_response([])
+
+    with patch.object(client, "_get", side_effect=fake_get):
+        prs = client.list_all_open_pull_requests("owner", "repo", max_prs=50)
+        assert len(prs) == 50
+        assert prs[0]["number"] == 1
+        assert prs[-1]["number"] == 50
+
+
 def test_get_reputation_metadata_builds_real_signals_from_github_api():
     client = GitHubClient(token="fake-token")
     created_at = (datetime.now(UTC) - timedelta(days=400)).isoformat().replace("+00:00", "Z")

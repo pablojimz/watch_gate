@@ -17,7 +17,7 @@ class RepoPollingService:
     @staticmethod
     def _build_candidate_dict(
         repo: MonitoredRepo, default_token: str | None, session: Any
-    ) -> dict[str, Any] | None:
+    ) -> dict[str, Any]:
         token = default_token
         if repo.vcs_connection_id:
             vcs = session.exec(
@@ -25,9 +25,6 @@ class RepoPollingService:
             ).first()
             if vcs and vcs.access_token:
                 token = vcs.access_token
-
-        if not token:
-            return None
 
         return {
             "id": repo.id,
@@ -43,12 +40,11 @@ class RepoPollingService:
         """Obtiene la lista de repositorios candidatos cerrando la sesión de DB inmediatamente."""
         now = datetime.now(UTC)
         candidates: list[dict[str, Any]] = []
-        default_token = os.environ.get("WATCHGATE_GITHUB_TOKEN")
+        default_token = os.environ.get("WATCHGATE_GITHUB_TOKEN") or os.environ.get("GITHUB_TOKEN")
 
         with next(get_session()) as session:
             repos = session.exec(
                 select(MonitoredRepo).where(
-                    MonitoredRepo.monitor_type == "audited",
                     MonitoredRepo.status == "active",
                     MonitoredRepo.auto_scan_prs == True,  # noqa: E712
                 )
@@ -61,8 +57,7 @@ class RepoPollingService:
                         continue
 
                 cand = cls._build_candidate_dict(repo, default_token, session)
-                if cand:
-                    candidates.append(cand)
+                candidates.append(cand)
 
         return candidates
 
@@ -72,13 +67,12 @@ class RepoPollingService:
     ) -> dict[str, Any] | None:
         """Obtiene un único candidato por ID para barrido inmediato."""
         now = datetime.now(UTC)
-        default_token = os.environ.get("WATCHGATE_GITHUB_TOKEN")
+        default_token = os.environ.get("WATCHGATE_GITHUB_TOKEN") or os.environ.get("GITHUB_TOKEN")
 
         with next(get_session()) as session:
             repo = session.exec(
                 select(MonitoredRepo).where(
                     MonitoredRepo.id == repo_id,
-                    MonitoredRepo.monitor_type == "audited",
                     MonitoredRepo.status == "active",
                     MonitoredRepo.auto_scan_prs == True,  # noqa: E712
                 )
@@ -102,12 +96,10 @@ class RepoPollingService:
         total_enqueued = 0
 
         try:
-            prs, new_etag = client.list_recent_pull_requests_with_etag(
-                owner, repo_name, per_page=10, etag=candidate["prs_etag"]
-            )
+            prs = client.list_all_open_pull_requests(owner, repo_name, max_prs=50)
             success = True
         except Exception:
-            prs, new_etag = None, None
+            prs = None
             success = False
 
         # Actualizar estado HTTP y contador de errores en la BD
@@ -117,8 +109,6 @@ class RepoPollingService:
                 repo_db.last_polled_at = now
                 if success:
                     repo_db.consecutive_errors = 0
-                    if new_etag:
-                        repo_db.prs_etag = new_etag
                 else:
                     repo_db.consecutive_errors += 1
                     if repo_db.consecutive_errors >= 5:
@@ -128,22 +118,35 @@ class RepoPollingService:
         if not success or prs is None:
             return 0
 
-        # Consultar PRs analizadas previamente con SQLModel
+        # Consultar PRs analizadas previamente con SQLModel y Dashboard DB
+        analyzed_pr_ids: set[str] = set()
         with next(get_session()) as session:
-            analyzed_pr_ids = set(
-                session.exec(
-                    select(PRScore.pr_id).where(PRScore.repo == candidate["repo_path"])
-                ).all()
-            )
+            sql_prs = session.exec(
+                select(PRScore.pr_id).where(PRScore.repo == candidate["repo_path"])
+            ).all()
+            analyzed_pr_ids.update(str(p) for p in sql_prs)
 
-        # Filtrar PRs nuevas
+        try:
+            from watchgate.dashboard.backend.db import db_session as dash_db_session
+
+            with dash_db_session() as dash_conn:
+                rows = dash_conn.execute(
+                    "SELECT pr_id FROM pr_scores WHERE repo = ?", (candidate["repo_path"],)
+                ).fetchall()
+                for r in rows:
+                    if r[0]:
+                        analyzed_pr_ids.add(str(r[0]))
+        except Exception:
+            pass
+
+        # Filtrar PRs abiertas nuevas (no analizadas aún)
         new_prs = [p for p in prs if str(p["number"]) not in analyzed_pr_ids]
 
         from watchgate.dashboard.backend.tasks import get_queue, run_audit_scan
 
         queue = get_queue()
 
-        for pr in new_prs[:5]:
+        for pr in new_prs:
             pr_num = int(pr["number"])
             job_id = f"audit_pr:{candidate['repo_path']}:{pr_num}"
 
