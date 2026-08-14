@@ -95,8 +95,13 @@ fi
 #    y "pr_id" van dentro de "metadata", como hace cli.py/main.py).
 # ---------------------------------------------------------------------------
 pr_number=""
+author_login=""
 if [ -n "${GITHUB_EVENT_PATH:-}" ] && [ -f "${GITHUB_EVENT_PATH:-}" ]; then
     pr_number="$(jq -r '.pull_request.number // empty' "$GITHUB_EVENT_PATH")"
+    author_login="$(jq -r '.pull_request.user.login // empty' "$GITHUB_EVENT_PATH")"
+fi
+if [ -z "$author_login" ]; then
+    author_login="${GITHUB_ACTOR:-}"
 fi
 
 payload_file="$workdir/payload.json"
@@ -107,12 +112,13 @@ jq -n \
     --arg repo_path "$GITHUB_REPOSITORY" \
     --arg repo "$GITHUB_REPOSITORY" \
     --arg pr_id "$pr_number" \
+    --arg author_login "$author_login" \
     '{
         diff_text: $diff_text,
         base_sha: $base_sha,
         head_sha: $head_sha,
         repo_path: $repo_path,
-        metadata: { repo: $repo, pr_id: $pr_id }
+        metadata: { repo: $repo, pr_id: $pr_id, author_login: $author_login }
     }' > "$payload_file"
 
 # ---------------------------------------------------------------------------

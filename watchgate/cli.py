@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -247,6 +248,21 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
         "repo": args.repo or (args.repo_path if not use_stdin else "local/stdin"),
         "author_login": args.author_login,
     }
+
+    repo_str = str(metadata["repo"])
+    if args.author_login and "/" in repo_str:
+        token = os.environ.get("WATCHGATE_GITHUB_TOKEN") or os.environ.get("GITHUB_TOKEN")
+        try:
+            from watchgate.adapters.github_client import GitHubClient
+
+            owner, repo_name = repo_str.split("/", 1)
+            pr_num = int(args.pr_id) if args.pr_id and args.pr_id.isdigit() else None
+            client = GitHubClient(token)
+            metadata["reputation"] = client.get_reputation_metadata(
+                owner, repo_name, args.author_login, pr_number=pr_num, head_sha=args.head
+            )
+        except Exception:
+            logger.debug("No se pudo obtener reputación en CLI", exc_info=True)
 
     # 3. Ejecución del pipeline
     try:
