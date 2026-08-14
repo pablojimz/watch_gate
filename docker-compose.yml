@@ -58,6 +58,16 @@ services:
       - .env
     environment:
       WATCHGATE_DATABASE_URL: postgresql+psycopg://watchgate:watchgate@postgres:5432/watchgate
+      # Sin esto, POST /api/v1/analyze (Puerta 3) solo hereda esta variable
+      # de tu .env local -- que en .env.example viene vacía -- y cae a
+      # SQLite local dentro de ESTE contenedor (.watchgate/dashboard.db),
+      # una base de datos aislada que dashboard-backend nunca lee. El
+      # resultado del análisis se guarda "bien" (sin excepción, así que ni
+      # siquiera se ve el logger.warning del espejo best-effort) pero
+      # /repos del frontend nunca lo ve. Mismo valor que usa
+      # dashboard-backend más abajo, a propósito: ambos servicios deben
+      # apuntar siempre a la misma base de datos del dashboard.
+      WATCHGATE_DASHBOARD_DATABASE_URL: postgresql://watchgate:watchgate@postgres:5432/watchgate_dashboard
     depends_on:
       postgres:
         condition: service_healthy
