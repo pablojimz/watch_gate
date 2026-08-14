@@ -146,10 +146,15 @@ class GitHubClient:
         new_etag = response.headers.get("ETag")
         return list(response.json()), new_etag
 
-    def get_pull_request_diff(self, owner: str, repo: str, pr_number: int) -> str:
-        """Descarga el diff unificado de una PR. Lanza DiffTooLargeError si > 2MB."""
+    def _stream_diff(self, url: str, size_error_context: str) -> str:
+        """Descarga un diff unificado en streaming desde `url`, aplicando
+        el límite de _MAX_DIFF_SIZE_BYTES -- lógica compartida por
+        `get_pull_request_diff` (diff de una PR) y `get_compare_diff`
+        (diff entre dos refs cualesquiera, usado para el escaneo de rama
+        completa, ver `get_default_branch_scan_data`). `size_error_context`
+        es solo para el mensaje de `DiffTooLargeError` (p. ej. "la PR #42"
+        o "la comparación <sha>...main")."""
         headers = {**self._headers, "Accept": "application/vnd.github.v3.diff"}
-        url = f"{_API_BASE}/repos/{owner}/{repo}/pulls/{pr_number}"
 
         max_retries = 3
         for attempt in range(max_retries):
@@ -176,7 +181,7 @@ class GitHubClient:
                         downloaded += len(chunk.encode("utf-8"))
                         if downloaded > _MAX_DIFF_SIZE_BYTES:
                             raise DiffTooLargeError(
-                                f"El diff de la PR #{pr_number} supera el límite de 2MB."
+                                f"El diff de {size_error_context} supera el límite de 2MB."
                             )
                         diff_text += chunk
 
@@ -190,6 +195,20 @@ class GitHubClient:
             response=httpx.Response(429, request=httpx.Request("GET", url)),
         )
 
+    def get_pull_request_diff(self, owner: str, repo: str, pr_number: int) -> str:
+        """Descarga el diff unificado de una PR. Lanza DiffTooLargeError si > 2MB."""
+        url = f"{_API_BASE}/repos/{owner}/{repo}/pulls/{pr_number}"
+        return self._stream_diff(url, f"la PR #{pr_number}")
+
+    def get_compare_diff(self, owner: str, repo: str, base: str, head: str) -> str:
+        """Descarga el diff unificado entre `base` y `head` (dos refs/SHAs
+        cualesquiera, no necesariamente relacionados por una PR) vía la
+        Compare API de GitHub. Lanza DiffTooLargeError si > 2MB -- MISMO
+        límite que un diff de PR, y en un repo grande es bastante más
+        probable alcanzarlo aquí (ver `get_default_branch_scan_data`)."""
+        url = f"{_API_BASE}/repos/{owner}/{repo}/compare/{base}...{head}"
+        return self._stream_diff(url, f"la comparación {base}...{head}")
+
     def get_pull_request_metadata(self, owner: str, repo: str, pr_number: int) -> dict[str, Any]:
         """Descarga los metadatos JSON (author, head, base, etc.) de una PR."""
         return dict(self._get(f"/repos/{owner}/{repo}/pulls/{pr_number}").json())
@@ -200,6 +219,85 @@ class GitHubClient:
         """Descarga el diff y los metadatos JSON de una PR."""
         metadata = self.get_pull_request_metadata(owner, repo, pr_number)
         diff_text = self.get_pull_request_diff(owner, repo, pr_number)
+        return diff_text, metadata
+
+    def get_repo_metadata(self, owner: str, repo: str) -> dict[str, Any]:
+        """Metadatos del repositorio (incluye `default_branch`)."""
+        return dict(self._get(f"/repos/{owner}/{repo}").json())
+
+    def get_branch_head_commit(self, owner: str, repo: str, branch: str) -> dict[str, Any]:
+        """Metadatos JSON del commit HEAD de `branch` (sha, autor, etc.)."""
+        return dict(self._get(f"/repos/{owner}/{repo}/commits/{branch}").json())
+
+    def get_root_commit_sha(self, owner: str, repo: str, branch: str) -> str | None:
+        """SHA del primer commit (root, sin padre) del historial de
+        `branch` -- usado como "base" real para diffear TODO el contenido
+        actual del repo (ver `get_default_branch_scan_data`).
+
+        Probado en vivo: la Compare API de GitHub NO admite el SHA mágico
+        del árbol vacío de git (`4b825dc6...`, el truco que sí funciona con
+        `git diff` en un checkout local) como base -- responde 404, porque
+        ese objeto no existe de verdad en el almacén de GitHub para un repo
+        concreto. El primer commit real sí es siempre un objeto válido.
+
+        Misma técnica que `_commit_history_by_author`: pedir `per_page=1`
+        trae en la propia cabecera `Link` el número de la última página, que
+        equivale al total de commits -- pedir esa última página da el commit
+        MÁS ANTIGUO sin tener que paginar el historial completo (coste fijo:
+        2 peticiones, con independencia de cuántos commits tenga el repo)."""
+        response = self._get(
+            f"/repos/{owner}/{repo}/commits", params={"sha": branch, "per_page": 1}
+        )
+        commits = response.json()
+        if not commits:
+            return None
+
+        link_header = response.headers.get("Link", "")
+        match = _LINK_LAST_PAGE_RE.search(link_header)
+        if not match:
+            # Sin cabecera "last" -- un único commit en toda la rama, que
+            # ya es el root.
+            return commits[0].get("sha")
+
+        last_page = int(match.group(1))
+        last_response = self._get(
+            f"/repos/{owner}/{repo}/commits",
+            params={"sha": branch, "per_page": 1, "page": last_page},
+        )
+        last_commits = last_response.json()
+        return last_commits[0].get("sha") if last_commits else commits[0].get("sha")
+
+    def get_default_branch_scan_data(self, owner: str, repo: str) -> tuple[str, dict[str, Any]]:
+        """Diff completo de la rama por defecto del repo (TODO su
+        contenido actual, no solo una PR) + metadatos con la MISMA forma
+        que `get_pull_request_data` (`{"user": {"login": ...}}`) para que
+        encaje en el mismo pipeline de análisis sin cambios -- usado para
+        el escaneo de línea base al dar de alta un repo en auditoría
+        externa (ver `tasks.py:run_main_branch_scan`).
+
+        El diff se obtiene comparando contra el PRIMER commit real del
+        historial (`get_root_commit_sha`), no contra el árbol vacío de git
+        -- ver esa docstring para el porqué. Si por lo que sea no se puede
+        resolver el root (repo sin commits, fallo de red puntual), se cae a
+        comparar la rama contra sí misma (`default_branch...default_branch`,
+        diff vacío) -- una respuesta vacía es mejor que reventar el job de
+        auditoría completo por esto.
+        """
+        repo_meta = self.get_repo_metadata(owner, repo)
+        default_branch = repo_meta.get("default_branch") or "main"
+
+        head_commit = self.get_branch_head_commit(owner, repo, default_branch)
+        root_sha = self.get_root_commit_sha(owner, repo, default_branch) or default_branch
+        diff_text = self.get_compare_diff(owner, repo, root_sha, default_branch)
+
+        author = head_commit.get("author")
+        author_login = author.get("login") if isinstance(author, dict) else None
+
+        metadata = {
+            "user": {"login": author_login or "unknown"},
+            "head": {"sha": head_commit.get("sha", default_branch)},
+            "default_branch": default_branch,
+        }
         return diff_text, metadata
 
     def _commit_history_by_author(
