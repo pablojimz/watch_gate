@@ -233,6 +233,26 @@ def test_package_json_standalone_script() -> None:
     assert "Script de instalación sospechoso" in res.justification
 
 
+def test_combosquatting_with_suspicious_suffix_is_detected() -> None:
+    """Reproducido en vivo: 'sympy-dev' no se detectaba -- distancia
+    Levenshtein contra 'sympy' es 4 (se insertan 4 caracteres), por encima
+    del umbral de 2 que usa la comparación de typos. Es combosquatting, no
+    un typo: el nombre real completo más un sufijo que suena de confianza."""
+    checker = TyposquatChecker()
+    is_ts, ref = checker.is_typosquatting("sympy-dev", "PyPI")
+    assert is_ts is True
+    assert ref == "sympy"
+
+
+def test_combosquatting_does_not_flag_unrelated_package_with_trailing_digit() -> None:
+    """'boto3' es un paquete real y distinto de 'boto', no typosquatting --
+    los sufijos combosquat solo cubren separador + palabra, nunca dígitos
+    sueltos, precisamente para no marcar este caso."""
+    checker = TyposquatChecker()
+    is_ts, _ = checker.is_typosquatting("boto3", "PyPI")
+    assert is_ts is False
+
+
 def test_typosquatting_underscore_normalization() -> None:
     checker = TyposquatChecker()
     # "aiograam" en PyPI vs "aiogram" / "aio_gram"

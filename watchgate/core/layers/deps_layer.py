@@ -47,9 +47,39 @@ __all__ = [
 ]
 
 
+# Combosquatting: nombre real de un paquete popular + un sufijo genérico que
+# suena a "versión de confianza" ("sympy-dev", "requests-official"...).
+# Reproducido en vivo: "sympy-dev" no lo detectaba nada -- la distancia de
+# Levenshtein contra "sympy" es 4 (se insertan 4 caracteres), por encima del
+# límite de 2 que usa la comparación de abajo a propósito (para no marcar
+# typos de una sola letra como si fueran a 4 de distancia). Un ataque de
+# combosquatting no es un typo: añade texto a propósito, así que Levenshtein
+# nunca lo va a pillar por diseño -- hace falta una comparación aparte, de
+# sufijo exacto contra el nombre real. Solo sufijos con separador (no dígitos
+# sueltos como "2"/"3": "boto3" es un paquete real y distinto de "boto", no
+# typosquatting de él).
+_COMBOSQUAT_SUFFIXES = (
+    "-dev",
+    "-test",
+    "-official",
+    "-secure",
+    "-safe",
+    "-real",
+    "-patch",
+    "-fix",
+    "-utils",
+    "-util",
+    "-new",
+    "-latest",
+    "-stable",
+    "-original",
+)
+
+
 class TyposquatChecker:
     """Verifica si un nombre de paquete es sospechoso de typosquatting
-    comparando su distancia Levenshtein contra listados de referencia de paquetes populares.
+    comparando su distancia Levenshtein contra listados de referencia de paquetes populares,
+    y de combosquatting (nombre real + sufijo genérico sospechoso, ver `_COMBOSQUAT_SUFFIXES`).
     """
 
     def __init__(self, dataset_dir: Path | None = None) -> None:
@@ -127,6 +157,15 @@ class TyposquatChecker:
             dist = Levenshtein.distance(norm_name, ref_norm)
             if 0 < dist <= 2:
                 return True, ref_pkg
+
+        # Combosquatting (ver comentario de _COMBOSQUAT_SUFFIXES): el nombre
+        # completo, no un paquete de longitud parecida -- por eso va en un
+        # bucle aparte en vez de dentro del filtro de longitud de arriba.
+        for ref_pkg in top_list:
+            ref_norm = ref_pkg.lower().replace("_", "-")
+            for suffix in _COMBOSQUAT_SUFFIXES:
+                if norm_name == ref_norm + suffix:
+                    return True, ref_pkg
 
         return False, None
 
