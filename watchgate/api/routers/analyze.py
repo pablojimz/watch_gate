@@ -77,9 +77,7 @@ def analyze_pr(
         if session.exec(legacy_stmt).first() is None:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=(
-                    f"El repo '{requested_repo}' no está monitorizado por tu organización."
-                ),
+                detail=(f"El repo '{requested_repo}' no está monitorizado por tu organización."),
             )
     else:
         key_repo = session.get(MonitoredRepo, api_key.monitored_repo_id)

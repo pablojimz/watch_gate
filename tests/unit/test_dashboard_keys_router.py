@@ -138,9 +138,7 @@ def test_create_key_with_repo_from_another_org_fails(dashboard_client):
     client, session = dashboard_client
 
     other_org = create_organization(session, name="Otra Org")
-    foreign_repo = MonitoredRepo(
-        id="repo-ajeno", org_id=other_org.id, repo_path="otraorg/secreto"
-    )
+    foreign_repo = MonitoredRepo(id="repo-ajeno", org_id=other_org.id, repo_path="otraorg/secreto")
     session.add(foreign_repo)
     session.commit()
 

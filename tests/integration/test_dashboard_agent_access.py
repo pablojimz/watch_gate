@@ -63,9 +63,7 @@ def app_and_key(monkeypatch: pytest.MonkeyPatch, tmp_path) -> Iterator[tuple]:  
             # reenganchar la instancia (leer `.id` con la sesión ya cerrada
             # dispara un refresh sobre un objeto "detached").
             session.add(
-                MonitoredRepo(
-                    id="repo-agent-ci", org_id=db_user.org_id, repo_path="acme/agent-ci"
-                )
+                MonitoredRepo(id="repo-agent-ci", org_id=db_user.org_id, repo_path="acme/agent-ci")
             )
             session.commit()
 

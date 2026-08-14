@@ -155,9 +155,9 @@ class GitHubClient:
                 if attempt == max_retries - 1:
                     raise exc
         raise httpx.HTTPStatusError(
-            "Max retries exceeded for rate limit", 
-            request=httpx.Request("GET", url), 
-            response=httpx.Response(429, request=httpx.Request("GET", url))
+            "Max retries exceeded for rate limit",
+            request=httpx.Request("GET", url),
+            response=httpx.Response(429, request=httpx.Request("GET", url)),
         )
 
     def get_pull_request_metadata(self, owner: str, repo: str, pr_number: int) -> dict[str, Any]:
