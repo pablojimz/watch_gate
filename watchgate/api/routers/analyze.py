@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -16,6 +17,8 @@ from watchgate.core.models import AggregatedResult, CommitAuthor
 from watchgate.db.models import MonitoredRepo, Organization, User, UserAPIKey
 from watchgate.service.policy import ClientConfigOverrideError, apply_client_config_override
 from watchgate.service.quota import QuotaService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1", tags=["Analysis"])
 
@@ -107,5 +110,31 @@ def analyze_pr(
         user_id=user.id,
         agent_id=api_key.default_agent_name,
     )
+
+    # Espejo best-effort en la base de datos del dashboard: sin esto, el
+    # análisis existe (base de datos A, vía save_pr_score dentro de
+    # analyze_with_quota) pero no aparece en /repos del frontend. Un fallo
+    # aquí es degradado, no crítico -- el análisis ya se hizo y ya se
+    # persistió en la base de datos A, así que la petición sigue devolviendo
+    # 200 pase lo que pase (mismo criterio que documentaba
+    # watchgate/adapters/github_action/dashboard_client.py para este tipo de
+    # fallo antes de que ese adaptador se eliminara).
+    from watchgate.dashboard.backend.db import db_session as dashboard_db_session
+    from watchgate.dashboard.backend.db import insert_aggregated, upsert_role
+
+    author_login = request.metadata.get("author_login") or (
+        request.authors[0].login if request.authors else None
+    )
+    try:
+        with dashboard_db_session() as dash_conn:
+            insert_aggregated(dash_conn, result, author_login=author_login)
+            upsert_role(dash_conn, user.name, result.repo, "admin_organizacion")
+    except Exception:
+        logger.warning(
+            "No se pudo persistir el resultado en el dashboard para repo=%s pr_id=%s",
+            result.repo,
+            result.pr_id,
+            exc_info=True,
+        )
 
     return result

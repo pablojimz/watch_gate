@@ -195,6 +195,83 @@ def test_analyze_legacy_key_without_repo_works_only_for_monitored_repos_of_its_o
     assert rejected_response.status_code == 403
 
 
+def test_analyze_mirrors_result_into_dashboard_db(api_client, monkeypatch, tmp_path):
+    """Puerta 3 <-> dashboard: un análisis que entra por /api/v1/analyze debe
+    dejar una fila en pr_scores (histórico) y una fila en repo_roles para el
+    usuario de la API key con role="admin_organizacion" -- si no, el repo
+    queda invisible en /repos para usuarios no-admin (ver
+    list_repos_for_user en watchgate/dashboard/backend/db.py)."""
+    from watchgate.dashboard.backend import db as dashboard_db
+
+    dashboard_db_path = tmp_path / "dashboard.db"
+    monkeypatch.setenv("WATCHGATE_DASHBOARD_DB", str(dashboard_db_path))
+    monkeypatch.delenv("WATCHGATE_DASHBOARD_DATABASE_URL", raising=False)
+
+    client, session = api_client
+    org = create_organization(session, name="Dashboard Mirror Org")
+    user = create_user(session, email="mirror@watchgate.io", name="mirror.dev", org_id=org.id)
+    repo = MonitoredRepo(id="repo-mirror", org_id=org.id, repo_path="acme/mirror-repo")
+    session.add(repo)
+    session.commit()
+    _, raw_token = create_api_key(
+        session, user_id=user.id, org_id=org.id, name="Mirror Key", monitored_repo_id=repo.id
+    )
+
+    headers = {"Authorization": f"Bearer {raw_token}"}
+    payload = {
+        "diff_text": _diff_text(),
+        "metadata": {"pr_id": "99", "repo": "acme/mirror-repo"},
+    }
+
+    response = client.post("/api/v1/analyze", headers=headers, json=payload)
+    assert response.status_code == 200
+
+    with dashboard_db.db_session(dashboard_db_path) as dash_conn:
+        scores = dashboard_db.list_scores(dash_conn, "acme/mirror-repo")
+        assert len(scores) == 1
+        assert scores[0].repo == "acme/mirror-repo"
+
+        role = dashboard_db.get_role(dash_conn, "mirror.dev", "acme/mirror-repo")
+        assert role == "admin_organizacion"
+
+
+def test_analyze_still_returns_200_when_dashboard_mirror_fails(api_client, monkeypatch, tmp_path):
+    """El espejo en el dashboard es best-effort: si dashboard_db_session()
+    revienta, /api/v1/analyze debe seguir devolviendo 200 con el resultado
+    del análisis -- ese análisis ya se hizo y ya quedó guardado en la base
+    de datos A, perder solo el espejo del dashboard es degradado, no
+    crítico."""
+    dashboard_db_path = tmp_path / "dashboard.db"
+    monkeypatch.setenv("WATCHGATE_DASHBOARD_DB", str(dashboard_db_path))
+    monkeypatch.delenv("WATCHGATE_DASHBOARD_DATABASE_URL", raising=False)
+
+    client, session = api_client
+    org = create_organization(session, name="Dashboard Failure Org")
+    user = create_user(session, email="failure@watchgate.io", name="failure.dev", org_id=org.id)
+    repo = MonitoredRepo(id="repo-failure", org_id=org.id, repo_path="acme/failure-repo")
+    session.add(repo)
+    session.commit()
+    _, raw_token = create_api_key(
+        session, user_id=user.id, org_id=org.id, name="Failure Key", monitored_repo_id=repo.id
+    )
+
+    headers = {"Authorization": f"Bearer {raw_token}"}
+    payload = {
+        "diff_text": _diff_text(),
+        "metadata": {"pr_id": "100", "repo": "acme/failure-repo"},
+    }
+
+    with patch(
+        "watchgate.dashboard.backend.db.db_session", side_effect=RuntimeError("dashboard db down")
+    ):
+        response = client.post("/api/v1/analyze", headers=headers, json=payload)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "score" in data
+    assert data["repo"] == "acme/failure-repo"
+
+
 def test_webhook_no_secret_fails_closed(api_client):
     """Antes: sin secreto configurado, el endpoint no verificaba nada y
     aceptaba cualquier payload como legítimo (200). Eso era fail-open --
