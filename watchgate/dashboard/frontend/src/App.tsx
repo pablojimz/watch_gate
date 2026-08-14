@@ -54,8 +54,16 @@ export default function App() {
           <Route index element={<Navigate to="/repos" replace />} />
           <Route path="repos" element={<ReposPage />} />
           <Route path="audits" element={<ExternalReposPage />} />
-          <Route path="repos/:owner/:name" element={<RepoPage />} />
-          <Route path="repos/:owner/:name/feedback" element={<FeedbackPage />} />
+          {/* Un solo segmento (:repo), codificado con encodeURIComponent al
+              construir el link -- no ":owner/:name" en dos segmentos. El
+              nombre de un repo es un string libre en metadata.repo/repo_path
+              (ver watchgate/api/routers/analyze.py): no siempre tiene el
+              formato "owner/name" (p. ej. "prueba_watchgate", sin barra),
+              y partirlo en dos segmentos de URL rompía el matcheo de rutas
+              para cualquier repo con 0 o 2+ barras, cayendo al catch-all de
+              abajo y devolviendo silenciosamente a /repos sin avisar. */}
+          <Route path="repos/:repo" element={<RepoPage />} />
+          <Route path="repos/:repo/feedback" element={<FeedbackPage />} />
           <Route path="metrics" element={<MetricsPage />} />
           <Route path="api-keys" element={<ApiKeysPage />} />
           <Route
