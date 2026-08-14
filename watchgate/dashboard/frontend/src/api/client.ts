@@ -285,10 +285,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ repo_path, monitor_type, vcs_connection_id }),
     }),
-  scanExternalRepo: (id: string, pr_number: number) => 
-    request<{message: string; repo_path: string; pr_number: number}>(`/repos/external/${id}/scan`, {
+  scanExternalRepo: (id: string, pr_number?: number | null) => 
+    request<{message: string; repo_path: string; pr_number?: number; prs_enqueued?: number}>(`/repos/external/${id}/scan`, {
       method: 'POST',
-      body: JSON.stringify({ pr_number }),
+      body: JSON.stringify({ pr_number: pr_number || 0 }),
     }),
   updateExternalRepo: (
     id: string,

@@ -65,10 +65,10 @@ export default function ExternalReposPage() {
     }
   }
 
-  async function handleScan(repoId: string) {
+  async function handleScanPr(repoId: string) {
     const prInput = scanPrs[repoId]
     const prNumber = parseInt(prInput, 10)
-    
+
     if (!prInput || isNaN(prNumber)) {
       toast.error('Número de PR inválido')
       return
@@ -76,9 +76,21 @@ export default function ExternalReposPage() {
 
     setIsScanning(prev => ({ ...prev, [repoId]: true }))
     try {
-      await api.scanExternalRepo(repoId, prNumber)
-      toast.success(t('externalRepos.scanEnqueued'))
+      const res = await api.scanExternalRepo(repoId, prNumber)
+      toast.success(res.message || t('externalRepos.scanEnqueued'))
       setScanPrs(prev => ({ ...prev, [repoId]: '' }))
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al escanear')
+    } finally {
+      setIsScanning(prev => ({ ...prev, [repoId]: false }))
+    }
+  }
+
+  async function handleScanAllOpen(repoId: string) {
+    setIsScanning(prev => ({ ...prev, [repoId]: true }))
+    try {
+      const res = await api.scanExternalRepo(repoId, 0)
+      toast.success(res.message || 'Escaneo de todas las PRs abiertas encolado')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error al escanear')
     } finally {
@@ -183,9 +195,8 @@ export default function ExternalReposPage() {
                 )}
               </div>
 
-              {repo.monitor_type === 'audited' && (
-                <div className="space-y-3 pt-2 border-t">
-                  <div className="flex items-center justify-between">
+              <div className="space-y-3 pt-2 border-t">
+                <div className="flex items-center justify-between">
                     <span className="text-xs font-medium">Auto Escaneo PRs:</span>
                     <label className="relative inline-flex items-center cursor-pointer">
                       <input
@@ -213,27 +224,36 @@ export default function ExternalReposPage() {
                     </select>
                   </div>
 
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full h-8 text-xs gap-1.5"
+                    disabled={isScanning[repo.id]}
+                    onClick={() => handleScanAllOpen(repo.id)}
+                  >
+                    <RefreshCw className={`size-3.5 ${isScanning[repo.id] ? 'animate-spin' : ''}`} />
+                    Escanear todas las PRs abiertas
+                  </Button>
+
                   <div className="flex gap-2 pt-1">
                     <Input
                       placeholder={t('externalRepos.scanPrPlaceholder')}
                       value={scanPrs[repo.id] || ''}
                       onChange={e => setScanPrs(prev => ({ ...prev, [repo.id]: e.target.value }))}
-                      className="h-9"
+                      className="h-9 text-xs"
                       disabled={isScanning[repo.id]}
                     />
                     <Button 
                       variant="secondary" 
                       size="sm" 
-                      className="h-9 gap-1.5"
+                      className="h-9 text-xs gap-1.5 whitespace-nowrap"
                       disabled={!scanPrs[repo.id] || isScanning[repo.id]}
-                      onClick={() => handleScan(repo.id)}
+                      onClick={() => handleScanPr(repo.id)}
                     >
-                      <RefreshCw className={`size-3.5 ${isScanning[repo.id] ? 'animate-spin' : ''}`} />
-                      {t('externalRepos.scanButton')}
+                      Audit PR
                     </Button>
                   </div>
                 </div>
-              )}
             </CardContent>
           </Card>
         ))}
