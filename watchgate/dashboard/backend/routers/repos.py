@@ -84,7 +84,7 @@ def add_external_repo(
     # Extraer "owner/repo" por si el usuario metió un enlace completo
     repo_path_cleaned = data.repo_path
     if repo_path_cleaned.startswith("http"):
-        # Intenta extraer la ruta final (e.g., https://github.com/openclaw/openclaw-server -> openclaw/openclaw-server)
+        # Intenta extraer la ruta final (e.g. owner/repo)
         import re
 
         match = re.search(r"github\.com/([^/]+/[^/]+?)(?:\.git|/)?$", repo_path_cleaned)
@@ -115,6 +115,12 @@ def add_external_repo(
     session.add(new_repo)
     session.commit()
     session.refresh(new_repo)
+
+    # Si es repo auditado con auto_scan, iniciar análisis inmediato de sus PRs
+    if new_repo.monitor_type == "audited" and new_repo.auto_scan_prs:
+        from watchgate.service.repo_polling import RepoPollingService
+
+        RepoPollingService.poll_repo_by_id(new_repo.id, ignore_interval=True)
 
     return new_repo
 

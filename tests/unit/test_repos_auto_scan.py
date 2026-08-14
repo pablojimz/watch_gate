@@ -124,9 +124,11 @@ def test_repo_polling_service_poll_all_candidates_enqueues_and_handles_errors(te
     mock_queue = MagicMock()
     mock_queue.fetch_job.return_value = None
 
-    target_etag = "watchgate.adapters.github_client.GitHubClient.list_recent_pull_requests_with_etag"
+    target_etag = "watchgate.adapters.github_client.GitHubClient"
+    target_etag += ".list_recent_pull_requests_with_etag"
+    target_sess = "watchgate.service.repo_polling.get_session"
     with (
-        patch("watchgate.service.repo_polling.get_session", side_effect=lambda: iter([test_db_session])),
+        patch(target_sess, side_effect=lambda: iter([test_db_session])),
         patch("watchgate.dashboard.backend.tasks.get_queue", return_value=mock_queue),
         patch(target_etag) as mock_fetch,
     ):
@@ -208,5 +210,35 @@ def test_patch_external_repo_endpoint_and_rbac(test_db_session):
     assert data["auto_scan_prs"] is False
     assert data["scan_interval_minutes"] == 60
     assert data["status"] == "paused"
+
+    app.dependency_overrides.clear()
+
+
+def test_add_external_repo_triggers_instant_poll(test_db_session):
+    def get_test_db():
+        yield test_db_session
+
+    app.dependency_overrides[get_db_session] = get_test_db
+
+    from watchgate.dashboard.backend.routers.keys import _get_or_create_db_user
+    _get_or_create_db_user(test_db_session, "creator@corp.com")
+
+    client = TestClient(app)
+    from watchgate.dashboard.backend.auth import create_session_token
+    token = create_session_token("creator@corp.com")
+    client.cookies.set("watchgate_session", token)
+
+    target_poll = "watchgate.service.repo_polling.RepoPollingService.poll_repo_by_id"
+    with patch(target_poll) as mock_poll:
+        response = client.post(
+            "/api/repos/external",
+            json={"repo_path": "openclaw/instantrepo", "monitor_type": "audited"}
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert data["repo_path"] == "openclaw/instantrepo"
+        assert mock_poll.called
+        assert mock_poll.call_args[0][0] == data["id"]
+        assert mock_poll.call_args[1].get("ignore_interval") is True
 
     app.dependency_overrides.clear()
