@@ -60,7 +60,8 @@ def run_managed_scan(repo_path: str, pr_number: int, installation_id: str) -> No
         )
 
         # 5. Insertar en la BD del Dashboard para que se pueda visualizar
-        from watchgate.dashboard.backend.db import db_session as dashboard_db_session, insert_aggregated, upsert_role
+        from watchgate.dashboard.backend.db import db_session as dashboard_db_session
+        from watchgate.dashboard.backend.db import insert_aggregated, upsert_role
         with dashboard_db_session() as dash_conn:
             result.pr_id = str(pr_number)
             result.repo = repo_path
@@ -148,7 +149,8 @@ def run_audit_scan(
         )
 
         # 5. Insertar en la BD del Dashboard para que se pueda visualizar
-        from watchgate.dashboard.backend.db import db_session as dashboard_db_session, insert_aggregated, upsert_role
+        from watchgate.dashboard.backend.db import db_session as dashboard_db_session
+        from watchgate.dashboard.backend.db import insert_aggregated, upsert_role
         with dashboard_db_session() as dash_conn:
             result.pr_id = str(pr_number)
             result.repo = repo_path
