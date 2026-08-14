@@ -170,7 +170,11 @@ def test_agent_analyze_rejects_key_without_analysis_write_scope(api_client):
     org = create_organization(session, name="Agent Org")
     user = create_user(session, email="readonly@corp.com", name="Readonly Agent", org_id=org.id)
     _, raw_token = create_api_key(
-        session, user_id=user.id, org_id=org.id, monitored_repo_id="test-repo-id", scopes="scores:read"
+        session,
+        user_id=user.id,
+        org_id=org.id,
+        monitored_repo_id="test-repo-id",
+        scopes="scores:read",
     )
 
     headers = {"Authorization": f"Bearer {raw_token}"}
@@ -185,7 +189,11 @@ def test_agent_policy_endpoint_rejects_key_without_scores_read_scope(api_client)
     org = create_organization(session, name="Agent Org")
     user = create_user(session, email="writeonly@corp.com", name="Writeonly Agent", org_id=org.id)
     _, raw_token = create_api_key(
-        session, user_id=user.id, org_id=org.id, monitored_repo_id="test-repo-id", scopes="analysis:write"
+        session,
+        user_id=user.id,
+        org_id=org.id,
+        monitored_repo_id="test-repo-id",
+        scopes="analysis:write",
     )
 
     headers = {"Authorization": f"Bearer {raw_token}"}
