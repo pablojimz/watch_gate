@@ -59,8 +59,8 @@ def repo_score_history(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail=f"Permiso denegado: Sin rol asignado en '{repo}'",
                 )
-        scores = database.list_scores(conn, repo)
-    return scores[:limit]
+        scores = database.list_scores(conn, repo, limit=limit)
+    return scores
 
 
 @router.get("/metrics", response_model=OrgMetrics)
