@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Literal
 
 from watchgate.core.rag.indexer import (
+    COLLECTION_METADATA,
     DEFAULT_INDEX_PATH,
     EMBEDDING_MODEL_NAME,
     FEEDBACK_COLLECTION_NAME,
@@ -118,7 +119,7 @@ def add_confirmed_case(
     try:
         collection = client.get_collection(FEEDBACK_COLLECTION_NAME)
     except Exception:  # noqa: BLE001 - todavía no existe esta colección
-        collection = client.create_collection(FEEDBACK_COLLECTION_NAME)
+        collection = client.create_collection(FEEDBACK_COLLECTION_NAME, metadata=COLLECTION_METADATA)
 
     # Si el caso ya existía (se está corrigiendo o ampliando el veredicto) y
     # ahora tiene menos fragmentos, los sobrantes de la versión anterior no

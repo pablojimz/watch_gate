@@ -29,6 +29,18 @@ COLLECTION_NAME = "attack_patterns"
 FEEDBACK_COLLECTION_NAME = "feedback_cases"
 EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
 
+# Sin esto, `create_collection` usa el default de ChromaDB (L2 al cuadrado),
+# pensado para embeddings arbitrarios -- no para los que produce
+# sentence-transformers, que se comparan por similitud coseno (el propio
+# model card de `all-MiniLM-L6-v2` lo especifica). Reproducido en vivo:
+# con L2 las distancias de consultas relevantes e irrelevantes caían en la
+# misma banda estrecha (~0.9-1.4) sin separación real -- una consulta de
+# "typo en el README", totalmente benigna, salía más "cercana" a un caso de
+# ataque que una consulta de un ataque real genérico. `hnsw:space: cosine`
+# hace que ChromaDB normalice internamente antes de comparar, dando una
+# métrica acotada [0, 2] mucho más discriminativa.
+COLLECTION_METADATA: dict[str, str] = {"hnsw:space": "cosine"}
+
 # ~200-300 tokens de referencia en la spec; sin tokenizer a mano, se aproxima
 # con un tamaño en caracteres (~4 caracteres/token de media en inglés/español).
 _CHUNK_SIZE_CHARS = 1000
@@ -96,7 +108,7 @@ def build_index(corpus_dir: Path = CORPUS_DIR, index_path: str = DEFAULT_INDEX_P
         client.delete_collection(COLLECTION_NAME)
     except Exception:  # noqa: BLE001 - no existe todavía en la primera ejecución
         pass
-    collection = client.create_collection(COLLECTION_NAME)
+    collection = client.create_collection(COLLECTION_NAME, metadata=COLLECTION_METADATA)
     collection.upsert(ids=ids, embeddings=embeddings, documents=texts, metadatas=metadatas)
     return len(ids)
 
