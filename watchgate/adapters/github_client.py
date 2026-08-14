@@ -92,6 +92,36 @@ class GitHubClient:
         params = {"state": "open", "sort": "created", "direction": "desc", "per_page": per_page}
         return list(self._get(f"/repos/{owner}/{repo}/pulls", params=params).json())
 
+    def list_all_open_pull_requests(
+        self, owner: str, repo: str, max_prs: int = 50
+    ) -> list[dict[str, Any]]:
+        """Devuelve todas las PRs abiertas de un repositorio paginando hasta `max_prs`."""
+        all_prs: list[dict[str, Any]] = []
+        page = 1
+        per_page = min(50, max_prs)
+
+        while len(all_prs) < max_prs:
+            params = {
+                "state": "open",
+                "sort": "created",
+                "direction": "desc",
+                "per_page": per_page,
+                "page": page,
+            }
+            try:
+                response = self._get(f"/repos/{owner}/{repo}/pulls", params=params)
+                prs = response.json()
+                if not prs or not isinstance(prs, list):
+                    break
+                all_prs.extend(prs)
+                if len(prs) < per_page:
+                    break
+                page += 1
+            except httpx.HTTPError:
+                break
+
+        return all_prs[:max_prs]
+
     def list_recent_pull_requests_with_etag(
         self, owner: str, repo: str, per_page: int = 10, etag: str | None = None
     ) -> tuple[list[dict[str, Any]] | None, str | None]:
