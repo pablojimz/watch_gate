@@ -19,8 +19,10 @@ import { cn } from '@/lib/utils'
 type Tab = 'history' | 'authors'
 
 export default function RepoPage() {
-  const { owner = '', name = '' } = useParams()
-  const repo = `${owner}/${name}`
+  // Un solo segmento de URL codificado (ver App.tsx) -- no ":owner/:name",
+  // que rompía cualquier repo sin exactamente una barra.
+  const { repo: repoParam = '' } = useParams()
+  const repo = decodeURIComponent(repoParam)
   const { t } = useTranslation()
   const [scores, setScores] = useState<ScoreOut[] | null>(null)
   const [role, setRole] = useState<RoleName | null>(null)
@@ -66,7 +68,7 @@ export default function RepoPage() {
         </div>
         {canFeedback ? (
           <Link
-            to={`/repos/${repo}/feedback`}
+            to={`/repos/${encodeURIComponent(repo)}/feedback`}
             className={cn(buttonVariants({ variant: 'outline' }), 'gap-2')}
           >
             <MessageSquareWarning className="size-4" strokeWidth={1.75} />
