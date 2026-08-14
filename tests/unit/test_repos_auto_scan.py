@@ -327,7 +327,10 @@ def test_add_external_repo_triggers_instant_poll(test_db_session):
     client.cookies.set("watchgate_session", token)
 
     target_poll = "watchgate.service.repo_polling.RepoPollingService.poll_repo_by_id"
-    with patch(target_poll) as mock_poll:
+    target_queue = "watchgate.dashboard.backend.routers.repos.get_queue"
+    mock_queue = MagicMock()
+    mock_queue.fetch_job.return_value = None
+    with patch(target_poll) as mock_poll, patch(target_queue, return_value=mock_queue):
         response = client.post(
             "/api/repos/external",
             json={"repo_path": "openclaw/instantrepo", "monitor_type": "audited"},
@@ -338,5 +341,187 @@ def test_add_external_repo_triggers_instant_poll(test_db_session):
         assert mock_poll.called
         assert mock_poll.call_args[0][0] == data["id"]
         assert mock_poll.call_args[1].get("ignore_interval") is True
+
+    app.dependency_overrides.clear()
+
+
+def test_add_external_repo_audited_enqueues_main_branch_scan(test_db_session):
+    """Al dar de alta un repo "audited" (auditoría externa), debe encolarse
+    también run_main_branch_scan -- el escaneo de línea base de TODO el
+    contenido actual de la rama por defecto, no solo de sus PRs futuras."""
+
+    def get_test_db():
+        yield test_db_session
+
+    app.dependency_overrides[get_db_session] = get_test_db
+
+    from watchgate.dashboard.backend.routers.keys import _get_or_create_db_user
+    from watchgate.dashboard.backend.tasks import run_main_branch_scan
+
+    creator = _get_or_create_db_user(test_db_session, "creator2@corp.com")
+
+    client = TestClient(app)
+    from watchgate.dashboard.backend.auth import create_session_token
+
+    token = create_session_token("creator2@corp.com")
+    client.cookies.set("watchgate_session", token)
+
+    target_poll = "watchgate.service.repo_polling.RepoPollingService.poll_repo_by_id"
+    target_queue = "watchgate.dashboard.backend.routers.repos.get_queue"
+    mock_queue = MagicMock()
+    mock_queue.fetch_job.return_value = None
+    with patch(target_poll), patch(target_queue, return_value=mock_queue):
+        response = client.post(
+            "/api/repos/external",
+            json={"repo_path": "openclaw/baselinerepo", "monitor_type": "audited"},
+        )
+        assert response.status_code == 201
+
+    main_branch_calls = [
+        call for call in mock_queue.enqueue.call_args_list if call.args[0] is run_main_branch_scan
+    ]
+    assert len(main_branch_calls) == 1
+    call = main_branch_calls[0]
+    assert call.args[1] == "openclaw/baselinerepo"  # repo_path
+    assert call.args[2] == creator.org_id  # org_id
+    assert call.args[3] is None  # vcs_connection_id (no se pasó ninguno)
+    # job_id incluye org_id -- dos orgs distintas pueden auditar el mismo
+    # repo_path sin colisionar entre sí (ver comentario en repos.py).
+    assert call.kwargs["job_id"] == f"main_branch_scan:{creator.org_id}:openclaw/baselinerepo"
+
+    app.dependency_overrides.clear()
+
+
+def test_add_external_repo_deletes_stale_failed_main_branch_scan_job_before_reenqueueing(
+    test_db_session,
+):
+    """Regresión de un bug real reproducido en vivo: si ya existe en Redis
+    un job con ese job_id en estado failed (p. ej. de un intento anterior
+    para el mismo repo_path), volver a llamar a queue.enqueue() con el
+    MISMO job_id actualiza sus datos pero NO lo vuelve a meter en la lista
+    de la cola -- ningún worker lo recoge nunca, se queda "atascado" en
+    silencio. Hay que borrar el job viejo explícitamente antes de
+    reencolar (mismo patrón que RepoPollingService._poll_single_candidate)."""
+
+    def get_test_db():
+        yield test_db_session
+
+    app.dependency_overrides[get_db_session] = get_test_db
+
+    from watchgate.dashboard.backend.routers.keys import _get_or_create_db_user
+    from watchgate.dashboard.backend.tasks import run_main_branch_scan
+
+    creator = _get_or_create_db_user(test_db_session, "creator4@corp.com")
+
+    client = TestClient(app)
+    from watchgate.dashboard.backend.auth import create_session_token
+
+    token = create_session_token("creator4@corp.com")
+    client.cookies.set("watchgate_session", token)
+
+    stale_failed_job = MagicMock()
+    stale_failed_job.is_failed = True
+
+    target_poll = "watchgate.service.repo_polling.RepoPollingService.poll_repo_by_id"
+    target_queue = "watchgate.dashboard.backend.routers.repos.get_queue"
+    mock_queue = MagicMock()
+    mock_queue.fetch_job.return_value = stale_failed_job
+    with patch(target_poll), patch(target_queue, return_value=mock_queue):
+        response = client.post(
+            "/api/repos/external",
+            json={"repo_path": "openclaw/staleretry", "monitor_type": "audited"},
+        )
+        assert response.status_code == 201
+
+    # El job viejo (failed) se borra explícitamente...
+    assert stale_failed_job.delete.called
+    # ...y SÍ se vuelve a encolar uno nuevo con el mismo job_id.
+    main_branch_calls = [
+        call for call in mock_queue.enqueue.call_args_list if call.args[0] is run_main_branch_scan
+    ]
+    assert len(main_branch_calls) == 1
+    assert main_branch_calls[0].kwargs["job_id"] == f"main_branch_scan:{creator.org_id}:openclaw/staleretry"
+
+    app.dependency_overrides.clear()
+
+
+def test_add_external_repo_skips_main_branch_scan_when_job_already_in_flight(test_db_session):
+    """Lo contrario del test de arriba: si el job existente NO está failed
+    (sigue en cola o corriendo), no hay que tocarlo ni volver a encolar --
+    solo el caso failed necesita limpieza."""
+
+    def get_test_db():
+        yield test_db_session
+
+    app.dependency_overrides[get_db_session] = get_test_db
+
+    from watchgate.dashboard.backend.routers.keys import _get_or_create_db_user
+    from watchgate.dashboard.backend.tasks import run_main_branch_scan
+
+    _get_or_create_db_user(test_db_session, "creator5@corp.com")
+
+    client = TestClient(app)
+    from watchgate.dashboard.backend.auth import create_session_token
+
+    token = create_session_token("creator5@corp.com")
+    client.cookies.set("watchgate_session", token)
+
+    in_flight_job = MagicMock()
+    in_flight_job.is_failed = False
+
+    target_poll = "watchgate.service.repo_polling.RepoPollingService.poll_repo_by_id"
+    target_queue = "watchgate.dashboard.backend.routers.repos.get_queue"
+    mock_queue = MagicMock()
+    mock_queue.fetch_job.return_value = in_flight_job
+    with patch(target_poll), patch(target_queue, return_value=mock_queue):
+        response = client.post(
+            "/api/repos/external",
+            json={"repo_path": "openclaw/inflight", "monitor_type": "audited"},
+        )
+        assert response.status_code == 201
+
+    assert not in_flight_job.delete.called
+    main_branch_calls = [
+        call for call in mock_queue.enqueue.call_args_list if call.args[0] is run_main_branch_scan
+    ]
+    assert main_branch_calls == []
+
+    app.dependency_overrides.clear()
+
+
+def test_add_external_repo_managed_does_not_enqueue_main_branch_scan(test_db_session):
+    """El escaneo de línea base es solo para "audited" -- un repo "managed"
+    (GitHub App con permisos, vía webhook) no lo dispara al darse de alta."""
+
+    def get_test_db():
+        yield test_db_session
+
+    app.dependency_overrides[get_db_session] = get_test_db
+
+    from watchgate.dashboard.backend.routers.keys import _get_or_create_db_user
+    from watchgate.dashboard.backend.tasks import run_main_branch_scan
+
+    _get_or_create_db_user(test_db_session, "creator3@corp.com")
+
+    client = TestClient(app)
+    from watchgate.dashboard.backend.auth import create_session_token
+
+    token = create_session_token("creator3@corp.com")
+    client.cookies.set("watchgate_session", token)
+
+    target_poll = "watchgate.service.repo_polling.RepoPollingService.poll_repo_by_id"
+    target_queue = "watchgate.dashboard.backend.routers.repos.get_queue"
+    mock_queue = MagicMock()
+    with patch(target_poll), patch(target_queue, return_value=mock_queue):
+        response = client.post(
+            "/api/repos/external",
+            json={"repo_path": "openclaw/managedrepo", "monitor_type": "managed"},
+        )
+        assert response.status_code == 201
+
+    main_branch_calls = [
+        call for call in mock_queue.enqueue.call_args_list if call.args[0] is run_main_branch_scan
+    ]
+    assert main_branch_calls == []
 
     app.dependency_overrides.clear()
