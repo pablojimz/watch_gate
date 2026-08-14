@@ -629,10 +629,11 @@ def test_run_yara_on_text_falls_back_to_default_score_when_meta_missing(tmp_path
     assert findings[0]["risk_score"] == static_layer_module._YARA_DEFAULT_RISK_SCORE
 
 
-def test_analyze_runs_yara_even_on_extension_semgrep_does_not_recognize(tmp_path) -> None:
-    """El caso clave del diseño: un webshell con extensión .asp (que
-    _detect_language no reconoce, así que Semgrep nunca lo tocaría) debe
-    seguir siendo detectado por YARA -- ver el comentario en analyze()."""
+def test_analyze_runs_yara_and_full_semgrep_catalog_on_unrecognized_extension(tmp_path) -> None:
+    """Un webshell con extensión .asp (que _detect_language no reconoce)
+    debe seguir siendo detectado por YARA -- ver el comentario en
+    analyze() -- Y además Semgrep debe recibir ese fichero agrupado bajo
+    _UNRECOGNIZED_LANGUAGE_KEY (catálogo completo), no saltárselo."""
     _write_yara_rule(tmp_path, "rules/yara/webshells/test.yar", _WEBSHELL_YAR_RULE)
     layer = StaticLayer()
 
@@ -650,12 +651,69 @@ def test_analyze_runs_yara_even_on_extension_semgrep_does_not_recognize(tmp_path
         ]
     )
 
-    with patch.object(layer, "_get_rules_dir", return_value=tmp_path):
+    languages_seen: list[str] = []
+
+    def _fake_run_semgrep_on_files(temp_paths, language, rules_dir):
+        languages_seen.append(language)
+        return {p: [] for p in temp_paths}
+
+    with (
+        patch.object(layer, "_get_rules_dir", return_value=tmp_path),
+        patch.object(layer, "_run_semgrep_on_files", side_effect=_fake_run_semgrep_on_files),
+    ):
         res = layer.analyze(diff, {})
+
+    # Semgrep SÍ se invocó para este fichero -- ya no se salta por no
+    # reconocer la extensión, se agrupa bajo la clave "catch-all".
+    assert languages_seen == [static_layer_module._UNRECOGNIZED_LANGUAGE_KEY]
 
     assert res.skipped is False
     assert res.risk_score == 83
     assert any(f.threat_nature == ThreatNature.MALICIOUS for f in res.findings)
+
+
+def test_build_semgrep_config_paths_unrecognized_language_scans_full_catalog(tmp_path) -> None:
+    """Estrategia 0 de _build_semgrep_config_paths: un lenguaje no
+    reconocido no produce una lista vacía de --config (lo que equivaldría
+    a "no pasar ninguna regla") -- apunta a la raíz de rules/semgrep
+    entero, que Semgrep recorre recursivamente (todos los lenguajes,
+    third-party, regex, watchgate.yml)."""
+    layer = StaticLayer()
+    semgrep_root = tmp_path / "rules" / "semgrep"
+    (semgrep_root / "custom" / "python").mkdir(parents=True)
+
+    config_paths = layer._build_semgrep_config_paths(
+        static_layer_module._UNRECOGNIZED_LANGUAGE_KEY, tmp_path
+    )
+
+    assert config_paths == [f"--config={semgrep_root}"]
+
+
+def test_prepare_files_for_scanning_groups_unrecognized_extension_as_catch_all(tmp_path) -> None:
+    """_prepare_files_for_scanning ya no descarta los ficheros de extensión
+    no reconocida antes de llegar a Semgrep -- los mete en
+    language_groups[_UNRECOGNIZED_LANGUAGE_KEY]."""
+    layer = StaticLayer()
+    diff = _make_diff(
+        [
+            FileChange(
+                path="shell.asp",
+                status=FileStatus.MODIFIED,
+                diff_hunk="@@ -0,0 +1,1 @@\n+x",
+                additions=1,
+                deletions=0,
+            )
+        ]
+    )
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        _ordered, _yara, language_groups = layer._prepare_files_for_scanning(
+            diff, tmp_path, temp_dir
+        )
+
+    assert list(language_groups.keys()) == [static_layer_module._UNRECOGNIZED_LANGUAGE_KEY]
+    ((_temp_path, file_change),) = language_groups[static_layer_module._UNRECOGNIZED_LANGUAGE_KEY]
+    assert file_change.path == "shell.asp"
 
 
 def test_analyze_combines_semgrep_and_yara_via_max_never_sum(tmp_path) -> None:
