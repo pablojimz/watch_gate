@@ -104,6 +104,32 @@ def test_repo_polling_service_get_candidate_repos(test_db_session):
             assert candidates[0]["token"] == "token_vcs"
 
 
+def test_repo_polling_service_get_candidate_repos_ignore_interval(test_db_session):
+    from datetime import UTC, datetime
+
+    sess_target = "watchgate.service.repo_polling.get_session"
+    with patch(sess_target, side_effect=lambda: iter([test_db_session])):
+        org = create_organization(test_db_session, "Org AutoScan Ignore")
+        repo = MonitoredRepo(
+            id="repo-recent",
+            org_id=org.id,
+            repo_path="owner/recentrepo",
+            status="active",
+            auto_scan_prs=True,
+            scan_interval_minutes=60,
+            last_polled_at=datetime.now(UTC),
+        )
+        test_db_session.add(repo)
+        test_db_session.commit()
+
+        normal_candidates = RepoPollingService.get_candidate_repos(ignore_interval=False)
+        assert len(normal_candidates) == 0
+
+        ignored_candidates = RepoPollingService.get_candidate_repos(ignore_interval=True)
+        assert len(ignored_candidates) == 1
+        assert ignored_candidates[0]["repo_path"] == "owner/recentrepo"
+
+
 def test_repo_polling_service_poll_all_candidates_enqueues_and_handles_errors(test_db_session):
     org = create_organization(test_db_session, "Org AutoScan 2")
     vcs = VCSConnection(id="vcs-2", org_id=org.id, access_token="token_vcs2")

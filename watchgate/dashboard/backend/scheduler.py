@@ -17,9 +17,19 @@ def run_scheduler_loop(interval_seconds: int = 300) -> None:
     # este proceso se lanza como `python -m ...` suelto -- sin handler, el
     # root logger de Python se queda en WARNING y el bucle corre en
     # completo silencio en `docker logs`, indistinguible de estar colgado.
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+    )
     redis_conn = get_redis_conn()
     logger.info("Iniciando scheduler loop de WatchGate...")
+
+    # Barrido inicial inmediato al arrancar el scheduler para todos los repositorios registrados
+    try:
+        with redis_conn.lock("watchgate:polling_lock", timeout=120, blocking_timeout=2):
+            enqueued = RepoPollingService.poll_all_candidates(ignore_interval=True)
+            logger.info("Barrido inicial del scheduler completado: %d PRs encoladas.", enqueued)
+    except Exception as exc:
+        logger.warning("No se pudo ejecutar el barrido inicial del scheduler: %s", exc)
 
     while True:
         try:
