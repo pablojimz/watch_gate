@@ -52,6 +52,19 @@ export default function ExternalReposPage() {
     }
   }
 
+  async function handleUpdateRepo(
+    repoId: string,
+    data: { auto_scan_prs?: boolean; scan_interval_minutes?: number; status?: string }
+  ) {
+    try {
+      const updated = await api.updateExternalRepo(repoId, data)
+      toast.success('Configuración actualizada')
+      setRepos(prev => (prev ? prev.map(r => (r.id === repoId ? updated : r)) : null))
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al actualizar')
+    }
+  }
+
   async function handleScan(repoId: string) {
     const prInput = scanPrs[repoId]
     const prNumber = parseInt(prInput, 10)
@@ -151,32 +164,74 @@ export default function ExternalReposPage() {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="text-sm text-muted-foreground">
-                {t('externalRepos.lastScanned')}:{' '}
-                {repo.last_scanned_at 
-                  ? new Date(repo.last_scanned_at).toLocaleString() 
-                  : t('externalRepos.neverScanned')}
+              <div className="text-sm space-y-1">
+                <div className="text-muted-foreground">
+                  {t('externalRepos.lastScanned')}:{' '}
+                  {repo.last_scanned_at 
+                    ? new Date(repo.last_scanned_at).toLocaleString() 
+                    : t('externalRepos.neverScanned')}
+                </div>
+                {repo.last_polled_at && (
+                  <div className="text-xs text-muted-foreground">
+                    Último barrido: {new Date(repo.last_polled_at).toLocaleString()}
+                  </div>
+                )}
+                {repo.status === 'error' && (
+                  <div className="text-xs text-destructive font-medium">
+                    Error en peticiones ({repo.consecutive_errors} fallos)
+                  </div>
+                )}
               </div>
-              
+
               {repo.monitor_type === 'audited' && (
-                <div className="flex gap-2">
-                  <Input
-                    placeholder={t('externalRepos.scanPrPlaceholder')}
-                    value={scanPrs[repo.id] || ''}
-                    onChange={e => setScanPrs(prev => ({ ...prev, [repo.id]: e.target.value }))}
-                    className="h-9"
-                    disabled={isScanning[repo.id]}
-                  />
-                  <Button 
-                    variant="secondary" 
-                    size="sm" 
-                    className="h-9 gap-1.5"
-                    disabled={!scanPrs[repo.id] || isScanning[repo.id]}
-                    onClick={() => handleScan(repo.id)}
-                  >
-                    <RefreshCw className={`size-3.5 ${isScanning[repo.id] ? 'animate-spin' : ''}`} />
-                    {t('externalRepos.scanButton')}
-                  </Button>
+                <div className="space-y-3 pt-2 border-t">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium">Auto Escaneo PRs:</span>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={repo.auto_scan_prs}
+                        onChange={e => handleUpdateRepo(repo.id, { auto_scan_prs: e.target.checked })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-9 h-5 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+                    </label>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-medium">Intervalo:</span>
+                    <select
+                      className="h-8 rounded border border-input bg-transparent px-2 text-xs"
+                      value={repo.scan_interval_minutes}
+                      onChange={e => handleUpdateRepo(repo.id, { scan_interval_minutes: parseInt(e.target.value, 10) })}
+                    >
+                      <option value={15}>15 minutos</option>
+                      <option value={30}>30 minutos</option>
+                      <option value={60}>1 hora</option>
+                      <option value={120}>2 horas</option>
+                      <option value={1440}>24 horas</option>
+                    </select>
+                  </div>
+
+                  <div className="flex gap-2 pt-1">
+                    <Input
+                      placeholder={t('externalRepos.scanPrPlaceholder')}
+                      value={scanPrs[repo.id] || ''}
+                      onChange={e => setScanPrs(prev => ({ ...prev, [repo.id]: e.target.value }))}
+                      className="h-9"
+                      disabled={isScanning[repo.id]}
+                    />
+                    <Button 
+                      variant="secondary" 
+                      size="sm" 
+                      className="h-9 gap-1.5"
+                      disabled={!scanPrs[repo.id] || isScanning[repo.id]}
+                      onClick={() => handleScan(repo.id)}
+                    >
+                      <RefreshCw className={`size-3.5 ${isScanning[repo.id] ? 'animate-spin' : ''}`} />
+                      {t('externalRepos.scanButton')}
+                    </Button>
+                  </div>
                 </div>
               )}
             </CardContent>

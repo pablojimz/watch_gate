@@ -55,9 +55,16 @@ class MonitoredRepo(SQLModel, table=True):
     monitor_type: str = Field(
         default="managed"
     )  # "managed" (con webhooks) | "audited" (sólo lectura de terceros)
-    status: str = Field(default="active")
+    status: str = Field(default="active")  # "active" | "paused" | "error"
     last_scanned_at: datetime | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+    # --- CAMPOS DE AUTOMATIZACIÓN, ETags Y RESILIENCIA ---
+    auto_scan_prs: bool = Field(default=True)
+    scan_interval_minutes: int = Field(default=30)
+    prs_etag: str | None = Field(default=None)
+    last_polled_at: datetime | None = Field(default=None)
+    consecutive_errors: int = Field(default=0)
 
 
 class User(SQLModel, table=True):
