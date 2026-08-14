@@ -49,14 +49,15 @@ class RepoPollingService:
             repos = session.exec(
                 select(MonitoredRepo).where(
                     MonitoredRepo.status == "active",
-                    MonitoredRepo.auto_scan_prs == True,  # noqa: E712
+                    (MonitoredRepo.auto_scan_prs != False),  # noqa: E712
                 )
             ).all()
 
             for repo in repos:
                 if not ignore_interval and repo.last_polled_at:
+                    interval = repo.scan_interval_minutes or 30
                     elapsed = (now - repo.last_polled_at.replace(tzinfo=UTC)).total_seconds() / 60.0
-                    if elapsed < repo.scan_interval_minutes:
+                    if elapsed < interval:
                         continue
 
                 cand = cls._build_candidate_dict(repo, default_token, session)
@@ -77,7 +78,7 @@ class RepoPollingService:
                 select(MonitoredRepo).where(
                     MonitoredRepo.id == repo_id,
                     MonitoredRepo.status == "active",
-                    MonitoredRepo.auto_scan_prs == True,  # noqa: E712
+                    (MonitoredRepo.auto_scan_prs != False),  # noqa: E712
                 )
             ).first()
 
@@ -85,8 +86,9 @@ class RepoPollingService:
                 return None
 
             if not ignore_interval and repo.last_polled_at:
+                interval = repo.scan_interval_minutes or 30
                 elapsed = (now - repo.last_polled_at.replace(tzinfo=UTC)).total_seconds() / 60.0
-                if elapsed < repo.scan_interval_minutes:
+                if elapsed < interval:
                     return None
 
             return cls._build_candidate_dict(repo, default_token, session)
@@ -102,6 +104,10 @@ class RepoPollingService:
             repo_db = session.get(MonitoredRepo, repo_id)
             if repo_db:
                 repo_db.last_polled_at = now
+                if repo_db.auto_scan_prs is None:
+                    repo_db.auto_scan_prs = True
+                if not repo_db.scan_interval_minutes:
+                    repo_db.scan_interval_minutes = 30
                 if success:
                     repo_db.consecutive_errors = 0
                 else:
