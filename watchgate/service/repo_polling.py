@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from datetime import UTC, datetime
 from typing import Any
@@ -11,6 +12,8 @@ from sqlmodel import select
 from watchgate.adapters.github_client import GitHubClient
 from watchgate.db.connection import get_session
 from watchgate.db.models import MonitoredRepo, PRScore, VCSConnection
+
+logger = logging.getLogger("watchgate.repo_polling")
 
 
 class RepoPollingService:
@@ -89,22 +92,14 @@ class RepoPollingService:
             return cls._build_candidate_dict(repo, default_token, session)
 
     @classmethod
-    def _poll_single_candidate(cls, candidate: dict[str, Any]) -> int:
-        owner, repo_name = candidate["repo_path"].split("/", 1)
-        client = GitHubClient(candidate["token"])
-        now = datetime.now(UTC)
-        total_enqueued = 0
-
-        try:
-            prs = client.list_all_open_pull_requests(owner, repo_name, max_prs=50)
-            success = True
-        except Exception:
-            prs = None
-            success = False
-
-        # Actualizar estado HTTP y contador de errores en la BD
+    def _record_poll_outcome(cls, repo_id: str, now: datetime, success: bool) -> None:
+        """Actualiza `last_polled_at`/`consecutive_errors`/`status` tras UN
+        intento de barrido -- extraído a helper para poder llamarlo también
+        desde el caso "repo_path mal formado" (ver `_poll_single_candidate`),
+        que antes crasheaba ANTES de llegar aquí y nunca contaba como
+        fallo."""
         with next(get_session()) as session:
-            repo_db = session.get(MonitoredRepo, candidate["id"])
+            repo_db = session.get(MonitoredRepo, repo_id)
             if repo_db:
                 repo_db.last_polled_at = now
                 if success:
@@ -114,6 +109,50 @@ class RepoPollingService:
                     if repo_db.consecutive_errors >= 5:
                         repo_db.status = "error"
                 session.commit()
+
+    @classmethod
+    def _poll_single_candidate(cls, candidate: dict[str, Any]) -> int:
+        now = datetime.now(UTC)
+        total_enqueued = 0
+
+        repo_path = candidate["repo_path"]
+        owner_repo = repo_path.split("/", 1)
+        if len(owner_repo) != 2 or not owner_repo[0] or not owner_repo[1]:
+            # repo_path no tiene forma "owner/repo" (p. ej. quedó de una
+            # prueba con un repo git local, sin dueño de GitHub) --
+            # GitHubClient no tiene nada que consultar. Antes esto hacía
+            # `owner, repo_name = repo_path.split("/", 1)` a pelo, SIN
+            # capturar: un ValueError sin coger aquí no solo mataba este
+            # candidato, se propagaba hasta el `with redis_conn.lock(...)`
+            # del scheduler y abortaba el barrido ENTERO -- ningún otro
+            # repo (ni siquiera los válidos) se llegaba a comprobar
+            # mientras existiera un solo repo_path mal formado en la BD
+            # (hallazgo real, no hipotético: reproducido en vivo con dos
+            # filas de prueba `prueba-1`/`prueba_watchgate` sin "/").
+            # Se cuenta como un fallo más, por el MISMO camino de
+            # consecutive_errors que un fallo de red -- tras 5 barridos
+            # seguidos así, el repo pasa a status="error" y queda visible
+            # en el dashboard en vez de fallar en silencio para siempre.
+            logger.warning(
+                "repo_path '%s' (id=%s) no tiene forma 'owner/repo' -- se omite y "
+                "cuenta como fallo de barrido.",
+                repo_path,
+                candidate["id"],
+            )
+            cls._record_poll_outcome(candidate["id"], now, success=False)
+            return 0
+        owner, repo_name = owner_repo
+
+        client = GitHubClient(candidate["token"])
+
+        try:
+            prs = client.list_all_open_pull_requests(owner, repo_name, max_prs=50)
+            success = True
+        except Exception:
+            prs = None
+            success = False
+
+        cls._record_poll_outcome(candidate["id"], now, success)
 
         if not success or prs is None:
             return 0
@@ -184,6 +223,19 @@ class RepoPollingService:
         total_enqueued = 0
 
         for candidate in candidates:
-            total_enqueued += cls._poll_single_candidate(candidate)
+            try:
+                total_enqueued += cls._poll_single_candidate(candidate)
+            except Exception as exc:  # noqa: BLE001 -- un fallo inesperado en UN
+                # candidato (bug no previsto, no solo el repo_path mal formado ya
+                # cubierto arriba) nunca debe impedir que se compruebe el resto --
+                # hallazgo real: sin este aislamiento, dos filas de prueba con
+                # repo_path sin "/" bastaban para que NINGÚN repo, ni siquiera los
+                # válidos, se comprobara nunca en todo el proceso del scheduler.
+                logger.warning(
+                    "Fallo inesperado barriendo el repo '%s' (id=%s): %r",
+                    candidate.get("repo_path"),
+                    candidate.get("id"),
+                    exc,
+                )
 
         return total_enqueued

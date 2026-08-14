@@ -178,6 +178,74 @@ def test_repo_polling_service_poll_all_candidates_enqueues_and_handles_errors(te
         assert repo_updated.consecutive_errors >= 5
 
 
+def test_poll_all_candidates_malformed_repo_path_does_not_block_others(
+    test_db_session, monkeypatch
+):
+    """Regresión de un bug real reproducido en vivo: un repo_path sin '/'
+    (residuo de una prueba con un repo git local) hacía que
+    `owner, repo_name = repo_path.split("/", 1)` lanzara ValueError SIN
+    capturar -- eso mataba `poll_all_candidates` entero, así que NINGÚN
+    repo, ni siquiera los válidos, se llegaba a comprobar mientras
+    existiera esa fila. Ahora debe: 1) no propagar la excepción, 2) seguir
+    encolando el repo válido, 3) marcar el mal formado como un fallo más
+    (mismo camino de consecutive_errors que un fallo de red de verdad)."""
+    org = create_organization(test_db_session, "Org AutoScan Malformed")
+
+    malformed = MonitoredRepo(
+        id="repo-malformed",
+        org_id=org.id,
+        repo_path="prueba-1",  # sin "/" -- exactamente el caso reproducido en producción
+        monitor_type="audited",
+        status="active",
+        auto_scan_prs=True,
+        scan_interval_minutes=15,
+    )
+    valid = MonitoredRepo(
+        id="repo-valid",
+        org_id=org.id,
+        repo_path="owner/validrepo",
+        monitor_type="audited",
+        status="active",
+        auto_scan_prs=True,
+        scan_interval_minutes=15,
+    )
+    test_db_session.add_all([malformed, valid])
+    test_db_session.commit()
+
+    monkeypatch.setenv("WATCHGATE_GITHUB_TOKEN", "fake-token")
+
+    mock_queue = MagicMock()
+    mock_queue.fetch_job.return_value = None
+
+    target_prs = "watchgate.adapters.github_client.GitHubClient.list_all_open_pull_requests"
+    target_sess = "watchgate.service.repo_polling.get_session"
+    with (
+        patch(target_sess, side_effect=lambda: iter([test_db_session])),
+        patch("watchgate.dashboard.backend.tasks.get_queue", return_value=mock_queue),
+        patch(target_prs, return_value=[{"number": 201}]),
+    ):
+        for _ in range(5):
+            repo_to_reset = test_db_session.get(MonitoredRepo, "repo-malformed")
+            repo_to_reset.last_polled_at = None
+            valid_repo = test_db_session.get(MonitoredRepo, "repo-valid")
+            valid_repo.last_polled_at = None
+            test_db_session.commit()
+
+            enqueued = RepoPollingService.poll_all_candidates()  # no debe lanzar
+
+            # El repo válido se sigue encolando en TODAS las pasadas, con
+            # independencia de que el mal formado siga fallando al lado.
+            assert enqueued >= 1
+
+    malformed_updated = test_db_session.get(MonitoredRepo, "repo-malformed")
+    assert malformed_updated.consecutive_errors >= 5
+    assert malformed_updated.status == "error"
+
+    valid_updated = test_db_session.get(MonitoredRepo, "repo-valid")
+    assert valid_updated.consecutive_errors == 0
+    assert valid_updated.status == "active"
+
+
 def test_patch_external_repo_endpoint_and_rbac(test_db_session):
     def get_test_db():
         yield test_db_session
