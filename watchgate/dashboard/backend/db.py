@@ -511,11 +511,23 @@ def _row_to_score_out(row: Row) -> ScoreOut:
     )
 
 
-def list_scores(conn: DBConnection, repo: str) -> list[ScoreOut]:
-    rows = conn.execute(
-        "SELECT * FROM pr_scores WHERE repo = ? ORDER BY timestamp DESC",
-        (repo,),
-    ).fetchall()
+def list_scores(conn: DBConnection, repo: str, limit: int | None = None) -> list[ScoreOut]:
+    """`limit=None` (por defecto) trae todo el histórico, como antes -- lo
+    usa el propio dashboard. Los callers que ya sabían cuántas filas
+    necesitaban (p. ej. `agent_access.py::repo_score_history`) recortaban en
+    Python después de traer la tabla entera; pasar `limit` aquí mueve el
+    corte al propio SQL (el índice `idx_repo_timestamp` ya cubre el
+    WHERE+ORDER BY, así que LIMIT no cuesta un escaneo completo)."""
+    if limit is not None:
+        rows = conn.execute(
+            "SELECT * FROM pr_scores WHERE repo = ? ORDER BY timestamp DESC LIMIT ?",
+            (repo, limit),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM pr_scores WHERE repo = ? ORDER BY timestamp DESC",
+            (repo,),
+        ).fetchall()
     return [_row_to_score_out(row) for row in rows]
 
 
