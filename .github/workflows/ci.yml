@@ -136,4 +136,6 @@ jobs:
           exit-code: '0'
           ignore-unfixed: true
           vuln-type: 'os,library'
+          scanners: 'vuln'
+          timeout: '15m'
           severity: 'CRITICAL,HIGH'

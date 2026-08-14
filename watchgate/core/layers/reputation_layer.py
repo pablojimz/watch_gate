@@ -21,6 +21,12 @@ class ReputationLayer(AnalysisLayer):
 
     def analyze(self, diff: NormalizedDiff, metadata: dict[str, Any]) -> LayerResult:
         reputation = metadata.get("reputation")
+        if isinstance(reputation, dict):
+            try:
+                reputation = ReputationMetadata.model_validate(reputation)
+            except Exception:
+                reputation = None
+
         if not isinstance(reputation, ReputationMetadata):
             return LayerResult(
                 layer_name=self.name,
@@ -41,6 +47,18 @@ class ReputationLayer(AnalysisLayer):
             signals.append(
                 f"La cuenta autora tiene {reputation.author_account_age_days} días de "
                 "antigüedad (menos de 30)."
+            )
+
+        if (
+            reputation.author_public_repos == 0
+            and reputation.author_followers == 0
+            and reputation.author_account_age_days is not None
+            and reputation.author_account_age_days < 90
+        ):
+            score += 15
+            signals.append(
+                "El perfil de GitHub del autor carece de actividad pública previa "
+                "(0 repositorios públicos y 0 seguidores)."
             )
 
         if reputation.author_prior_contributions_to_repo == 0:
