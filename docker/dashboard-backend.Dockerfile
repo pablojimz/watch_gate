@@ -32,6 +32,12 @@ RUN poetry install --only main --extras analysis --no-root --no-directory
 
 COPY watchgate ./watchgate
 COPY README.md ./
+# alembic.ini/alembic: sin esto, ni este contenedor ni dashboard-worker (que
+# reutiliza esta imagen) pueden ejecutar `alembic upgrade head` -- migrar el
+# esquema queda forzosamente atado al contenedor engine-api, que sí los trae
+# (ver docker/engine-api.Dockerfile y docs/despliegue.md).
+COPY alembic.ini ./
+COPY alembic ./alembic
 RUN poetry install --only main --extras analysis
 
 
@@ -49,6 +55,8 @@ WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/watchgate /app/watchgate
 COPY --from=builder /app/README.md /app/README.md
+COPY --from=builder /app/alembic.ini /app/alembic.ini
+COPY --from=builder /app/alembic /app/alembic
 COPY --from=builder /app/pyproject.toml /app/pyproject.toml
 
 ENV PATH="/app/.venv/bin:$PATH" \
