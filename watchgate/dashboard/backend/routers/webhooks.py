@@ -4,6 +4,7 @@ import os
 from typing import Annotated
 
 from fastapi import APIRouter, Header, HTTPException, Request, Response, status
+from starlette.concurrency import run_in_threadpool
 
 from watchgate.dashboard.backend.tasks import get_queue
 
@@ -62,9 +63,20 @@ async def github_webhook(
     # El worker de managed mode no existe aún (run_audit_scan asume audited o similar,
     # pero requiere org_id explícito). Vamos a usar RQ para encolarlo a un worker especial
     # que resuelva todo desde el installation_id.
+    # queue.enqueue() habla con Redis por un socket bloqueante (redis-py
+    # estándar, no async) -- este endpoint SÍ es `async def` (lo exige
+    # `await request.body()`/`request.json()` de arriba, para leer el
+    # payload antes de verificar la firma), así que sin `run_in_threadpool`
+    # esa llamada bloquea el event loop entero: mientras Redis responde,
+    # ninguna otra petición concurrente al dashboard se procesa en este
+    # proceso, no solo la del propio webhook.
     queue = get_queue()
-    queue.enqueue(
-        "watchgate.dashboard.backend.tasks.run_managed_scan", repo_path, pr_number, installation_id
+    await run_in_threadpool(
+        queue.enqueue,
+        "watchgate.dashboard.backend.tasks.run_managed_scan",
+        repo_path,
+        pr_number,
+        installation_id,
     )
 
     return Response(status_code=status.HTTP_202_ACCEPTED)
