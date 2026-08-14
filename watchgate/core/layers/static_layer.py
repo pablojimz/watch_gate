@@ -1086,7 +1086,9 @@ class StaticLayer(AnalysisLayer):
         docstring."""
         temp_paths = [temp_path for temp_path, _fc in entries]
         path_by_temp = {temp_path: fc.path for temp_path, fc in entries}
-        findings_by_temp_path = self._run_semgrep_on_files(temp_paths, language, rules_dir=rules_dir)
+        findings_by_temp_path = self._run_semgrep_on_files(
+            temp_paths, language, rules_dir=rules_dir
+        )
 
         per_file: dict[str, list[dict[str, Any]]] = {}
         for temp_path, findings in findings_by_temp_path.items():
@@ -1127,7 +1129,9 @@ class StaticLayer(AnalysisLayer):
         max_workers = min(len(language_groups), _MAX_PARALLEL_SEMGREP_LANGUAGES)
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {
-                executor.submit(self._run_semgrep_for_language_group, language, entries, rules_dir): language
+                executor.submit(
+                    self._run_semgrep_for_language_group, language, entries, rules_dir
+                ): language
                 for language, entries in language_groups.items()
             }
             for future in as_completed(futures):
