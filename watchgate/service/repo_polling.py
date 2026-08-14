@@ -56,9 +56,7 @@ class RepoPollingService:
 
             for repo in repos:
                 if repo.last_polled_at:
-                    elapsed = (
-                        now - repo.last_polled_at.replace(tzinfo=UTC)
-                    ).total_seconds() / 60.0
+                    elapsed = (now - repo.last_polled_at.replace(tzinfo=UTC)).total_seconds() / 60.0
                     if elapsed < repo.scan_interval_minutes:
                         continue
 
