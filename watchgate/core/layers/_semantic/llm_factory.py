@@ -22,6 +22,13 @@ _DEFAULT_MODELS = {
 }
 # Puerto/ruta por defecto de Ollama sirviendo su API compatible con OpenAI.
 _DEFAULT_LOCAL_BASE_URL = "http://localhost:11434/v1"
+# Un proveedor cloud (Anthropic/Gemini) responde de sobra en 60s -- el límite
+# ahí es red, no cómputo. Un modelo local comparte GPU con lo que sea que
+# corra al lado y el cuello de botella es cómputo puro: reproducido en vivo,
+# qwen3.6:27b superaba los 60s en diffs grandes/con varias tool calls y la
+# capa se marcaba "skipped" (timeout), no por peor razonamiento -- justo en
+# los casos más difíciles, que es donde menos conviene perder la señal.
+_DEFAULT_LOCAL_TIMEOUT_SECONDS = 120.0
 
 # Prefijos de clave estables y documentados por cada proveedor (Anthropic
 # siempre "sk-ant-", Google AI Studio siempre "AIzaSy") -- suficientes para
@@ -89,4 +96,7 @@ def build_llm_client(provider: str | None = None) -> LLMClient:
         or os.environ.get("OPENAI_API_KEY")
         or os.environ.get("OPENROUTER_API_KEY")
     )
-    return OpenAICompatibleClient(base_url=base_url, model=model, api_key=api_key)
+    timeout = float(
+        os.environ.get("WATCHGATE_LLM_TIMEOUT_SECONDS", _DEFAULT_LOCAL_TIMEOUT_SECONDS)
+    )
+    return OpenAICompatibleClient(base_url=base_url, model=model, api_key=api_key, timeout=timeout)

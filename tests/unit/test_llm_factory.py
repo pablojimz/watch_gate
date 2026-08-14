@@ -48,6 +48,24 @@ def test_local_provider_respects_custom_base_url_and_model(monkeypatch):
     assert client._model == "qwen2.5-coder"
 
 
+def test_local_provider_defaults_to_a_longer_timeout_than_cloud_providers(monkeypatch):
+    """Reproducido en vivo: un modelo local grande (qwen3.6:27b) compartiendo
+    GPU supera los 60s en diffs grandes/con varias tool calls y la capa
+    semántica se marcaba "skipped" por timeout, no por peor razonamiento --
+    justo en los casos más difíciles."""
+    monkeypatch.setenv("WATCHGATE_LLM_PROVIDER", "local")
+    monkeypatch.delenv("WATCHGATE_LLM_TIMEOUT_SECONDS", raising=False)
+    client = build_llm_client()
+    assert client._client.timeout.connect == 120.0
+
+
+def test_local_provider_respects_custom_timeout(monkeypatch):
+    monkeypatch.setenv("WATCHGATE_LLM_PROVIDER", "local")
+    monkeypatch.setenv("WATCHGATE_LLM_TIMEOUT_SECONDS", "240")
+    client = build_llm_client()
+    assert client._client.timeout.connect == 240.0
+
+
 def test_unknown_provider_raises_a_clear_error(monkeypatch):
     monkeypatch.setenv("WATCHGATE_LLM_PROVIDER", "cohere")
     with pytest.raises(ValueError, match="Proveedor LLM desconocido"):
