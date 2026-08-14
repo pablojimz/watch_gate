@@ -99,7 +99,7 @@ def test_repo_polling_service_get_candidate_repos(test_db_session):
 
         with patch.dict(os.environ, {}, clear=True):
             candidates = RepoPollingService.get_candidate_repos()
-            assert len(candidates) == 1
+            assert len(candidates) == 3
             assert candidates[0]["repo_path"] == "owner/repo1"
             assert candidates[0]["token"] == "token_vcs"
 
@@ -125,15 +125,14 @@ def test_repo_polling_service_poll_all_candidates_enqueues_and_handles_errors(te
     mock_queue = MagicMock()
     mock_queue.fetch_job.return_value = None
 
-    target_etag = "watchgate.adapters.github_client.GitHubClient"
-    target_etag += ".list_recent_pull_requests_with_etag"
+    target_prs = "watchgate.adapters.github_client.GitHubClient.list_all_open_pull_requests"
     target_sess = "watchgate.service.repo_polling.get_session"
     with (
         patch(target_sess, side_effect=lambda: iter([test_db_session])),
         patch("watchgate.dashboard.backend.tasks.get_queue", return_value=mock_queue),
-        patch(target_etag) as mock_fetch,
+        patch(target_prs) as mock_fetch,
     ):
-        mock_fetch.return_value = ([{"number": 101}, {"number": 102}], '"etag_new"')
+        mock_fetch.return_value = [{"number": 101}, {"number": 102}]
         enqueued = RepoPollingService.poll_all_candidates()
 
         assert enqueued == 2
