@@ -15,10 +15,12 @@ aquí lo traduce a `%s` (estilo psycopg) antes de ejecutar.
 from __future__ import annotations
 
 import re
+import threading
 from typing import Any
 
 import psycopg
 from psycopg.rows import DictRow, dict_row
+from psycopg_pool import ConnectionPool
 
 _PLACEHOLDER_RE = re.compile(r"\?")
 
@@ -43,10 +45,17 @@ class PostgresCursor:
 
 
 class PostgresConnection:
-    """Envoltorio de `psycopg.Connection` con la interfaz mínima que usa db.py."""
+    """Envoltorio de `psycopg.Connection` con la interfaz mínima que usa db.py.
 
-    def __init__(self, conn: psycopg.Connection) -> None:
+    `close()` no cierra la conexión física si viene de un pool -- la
+    devuelve (`pool.putconn`) para que otra llamada a `connect()` la
+    reutilice, ver el comentario de `_get_pool` sobre por qué hace falta
+    esto en vez de abrir una conexión TCP+auth nueva por cada
+    `db_session()`."""
+
+    def __init__(self, conn: psycopg.Connection, pool: ConnectionPool | None = None) -> None:
         self._conn = conn
+        self._pool = pool
 
     def execute(self, sql: str, params: Any = ()) -> PostgresCursor:
         cursor = self._conn.cursor(row_factory=dict_row)
@@ -70,12 +79,49 @@ class PostgresConnection:
         self._conn.rollback()
 
     def close(self) -> None:
-        self._conn.close()
+        if self._pool is not None:
+            self._pool.putconn(self._conn)
+        else:
+            self._conn.close()
+
+
+# Un pool por `database_url` (en la práctica, uno solo por proceso -- el
+# valor real no cambia en producción, solo en tests que apuntan a bases
+# distintas). `min_size=1` mantiene al menos una conexión viva sin pagar el
+# handshake+auth en la primera petición tras un rato de inactividad;
+# `max_size=10` es generoso para un solo proceso del dashboard sin agotar
+# `max_connections` de Postgres si hay varias réplicas.
+_pools: dict[str, ConnectionPool] = {}
+_pools_lock = threading.Lock()
+
+
+def _get_pool(database_url: str) -> ConnectionPool:
+    """`db_session()` (db.py) crea y cierra una `PostgresConnection` en
+    CADA llamada -- una por cada request de cada router. Sin pool, eso es
+    una conexión TCP + autenticación nueva contra Postgres en cada
+    `db_session()`, no solo la primera vez que arranca el proceso: bajo
+    tráfico concurrente normal (varias pestañas de dashboard, o el CI
+    llamando a `/api/scores`+`/ci-config` en cada PR) es overhead de
+    conexión repetido en cada llamada. `ConnectionPool` reutiliza conexiones
+    ya abiertas -- `getconn()`/`putconn()` en vez de abrir/cerrar físicamente
+    cada vez."""
+    if database_url not in _pools:
+        with _pools_lock:
+            if database_url not in _pools:
+                _pools[database_url] = ConnectionPool(
+                    database_url,
+                    min_size=1,
+                    max_size=10,
+                    kwargs={"autocommit": False},
+                    open=True,
+                )
+    return _pools[database_url]
 
 
 def connect(database_url: str) -> PostgresConnection:
-    conn = psycopg.connect(database_url, autocommit=False)
-    return PostgresConnection(conn)
+    pool = _get_pool(database_url)
+    conn = pool.getconn()
+    return PostgresConnection(conn, pool=pool)
 
 
 # Mismas tablas que SCHEMA (db.py) salvo lo que SQLite y Postgres no

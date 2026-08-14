@@ -18,6 +18,9 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+from watchgate.dashboard.backend import db_postgres
 from watchgate.dashboard.backend.db_postgres import (
     POSTGRES_SCHEMA,
     PostgresConnection,
@@ -25,6 +28,15 @@ from watchgate.dashboard.backend.db_postgres import (
     _to_pg_params,
     connect,
 )
+
+
+@pytest.fixture(autouse=True)
+def _reset_pool_cache() -> None:
+    """`_pools` es un cache global por `database_url` (mismo motivo que
+    `_initialized_targets` en db.py) -- sin limpiarlo entre tests, un pool
+    mockeado de un test se colaría en el siguiente que use la misma URL
+    falsa."""
+    db_postgres._pools.clear()
 
 
 def test_translates_single_placeholder() -> None:
@@ -98,14 +110,52 @@ def test_postgres_cursor_and_connection_wrapper_methods() -> None:
     mock_pg_conn.close.assert_called_once()
 
 
-def test_connect_wrapper_invokes_psycopg_connect() -> None:
-    mock_psycopg = MagicMock()
+def test_connect_gets_a_connection_from_the_pool() -> None:
+    mock_pool_cls = MagicMock()
+    mock_pool = MagicMock()
     mock_conn = MagicMock()
-    mock_psycopg.connect.return_value = mock_conn
+    mock_pool.getconn.return_value = mock_conn
+    mock_pool_cls.return_value = mock_pool
 
-    with patch("watchgate.dashboard.backend.db_postgres.psycopg", mock_psycopg):
+    with patch("watchgate.dashboard.backend.db_postgres.ConnectionPool", mock_pool_cls):
         conn = connect("postgresql://user:pass@localhost:5432/db")
         assert isinstance(conn, PostgresConnection)
-        mock_psycopg.connect.assert_called_once_with(
-            "postgresql://user:pass@localhost:5432/db", autocommit=False
-        )
+        mock_pool.getconn.assert_called_once()
+        # autocommit=False explícito (comportamiento previo a introducir el
+        # pool, ver PostgresConnection) -- va en `kwargs` del pool, no en
+        # cada `getconn()` individual.
+        assert mock_pool_cls.call_args.kwargs["kwargs"] == {"autocommit": False}
+
+
+def test_connect_reuses_the_same_pool_for_the_same_database_url() -> None:
+    """Regresión: sin pool, cada `db_session()` (db.py) abría una conexión
+    TCP+auth física nueva contra Postgres -- una por cada request de cada
+    router. `_get_pool` debe crear el `ConnectionPool` una sola vez por
+    `database_url` y reusarlo en llamadas posteriores a `connect()`, no uno
+    nuevo cada vez."""
+    mock_pool_cls = MagicMock()
+    mock_pool_cls.return_value.getconn.return_value = MagicMock()
+    url = "postgresql://user:pass@localhost:5432/db"
+
+    with patch("watchgate.dashboard.backend.db_postgres.ConnectionPool", mock_pool_cls):
+        connect(url)
+        connect(url)
+        connect(url)
+
+    mock_pool_cls.assert_called_once()
+    assert mock_pool_cls.return_value.getconn.call_count == 3
+
+
+def test_close_returns_the_connection_to_the_pool_instead_of_closing_it() -> None:
+    """`close()` en una conexión sin pool (p. ej. el test de arriba,
+    `test_postgres_cursor_and_connection_wrapper_methods`) sigue cerrando
+    de verdad -- solo una conexión de un pool real debe devolverse en vez
+    de cerrarse, o el pool se quedaría sin conexiones que reutilizar."""
+    mock_pool = MagicMock()
+    mock_conn = MagicMock()
+
+    conn = PostgresConnection(mock_conn, pool=mock_pool)
+    conn.close()
+
+    mock_pool.putconn.assert_called_once_with(mock_conn)
+    mock_conn.close.assert_not_called()
