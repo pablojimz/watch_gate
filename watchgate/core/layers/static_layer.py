@@ -169,6 +169,20 @@ _semgrep_finding_type_cache: dict[str, dict[str, str]] = {}
 # conexión, etc. -- no son específicos de un lenguaje).
 _ALWAYS_ON_CUSTOM_CATEGORY = "regex"
 
+# Clave de grupo (no es un lenguaje real, nunca puede colisionar con lo que
+# devuelve _detect_language) para los ficheros cuya extensión no reconoce
+# _detect_language -- extensión rara, sin extensión, etc. Antes esos
+# ficheros se quedaban SIN Semgrep en absoluto (solo YARA + el heurístico de
+# emergencia si ninguno de los dos encontraba nada); ahora se agrupan bajo
+# esta clave y _build_semgrep_config_paths les aplica el catálogo COMPLETO
+# de reglas (todos los lenguajes, todo third-party, regex, watchgate.yml) --
+# un fichero de extensión rara es precisamente el tipo de cosa que se usa
+# para esquivar el filtrado por lenguaje, así que no tiene sentido dejarlo
+# sin ninguna regla de Semgrep encima. Es más caro (Semgrep compila todo el
+# catálogo, no solo el de un lenguaje), pero solo se paga para ficheros que
+# ningún lenguaje conocido reclama.
+_UNRECOGNIZED_LANGUAGE_KEY = "__unrecognized__"
+
 # Mapeo EXPLÍCITO (a mano, nunca adivinado por coincidencia de nombre) de
 # lenguaje detectado -> carpetas de third-party relevantes. El repo de
 # reglas deja claro que <carpeta> de third-party es un namespace
@@ -718,6 +732,12 @@ class StaticLayer(AnalysisLayer):
         lenguaje en una única invocación de Semgrep (ver
         `_run_semgrep_on_files`, que depende de esta propiedad).
 
+        Estrategia 0: `language == _UNRECOGNIZED_LANGUAGE_KEY` -- ficheros
+          cuya extensión _detect_language no reconoce. Se escanean con el
+          catálogo COMPLETO (`--config=<semgrep_root>`, que Semgrep recorre
+          recursivamente: todos los lenguajes custom, todo third-party,
+          regex, watchgate.yml) en vez de con las estrategias 1-3 de abajo,
+          que están pensadas para UN lenguaje concreto.
         Estrategia 1: rules/semgrep/custom/<language>
         Estrategia 1b: rules/semgrep/custom/regex (patrones genéricos,
           siempre se aplican con independencia del lenguaje)
@@ -727,8 +747,16 @@ class StaticLayer(AnalysisLayer):
         Estrategia 3: raiz del directorio de reglas (si nada de lo
           anterior existe -- último recurso, escanea todo)
         """
-        config_paths: list[str] = []
         semgrep_root = rules_dir / "rules" / "semgrep"
+
+        if language == _UNRECOGNIZED_LANGUAGE_KEY:
+            if semgrep_root.exists():
+                return [f"--config={semgrep_root}"]
+            if rules_dir.exists():
+                return [f"--config={rules_dir}"]
+            return []
+
+        config_paths: list[str] = []
 
         custom_lang_dir = semgrep_root / "custom" / language
         if custom_lang_dir.exists():
@@ -1031,9 +1059,11 @@ class StaticLayer(AnalysisLayer):
                 file_change.diff_hunk, rules_dir=rules_dir
             )
 
-            language = self._detect_language(file_change.path)
-            if not language:
-                continue
+            # Sin lenguaje reconocido, se agrupa bajo _UNRECOGNIZED_LANGUAGE_KEY
+            # en vez de saltarse Semgrep -- ver docstring de esa constante y
+            # de _build_semgrep_config_paths (estrategia 0): se escanea con
+            # el catálogo COMPLETO de reglas, no con ninguno en absoluto.
+            language = self._detect_language(file_change.path) or _UNRECOGNIZED_LANGUAGE_KEY
 
             ext = os.path.splitext(file_change.path)[1] or ".txt"
             temp_file = tempfile.NamedTemporaryFile(
@@ -1074,11 +1104,14 @@ class StaticLayer(AnalysisLayer):
         """Fase 2 de `analyze()`: una invocación de Semgrep por lenguaje
         distinto presente en el diff (no por fichero, ver
         `_run_semgrep_on_files`) -- y solo por los lenguajes que
-        `language_groups` trae, que ya viene filtrado en
-        `_prepare_files_for_scanning` a los detectados de verdad en el diff
-        (`_detect_language` devuelve `None` para lo que no reconoce, y ese
-        fichero ni entra en `language_groups`): un PR sin Go, por ejemplo,
-        nunca dispara una invocación de Semgrep con `--config=.../go`.
+        `language_groups` trae, que ya viene construido en
+        `_prepare_files_for_scanning` a partir de los detectados de verdad
+        en el diff: un PR sin Go, por ejemplo, nunca dispara una invocación
+        de Semgrep con `--config=.../go`. Los ficheros cuya extensión
+        `_detect_language` NO reconoce no se descartan -- se agrupan bajo
+        `_UNRECOGNIZED_LANGUAGE_KEY` y esa "invocación" recibe el catálogo
+        COMPLETO de reglas en vez de ninguna (ver `_build_semgrep_config_paths`,
+        estrategia 0).
 
         Los distintos lenguajes se lanzan EN PARALELO (un thread por
         lenguaje, tope `_MAX_PARALLEL_SEMGREP_LANGUAGES`) en vez de
