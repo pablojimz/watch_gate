@@ -12,6 +12,12 @@ logger = logging.getLogger(__name__)
 
 
 def run_scheduler_loop(interval_seconds: int = 300) -> None:
+    # Sin esto, `logger.info` no imprime nada: a diferencia de
+    # dashboard-backend/engine-api (uvicorn configura el logging por ellos),
+    # este proceso se lanza como `python -m ...` suelto -- sin handler, el
+    # root logger de Python se queda en WARNING y el bucle corre en
+    # completo silencio en `docker logs`, indistinguible de estar colgado.
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     redis_conn = get_redis_conn()
     logger.info("Iniciando scheduler loop de WatchGate...")
 

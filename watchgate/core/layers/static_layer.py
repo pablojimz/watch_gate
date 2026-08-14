@@ -61,6 +61,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
@@ -121,6 +122,18 @@ _INITIAL_CLONE_TIMEOUT_SECONDS = 90.0
 # petición entera respondía 200 OK con la capa `static` en 0 sin ningún
 # indicio de que en realidad ni siquiera había terminado de analizar.
 _SEMGREP_SUBPROCESS_TIMEOUT_SECONDS = 60.0
+
+# Nº máximo de invocaciones de Semgrep en vuelo a la vez (una por lenguaje
+# distinto presente en el diff, ver _collect_semgrep_findings_by_file). Cada
+# una ya es un subprocess.run aparte (compila su propio --config, sin nada
+# compartido con las demás), así que lanzarlas en paralelo con un thread por
+# invocación es seguro -- subprocess.run libera el GIL mientras espera al
+# hijo, el paralelismo real lo da el propio SO ejecutando varios procesos
+# `semgrep` a la vez. El límite no es por seguridad sino por no saturar
+# CPU/RAM si un diff toca muchísimos lenguajes distintos de golpe (cada
+# invocación de Semgrep ya compila su conjunto de reglas desde cero, ver
+# docstring de _run_semgrep_on_files).
+_MAX_PARALLEL_SEMGREP_LANGUAGES = 8
 
 # Puntuación de riesgo si una regla YARA coincide pero, por lo que sea, no
 # trae su propio meta.risk_score (no debería pasar con las reglas
@@ -1032,30 +1045,69 @@ class StaticLayer(AnalysisLayer):
 
         return ordered_files, per_file_yara, language_groups
 
+    def _run_semgrep_for_language_group(
+        self, language: str, entries: list[tuple[str, FileChange]], rules_dir: Path
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Ejecuta Semgrep para UN lenguaje del diff y reatribuye cada
+        hallazgo a la ruta ORIGINAL del fichero (no la temporal) vía el
+        mapeo `path_by_temp`. Aislado en su propio método (en vez de vivir
+        inline en `_collect_semgrep_findings_by_file`) para poder lanzarlo
+        como unidad de trabajo de un `ThreadPoolExecutor` -- ver esa
+        docstring."""
+        temp_paths = [temp_path for temp_path, _fc in entries]
+        path_by_temp = {temp_path: fc.path for temp_path, fc in entries}
+        findings_by_temp_path = self._run_semgrep_on_files(temp_paths, language, rules_dir=rules_dir)
+
+        per_file: dict[str, list[dict[str, Any]]] = {}
+        for temp_path, findings in findings_by_temp_path.items():
+            original_path = path_by_temp.get(temp_path)
+            if original_path is None:
+                continue
+            per_file.setdefault(original_path, []).extend(findings)
+        return per_file
+
     def _collect_semgrep_findings_by_file(
         self,
         language_groups: dict[str, list[tuple[str, FileChange]]],
         rules_dir: Path | None,
     ) -> dict[str, list[dict[str, Any]]]:
         """Fase 2 de `analyze()`: una invocación de Semgrep por lenguaje
-        distinto presente en el diff (no por fichero), reatribuyendo cada
-        hallazgo a la ruta ORIGINAL del fichero (no la temporal) vía el
-        mapeo `path_by_temp` -- ver `_run_semgrep_on_files`."""
+        distinto presente en el diff (no por fichero, ver
+        `_run_semgrep_on_files`) -- y solo por los lenguajes que
+        `language_groups` trae, que ya viene filtrado en
+        `_prepare_files_for_scanning` a los detectados de verdad en el diff
+        (`_detect_language` devuelve `None` para lo que no reconoce, y ese
+        fichero ni entra en `language_groups`): un PR sin Go, por ejemplo,
+        nunca dispara una invocación de Semgrep con `--config=.../go`.
+
+        Los distintos lenguajes se lanzan EN PARALELO (un thread por
+        lenguaje, tope `_MAX_PARALLEL_SEMGREP_LANGUAGES`) en vez de
+        secuencialmente: son invocaciones de Semgrep completamente
+        independientes entre sí (cada una compila su propio `--config`
+        desde cero, sin nada compartido), así que antes un PR con Python +
+        JS + YAML pagaba la suma de los tres tiempos de arranque uno detrás
+        de otro cuando podía pagar solo el del más lento de los tres."""
         per_file_semgrep: dict[str, list[dict[str, Any]]] = {}
-        if not rules_dir:
+        if not rules_dir or not language_groups:
             return per_file_semgrep
 
-        for language, entries in language_groups.items():
-            temp_paths = [temp_path for temp_path, _fc in entries]
-            path_by_temp = {temp_path: fc.path for temp_path, fc in entries}
-            findings_by_temp_path = self._run_semgrep_on_files(
-                temp_paths, language, rules_dir=rules_dir
-            )
-            for temp_path, findings in findings_by_temp_path.items():
-                original_path = path_by_temp.get(temp_path)
-                if original_path is None:
+        max_workers = min(len(language_groups), _MAX_PARALLEL_SEMGREP_LANGUAGES)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(self._run_semgrep_for_language_group, language, entries, rules_dir): language
+                for language, entries in language_groups.items()
+            }
+            for future in as_completed(futures):
+                language = futures[future]
+                try:
+                    per_file = future.result()
+                except Exception as exc:  # noqa: BLE001 -- defensivo, _run_semgrep_on_files ya no debería propagar
+                    logger.warning(
+                        "Fallo inesperado analizando el grupo de lenguaje '%s': %r", language, exc
+                    )
                     continue
-                per_file_semgrep.setdefault(original_path, []).extend(findings)
+                for original_path, findings in per_file.items():
+                    per_file_semgrep.setdefault(original_path, []).extend(findings)
 
         return per_file_semgrep
 
