@@ -85,7 +85,13 @@ def build_index(corpus_dir: Path = CORPUS_DIR, index_path: str = DEFAULT_INDEX_P
     if not documents:
         return 0
 
-    from sentence_transformers import SentenceTransformer
+    # Import diferido (evita el ciclo indexer<->retriever a nivel de módulo,
+    # retriever.py ya importa de aquí) para reusar el mismo modelo cacheado
+    # con locking que usa `retrieve_relevant_context` en cada análisis real
+    # -- sin esto, cada `watchgate rag reindex` cargaba de disco una
+    # instancia de SentenceTransformer aparte (coste real, no solo teórico:
+    # cientos de ms a segundos) que nunca se reutilizaba.
+    from watchgate.core.rag.retriever import _get_embedding_model
 
     ids: list[str] = []
     texts: list[str] = []
@@ -98,7 +104,7 @@ def build_index(corpus_dir: Path = CORPUS_DIR, index_path: str = DEFAULT_INDEX_P
                 {"source": f"{case_name}.md", "case_name": case_name, "origin": "corpus"}
             )
 
-    model = SentenceTransformer(EMBEDDING_MODEL_NAME)
+    model = _get_embedding_model()
     embeddings = model.encode(texts).tolist()
 
     client = get_chroma_client(index_path=index_path)

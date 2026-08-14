@@ -25,7 +25,6 @@ from typing import Literal
 from watchgate.core.rag.indexer import (
     COLLECTION_METADATA,
     DEFAULT_INDEX_PATH,
-    EMBEDDING_MODEL_NAME,
     FEEDBACK_COLLECTION_NAME,
     chunk_document,
     get_chroma_client,
@@ -96,9 +95,14 @@ def add_confirmed_case(
     if not chunks:
         return 0
 
-    from sentence_transformers import SentenceTransformer
+    # Import diferido (mismo motivo que en indexer.py::build_index): reusa
+    # el modelo cacheado con locking de retriever.py en vez de cargar una
+    # instancia de SentenceTransformer nueva -- esta función corre dentro
+    # del proceso de dashboard-worker/engine-api de larga duración cada vez
+    # que un revisor confirma un caso, no en un proceso de usar-y-tirar.
+    from watchgate.core.rag.retriever import _get_embedding_model
 
-    model = SentenceTransformer(EMBEDDING_MODEL_NAME)
+    model = _get_embedding_model()
     embeddings = model.encode(chunks).tolist()
 
     effective_org_id = org_id or _SHARED_ORG_SENTINEL
@@ -119,7 +123,9 @@ def add_confirmed_case(
     try:
         collection = client.get_collection(FEEDBACK_COLLECTION_NAME)
     except Exception:  # noqa: BLE001 - todavía no existe esta colección
-        collection = client.create_collection(FEEDBACK_COLLECTION_NAME, metadata=COLLECTION_METADATA)
+        collection = client.create_collection(
+            FEEDBACK_COLLECTION_NAME, metadata=COLLECTION_METADATA
+        )
 
     # Si el caso ya existía (se está corrigiendo o ampliando el veredicto) y
     # ahora tiene menos fragmentos, los sobrantes de la versión anterior no
