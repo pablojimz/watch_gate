@@ -440,7 +440,8 @@ def test_add_external_repo_deletes_stale_failed_main_branch_scan_job_before_reen
         call for call in mock_queue.enqueue.call_args_list if call.args[0] is run_main_branch_scan
     ]
     assert len(main_branch_calls) == 1
-    assert main_branch_calls[0].kwargs["job_id"] == f"main_branch_scan:{creator.org_id}:openclaw/staleretry"
+    expected_job_id = f"main_branch_scan:{creator.org_id}:openclaw/staleretry"
+    assert main_branch_calls[0].kwargs["job_id"] == expected_job_id
 
     app.dependency_overrides.clear()
 
