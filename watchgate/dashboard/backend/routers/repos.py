@@ -11,7 +11,7 @@ from sqlmodel import Session, select
 from watchgate.dashboard.backend.auth import CurrentUser, require_role
 from watchgate.dashboard.backend.routers.keys import _get_or_create_db_user
 from watchgate.dashboard.backend.schemas import normalize_login
-from watchgate.dashboard.backend.tasks import get_queue, run_audit_scan
+from watchgate.dashboard.backend.tasks import get_queue, run_audit_scan, run_main_branch_scan
 from watchgate.db.connection import get_db_session
 from watchgate.db.models import MonitoredRepo, VCSConnection
 
@@ -117,6 +117,43 @@ def add_external_repo(
     session.add(new_repo)
     session.commit()
     session.refresh(new_repo)
+
+    # Escaneo de línea base: al dar de alta un repo en auditoría externa
+    # ("audited", sin permisos de escritura -- distinto de "managed", que
+    # llega vía GitHub App/webhook), se encola un análisis del contenido
+    # COMPLETO de su rama por defecto, no solo de sus PRs futuras -- ver
+    # tasks.py:run_main_branch_scan. Sin esto, un repo con historial ya
+    # existente se queda sin ninguna foto de riesgo hasta que alguien abra
+    # la primera PR nueva. Se dispara siempre que el repo es "audited", con
+    # independencia de auto_scan_prs (ese toggle solo controla el repolling
+    # PERIÓDICO de PRs, no este escaneo puntual de alta).
+    #
+    # job_id incluye org_id (no solo repo_path): dos organizaciones
+    # distintas pueden auditar el MISMO repo_path (la unicidad de arriba
+    # está bajo (org_id, repo_path), no bajo repo_path a secas) -- sin
+    # org_id aquí, la segunda colisionaría con el job de la primera.
+    #
+    # Se comprueba/borra un job previo con ese id antes de encolar --
+    # MISMO patrón que RepoPollingService._poll_single_candidate: un
+    # job_id que ya existe en Redis (p. ej. de un intento anterior que
+    # falló) no se vuelve a encolar solo por llamar a queue.enqueue() con
+    # el mismo id -- se actualizan sus datos pero, si RQ ya lo sacó una vez
+    # de la lista de la cola, se queda "atascado" sin que ningún worker lo
+    # recoja nunca (comprobado en vivo).
+    if new_repo.monitor_type == "audited":
+        queue = get_queue()
+        job_id = f"main_branch_scan:{org_id}:{new_repo.repo_path}"
+        existing_job = queue.fetch_job(job_id)
+        if existing_job is None or existing_job.is_failed:
+            if existing_job is not None:
+                existing_job.delete()
+            queue.enqueue(
+                run_main_branch_scan,
+                new_repo.repo_path,
+                org_id,
+                new_repo.vcs_connection_id,
+                job_id=job_id,
+            )
 
     # Si tiene auto_scan_prs activo, iniciar análisis inmediato de todas sus PRs abiertas
     if new_repo.auto_scan_prs:

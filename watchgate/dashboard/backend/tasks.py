@@ -107,6 +107,104 @@ def get_queue() -> Queue:
     return Queue(connection=get_redis_conn())
 
 
+# pr_id sintético para el escaneo de línea base de la rama por defecto
+# (run_main_branch_scan) -- nunca colisiona con un número de PR real de
+# GitHub (siempre entero, siempre >= 1). En la BD del dashboard,
+# _pr_number_from_pr_id() lo mapea a pr_number=0 (sin dígitos en "main"),
+# que por el mismo motivo tampoco puede colisionar con una PR real.
+MAIN_BRANCH_SCAN_PR_ID = "main"
+
+
+def run_main_branch_scan(repo_path: str, org_id: str, vcs_connection_id: str | None) -> None:
+    """Escaneo de línea base: analiza TODO el contenido actual de la rama
+    por defecto (no una PR concreta), disparado UNA VEZ al dar de alta un
+    repositorio en auditoría externa -- ver
+    routers/repos.py:add_external_repo. Dar de alta un repo con historial
+    ya existente sin esto deja ese código de fondo completamente sin
+    auditar hasta que alguien abra la primera PR nueva; esto da una foto
+    de riesgo del estado ACTUAL del repo desde el primer momento.
+
+    Mismo pipeline que `run_audit_scan` (comparten quota_service,
+    inserción en la BD del dashboard, etc.) -- solo cambia de dónde sale
+    el diff: `get_default_branch_scan_data` en vez de
+    `get_pull_request_data`, y no hay `pr_number` real, así que se usa
+    `MAIN_BRANCH_SCAN_PR_ID` como identificador."""
+    with next(get_session()) as session:
+        token = None
+        if vcs_connection_id:
+            vcs = session.exec(
+                select(VCSConnection).where(VCSConnection.id == vcs_connection_id)
+            ).first()
+            if vcs and vcs.access_token:
+                token = vcs.access_token
+
+        client = GitHubClient(token)
+        owner, repo_name = repo_path.split("/", 1)
+
+        diff_text, metadata = client.get_default_branch_scan_data(owner, repo_name)
+
+        author_login = metadata.get("user", {}).get("login", "unknown")
+        author = CommitAuthor(name=author_login, email="unknown@example.com", login=author_login)
+        parsed_diff = parse_diff_from_text(diff_text, authors=[author])
+
+        reputation_metadata = None
+        if author_login != "unknown":
+            try:
+                reputation_metadata = client.get_reputation_metadata(
+                    owner,
+                    repo_name,
+                    author_login,
+                    head_sha=metadata.get("head", {}).get("sha"),
+                )
+            except Exception:
+                pass
+
+        pipeline_metadata: dict[str, object] = {
+            "pr_id": MAIN_BRANCH_SCAN_PR_ID,
+            "repo": repo_path,
+            "author_login": author_login,
+        }
+        if reputation_metadata:
+            pipeline_metadata["reputation"] = reputation_metadata
+        config = load_config()
+
+        quota_service = QuotaService(session)
+        result, is_degraded = quota_service.analyze_with_quota(
+            diff=parsed_diff,
+            metadata=pipeline_metadata,
+            config=config,
+            org_id=org_id,
+            user_id=None,
+            agent_id=None,
+        )
+
+        from watchgate.dashboard.backend.db import db_session as dashboard_db_session
+        from watchgate.dashboard.backend.db import insert_aggregated, upsert_role
+
+        with dashboard_db_session() as dash_conn:
+            result.pr_id = MAIN_BRANCH_SCAN_PR_ID
+            result.repo = repo_path
+            insert_aggregated(dash_conn, result, author_login=author_login)
+
+            from watchgate.db.models import User
+
+            user_obj = session.exec(select(User).where(User.org_id == org_id)).first()
+            if user_obj:
+                upsert_role(dash_conn, user_obj.name, repo_path, "admin_organizacion")
+
+        repo_obj = session.exec(
+            select(MonitoredRepo).where(
+                MonitoredRepo.org_id == org_id, MonitoredRepo.repo_path == repo_path
+            )
+        ).first()
+        if repo_obj:
+            from datetime import UTC, datetime
+
+            repo_obj.last_scanned_at = datetime.now(UTC)
+
+        session.commit()
+
+
 def run_audit_scan(
     repo_path: str, pr_number: int, org_id: str, vcs_connection_id: str | None
 ) -> None:

@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import httpx
 import pytest
 
-from watchgate.adapters.github_client import GitHubClient
+from watchgate.adapters.github_client import DiffTooLargeError, GitHubClient
 
 
 def _mock_response(json_data, headers: dict[str, str] | None = None) -> Mock:
@@ -17,6 +17,22 @@ def _mock_response(json_data, headers: dict[str, str] | None = None) -> Mock:
     resp.json.return_value = json_data
     resp.headers = headers or {}
     return resp
+
+
+def _mock_stream_response(
+    chunks: list[str], status_code: int = 200, headers: dict[str, str] | None = None
+) -> MagicMock:
+    """Simula el context manager que devuelve `httpx.stream(...)`, usado
+    por `_stream_diff` (get_pull_request_diff / get_compare_diff)."""
+    resp = Mock()
+    resp.status_code = status_code
+    resp.headers = headers or {}
+    resp.raise_for_status = Mock()
+    resp.iter_text = Mock(return_value=iter(chunks))
+    cm = MagicMock()
+    cm.__enter__ = Mock(return_value=resp)
+    cm.__exit__ = Mock(return_value=False)
+    return cm
 
 
 def test_get_pr_diff_shas_reads_base_and_head_from_event_payload():
@@ -173,3 +189,131 @@ def test_post_comment_propagates_failures_instead_of_swallowing_them():
     with patch("httpx.post", side_effect=httpx.ConnectError("sin red")):
         with pytest.raises(httpx.ConnectError):
             client.post_comment("org", "repo", 1, "x")
+
+
+def test_get_repo_metadata_fetches_repo_json():
+    client = GitHubClient(token="fake-token")
+    with patch.object(
+        client, "_get", return_value=_mock_response({"default_branch": "develop"})
+    ) as mock_get:
+        meta = client.get_repo_metadata("org", "repo")
+
+    assert meta["default_branch"] == "develop"
+    mock_get.assert_called_once_with("/repos/org/repo")
+
+
+def test_get_branch_head_commit_fetches_commit_json():
+    client = GitHubClient(token="fake-token")
+    commit_json = {"sha": "abc123", "author": {"login": "octocat"}}
+    with patch.object(client, "_get", return_value=_mock_response(commit_json)) as mock_get:
+        commit = client.get_branch_head_commit("org", "repo", "main")
+
+    assert commit["sha"] == "abc123"
+    mock_get.assert_called_once_with("/repos/org/repo/commits/main")
+
+
+def test_get_compare_diff_streams_against_the_compare_endpoint():
+    client = GitHubClient(token="fake-token")
+    with patch(
+        "httpx.stream", return_value=_mock_stream_response(["diff --git a/x b/x\n"])
+    ) as mock_stream:
+        diff = client.get_compare_diff("org", "repo", "base-sha", "main")
+
+    assert diff == "diff --git a/x b/x\n"
+    args, _kwargs = mock_stream.call_args
+    assert args[0] == "GET"
+    assert args[1] == "https://api.github.com/repos/org/repo/compare/base-sha...main"
+
+
+def test_get_compare_diff_raises_when_over_size_limit():
+    """MISMO límite de 2MB que get_pull_request_diff -- comparten
+    _stream_diff, y en un repo grande esto es bastante más probable de
+    alcanzar aquí que en el diff de una sola PR."""
+    client = GitHubClient(token="fake-token")
+    huge_chunk = "a" * (2 * 1024 * 1024 + 1)
+    with patch("httpx.stream", return_value=_mock_stream_response([huge_chunk])):
+        with pytest.raises(DiffTooLargeError):
+            client.get_compare_diff("org", "repo", "base-sha", "main")
+
+
+def test_get_root_commit_sha_paginates_to_the_last_page():
+    """Hallazgo real en vivo: la Compare API de GitHub no admite el SHA del
+    árbol vacío de git como base (404) -- hace falta el primer commit REAL.
+    per_page=1 + la cabecera Link "last" da el número total de páginas sin
+    tener que descargar el historial completo; esa última página trae el
+    commit más antiguo."""
+    client = GitHubClient(token="fake-token")
+
+    def fake_get(url, params=None):
+        if params.get("page") is None:
+            return _mock_response(
+                [{"sha": "head-sha"}], headers={"Link": '<...?page=42>; rel="last"'}
+            )
+        assert params["page"] == 42
+        return _mock_response([{"sha": "root-sha"}])
+
+    with patch.object(client, "_get", side_effect=fake_get):
+        root_sha = client.get_root_commit_sha("org", "repo", "main")
+
+    assert root_sha == "root-sha"
+
+
+def test_get_root_commit_sha_single_commit_branch_has_no_last_page():
+    """Sin cabecera Link "last" (una sola página -- rama con un único
+    commit), ese único commit YA es el root; no debe intentar una segunda
+    petición."""
+    client = GitHubClient(token="fake-token")
+    with patch.object(
+        client, "_get", return_value=_mock_response([{"sha": "only-commit-sha"}])
+    ) as mock_get:
+        root_sha = client.get_root_commit_sha("org", "repo", "main")
+
+    assert root_sha == "only-commit-sha"
+    assert mock_get.call_count == 1
+
+
+def test_get_default_branch_scan_data_builds_pr_shaped_metadata():
+    """El resultado debe encajar en la MISMA forma que get_pull_request_data
+    (metadata["user"]["login"]) para que run_main_branch_scan reutilice el
+    pipeline de análisis sin ningún cambio, y el diff debe pedirse contra el
+    commit ROOT real (no el SHA del árbol vacío -- ver
+    get_root_commit_sha)."""
+    client = GitHubClient(token="fake-token")
+    with (
+        patch.object(client, "get_repo_metadata", return_value={"default_branch": "develop"}),
+        patch.object(
+            client,
+            "get_branch_head_commit",
+            return_value={"sha": "headsha123", "author": {"login": "octocat"}},
+        ),
+        patch.object(client, "get_root_commit_sha", return_value="root-sha-abc") as mock_root,
+        patch.object(client, "get_compare_diff", return_value="diff --git a/x b/x\n") as mock_cmp,
+    ):
+        diff_text, metadata = client.get_default_branch_scan_data("org", "repo")
+
+    assert diff_text == "diff --git a/x b/x\n"
+    assert metadata["user"]["login"] == "octocat"
+    assert metadata["head"]["sha"] == "headsha123"
+    assert metadata["default_branch"] == "develop"
+    mock_root.assert_called_once_with("org", "repo", "develop")
+    mock_cmp.assert_called_once_with("org", "repo", "root-sha-abc", "develop")
+
+
+def test_get_default_branch_scan_data_falls_back_when_metadata_incomplete():
+    """Sin default_branch en la respuesta del repo, sin autor resuelto en
+    el commit HEAD, o sin poder resolver el root commit -- no debe
+    reventar: cae a "main"/"unknown"/comparar la rama contra sí misma
+    (diff vacío), igual que get_pull_request_data hace hoy vía
+    metadata.get(...)."""
+    client = GitHubClient(token="fake-token")
+    with (
+        patch.object(client, "get_repo_metadata", return_value={}),
+        patch.object(client, "get_branch_head_commit", return_value={"sha": "headsha"}),
+        patch.object(client, "get_root_commit_sha", return_value=None),
+        patch.object(client, "get_compare_diff", return_value="") as mock_cmp,
+    ):
+        _diff_text, metadata = client.get_default_branch_scan_data("org", "repo")
+
+    assert metadata["user"]["login"] == "unknown"
+    assert metadata["default_branch"] == "main"
+    mock_cmp.assert_called_once_with("org", "repo", "main", "main")
