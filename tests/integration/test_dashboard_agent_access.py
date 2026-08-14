@@ -197,6 +197,35 @@ def test_org_metrics_via_api_key_scoped_to_explicit_repos(app_and_key, tmp_path)
     assert data["repos_count"] == 1
 
 
+def test_org_metrics_full_breakdown_survives_selecting_only_needed_columns(
+    app_and_key, tmp_path
+) -> None:
+    """Regresión: compute_org_metrics() pasó de `SELECT *` a una lista
+    explícita de columnas (perf(dashboard): no cargar findings_json/
+    semantic_justification en cada fila del histórico) -- este test cubre
+    el desglose completo (by_semaforo/layer_avg/by_repo), no solo
+    total_prs/repos_count como los tests de arriba, para que un typo en la
+    lista de columnas no pase desapercibido."""
+    app, raw_token = app_and_key
+    _seed_score(app, tmp_path, repo="acme/webapp", score=75, semaforo="rojo")
+    _seed_score(app, tmp_path, repo="acme/webapp", score=25, semaforo="verde")
+
+    with TestClient(app) as client:
+        resp = client.get(
+            "/api/agent-access/metrics", headers={"Authorization": f"Bearer {raw_token}"}
+        )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["by_semaforo"] == {"verde": 1, "amarillo": 0, "rojo": 1}
+    assert data["avg_score"] == 50.0
+    assert data["layer_avg"]["static"] == 50.0
+    by_repo = {row["repo"]: row for row in data["by_repo"]}
+    assert by_repo["acme/webapp"]["prs"] == 2
+    assert by_repo["acme/webapp"]["avg_score"] == 50.0
+    assert len(data["trend"]) == 1
+    assert data["trend"][0]["count"] == 2
+
+
 def test_agent_access_also_accepts_x_api_key_header(app_and_key, tmp_path) -> None:
     app, raw_token = app_and_key
     _seed_score(app, tmp_path, repo="acme/webapp", score=42, semaforo="amarillo")
