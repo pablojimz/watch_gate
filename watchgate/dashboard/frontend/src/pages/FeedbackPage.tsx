@@ -9,8 +9,10 @@ import { Button, buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
 export default function FeedbackPage() {
-  const { owner = '', name = '' } = useParams()
-  const repo = `${owner}/${name}`
+  // Un solo segmento de URL codificado (ver App.tsx) -- no ":owner/:name",
+  // que rompía cualquier repo sin exactamente una barra.
+  const { repo: repoParam = '' } = useParams()
+  const repo = decodeURIComponent(repoParam)
   const { t } = useTranslation()
   const [scores, setScores] = useState<ScoreOut[] | null>(null)
 
@@ -61,7 +63,10 @@ export default function FeedbackPage() {
           <h1 className="text-xl font-semibold">{t('feedback.title')}</h1>
           <p className="text-sm text-muted-foreground">{repo}</p>
         </div>
-        <Link to={`/repos/${repo}`} className={cn(buttonVariants({ variant: 'outline' }))}>
+        <Link
+          to={`/repos/${encodeURIComponent(repo)}`}
+          className={cn(buttonVariants({ variant: 'outline' }))}
+        >
           Volver
         </Link>
       </div>

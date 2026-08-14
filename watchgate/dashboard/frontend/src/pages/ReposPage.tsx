@@ -234,7 +234,7 @@ export default function ReposPage() {
                       {item.red > 0 ? ` · ${t('repos.highCount', { count: item.red })}` : ''}
                     </div>
                     <Link
-                      to={`/repos/${item.repo}`}
+                      to={`/repos/${encodeURIComponent(item.repo)}`}
                       className={cn(
                         buttonVariants({ variant: 'outline', size: 'sm' }),
                         'shrink-0 gap-1.5',
