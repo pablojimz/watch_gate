@@ -3,18 +3,20 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 
+from watchgate.adapters.github_client import GitHubClient
 from watchgate.api.auth import require_scope
 from watchgate.api.dependencies import get_db_session
 from watchgate.config import load_config
 from watchgate.core.diffparser import parse_diff_from_text
 from watchgate.core.models import AggregatedResult, CommitAuthor
-from watchgate.db.models import MonitoredRepo, Organization, User, UserAPIKey
+from watchgate.db.models import MonitoredRepo, Organization, User, UserAPIKey, VCSConnection
 from watchgate.service.policy import ClientConfigOverrideError, apply_client_config_override
 from watchgate.service.quota import QuotaService
 
@@ -98,6 +100,36 @@ def analyze_pr(
         config = apply_client_config_override(base_config, request.config_override)
     except ClientConfigOverrideError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    if "reputation" not in request.metadata and "/" in requested_repo:
+        author_login = request.metadata.get("author_login") or (
+            (request.authors[0].login or request.authors[0].name) if request.authors else None
+        )
+        if author_login:
+            token = os.environ.get("WATCHGATE_GITHUB_TOKEN") or os.environ.get("GITHUB_TOKEN")
+            if not token and api_key.monitored_repo_id:
+                key_repo = session.get(MonitoredRepo, api_key.monitored_repo_id)
+                if key_repo and key_repo.vcs_connection_id:
+                    vcs = session.get(VCSConnection, key_repo.vcs_connection_id)
+                    if vcs and vcs.access_token:
+                        token = vcs.access_token
+
+            owner, repo_name = requested_repo.split("/", 1)
+            pr_num = None
+            if request.metadata.get("pr_id"):
+                try:
+                    pr_num = int(str(request.metadata.get("pr_id")))
+                except (ValueError, TypeError):
+                    pass
+
+            try:
+                client = GitHubClient(token)
+                rep_metadata = client.get_reputation_metadata(
+                    owner, repo_name, author_login, pr_number=pr_num, head_sha=request.head_sha
+                )
+                request.metadata["reputation"] = rep_metadata
+            except Exception:
+                logger.debug("No se pudieron enriquecer metadatos de reputación", exc_info=True)
 
     quota_service = QuotaService(session)
     result, _is_degraded = quota_service.analyze_with_quota(

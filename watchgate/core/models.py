@@ -140,3 +140,5 @@ class ReputationMetadata(BaseModel):
     commit_is_signed: bool
     signing_key_seen_before_for_login: bool | None  # None si no aplica (no firmado)
     repo_has_history_of_signed_commits: bool
+    author_public_repos: int | None = None
+    author_followers: int | None = None

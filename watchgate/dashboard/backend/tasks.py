@@ -127,10 +127,19 @@ def run_audit_scan(
 
         diff_text, metadata = client.get_pull_request_data(owner, repo_name, pr_number)
 
-        # 3. Construir autores
+        # 3. Construir autores y metadatos de reputación
         author_login = metadata.get("user", {}).get("login", "unknown")
         author = CommitAuthor(name=author_login, email="unknown@example.com", login=author_login)
         parsed_diff = parse_diff_from_text(diff_text, authors=[author])
+
+        reputation_metadata = None
+        if author_login != "unknown":
+            try:
+                reputation_metadata = client.get_reputation_metadata(
+                    owner, repo_name, author_login, pr_number=pr_number
+                )
+            except Exception:
+                pass
 
         # 4. Análisis con control de cuota
         pipeline_metadata: dict[str, object] = {
@@ -138,6 +147,8 @@ def run_audit_scan(
             "repo": repo_path,
             "author_login": author_login,
         }
+        if reputation_metadata:
+            pipeline_metadata["reputation"] = reputation_metadata
         config = load_config()
 
         quota_service = QuotaService(session)

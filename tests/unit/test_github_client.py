@@ -65,6 +65,36 @@ def test_get_reputation_metadata_builds_real_signals_from_github_api():
     assert rep.repo_has_history_of_signed_commits is True
 
 
+def test_get_reputation_metadata_with_pr_number_and_profile_activity():
+    client = GitHubClient(token="fake-token")
+    created_at = (datetime.now(UTC) - timedelta(days=10)).isoformat().replace("+00:00", "Z")
+
+    def fake_request(method, url, headers=None, params=None, timeout=None):
+        if url.endswith("/users/newuser"):
+            return _mock_response(
+                {"login": "newuser", "created_at": created_at, "public_repos": 0, "followers": 0}
+            )
+        if url.endswith("/repos/org/repo/commits") and (params or {}).get("author") == "newuser":
+            return _mock_response([])
+        if url.endswith("/repos/org/repo/pulls/5/commits"):
+            return _mock_response(
+                [{"author": {"login": "newuser"}, "commit": {"verification": {"verified": True}}}]
+            )
+        if url.endswith("/repos/org/repo/commits") and "author" not in (params or {}):
+            return _mock_response([])
+        raise AssertionError(f"URL inesperada: {url} params={params}")
+
+    with patch("httpx.request", side_effect=fake_request):
+        rep = client.get_reputation_metadata("org", "repo", "newuser", pr_number=5)
+
+    assert rep.author_login == "newuser"
+    assert rep.author_public_repos == 0
+    assert rep.author_followers == 0
+    assert rep.author_prior_contributions_to_repo == 0
+    assert rep.commit_email_matches_verified_email is True
+    assert rep.commit_is_signed is True
+
+
 def test_get_reputation_metadata_degrades_gracefully_when_user_lookup_fails():
     """Un fallo puntual de la API (ej. el usuario se borró la cuenta) no debe
     tirar abajo el resto de señales -- ni tampoco convertirse en una

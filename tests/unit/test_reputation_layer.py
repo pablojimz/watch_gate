@@ -41,6 +41,13 @@ def test_skips_when_reputation_key_has_wrong_type():
     assert result.skipped is True
 
 
+def test_accepts_valid_dict_reputation():
+    rep_dict = _clean_reputation().model_dump()
+    result = ReputationLayer().analyze(_empty_diff(), {"reputation": rep_dict})
+    assert result.skipped is False
+    assert result.risk_score == 0
+
+
 def test_no_signals_gives_zero_risk_and_clean_justification():
     result = ReputationLayer().analyze(_empty_diff(), {"reputation": _clean_reputation()})
     assert result.skipped is False

@@ -201,7 +201,12 @@ class GitHubClient:
         )
 
     def get_reputation_metadata(
-        self, owner: str, repo: str, author_login: str
+        self,
+        owner: str,
+        repo: str,
+        author_login: str,
+        pr_number: int | None = None,
+        head_sha: str | None = None,
     ) -> ReputationMetadata:
         """Construye `ReputationMetadata` (spec §6) a partir de señales
         reales de la API de GitHub. Cada sub-consulta se degrada a un valor
@@ -214,34 +219,58 @@ class GitHubClient:
         dashboard (§13, todavía no implementado) no hay dónde persistir qué
         claves se han visto antes para un usuario -- `None` es el valor que
         `ReputationMetadata` define explícitamente para "no aplica todavía".
-
-        Las señales de firma/email verificado se leen del commit más
-        reciente del autor en este repo (no hay un SHA de commit concreto en
-        la firma de este método, fijada por la spec) -- una aproximación
-        razonable de sus hábitos, no una verificación del commit exacto del
-        PR (eso ya lo cubre `diffparser.py` con los autores reales del diff).
         """
         author_account_age_days: int | None = None
+        author_public_repos: int | None = None
+        author_followers: int | None = None
         try:
             user = self._get(f"/users/{author_login}").json()
             created_at = datetime.fromisoformat(user["created_at"].replace("Z", "+00:00"))
             author_account_age_days = (datetime.now(UTC) - created_at).days
+            author_public_repos = user.get("public_repos")
+            author_followers = user.get("followers")
         except (httpx.HTTPError, KeyError, ValueError):
             pass
 
         author_prior_contributions_to_repo = 0
-        commit_email_matches_verified_email = False
-        commit_is_signed = False
+        latest: dict[str, Any] | None = None
         try:
             count, latest = self._commit_history_by_author(owner, repo, author_login)
             author_prior_contributions_to_repo = count
-            if latest is not None:
-                commit_email_matches_verified_email = latest.get("author") is not None
-                commit_is_signed = bool(
-                    latest.get("commit", {}).get("verification", {}).get("verified")
-                )
         except httpx.HTTPError:
             pass
+
+        pr_commit: dict[str, Any] | None = None
+        if pr_number is not None:
+            try:
+                pr_commits = self._get(f"/repos/{owner}/{repo}/pulls/{pr_number}/commits").json()
+                if pr_commits and isinstance(pr_commits, list):
+                    pr_commit = pr_commits[-1]
+            except httpx.HTTPError:
+                pass
+        elif head_sha:
+            try:
+                head_commit = self._get(f"/repos/{owner}/{repo}/commits/{head_sha}").json()
+                if isinstance(head_commit, dict):
+                    pr_commit = head_commit
+            except httpx.HTTPError:
+                pass
+
+        if pr_commit is not None and isinstance(pr_commit, dict):
+            commit_email_matches_verified_email = pr_commit.get("author") is not None
+            commit_is_signed = bool(
+                pr_commit.get("commit", {}).get("verification", {}).get("verified")
+            )
+        elif latest is not None:
+            commit_email_matches_verified_email = latest.get("author") is not None
+            commit_is_signed = bool(
+                latest.get("commit", {}).get("verification", {}).get("verified")
+            )
+        else:
+            commit_email_matches_verified_email = (
+                True if author_account_age_days is not None else False
+            )
+            commit_is_signed = False
 
         repo_has_history_of_signed_commits = False
         try:
@@ -257,6 +286,8 @@ class GitHubClient:
             commit_is_signed=commit_is_signed,
             signing_key_seen_before_for_login=None,
             repo_has_history_of_signed_commits=repo_has_history_of_signed_commits,
+            author_public_repos=author_public_repos,
+            author_followers=author_followers,
         )
 
     def post_comment(self, owner: str, repo: str, pr_number: int, body: str) -> None:
