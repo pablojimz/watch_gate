@@ -12,6 +12,7 @@ perdido.
 
 from __future__ import annotations
 
+import logging
 import re
 import time
 from datetime import UTC, datetime
@@ -20,6 +21,8 @@ from typing import Any
 import httpx
 
 from watchgate.core.models import ReputationMetadata
+
+logger = logging.getLogger(__name__)
 
 _API_BASE = "https://api.github.com"
 _TIMEOUT = 15.0
@@ -59,6 +62,11 @@ class GitHubClient:
             # Manejo de Rate Limit
             if response.status_code in (403, 429) and "x-ratelimit-remaining" in response.headers:
                 if int(response.headers["x-ratelimit-remaining"]) == 0:
+                    logger.warning(
+                        "Límite de peticiones de GitHub API (Rate Limit) alcanzado en %s. "
+                        "Configura WATCHGATE_GITHUB_TOKEN en tu .env para aumentar a 5000 req/h.",
+                        path,
+                    )
                     reset_time = int(response.headers.get("x-ratelimit-reset", time.time() + 60))
                     sleep_time = max(0, reset_time - int(time.time())) + 1
                     # No esperar más de 60 segundos por defecto para evitar asfixiar workers
@@ -117,7 +125,16 @@ class GitHubClient:
                 if len(prs) < per_page:
                     break
                 page += 1
-            except httpx.HTTPError:
+            except httpx.HTTPError as exc:
+                if not all_prs:
+                    raise exc
+                logger.warning(
+                    "Paginación de PRs interrumpida en pág %d para %s/%s: %s",
+                    page,
+                    owner,
+                    repo,
+                    exc,
+                )
                 break
 
         return all_prs[:max_prs]
