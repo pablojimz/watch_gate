@@ -76,6 +76,9 @@ export interface LlmSettings {
   api_key_masked: string | null
   monthly_budget_tokens: number | null
   max_diff_tokens: number | null
+  github_api_url?: string
+  github_token_set?: boolean
+  github_token_masked?: string | null
 }
 
 export interface LlmSettingsUpdate {
@@ -86,6 +89,27 @@ export interface LlmSettingsUpdate {
   clear_api_key?: boolean
   monthly_budget_tokens: number | null
   max_diff_tokens: number | null
+  github_api_url?: string | null
+  github_token?: string | null
+  clear_github_token?: boolean
+}
+
+export interface UserSettings {
+  login: string
+  display_name: string
+  role: RoleName
+  github_api_url: string
+  github_token_set: boolean
+  github_token_masked?: string | null
+  ui_settings?: UiSettings | null
+}
+
+export interface UserSettingsUpdate {
+  display_name?: string | null
+  github_api_url?: string | null
+  github_token?: string | null
+  clear_github_token?: boolean
+  ui_settings?: UiSettings | null
 }
 
 export interface RepoMetricRow {
@@ -234,6 +258,12 @@ export const api = {
   getLlmSettings: () => request<LlmSettings>('/settings/llm'),
   putLlmSettings: (body: LlmSettingsUpdate) =>
     request<LlmSettings>('/settings/llm', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  getUserSettings: () => request<UserSettings>('/settings/user'),
+  putUserSettings: (body: UserSettingsUpdate) =>
+    request<UserSettings>('/settings/user', {
       method: 'PUT',
       body: JSON.stringify(body),
     }),

@@ -147,6 +147,7 @@ def add_external_repo(
                 new_repo.repo_path,
                 org_id,
                 new_repo.vcs_connection_id,
+                user_login=user_login,
                 job_id=job_id,
             )
 
@@ -199,7 +200,12 @@ def scan_audited_repo(
     if scan_data.pr_number and scan_data.pr_number > 0:
         queue = get_queue()
         queue.enqueue(
-            run_audit_scan, repo.repo_path, scan_data.pr_number, org_id, repo.vcs_connection_id
+            run_audit_scan,
+            repo.repo_path,
+            scan_data.pr_number,
+            org_id,
+            repo.vcs_connection_id,
+            user_login=user_login,
         )
         return {
             "message": "Escaneo de PR encolado",

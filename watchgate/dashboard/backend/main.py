@@ -24,6 +24,7 @@ from watchgate.dashboard.backend.routers.metrics import router as metrics_router
 from watchgate.dashboard.backend.routers.repos import router as repos_router
 from watchgate.dashboard.backend.routers.scores import router as scores_router
 from watchgate.dashboard.backend.routers.ui_settings import router as ui_router
+from watchgate.dashboard.backend.routers.user_settings import router as user_settings_router
 from watchgate.dashboard.backend.routers.webhooks import router as webhooks_router
 from watchgate.db.connection import init_db as init_api_keys_db
 from watchgate.logging_config import configure_logging
@@ -96,6 +97,7 @@ def create_app() -> FastAPI:
     app.include_router(metrics_router, prefix="/api")
     app.include_router(llm_router, prefix="/api")
     app.include_router(ui_router, prefix="/api")
+    app.include_router(user_settings_router, prefix="/api")
     app.include_router(repos_router, prefix="/api")
     app.include_router(webhooks_router, prefix="/api")
 
