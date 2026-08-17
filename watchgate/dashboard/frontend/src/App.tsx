@@ -1,7 +1,9 @@
 import { useEffect, useState, type ReactElement } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { Toaster } from 'sonner'
 import { AppLayout } from '@/components/AppLayout'
 import { api, type MeResponse } from '@/api/client'
+import { useTheme } from '@/lib/theme'
 import LoginPage from '@/pages/LoginPage'
 import ReposPage from '@/pages/ReposPage'
 import ExternalReposPage from '@/pages/ExternalReposPage'
@@ -32,6 +34,7 @@ function RequireAuth({
 
 export default function App() {
   const [me, setMe] = useState<MeResponse | null | undefined>(undefined)
+  const { mode } = useTheme()
 
   useEffect(() => {
     void api
@@ -42,6 +45,18 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      {/* Montado aquí (nivel raíz, fuera de las rutas) para que un
+          toast.error(...) dispare en CUALQUIER página, incluida /login --
+          antes vivía dentro de AppLayout, que solo se renderiza para las
+          rutas ya autenticadas, así que un login con contraseña incorrecta
+          nunca mostraba el error (el 401 llegaba bien del backend, pero
+          sonner no tenía dónde pintarlo: hallazgo real, reproducido en
+          vivo). */}
+      <Toaster
+        theme={mode === 'dark' || mode === 'light' ? mode : 'system'}
+        closeButton
+        toastOptions={{ duration: 5000 }}
+      />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route

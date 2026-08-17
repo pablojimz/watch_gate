@@ -121,6 +121,25 @@ class UserTokenUsage(SQLModel, table=True):
     tokens_used: int = Field(default=0)
 
 
+class RepoTokenUsage(SQLModel, table=True):
+    """Consumo mensual acumulado de tokens de LLM por repositorio, sin
+    concepto de organización/tenant -- usado por `CostController`
+    (`watchgate/core/cost_control.py`), el control de presupuesto del modo
+    CLI/engine local (un repo analizado directamente, sin SaaS de por
+    medio). Distinto de `UserTokenUsage` (clave `user_id`+`month`): ahí la
+    cuota es por usuario/organización de la plataforma SaaS, aquí es por
+    repositorio -- dos conceptos de la misma familia (consumo de tokens),
+    pero con claves genuinamente distintas, no el mismo dato con otro
+    nombre.
+    """
+
+    __tablename__ = "repo_token_usage"
+
+    repo: str = Field(primary_key=True)
+    month: str = Field(primary_key=True)  # Formato "YYYY-MM"
+    tokens_used: int = Field(default=0)
+
+
 class SemanticCache(SQLModel, table=True):
     """Caché unificada de respuestas de la capa semántica por hash de diff y organización."""
 

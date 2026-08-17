@@ -35,7 +35,6 @@ dependencies = [
   "alembic (>=1.19.1,<2.0.0)",
   "redis (>=8.1.0,<9.0.0)",
   "rq (>=1.16,<2.0)",
-  "psycopg-pool (>=3.3.1,<4.0.0)",
 ]
 
 # Extra "analysis": lo que de verdad hace pesada la imagen (~1.5 GB, sobre
@@ -114,7 +113,9 @@ target-version = "py311"
 # (imports sin ordenar, Union en vez de X | Y...) -- se generan así en
 # cada `autogenerate` futuro, no tiene sentido reformatearlas a mano cada
 # vez. alembic/script.py.mako ni siquiera es Python (plantilla Mako).
-# alembic/env.py sí es código propio y sí se lintea.
+# alembic/env.py sí es código propio y sí se lintea. Mismo criterio para
+# alembic_dashboard/ (segundo entorno Alembic, esquema del Dashboard DB --
+# ver watchgate/dashboard/backend/models.py).
 extend-exclude = [
   "docs",
   "tests/cases",
@@ -122,6 +123,8 @@ extend-exclude = [
   "scratchpad",
   "alembic/versions",
   "alembic/script.py.mako",
+  "alembic_dashboard/versions",
+  "alembic_dashboard/script.py.mako",
 ]
 
 [tool.ruff.lint]

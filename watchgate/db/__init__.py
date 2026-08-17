@@ -11,6 +11,7 @@ from watchgate.db.connection import get_session, init_db
 from watchgate.db.models import (
     Organization,
     PRScore,
+    RepoTokenUsage,
     SemanticCache,
     User,
     UserAPIKey,
@@ -20,6 +21,7 @@ from watchgate.db.models import (
 __all__ = [
     "Organization",
     "PRScore",
+    "RepoTokenUsage",
     "SemanticCache",
     "User",
     "UserAPIKey",

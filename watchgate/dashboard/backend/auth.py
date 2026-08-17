@@ -59,6 +59,22 @@ def _dev_mode() -> bool:
     return os.environ.get("WATCHGATE_DASHBOARD_DEV_MODE", "1") == "1"
 
 
+def _dev_login_enabled() -> bool:
+    """Gate específico de `POST /api/auth/dev-login` (crear sesión con solo un
+    usuario, sin contraseña), independiente de `_dev_mode()`.
+
+    `_dev_mode()` también controla `ensure_safe_startup_config` (exige
+    secreto largo + token de ingesta + cookie Secure en cuanto se apaga), que
+    son cosas de "esto es un despliegue real detrás de TLS" -- no aplican
+    necesariamente a un host sin reverse proxy HTTPS delante, donde forzar
+    cookie Secure rompería todas las sesiones. Este flag deja cerrar solo el
+    login sin contraseña sin arrastrar esas otras exigencias.
+    """
+    if os.environ.get("WATCHGATE_DASHBOARD_DISABLE_DEV_LOGIN", "0") == "1":
+        return False
+    return _dev_mode()
+
+
 def _ingest_token() -> str | None:
     return os.environ.get("WATCHGATE_DASHBOARD_INGEST_TOKEN")
 
@@ -510,8 +526,9 @@ def password_login(body: PasswordLoginIn, response: Response) -> dict[str, str]:
 
 @router.post("/dev-login")
 def dev_login(body: DevLoginIn, response: Response) -> dict[str, str]:
-    """Login de desarrollo (solo si WATCHGATE_DASHBOARD_DEV_MODE=1)."""
-    if not _dev_mode():
+    """Login de desarrollo (solo si WATCHGATE_DASHBOARD_DEV_MODE=1 y no se ha
+    desactivado explícitamente con WATCHGATE_DASHBOARD_DISABLE_DEV_LOGIN=1)."""
+    if not _dev_login_enabled():
         raise HTTPException(status_code=404, detail="Dev login deshabilitado")
 
     with database.db_session() as conn:

@@ -1,4 +1,4 @@
-.PHONY: install lint test run-demo dashboard-backend dashboard-frontend dashboard-install docker-up docker-down migrate migration
+.PHONY: install lint test run-demo dashboard-backend dashboard-frontend dashboard-install docker-up docker-down migrate migration migrate-dashboard migration-dashboard
 
 install:
 	# --all-extras: incluye el extra "analysis" (semgrep/yara/chromadb/
@@ -41,13 +41,24 @@ docker-up:
 docker-down:
 	docker compose down
 
-# Migraciones del esquema SQLModel (watchgate/db/) -- ver docs/despliegue.md
-# para el flujo completo (incluye cómo adoptar Alembic en una base de datos
-# ya existente con `alembic stamp head`). El esquema propio del Dashboard
-# (watchgate/dashboard/backend/db.py) NO usa Alembic, ver alembic/env.py.
+# Migraciones del esquema SQLModel (watchgate/db/, Engine DB) -- ver
+# docs/despliegue.md para el flujo completo (incluye cómo adoptar Alembic
+# en una base de datos ya existente con `alembic stamp head`). El esquema
+# propio del Dashboard (watchgate/dashboard/backend/models.py) usa un
+# segundo entorno Alembic separado, ver los targets *-dashboard abajo y
+# alembic_dashboard/env.py -- son dos bases de datos físicamente
+# distintas, cada una con su propio historial de migraciones.
 migrate:
 	poetry run alembic upgrade head
 
 # Uso: make migration m="añadir columna x a pr_scores"
 migration:
 	poetry run alembic revision --autogenerate -m "$(m)"
+
+# Migraciones del esquema del Dashboard DB (watchgate/dashboard/backend/models.py).
+migrate-dashboard:
+	poetry run alembic -c alembic_dashboard.ini upgrade head
+
+# Uso: make migration-dashboard m="añadir columna x a repo_settings"
+migration-dashboard:
+	poetry run alembic -c alembic_dashboard.ini revision --autogenerate -m "$(m)"
