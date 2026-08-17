@@ -184,6 +184,8 @@
     "userRemoved": "Usuario eliminado",
     "noUsers": "No hay cuentas locales todavía.",
     "repo": "Repositorio",
+    "repoType": "Tipo de repo",
+    "repoTypeUnlinked": "No conectado",
     "role": "Rol",
     "add": "Asignar",
     "remove": "Quitar"
