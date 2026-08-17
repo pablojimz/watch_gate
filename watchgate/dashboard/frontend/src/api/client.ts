@@ -151,6 +151,14 @@ export interface RepoRole {
   role: RoleName
 }
 
+// Cuenta local (login/contraseña) del Dashboard -- distinto de RepoRole,
+// que es qué puede ver/administrar una vez dentro. Un login puede tener
+// roles sin cuenta local aquí (entra por GitHub/OIDC).
+export interface DashboardUser {
+  login: string
+  display_name: string
+}
+
 export interface ApiKey {
   id: string
   name: string
@@ -292,6 +300,14 @@ export const api = {
     request<void>(`/admin/roles/${encodeURIComponent(userLogin)}/${repo}`, {
       method: 'DELETE',
     }),
+  listUsers: () => request<DashboardUser[]>('/admin/users'),
+  createUser: (login: string, display_name: string, password: string) =>
+    request<DashboardUser>('/admin/users', {
+      method: 'POST',
+      body: JSON.stringify({ login, display_name, password }),
+    }),
+  deleteUser: (login: string) =>
+    request<void>(`/admin/users/${encodeURIComponent(login)}`, { method: 'DELETE' }),
   listApiKeys: () => request<ApiKey[]>('/keys'),
   // `monitored_repo_id` es obligatorio -- ya no se permiten claves
   // generales de organización sin repo asignado.

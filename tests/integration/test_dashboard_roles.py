@@ -314,6 +314,63 @@ def test_admin_can_manage_roles_and_settings(client: TestClient) -> None:
     assert invalid_logo.status_code == 422
 
 
+def test_admin_can_manage_users(client: TestClient) -> None:
+    _login(client, "admin", "admin_organizacion")
+
+    assert client.get("/api/admin/users").status_code == 200
+
+    created = client.post(
+        "/api/admin/users",
+        json={"login": "Nueva.Persona", "display_name": "Nueva Persona", "password": "correcto123"},
+    )
+    assert created.status_code == 201
+    body = created.json()
+    # normalize_login: minúsculas, sin espacios -- mismo criterio que roles.
+    assert body["login"] == "nueva.persona"
+    assert body["display_name"] == "Nueva Persona"
+    assert "password" not in body and "password_hash" not in body
+
+    listed = client.get("/api/admin/users").json()
+    assert any(u["login"] == "nueva.persona" for u in listed)
+
+    # Login duplicado (aunque con distinta may/min) -> 409, no lo pisa.
+    dup = client.post(
+        "/api/admin/users",
+        json={"login": "NUEVA.PERSONA", "display_name": "Otra", "password": "correcto123"},
+    )
+    assert dup.status_code == 409
+
+    # Contraseña corta -> 422 (validación de schema, min_length=8).
+    weak = client.post(
+        "/api/admin/users",
+        json={"login": "otra-persona", "display_name": "Otra", "password": "1234567"},
+    )
+    assert weak.status_code == 422
+
+    # No se puede borrar la propia cuenta desde aquí.
+    assert client.delete("/api/admin/users/admin").status_code == 400
+
+    assert client.delete("/api/admin/users/nueva.persona").status_code == 204
+    assert not any(u["login"] == "nueva.persona" for u in client.get("/api/admin/users").json())
+    assert client.delete("/api/admin/users/nueva.persona").status_code == 404
+
+
+def test_revisor_and_mantenedor_cannot_manage_users(client: TestClient) -> None:
+    _login(client, "viewer", "revisor")
+    assert client.get("/api/admin/users").status_code == 403
+    assert (
+        client.post(
+            "/api/admin/users",
+            json={"login": "x", "display_name": "X", "password": "correcto123"},
+        ).status_code
+        == 403
+    )
+    assert client.delete("/api/admin/users/admin").status_code == 403
+
+    _login(client, "maint", "mantenedor")
+    assert client.get("/api/admin/users").status_code == 403
+
+
 def test_revisor_cannot_see_unassigned_repo(client: TestClient) -> None:
     _login(client, "viewer", "revisor")
     assert client.get("/api/repos/acme/auth-service/scores").status_code == 403

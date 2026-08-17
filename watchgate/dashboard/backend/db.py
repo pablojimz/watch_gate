@@ -1092,6 +1092,52 @@ def authenticate_user(session: Session, login: str, password: str) -> bool:
     return verify_password(password, record.password_hash)
 
 
+def get_user(session: Session, login: str) -> DashboardUser | None:
+    return session.get(DashboardUser, normalize_login(login))
+
+
+def list_users(session: Session) -> list[DashboardUser]:
+    stmt = select(DashboardUser).order_by(DashboardUser.login)
+    return list(session.execute(stmt).scalars().all())
+
+
+def is_last_org_admin(session: Session, login: str) -> bool:
+    """`True` si `login` tiene rol `admin_organizacion` en algún repo Y es
+    el ÚNICO login con ese rol -- usado para bloquear una acción (borrar
+    la cuenta, quitarle el último rol de admin) que dejaría la
+    organización sin ningún admin_organizacion capaz de gestionar accesos
+    después."""
+    norm_login = normalize_login(login)
+    admin_logins = set(
+        session.execute(
+            select(RepoRole.user_login).where(RepoRole.role == "admin_organizacion").distinct()
+        )
+        .scalars()
+        .all()
+    )
+    return norm_login in admin_logins and len(admin_logins) <= 1
+
+
+def delete_user(session: Session, login: str) -> bool:
+    """Borra la cuenta local y, en cascada, TODOS sus roles asignados
+    (`repo_roles`) -- sin este segundo borrado quedarían filas huérfanas
+    apuntando a un login que ya no puede autenticarse nunca (ni con
+    contraseña -- la cuenta desaparece -- ni heredando un rol ya asignado
+    si algún día vuelve a entrar por GitHub/OIDC con el mismo login)."""
+    norm_login = normalize_login(login)
+    user = session.get(DashboardUser, norm_login)
+    if user is None:
+        return False
+    stale_roles = (
+        session.execute(select(RepoRole).where(RepoRole.user_login == norm_login)).scalars().all()
+    )
+    for role_row in stale_roles:
+        session.delete(role_row)
+    session.delete(user)
+    session.commit()
+    return True
+
+
 def list_pr_numbers_for_repo(session: Session, repo: str) -> set[str]:
     """Números de PR (como texto) ya presentes en el histórico del
     Dashboard para `repo` -- usado por el barrido de polling

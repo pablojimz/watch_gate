@@ -109,6 +109,26 @@ class RepoRoleOut(BaseModel):
     role: RoleName
 
 
+class DashboardUserOut(BaseModel):
+    """Cuenta local (login/contraseña) del Dashboard, independiente de
+    GitHub/GitLab -- ver `admin/users` en `routers/feedback.py`. No
+    incluye el hash de contraseña (nunca viaja de vuelta al cliente)."""
+
+    login: str
+    display_name: str
+
+
+class DashboardUserCreate(BaseModel):
+    login: str
+    display_name: str
+    password: str = Field(min_length=8, description="Mínimo 8 caracteres")
+
+    @field_validator("login")
+    @classmethod
+    def _normalize_login(cls, value: str) -> str:
+        return normalize_login(value)
+
+
 class RepoSettings(BaseModel):
     weights: dict[str, float] = Field(
         default_factory=lambda: {
