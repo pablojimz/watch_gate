@@ -13,6 +13,7 @@ perdido.
 from __future__ import annotations
 
 import logging
+import os
 import re
 import time
 from datetime import UTC, datetime
@@ -42,13 +43,21 @@ class DiffTooLargeError(Exception):
 
 
 class GitHubClient:
-    def __init__(self, token: str | None = None) -> None:
+    def __init__(self, token: str | None = None, api_url: str | None = None) -> None:
+        resolved_token = (
+            token or os.environ.get("WATCHGATE_GITHUB_TOKEN") or os.environ.get("GITHUB_TOKEN")
+        )
+        resolved_api_url = (
+            api_url or os.environ.get("WATCHGATE_GITHUB_API_URL") or "https://api.github.com"
+        ).rstrip("/")
+
+        self._api_base = resolved_api_url
         self._headers = {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
         }
-        if token:
-            self._headers["Authorization"] = f"Bearer {token}"
+        if resolved_token:
+            self._headers["Authorization"] = f"Bearer {resolved_token}"
 
     def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
         """Wrapper interno para peticiones con manejo de rate limits."""
@@ -57,7 +66,7 @@ class GitHubClient:
 
         max_retries = 3
         for attempt in range(max_retries):
-            response = httpx.request(method, f"{_API_BASE}{path}", **kwargs)
+            response = httpx.request(method, f"{self._api_base}{path}", **kwargs)
 
             # Manejo de Rate Limit
             if response.status_code in (403, 429) and "x-ratelimit-remaining" in response.headers:
@@ -214,7 +223,7 @@ class GitHubClient:
 
     def get_pull_request_diff(self, owner: str, repo: str, pr_number: int) -> str:
         """Descarga el diff unificado de una PR. Lanza DiffTooLargeError si > 2MB."""
-        url = f"{_API_BASE}/repos/{owner}/{repo}/pulls/{pr_number}"
+        url = f"{self._api_base}/repos/{owner}/{repo}/pulls/{pr_number}"
         return self._stream_diff(url, f"la PR #{pr_number}")
 
     def get_compare_diff(self, owner: str, repo: str, base: str, head: str) -> str:
@@ -223,7 +232,7 @@ class GitHubClient:
         Compare API de GitHub. Lanza DiffTooLargeError si > 2MB -- MISMO
         límite que un diff de PR, y en un repo grande es bastante más
         probable alcanzarlo aquí (ver `get_default_branch_scan_data`)."""
-        url = f"{_API_BASE}/repos/{owner}/{repo}/compare/{base}...{head}"
+        url = f"{self._api_base}/repos/{owner}/{repo}/compare/{base}...{head}"
         return self._stream_diff(url, f"la comparación {base}...{head}")
 
     def get_pull_request_metadata(self, owner: str, repo: str, pr_number: int) -> dict[str, Any]:
@@ -274,7 +283,8 @@ class GitHubClient:
         if not match:
             # Sin cabecera "last" -- un único commit en toda la rama, que
             # ya es el root.
-            return commits[0].get("sha")
+            sha = commits[0].get("sha")
+            return str(sha) if sha else None
 
         last_page = int(match.group(1))
         last_response = self._get(
@@ -282,7 +292,8 @@ class GitHubClient:
             params={"sha": branch, "per_page": 1, "page": last_page},
         )
         last_commits = last_response.json()
-        return last_commits[0].get("sha") if last_commits else commits[0].get("sha")
+        sha = last_commits[0].get("sha") if last_commits else commits[0].get("sha")
+        return str(sha) if sha else None
 
     def get_default_branch_scan_data(self, owner: str, repo: str) -> tuple[str, dict[str, Any]]:
         """Diff completo de la rama por defecto del repo (TODO su
@@ -437,7 +448,7 @@ class GitHubClient:
 
     def post_comment(self, owner: str, repo: str, pr_number: int, body: str) -> None:
         response = httpx.post(
-            f"{_API_BASE}/repos/{owner}/{repo}/issues/{pr_number}/comments",
+            f"{self._api_base}/repos/{owner}/{repo}/issues/{pr_number}/comments",
             headers=self._headers,
             json={"body": body},
             timeout=_TIMEOUT,
@@ -448,7 +459,7 @@ class GitHubClient:
         self, owner: str, repo: str, sha: str, conclusion: str, summary: str
     ) -> None:
         response = httpx.post(
-            f"{_API_BASE}/repos/{owner}/{repo}/check-runs",
+            f"{self._api_base}/repos/{owner}/{repo}/check-runs",
             headers=self._headers,
             json={
                 "name": "WatchGate",

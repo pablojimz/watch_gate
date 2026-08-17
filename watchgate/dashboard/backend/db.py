@@ -63,9 +63,12 @@ from watchgate.dashboard.backend.schemas import (
     ScoreOut,
     TrendPoint,
     UiSettings,
+    UserSettingsIn,
+    UserSettingsOut,
     normalize_login,
 )
 from watchgate.db.connection import build_engine
+from watchgate.db.models import MonitoredRepo, VCSConnection
 from watchgate.db.schema_guard import check_schema_matches_metadata
 
 DEFAULT_WEIGHTS = {
@@ -668,6 +671,7 @@ def get_llm_settings(session: Session) -> LlmSettingsOut:
     record = session.get(LlmSettingsRow, 1)
     assert record is not None
     api_key = record.api_key
+    gh_token = record.github_token
     return LlmSettingsOut(
         provider=record.provider,  # type: ignore[arg-type]
         model=record.model,
@@ -676,6 +680,9 @@ def get_llm_settings(session: Session) -> LlmSettingsOut:
         api_key_masked=_mask_api_key(api_key),
         monthly_budget_tokens=record.monthly_budget_tokens,
         max_diff_tokens=record.max_diff_tokens,
+        github_api_url=record.github_api_url or "https://api.github.com",
+        github_token_set=bool(gh_token),
+        github_token_masked=_mask_api_key(gh_token),
     )
 
 
@@ -690,14 +697,168 @@ def set_llm_settings(session: Session, body: LlmSettingsIn) -> LlmSettingsOut:
         new_key = body.api_key.strip()
     else:
         new_key = current_key
+
+    current_gh_token = record.github_token
+    if body.clear_github_token:
+        new_gh_token = None
+    elif body.github_token is not None and body.github_token.strip():
+        new_gh_token = body.github_token.strip()
+    else:
+        new_gh_token = current_gh_token
+
     record.provider = body.provider
     record.model = body.model
     record.base_url = body.base_url
     record.api_key = new_key
     record.monthly_budget_tokens = body.monthly_budget_tokens
     record.max_diff_tokens = body.max_diff_tokens
+    record.github_api_url = (
+        body.github_api_url.strip() if body.github_api_url else "https://api.github.com"
+    )
+    record.github_token = new_gh_token
     session.commit()
     return get_llm_settings(session)
+
+
+def get_user_highest_role(session: Session, user_login: str) -> RoleName:
+    norm_login = normalize_login(user_login)
+    if user_is_org_admin(session, norm_login):
+        return "admin_organizacion"
+    roles = session.scalars(select(RepoRole.role).where(RepoRole.user_login == norm_login)).all()
+    if "mantenedor" in roles:
+        return "mantenedor"
+    return "revisor"
+
+
+def get_user_settings(session: Session, login: str) -> UserSettingsOut:
+    norm_login = normalize_login(login)
+    user = session.get(DashboardUser, norm_login)
+    if not user:
+        raise ValueError(f"Usuario no encontrado: {login}")
+
+    role = get_user_highest_role(session, norm_login)
+    gh_token = user.github_token
+
+    ui_settings = None
+    if user.ui_settings_json:
+        try:
+            ui_settings = UiSettings.model_validate_json(user.ui_settings_json)
+        except Exception:
+            pass
+
+    return UserSettingsOut(
+        login=user.login,
+        display_name=user.display_name,
+        role=role,
+        github_api_url=user.github_api_url or "https://api.github.com",
+        github_token_set=bool(gh_token),
+        github_token_masked=_mask_api_key(gh_token),
+        ui_settings=ui_settings,
+    )
+
+
+def set_user_settings(session: Session, login: str, body: UserSettingsIn) -> UserSettingsOut:
+    norm_login = normalize_login(login)
+    user = session.get(DashboardUser, norm_login)
+    if not user:
+        raise ValueError(f"Usuario no encontrado: {login}")
+
+    if body.display_name and body.display_name.strip():
+        user.display_name = body.display_name.strip()
+
+    if body.github_api_url is not None:
+        user.github_api_url = (
+            body.github_api_url.strip() if body.github_api_url.strip() else "https://api.github.com"
+        )
+
+    if body.clear_github_token:
+        user.github_token = None
+    elif body.github_token is not None and body.github_token.strip():
+        user.github_token = body.github_token.strip()
+
+    if body.ui_settings is not None:
+        user.ui_settings_json = body.ui_settings.model_dump_json()
+
+    session.commit()
+    return get_user_settings(session, norm_login)
+
+
+def resolve_github_credentials(
+    session: Session,
+    user_login: str | None = None,
+    repo_path: str | None = None,
+) -> tuple[str | None, str]:
+    """Cascada de 5 niveles para resolver token y URL de la API de GitHub:
+    1. Token Personal del Usuario (user.github_token).
+    2. Token de VCSConnection del MonitoredRepo (vcs.access_token).
+    3. Token Fallback de la Org (LlmSettingsRow.github_token).
+    4. Variables de Entorno (WATCHGATE_GITHUB_TOKEN / GITHUB_TOKEN).
+    5. Petición Anónima.
+    """
+    token: str | None = None
+    api_url: str = "https://api.github.com"
+
+    # Nivel 1: Usuario
+    if user_login:
+        norm_login = normalize_login(user_login)
+        user = session.get(DashboardUser, norm_login)
+        if user:
+            if user.github_token:
+                token = user.github_token
+            if user.github_api_url:
+                api_url = user.github_api_url
+
+    # Nivel 2: VCSConnection del Repositorio -- OJO, `MonitoredRepo`/
+    # `VCSConnection` son modelos de la ENGINE DB
+    # (`watchgate.db.models`), no de esta base de datos del Dashboard:
+    # `session` (el parámetro de esta función) está bound al motor del
+    # Dashboard, que no tiene esas tablas -- consultarlas con `session`
+    # directamente lanza `OperationalError: no such table: monitored_repos`
+    # (reproducido en vivo). Sesión propia y aparte, contra el motor
+    # correcto -- mismo motivo/patrón que el fix de `compute_agent_metrics`
+    # más abajo en este mismo fichero. `.first()` en vez de
+    # `.scalar_one_or_none()`: `repo_path` no es único a secas (dos
+    # organizaciones distintas pueden auditar el mismo repo_path, ver
+    # comentario en `routers/repos.py::_enqueue_main_branch_scan`), así
+    # que más de una fila coincidiendo es un caso real, no un error de
+    # integridad -- cualquiera de las dos sirve igual para resolver un
+    # token de lectura.
+    if not token and repo_path:
+        from watchgate.db.connection import get_session as get_engine_session
+
+        with next(get_engine_session()) as engine_session:
+            repo = (
+                engine_session.execute(
+                    select(MonitoredRepo).where(
+                        MonitoredRepo.repo_path == repo_path  # type: ignore[arg-type]
+                    )
+                )
+                .scalars()
+                .first()
+            )
+            if repo and repo.vcs_connection_id:
+                vcs = engine_session.get(VCSConnection, repo.vcs_connection_id)
+                if vcs and vcs.access_token:
+                    token = vcs.access_token
+
+    # Nivel 3: Fallback de la Org (LlmSettingsRow)
+    ensure_llm_settings(session)
+    llm = session.get(LlmSettingsRow, 1)
+    if llm:
+        if not token and llm.github_token:
+            token = llm.github_token
+        if api_url == "https://api.github.com" and llm.github_api_url:
+            api_url = llm.github_api_url
+
+    # Nivel 4: Variables de entorno
+    if not token:
+        token = os.environ.get("WATCHGATE_GITHUB_TOKEN") or os.environ.get("GITHUB_TOKEN")
+    if api_url == "https://api.github.com":
+        env_url = os.environ.get("WATCHGATE_GITHUB_API_URL")
+        if env_url:
+            api_url = env_url
+
+    return token, api_url
 
 
 def ensure_ui_settings(session: Session) -> None:
