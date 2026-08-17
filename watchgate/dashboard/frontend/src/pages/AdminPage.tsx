@@ -11,6 +11,7 @@ import {
 import { toast } from 'sonner'
 import {
   api,
+  type DashboardUser,
   type LlmProvider,
   type LlmSettings,
   type RepoRole,
@@ -711,6 +712,7 @@ export default function AdminPage() {
   const [tab, setTab] = useState<Tab>('access')
   const [configScope, setConfigScope] = useState<ConfigScope>('default')
   const [roles, setRoles] = useState<RepoRole[] | null>(null)
+  const [users, setUsers] = useState<DashboardUser[] | null>(null)
   const [repos, setRepos] = useState<string[]>([])
   const [selectedRepo, setSelectedRepo] = useState('')
   const [settings, setSettings] = useState<RepoSettings | null>(null)
@@ -720,16 +722,29 @@ export default function AdminPage() {
   const [userLogin, setUserLogin] = useState('')
   const [repo, setRepo] = useState('acme/payments-api')
   const [role, setRole] = useState<RoleName>('revisor')
+  const [newUserLogin, setNewUserLogin] = useState('')
+  const [newUserDisplayName, setNewUserDisplayName] = useState('')
+  const [newUserPassword, setNewUserPassword] = useState('')
+  const [creatingUser, setCreatingUser] = useState(false)
 
   async function reloadRoles() {
     const data = await api.listRoles()
     setRoles(data)
   }
 
+  async function reloadUsers() {
+    const data = await api.listUsers()
+    setUsers(data)
+  }
+
   useEffect(() => {
     void reloadRoles().catch((err: unknown) => {
       toast.error(err instanceof Error ? err.message : 'Error')
       setRoles([])
+    })
+    void reloadUsers().catch((err: unknown) => {
+      toast.error(err instanceof Error ? err.message : 'Error')
+      setUsers([])
     })
     void api
       .listRepos()
@@ -846,6 +861,37 @@ export default function AdminPage() {
     }
   }
 
+  async function addUser() {
+    const normalizedLogin = newUserLogin.trim().toLowerCase()
+    if (!normalizedLogin || !newUserDisplayName.trim() || newUserPassword.length < 8) {
+      toast.error(t('admin.userFormInvalid'))
+      return
+    }
+    setCreatingUser(true)
+    try {
+      await api.createUser(normalizedLogin, newUserDisplayName.trim(), newUserPassword)
+      setNewUserLogin('')
+      setNewUserDisplayName('')
+      setNewUserPassword('')
+      await reloadUsers()
+      toast.success(t('admin.userCreated'))
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error')
+    } finally {
+      setCreatingUser(false)
+    }
+  }
+
+  async function removeUser(item: DashboardUser) {
+    try {
+      await api.deleteUser(item.login)
+      await reloadUsers()
+      toast.success(t('admin.userRemoved'))
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error')
+    }
+  }
+
   async function saveSettings() {
     if (!settings) return
     setSaving(true)
@@ -885,7 +931,7 @@ export default function AdminPage() {
     { id: 'llm', label: t('admin.tabLlm'), icon: KeyRound },
   ]
 
-  if (roles === null) {
+  if (roles === null || users === null) {
     return (
       <div className="p-4 sm:px-6 lg:px-8">
         <TableSkeleton rows={6} />
@@ -904,6 +950,80 @@ export default function AdminPage() {
               <Users className="size-5 text-primary" strokeWidth={1.75} />
               <h1 className="text-xl font-semibold">{t('admin.title')}</h1>
             </div>
+
+            <div className="flex flex-col gap-3">
+              <h2 className="text-sm font-semibold text-muted-foreground">
+                {t('admin.usersTitle')}
+              </h2>
+              <div className="grid gap-3 rounded-xl border p-4 sm:grid-cols-2 xl:grid-cols-4">
+                <Input
+                  placeholder={t('admin.user')}
+                  value={newUserLogin}
+                  onChange={(e) => setNewUserLogin(e.target.value)}
+                  disabled={creatingUser}
+                />
+                <Input
+                  placeholder={t('admin.displayName')}
+                  value={newUserDisplayName}
+                  onChange={(e) => setNewUserDisplayName(e.target.value)}
+                  disabled={creatingUser}
+                />
+                <div>
+                  <Input
+                    type="password"
+                    placeholder={t('admin.password')}
+                    value={newUserPassword}
+                    onChange={(e) => setNewUserPassword(e.target.value)}
+                    disabled={creatingUser}
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {t('admin.passwordHint')}
+                  </p>
+                </div>
+                <Button disabled={creatingUser} onClick={() => void addUser()}>
+                  {t('admin.createUser')}
+                </Button>
+              </div>
+
+              <div className="overflow-x-auto rounded-xl border">
+                <table className="w-full min-w-[24rem] text-sm">
+                  <thead className="bg-muted/50 text-left text-muted-foreground">
+                    <tr>
+                      <th className="px-4 py-3 font-medium">{t('admin.user')}</th>
+                      <th className="px-4 py-3 font-medium">{t('admin.displayName')}</th>
+                      <th className="px-4 py-3" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {users.map((u) => (
+                      <tr key={u.login} className="border-t">
+                        <td className="px-4 py-3">{u.login}</td>
+                        <td className="px-4 py-3">{u.display_name}</td>
+                        <td className="px-4 py-3 text-right">
+                          <Button size="sm" variant="outline" onClick={() => void removeUser(u)}>
+                            {t('admin.remove')}
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                    {users.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={3}
+                          className="px-4 py-6 text-center text-sm text-muted-foreground"
+                        >
+                          {t('admin.noUsers')}
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <h2 className="text-sm font-semibold text-muted-foreground">
+              {t('admin.rolesTitle')}
+            </h2>
 
             <div className="grid gap-3 rounded-xl border p-4 sm:grid-cols-2 xl:grid-cols-4">
               <div>
