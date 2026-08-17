@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Eye, Plus, RefreshCw, FolderGit2 } from 'lucide-react'
+import { Eye, Plus, RefreshCw, FolderGit2, GitBranch } from 'lucide-react'
 import { toast } from 'sonner'
 import { api, type MonitoredRepoResponse } from '@/api/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -80,6 +80,18 @@ export default function ExternalReposPage() {
       toast.success(res.message || 'Escaneo de todas las PRs abiertas encolado')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error al escanear')
+    } finally {
+      setIsScanning(prev => ({ ...prev, [repoId]: false }))
+    }
+  }
+
+  async function handleScanMainBranch(repoId: string) {
+    setIsScanning(prev => ({ ...prev, [repoId]: true }))
+    try {
+      const res = await api.scanMainBranch(repoId)
+      toast.success(res.message)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al escanear la rama principal')
     } finally {
       setIsScanning(prev => ({ ...prev, [repoId]: false }))
     }
@@ -192,6 +204,17 @@ export default function ExternalReposPage() {
                   >
                     <RefreshCw className={`size-3.5 ${isScanning[repo.id] ? 'animate-spin' : ''}`} />
                     Escanear todas las PRs abiertas
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full h-8 text-xs gap-1.5"
+                    disabled={isScanning[repo.id]}
+                    onClick={() => handleScanMainBranch(repo.id)}
+                  >
+                    <GitBranch className={`size-3.5 ${isScanning[repo.id] ? 'animate-spin' : ''}`} />
+                    Escanear rama principal
                   </Button>
 
                   <div className="flex gap-2 pt-1">
