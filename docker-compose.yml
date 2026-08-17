@@ -127,34 +127,6 @@ services:
       dashboard-backend:
         condition: service_started
 
-  scheduler:
-    build:
-      context: .
-      dockerfile: docker/dashboard-backend.Dockerfile
-    # Bucle de repolling periódico de PRs en repos externos "audited" (ver
-    # watchgate/dashboard/backend/scheduler.py) -- sin este servicio, un
-    # repo dado de alta solo se escanea una vez (al crearlo) o cuando se
-    # pulsa "Scan PR" a mano en el Dashboard; auto_scan_prs/
-    # scan_interval_minutes no tienen ningún proceso que los respete.
-    command: python -m watchgate.dashboard.backend.scheduler
-    env_file:
-      - .env
-    environment:
-      WATCHGATE_DASHBOARD_DATABASE_URL: postgresql://watchgate:watchgate@postgres:5432/watchgate_dashboard
-      WATCHGATE_DATABASE_URL: postgresql+psycopg://watchgate:watchgate@postgres:5432/watchgate
-      WATCHGATE_REDIS_URL: redis://redis:6379/0
-    # Mismo motivo que dashboard-worker: reutiliza la imagen del backend
-    # (con su HEALTHCHECK a /api/health), pero no expone servidor HTTP.
-    healthcheck:
-      disable: true
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      dashboard-backend:
-        condition: service_started
-
   dashboard-frontend:
     build:
       context: watchgate/dashboard/frontend

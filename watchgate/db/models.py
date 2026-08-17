@@ -59,9 +59,11 @@ class MonitoredRepo(SQLModel, table=True):
     last_scanned_at: datetime | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
-    # --- CAMPOS DE AUTOMATIZACIÓN, ETags Y RESILIENCIA ---
-    auto_scan_prs: bool = Field(default=True)
-    scan_interval_minutes: int = Field(default=30)
+    # --- CAMPOS DE ETags Y RESILIENCIA ---
+    # (el repolling PERIÓDICO automático -- auto_scan_prs/
+    # scan_interval_minutes -- se eliminó a petición explícita: todo
+    # escaneo de un repo ya conectado requiere pulsar "Escanear" en el
+    # Dashboard, ver watchgate/service/repo_polling.py)
     prs_etag: str | None = Field(default=None)
     last_polled_at: datetime | None = Field(default=None)
     consecutive_errors: int = Field(default=0)

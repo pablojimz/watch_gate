@@ -197,8 +197,6 @@ export interface MonitoredRepoResponse {
   repo_path: string
   monitor_type: string
   status: string
-  auto_scan_prs: boolean
-  scan_interval_minutes: number
   last_scanned_at: string | null
   last_polled_at: string | null
   consecutive_errors: number
@@ -285,10 +283,7 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ pr_number: pr_number || 0 }),
     }),
-  updateExternalRepo: (
-    id: string,
-    data: { auto_scan_prs?: boolean; scan_interval_minutes?: number; status?: string }
-  ) =>
+  updateExternalRepo: (id: string, data: { status?: string }) =>
     request<MonitoredRepoResponse>(`/repos/external/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
