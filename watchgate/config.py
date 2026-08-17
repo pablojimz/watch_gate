@@ -81,6 +81,12 @@ class WatchGateConfig(BaseSettings):
     # Usado por shortcircuit.py (§11, opcional).
     shortcircuit_enabled: bool = False
 
+    # Configuración de VCS / GitHub API
+    github_token: str | None = Field(default=None, validation_alias="WATCHGATE_GITHUB_TOKEN")
+    github_api_url: str = Field(
+        default="https://api.github.com", validation_alias="WATCHGATE_GITHUB_API_URL"
+    )
+
 
 def _read_yaml(yaml_path: str) -> dict[str, Any]:
     path = Path(yaml_path)
