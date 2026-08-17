@@ -26,3 +26,7 @@ semantic:
   max_diff_tokens: 6000
   monthly_budget_tokens: null   # null = sin límite
   cache_identical_diffs: true
+
+# Configuración de API de GitHub (opcional)
+github_token: null            # Token de GitHub (PAT) para aumentar la cuota a 5.000 req/h
+github_api_url: "https://api.github.com"

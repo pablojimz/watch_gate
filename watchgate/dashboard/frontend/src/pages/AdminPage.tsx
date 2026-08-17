@@ -520,6 +520,9 @@ function LlmSettingsForm({
   const [clearKey, setClearKey] = useState(false)
   const [budget, setBudget] = useState(settings.monthly_budget_tokens ?? 2_000_000)
   const [maxDiff, setMaxDiff] = useState(settings.max_diff_tokens ?? 80_000)
+  const [githubApiUrl, setGithubApiUrl] = useState(settings.github_api_url ?? 'https://api.github.com')
+  const [githubToken, setGithubToken] = useState('')
+  const [clearGithubToken, setClearGithubToken] = useState(false)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -528,8 +531,11 @@ function LlmSettingsForm({
     setBaseUrl(settings.base_url ?? '')
     setBudget(settings.monthly_budget_tokens ?? 2_000_000)
     setMaxDiff(settings.max_diff_tokens ?? 80_000)
+    setGithubApiUrl(settings.github_api_url ?? 'https://api.github.com')
     setApiKey('')
     setClearKey(false)
+    setGithubToken('')
+    setClearGithubToken(false)
   }, [settings])
 
   async function save() {
@@ -543,10 +549,15 @@ function LlmSettingsForm({
         clear_api_key: clearKey,
         monthly_budget_tokens: budget,
         max_diff_tokens: maxDiff,
+        github_api_url: githubApiUrl.trim() || 'https://api.github.com',
+        github_token: clearGithubToken ? null : githubToken.trim() || null,
+        clear_github_token: clearGithubToken,
       })
       onSaved(updated)
       setApiKey('')
       setClearKey(false)
+      setGithubToken('')
+      setClearGithubToken(false)
       toast.success(t('admin.llmSaved'))
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error')
@@ -637,6 +648,52 @@ function LlmSettingsForm({
               value={maxDiff}
               onChange={(e) => setMaxDiff(Number(e.target.value))}
             />
+          </label>
+        </div>
+        <div className="mt-5">
+          <Button disabled={saving} onClick={() => void save()}>
+            {t('admin.saveSettings')}
+          </Button>
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        title="API de GitHub y Repositorios Externos (Fallback de Organización)"
+        hint="Token global de respaldo para solicitudes a la API de GitHub en escaneos cuando el usuario no tenga su propio PAT."
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="text-sm">
+            <span className="mb-1 block text-muted-foreground">URL de la API de GitHub</span>
+            <Input
+              value={githubApiUrl}
+              onChange={(e) => setGithubApiUrl(e.target.value)}
+              placeholder="https://api.github.com"
+            />
+          </label>
+          <label className="text-sm">
+            <span className="mb-1 block text-muted-foreground">Token Fallback de GitHub</span>
+            <Input
+              type="password"
+              autoComplete="off"
+              value={githubToken}
+              disabled={clearGithubToken}
+              onChange={(e) => setGithubToken(e.target.value)}
+              placeholder={
+                settings.github_token_set
+                  ? t('admin.llmApiKeySet', { masked: settings.github_token_masked })
+                  : t('admin.llmApiKeyEmpty')
+              }
+            />
+            {settings.github_token_set ? (
+              <label className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={clearGithubToken}
+                  onChange={(e) => setClearGithubToken(e.target.checked)}
+                />
+                {t('admin.llmClearKey')}
+              </label>
+            ) : null}
           </label>
         </div>
         <div className="mt-5">
