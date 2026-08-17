@@ -52,6 +52,44 @@ class ScanRequest(BaseModel):
     )
 
 
+def _enqueue_main_branch_scan(org_id: str, repo: MonitoredRepo) -> bool:
+    """Encola `run_main_branch_scan` (análisis del contenido COMPLETO de la
+    rama por defecto, no solo de PRs) -- extraído para reusarse tanto al
+    conectar un repo nuevo (`add_external_repo`, evento único de
+    onboarding) como al pulsar "Escanear rama principal" a mano
+    (`scan_main_branch`). Devuelve `False` sin encolar nada si ya hay un
+    job para este repo en curso (ni failed ni terminado) -- mismo criterio
+    que el resto de escaneos: no duplicar trabajo en vuelo.
+
+    job_id incluye org_id (no solo repo_path): dos organizaciones
+    distintas pueden auditar el MISMO repo_path (la unicidad de
+    MonitoredRepo está bajo (org_id, repo_path), no bajo repo_path a
+    secas) -- sin org_id aquí, la segunda colisionaría con el job de la
+    primera. Se comprueba/borra un job previo con ese id antes de encolar
+    -- MISMO patrón que RepoPollingService._poll_single_candidate: un
+    job_id que ya existe en Redis (p. ej. de un intento anterior que
+    falló) no se vuelve a encolar solo por llamar a queue.enqueue() con el
+    mismo id -- se actualizan sus datos pero, si RQ ya lo sacó una vez de
+    la lista de la cola, se queda "atascado" sin que ningún worker lo
+    recoja nunca (comprobado en vivo).
+    """
+    queue = get_queue()
+    job_id = f"main_branch_scan:{org_id}:{repo.repo_path}"
+    existing_job = queue.fetch_job(job_id)
+    if existing_job is not None and not existing_job.is_failed:
+        return False
+    if existing_job is not None:
+        existing_job.delete()
+    queue.enqueue(
+        run_main_branch_scan,
+        repo.repo_path,
+        org_id,
+        repo.vcs_connection_id,
+        job_id=job_id,
+    )
+    return True
+
+
 @router.post("", response_model=MonitoredRepoResponse, status_code=status.HTTP_201_CREATED)
 def add_external_repo(
     data: MonitoredRepoCreate,
@@ -121,34 +159,10 @@ def add_external_repo(
     # "Escanear" o abra la primera PR nueva. Evento ÚNICO al conectar el
     # repo, no periódico -- el repolling automático se eliminó (ver
     # watchgate/service/repo_polling.py); todo escaneo POSTERIOR de un
-    # repo ya conectado requiere pulsar "Escanear" en el Dashboard.
-    #
-    # job_id incluye org_id (no solo repo_path): dos organizaciones
-    # distintas pueden auditar el MISMO repo_path (la unicidad de arriba
-    # está bajo (org_id, repo_path), no bajo repo_path a secas) -- sin
-    # org_id aquí, la segunda colisionaría con el job de la primera.
-    #
-    # Se comprueba/borra un job previo con ese id antes de encolar --
-    # MISMO patrón que RepoPollingService._poll_single_candidate: un
-    # job_id que ya existe en Redis (p. ej. de un intento anterior que
-    # falló) no se vuelve a encolar solo por llamar a queue.enqueue() con
-    # el mismo id -- se actualizan sus datos pero, si RQ ya lo sacó una vez
-    # de la lista de la cola, se queda "atascado" sin que ningún worker lo
-    # recoja nunca (comprobado en vivo).
+    # repo ya conectado requiere pulsar un botón "Escanear..." en el
+    # Dashboard (ver `scan_main_branch`/`scan_audited_repo` más abajo).
     if new_repo.monitor_type == "audited":
-        queue = get_queue()
-        job_id = f"main_branch_scan:{org_id}:{new_repo.repo_path}"
-        existing_job = queue.fetch_job(job_id)
-        if existing_job is None or existing_job.is_failed:
-            if existing_job is not None:
-                existing_job.delete()
-            queue.enqueue(
-                run_main_branch_scan,
-                new_repo.repo_path,
-                org_id,
-                new_repo.vcs_connection_id,
-                job_id=job_id,
-            )
+        _enqueue_main_branch_scan(org_id, new_repo)
 
     # Escaneo inmediato (único, al conectar) de todas las PRs abiertas ya
     # existentes -- igual que el escaneo de línea base de arriba, evento de
@@ -214,6 +228,43 @@ def scan_audited_repo(
         "message": f"Escaneo de todas las PRs abiertas encolado ({enqueued} PRs)",
         "repo_path": repo.repo_path,
         "prs_enqueued": enqueued,
+    }
+
+
+@router.post("/{repo_id}/scan-main", status_code=status.HTTP_202_ACCEPTED)
+def scan_main_branch(
+    repo_id: str,
+    current_user: CurrentUser,
+    session: DBSession,
+) -> Any:
+    """Encola un análisis del contenido COMPLETO de la rama por defecto
+    (no de una PR concreta) -- botón "Escanear rama principal" del
+    Dashboard. Mismo `run_main_branch_scan` que ya se dispara una única
+    vez al conectar un repo "audited" (`add_external_repo`), pero aquí
+    bajo demanda y para cualquier repo (también "managed": las PRs le
+    llegan por webhook, pero el contenido YA existente de la rama
+    principal antes de activar el webhook no queda cubierto por eso).
+    Queda reflejado en el historial del repo como cualquier otro análisis
+    (`pr_id` = "main")."""
+    user_login = normalize_login(current_user.login)
+    db_user = _get_or_create_db_user(session, user_login)
+    org_id = db_user.org_id
+    assert org_id is not None
+
+    repo = session.exec(
+        select(MonitoredRepo).where(MonitoredRepo.id == repo_id, MonitoredRepo.org_id == org_id)
+    ).first()
+
+    if not repo:
+        raise HTTPException(status_code=404, detail="Repositorio no encontrado")
+
+    enqueued = _enqueue_main_branch_scan(org_id, repo)
+    return {
+        "message": "Escaneo de la rama principal encolado"
+        if enqueued
+        else "Ya hay un escaneo de la rama principal en curso para este repositorio",
+        "repo_path": repo.repo_path,
+        "enqueued": enqueued,
     }
 
 

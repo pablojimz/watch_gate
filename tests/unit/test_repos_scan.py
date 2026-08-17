@@ -460,3 +460,124 @@ def test_add_external_repo_managed_does_not_enqueue_main_branch_scan(test_db_ses
     assert main_branch_calls == []
 
     app.dependency_overrides.clear()
+
+
+def test_scan_main_branch_endpoint_enqueues_job(test_db_session):
+    """Botón "Escanear rama principal": POST /{repo_id}/scan-main encola
+    run_main_branch_scan bajo demanda, con independencia de si el repo ya
+    tuvo su escaneo de línea base al conectarse."""
+
+    def get_test_db():
+        yield test_db_session
+
+    app.dependency_overrides[get_db_session] = get_test_db
+
+    from watchgate.dashboard.backend.routers.keys import _get_or_create_db_user
+    from watchgate.dashboard.backend.tasks import run_main_branch_scan
+
+    creator = _get_or_create_db_user(test_db_session, "creator6@corp.com")
+    repo = MonitoredRepo(
+        id="repo-scan-main",
+        org_id=creator.org_id,
+        repo_path="openclaw/scanmainrepo",
+        monitor_type="audited",
+        status="active",
+    )
+    test_db_session.add(repo)
+    test_db_session.commit()
+
+    client = TestClient(app)
+    from watchgate.dashboard.backend.auth import create_session_token
+
+    token = create_session_token("creator6@corp.com")
+    client.cookies.set("watchgate_session", token)
+
+    mock_queue = MagicMock()
+    mock_queue.fetch_job.return_value = None
+    target_queue = "watchgate.dashboard.backend.routers.repos.get_queue"
+    with patch(target_queue, return_value=mock_queue):
+        response = client.post("/api/repos/external/repo-scan-main/scan-main")
+
+    assert response.status_code == 202
+    data = response.json()
+    assert data["enqueued"] is True
+    assert data["repo_path"] == "openclaw/scanmainrepo"
+
+    main_branch_calls = [
+        call for call in mock_queue.enqueue.call_args_list if call.args[0] is run_main_branch_scan
+    ]
+    assert len(main_branch_calls) == 1
+    assert main_branch_calls[0].args[1] == "openclaw/scanmainrepo"
+    assert main_branch_calls[0].args[2] == creator.org_id
+
+    app.dependency_overrides.clear()
+
+
+def test_scan_main_branch_endpoint_skips_when_job_already_in_flight(test_db_session):
+    """No duplica trabajo: si ya hay un escaneo de rama principal en curso
+    (ni failed ni terminado) para este repo, no vuelve a encolar."""
+
+    def get_test_db():
+        yield test_db_session
+
+    app.dependency_overrides[get_db_session] = get_test_db
+
+    from watchgate.dashboard.backend.routers.keys import _get_or_create_db_user
+    from watchgate.dashboard.backend.tasks import run_main_branch_scan
+
+    creator = _get_or_create_db_user(test_db_session, "creator7@corp.com")
+    repo = MonitoredRepo(
+        id="repo-scan-main-2",
+        org_id=creator.org_id,
+        repo_path="openclaw/inflightmain",
+        monitor_type="audited",
+        status="active",
+    )
+    test_db_session.add(repo)
+    test_db_session.commit()
+
+    client = TestClient(app)
+    from watchgate.dashboard.backend.auth import create_session_token
+
+    token = create_session_token("creator7@corp.com")
+    client.cookies.set("watchgate_session", token)
+
+    in_flight_job = MagicMock()
+    in_flight_job.is_failed = False
+    mock_queue = MagicMock()
+    mock_queue.fetch_job.return_value = in_flight_job
+    target_queue = "watchgate.dashboard.backend.routers.repos.get_queue"
+    with patch(target_queue, return_value=mock_queue):
+        response = client.post("/api/repos/external/repo-scan-main-2/scan-main")
+
+    assert response.status_code == 202
+    assert response.json()["enqueued"] is False
+    assert not in_flight_job.delete.called
+    main_branch_calls = [
+        call for call in mock_queue.enqueue.call_args_list if call.args[0] is run_main_branch_scan
+    ]
+    assert main_branch_calls == []
+
+    app.dependency_overrides.clear()
+
+
+def test_scan_main_branch_endpoint_404_for_unknown_repo(test_db_session):
+    def get_test_db():
+        yield test_db_session
+
+    app.dependency_overrides[get_db_session] = get_test_db
+
+    from watchgate.dashboard.backend.routers.keys import _get_or_create_db_user
+
+    _get_or_create_db_user(test_db_session, "creator8@corp.com")
+
+    client = TestClient(app)
+    from watchgate.dashboard.backend.auth import create_session_token
+
+    token = create_session_token("creator8@corp.com")
+    client.cookies.set("watchgate_session", token)
+
+    response = client.post("/api/repos/external/no-existe/scan-main")
+    assert response.status_code == 404
+
+    app.dependency_overrides.clear()
