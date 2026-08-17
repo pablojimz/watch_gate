@@ -11,15 +11,23 @@ import os
 from collections.abc import Generator
 from typing import Any
 
-from sqlalchemy import engine, event, inspect
+from sqlalchemy import engine, event
 from sqlmodel import Session, SQLModel, create_engine
+
+from watchgate.db.schema_guard import SchemaOutOfDateError, check_schema_matches_metadata
 
 _DEFAULT_SQLITE_URL = "sqlite:///.watchgate/app.db"
 
-
-class SchemaOutOfDateError(RuntimeError):
-    """La base de datos ya existe pero le faltan columnas que el código
-    actual espera -- ver `_check_schema_matches_models` para el porqué."""
+__all__ = [
+    "SchemaOutOfDateError",
+    "build_engine",
+    "default_engine",
+    "get_database_url",
+    "get_db_session",
+    "get_session",
+    "init_db",
+    "normalize_database_url",
+]
 
 
 def get_database_url() -> str:
@@ -27,9 +35,26 @@ def get_database_url() -> str:
     return os.environ.get("WATCHGATE_DATABASE_URL", _DEFAULT_SQLITE_URL)
 
 
+def normalize_database_url(database_url: str) -> str:
+    """Normaliza un DSN `postgres(ql)://` sin driver explícito a
+    `postgresql+psycopg://` (SQLAlchemy 2.0 resuelve un DSN `postgresql://`
+    a pelo contra el driver `psycopg2` por defecto, no `psycopg` v3 -- y
+    `psycopg2` no es una dependencia del proyecto, solo `psycopg[binary]`.
+    Sin esto, `create_engine()` contra la URL exacta que documenta
+    `.env.example` fallaría con `ModuleNotFoundError: No module named
+    'psycopg2'` en el primer arranque contra Postgres real). No toca URLs
+    que ya traen un driver explícito (`postgresql+psycopg://`,
+    `postgresql+asyncpg://`, ...) ni URLs de otros dialectos (sqlite)."""
+    if database_url.startswith("postgres://"):
+        database_url = "postgresql://" + database_url[len("postgres://") :]
+    if database_url.startswith("postgresql://"):
+        return "postgresql+psycopg://" + database_url[len("postgresql://") :]
+    return database_url
+
+
 def build_engine(database_url: str | None = None) -> engine.Engine:
     """Construye el motor SQLAlchemy/SQLModel adecuado según el dialecto."""
-    db_url = database_url or get_database_url()
+    db_url = normalize_database_url(database_url or get_database_url())
 
     connect_args: dict[str, Any] = {}
     if db_url.startswith("sqlite"):
@@ -54,50 +79,13 @@ def build_engine(database_url: str | None = None) -> engine.Engine:
 default_engine = build_engine()
 
 
-def _check_schema_matches_models(target_engine: engine.Engine) -> None:
-    """Aborta con un mensaje claro si una tabla YA EXISTE en la base de
-    datos pero le faltan columnas que los modelos de SQLModel actuales
-    esperan.
-
-    `SQLModel.metadata.create_all()` (más abajo) solo crea tablas que no
-    existen -- nunca añade columnas nuevas a una tabla ya existente, y
-    Alembic (ver `alembic/`) tampoco se ejecuta solo en cada arranque a
-    propósito (ver `alembic/env.py` y docs/despliegue.md: aplicar
-    migraciones es un paso explícito de despliegue, `alembic upgrade
-    head`, no algo que deba correr sin supervisión en cada boot -- sobre
-    todo con más de una réplica arrancando a la vez contra la misma base
-    de datos). Sin este chequeo, desplegar una versión del código que
-    añade columnas contra una base de datos a la que no se le aplicó la
-    migración produce un apagón confuso: `OperationalError: no such
-    column` mucho más tarde, en medio de `create_api_key`/`save_pr_score`,
-    sin relación aparente con el despliegue que lo causó. Se prefiere
-    fallar aquí, en el arranque, con un mensaje que dice exactamente qué
-    falta y qué hacer.
-    """
-    inspector = inspect(target_engine)
-    existing_tables = set(inspector.get_table_names())
-
-    problems: list[str] = []
-    for table_name, table in SQLModel.metadata.tables.items():
-        if table_name not in existing_tables:
-            continue  # create_all() la creará entera y correcta más abajo.
-        existing_columns = {col["name"] for col in inspector.get_columns(table_name)}
-        expected_columns = {col.name for col in table.columns}
-        missing = sorted(expected_columns - existing_columns)
-        if missing:
-            problems.append(f"  - tabla '{table_name}': faltan columnas {missing}")
-
-    if problems:
-        raise SchemaOutOfDateError(
-            "La base de datos existente no coincide con el esquema actual de "
-            "WatchGate -- faltan columnas que el código espera:\n"
-            + "\n".join(problems)
-            + "\nAplica la migración pendiente con `alembic upgrade head` (o, si es "
-            "un entorno de desarrollo sin datos que conservar, borra/recrea la base "
-            "de datos) antes de arrancar esta versión. Si la base de datos ya tenía "
-            "estas tablas de antes de adoptar Alembic, primero hace falta "
-            "`alembic stamp head` una sola vez -- ver docs/despliegue.md."
-        )
+_MIGRATION_HINT = (
+    "Aplica la migración pendiente con `alembic upgrade head` (o, si es "
+    "un entorno de desarrollo sin datos que conservar, borra/recrea la base "
+    "de datos) antes de arrancar esta versión. Si la base de datos ya tenía "
+    "estas tablas de antes de adoptar Alembic, primero hace falta "
+    "`alembic stamp head` una sola vez -- ver docs/despliegue.md."
+)
 
 
 def init_db(db_engine: engine.Engine | None = None) -> None:
@@ -105,12 +93,12 @@ def init_db(db_engine: engine.Engine | None = None) -> None:
 
     Antes de crear nada, comprueba que las tablas que YA existen tengan
     todas las columnas que el código actual espera -- ver
-    `_check_schema_matches_models`. `create_all()` por sí solo nunca migra
+    `check_schema_matches_metadata`. `create_all()` por sí solo nunca migra
     una tabla existente, así que sin este chequeo el desajuste se
     descubriría mucho más tarde, a mitad de una petición cualquiera.
     """
     target_engine = db_engine or default_engine
-    _check_schema_matches_models(target_engine)
+    check_schema_matches_metadata(target_engine, SQLModel.metadata, migration_hint=_MIGRATION_HINT)
     SQLModel.metadata.create_all(target_engine)
 
 

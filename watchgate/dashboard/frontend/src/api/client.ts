@@ -213,11 +213,6 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ username, password }),
     }),
-  devLogin: (login: string, role: RoleName) =>
-    request<{ login: string; role: string }>('/auth/dev-login', {
-      method: 'POST',
-      body: JSON.stringify({ login, role }),
-    }),
   listRepos: () => request<string[]>('/repos'),
   listScores: (repo: string) => request<ScoreOut[]>(`/repos/${repo}/scores`),
   myRole: (repo: string) =>

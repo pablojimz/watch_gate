@@ -17,7 +17,7 @@ export default function LoginPage() {
     event.preventDefault()
     setLoading(true)
     try {
-      password ? await api.login(username, password) : await api.devLogin(username, "admin_organizacion")
+      await api.login(username, password)
       window.location.href = '/repos'
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error de login')
@@ -52,12 +52,13 @@ export default function LoginPage() {
             />
           </label>
           <label className="text-sm">
-            <span className="mb-1 block text-muted-foreground">{t('login.password')} (Opcional en entorno de Desarrollo local)</span>
+            <span className="mb-1 block text-muted-foreground">{t('login.password')}</span>
             <Input
               type="password"
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              required
             />
           </label>
           <Button type="submit" size="lg" disabled={loading} className="w-full gap-2">

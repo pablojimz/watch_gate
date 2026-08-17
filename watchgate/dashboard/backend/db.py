@@ -1,11 +1,18 @@
-"""db.py — esquema y acceso a la base de datos histórica.
+"""db.py — esquema y acceso a la base de datos histórica del Dashboard.
 
 SQLite por defecto (fichero local, cero configuración). Si
 ``WATCHGATE_DASHBOARD_DATABASE_URL`` apunta a una URL ``postgres(ql)://``,
-``connect()`` usa Postgres en su lugar (ver `db_postgres.py`): las ~40
-funciones de este módulo no saben contra qué motor hablan, solo `connect()`,
-`init_db()` e `insert_aggregated()` (el único sitio que usa `lastrowid`,
-sin equivalente directo en Postgres) ramifican por motor.
+se usa Postgres en su lugar -- ambos dialectos se resuelven con el mismo
+motor SQLAlchemy 2.0 (`watchgate.db.connection.build_engine`, que ya
+normaliza el DSN al driver `psycopg` correcto), así que este módulo ya no
+necesita ramificar por motor en ningún sitio: es el mismo código ORM tanto
+en SQLite como en Postgres.
+
+Las ~40 funciones de este módulo reciben una `Session` de SQLAlchemy (ver
+`db_session()`) contra los modelos de `watchgate.dashboard.backend.models`
+-- ese módulo documenta por qué usa su propia base declarativa
+(`DashboardBase`), separada de `watchgate.db.models`: son dos bases de
+datos físicamente distintas.
 """
 
 from __future__ import annotations
@@ -14,13 +21,15 @@ import hashlib
 import json
 import os
 import secrets
-import sqlite3
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal, cast
+
+from sqlalchemy import Engine, func, select
+from sqlalchemy.orm import Session
 
 from watchgate.core.models import (
     AggregatedResult,
@@ -31,8 +40,16 @@ from watchgate.core.models import (
     Semaforo,
     ThreatNature,
 )
-from watchgate.dashboard.backend import db_postgres
-from watchgate.dashboard.backend.db_postgres import PostgresConnection
+from watchgate.dashboard.backend.models import (
+    DashboardBase,
+    DashboardPRScore,
+    DashboardUser,
+    LlmSettingsRow,
+    OrgSettingsRow,
+    RepoRole,
+    RepoSettingsRow,
+    UiSettingsRow,
+)
 from watchgate.dashboard.backend.schemas import (
     AgentMetricRow,
     AgentUsageMetrics,
@@ -48,88 +65,8 @@ from watchgate.dashboard.backend.schemas import (
     UiSettings,
     normalize_login,
 )
-
-DBConnection = sqlite3.Connection | PostgresConnection
-# Fila devuelta por `conn.execute(...).fetchone()/.fetchall()`: sqlite3.Row
-# en SQLite, dict en Postgres (ver PostgresCursor en db_postgres.py) -- ambas
-# soportan `row["columna"]` y `.keys()`, que es todo lo que este módulo usa.
-Row = sqlite3.Row | dict[str, Any]
-
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS pr_scores (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  repo TEXT NOT NULL,
-  pr_number INTEGER NOT NULL,
-  timestamp DATETIME NOT NULL,
-  score INTEGER NOT NULL,
-  semaforo TEXT NOT NULL,
-  static_score INTEGER, static_skipped BOOLEAN,
-  deps_score INTEGER, deps_skipped BOOLEAN,
-  reputation_score INTEGER, reputation_skipped BOOLEAN,
-  semantic_score INTEGER, semantic_skipped BOOLEAN, semantic_justification TEXT,
-  weights_json TEXT NOT NULL DEFAULT '{}',
-  author_login TEXT,
-  human_feedback TEXT CHECK(
-    human_feedback IN ('correcto','falso_positivo') OR human_feedback IS NULL
-  ),
-  accepted_by TEXT,
-  accepted_at TEXT,
-  findings_json TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_repo_timestamp ON pr_scores(repo, timestamp);
-
-CREATE TABLE IF NOT EXISTS repo_roles (
-  user_login TEXT NOT NULL, repo TEXT NOT NULL,
-  role TEXT NOT NULL CHECK(role IN ('admin_organizacion','mantenedor','revisor')),
-  PRIMARY KEY (user_login, repo)
-);
-
-CREATE TABLE IF NOT EXISTS repo_settings (
-  repo TEXT PRIMARY KEY,
-  weights_json TEXT NOT NULL,
-  thresholds_json TEXT NOT NULL,
-  layers_enabled_json TEXT NOT NULL DEFAULT '{}',
-  risk_colors_json TEXT NOT NULL DEFAULT '{}',
-  block_on_high BOOLEAN NOT NULL DEFAULT 1,
-  require_feedback_on_high BOOLEAN NOT NULL DEFAULT 0
-);
-
-CREATE TABLE IF NOT EXISTS org_settings (
-  id INTEGER PRIMARY KEY CHECK (id = 1),
-  weights_json TEXT NOT NULL,
-  thresholds_json TEXT NOT NULL,
-  layers_enabled_json TEXT NOT NULL,
-  risk_colors_json TEXT NOT NULL DEFAULT '{}',
-  block_on_high BOOLEAN NOT NULL DEFAULT 1,
-  require_feedback_on_high BOOLEAN NOT NULL DEFAULT 0
-);
-
-CREATE TABLE IF NOT EXISTS dashboard_users (
-  login TEXT PRIMARY KEY,
-  password_hash TEXT NOT NULL,
-  display_name TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS llm_settings (
-  id INTEGER PRIMARY KEY CHECK (id = 1),
-  provider TEXT NOT NULL,
-  model TEXT NOT NULL,
-  base_url TEXT,
-  api_key TEXT,
-  monthly_budget_tokens INTEGER,
-  max_diff_tokens INTEGER
-);
-
-CREATE TABLE IF NOT EXISTS ui_settings (
-  id INTEGER PRIMARY KEY CHECK (id = 1),
-  primary_color TEXT NOT NULL,
-  accent_color TEXT NOT NULL,
-  radius TEXT NOT NULL,
-  font_scale TEXT NOT NULL,
-  density TEXT NOT NULL,
-  default_theme TEXT NOT NULL
-);
-"""
+from watchgate.db.connection import build_engine
+from watchgate.db.schema_guard import check_schema_matches_metadata
 
 DEFAULT_WEIGHTS = {
     "static": 0.25,
@@ -164,21 +101,24 @@ _LAYER_COLS = (
 )
 
 # Columnas que compute_org_metrics() lee de verdad -- a diferencia de
-# _row_to_score_out() (que sí necesita la fila completa, incluido
+# _record_to_score_out() (que sí necesita la fila completa, incluidos
 # findings_json/semantic_justification, para reconstruir un AggregatedResult
-# real), esta función solo agrega números/etiquetas. `SELECT *` traía esos
-# blobs (hallazgos con fichero/línea/mensaje de cada capa, texto del LLM)
-# para cada fila de TODO el histórico visible del organización -- payload
-# real que ni se deserializaba aquí, solo se descartaba.
-_METRICS_COLUMNS_SQL = ", ".join(
-    (
-        "repo",
-        "timestamp",
-        "score",
-        "semaforo",
-        "human_feedback",
-        *(col for _, score_col, skip_col in _LAYER_COLS for col in (score_col, skip_col)),
-    )
+# real), esta función solo agrega números/etiquetas. Seleccionar la entidad
+# completa traería esos blobs (hallazgos con fichero/línea/mensaje de cada
+# capa, texto del LLM) para cada fila de TODO el histórico visible de la
+# organización -- payload real que ni se deserializaba aquí, solo se
+# descartaba.
+_METRICS_COLUMNS = (
+    DashboardPRScore.repo,
+    DashboardPRScore.timestamp,
+    DashboardPRScore.score,
+    DashboardPRScore.semaforo,
+    DashboardPRScore.human_feedback,
+    *(
+        getattr(DashboardPRScore, col)
+        for _, score_col, skip_col in _LAYER_COLS
+        for col in (score_col, skip_col)
+    ),
 )
 
 
@@ -189,126 +129,71 @@ def default_db_path() -> Path:
     return Path(".watchgate") / "dashboard.db"
 
 
-def connect(db_path: Path | None = None) -> DBConnection:
-    database_url = os.environ.get("WATCHGATE_DASHBOARD_DATABASE_URL")
-    if database_url and database_url.startswith(("postgres://", "postgresql://")):
-        return db_postgres.connect(database_url)
-
-    path = db_path or default_db_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(path), check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
-
-
-def _connection_target(db_path: Path | None) -> str:
-    """Identificador estable de a qué base de datos apunta `connect(db_path)`
-    -- mismo criterio que usa `connect()` para decidir Postgres vs SQLite,
-    duplicado aquí a propósito para no acoplar el guard de `db_session()` a
-    cambios de firma de `connect()`."""
+def _database_url(db_path: Path | None) -> str:
+    """Mismo criterio de resolución que antes: `WATCHGATE_DASHBOARD_DATABASE_URL`
+    (Postgres) tiene prioridad; si no, SQLite contra `db_path` (o
+    `default_db_path()`, que a su vez lee `WATCHGATE_DASHBOARD_DB`).
+    También sirve de clave de caché de motor -- dos llamadas que resuelven
+    a la misma URL comparten el mismo `Engine`/el mismo guard de
+    inicialización (ver `db_session()`)."""
     database_url = os.environ.get("WATCHGATE_DASHBOARD_DATABASE_URL")
     if database_url and database_url.startswith(("postgres://", "postgresql://")):
         return database_url
-    return str(db_path or default_db_path())
+    path = db_path or default_db_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return f"sqlite:///{path}"
 
 
-def _init_db_postgres(conn: PostgresConnection) -> None:
-    conn.executescript(db_postgres.POSTGRES_SCHEMA)
-    # A diferencia de SQLite, Postgres soporta IF NOT EXISTS en ADD COLUMN de
-    # forma nativa -- no hace falta el sondeo vía PRAGMA table_info de abajo.
-    conn.execute("ALTER TABLE pr_scores ADD COLUMN IF NOT EXISTS author_login TEXT")
-    conn.execute("ALTER TABLE pr_scores ADD COLUMN IF NOT EXISTS vulnerabilities_score INTEGER")
-    conn.execute("ALTER TABLE pr_scores ADD COLUMN IF NOT EXISTS vulnerabilities_skipped BOOLEAN")
-    conn.execute("ALTER TABLE pr_scores ADD COLUMN IF NOT EXISTS accepted_by TEXT")
-    conn.execute("ALTER TABLE pr_scores ADD COLUMN IF NOT EXISTS accepted_at TEXT")
-    conn.execute("ALTER TABLE pr_scores ADD COLUMN IF NOT EXISTS findings_json TEXT")
-    conn.execute(
-        "ALTER TABLE pr_scores ADD COLUMN IF NOT EXISTS "
-        "threat_summary_json TEXT NOT NULL DEFAULT '{}'"
-    )
-    conn.execute("ALTER TABLE pr_scores ADD COLUMN IF NOT EXISTS static_threat_nature TEXT")
-    conn.execute(
-        "ALTER TABLE repo_settings ADD COLUMN IF NOT EXISTS "
-        "layers_enabled_json TEXT NOT NULL DEFAULT '{}'"
-    )
-    conn.execute(
-        "ALTER TABLE repo_settings ADD COLUMN IF NOT EXISTS "
-        "block_on_high INTEGER NOT NULL DEFAULT 1"
-    )
-    conn.execute(
-        "ALTER TABLE repo_settings ADD COLUMN IF NOT EXISTS "
-        "require_feedback_on_high INTEGER NOT NULL DEFAULT 0"
-    )
-    conn.execute(
-        "ALTER TABLE repo_settings ADD COLUMN IF NOT EXISTS "
-        "risk_colors_json TEXT NOT NULL DEFAULT '{}'"
-    )
-    conn.execute(
-        "ALTER TABLE org_settings ADD COLUMN IF NOT EXISTS "
-        "risk_colors_json TEXT NOT NULL DEFAULT '{}'"
-    )
-    conn.execute("ALTER TABLE ui_settings ADD COLUMN IF NOT EXISTS logo_data_url TEXT")
-    conn.commit()
-    ensure_org_settings(conn)
-    ensure_llm_settings(conn)
-    ensure_ui_settings(conn)
+# Un `Engine` por URL destino (en la práctica, uno solo en producción -- el
+# valor real no cambia; varios en tests, que apuntan cada uno a su propio
+# fichero SQLite bajo `tmp_path`). Reusa `build_engine()` de
+# `watchgate.db.connection` (mismo pooling, mismas pragmas WAL de SQLite,
+# misma normalización de dialecto Postgres) en vez de reimplementarlo aquí.
+_engines: dict[str, Engine] = {}
+_engines_lock = threading.Lock()
 
 
-def init_db(conn: DBConnection) -> None:
-    if isinstance(conn, PostgresConnection):
-        _init_db_postgres(conn)
-        return
-    conn.executescript(SCHEMA)
-    cols = {row[1] for row in conn.execute("PRAGMA table_info(pr_scores)").fetchall()}
-    if "author_login" not in cols:
-        conn.execute("ALTER TABLE pr_scores ADD COLUMN author_login TEXT")
-    if "vulnerabilities_score" not in cols:
-        conn.execute("ALTER TABLE pr_scores ADD COLUMN vulnerabilities_score INTEGER")
-    if "vulnerabilities_skipped" not in cols:
-        conn.execute("ALTER TABLE pr_scores ADD COLUMN vulnerabilities_skipped BOOLEAN")
-    if "threat_summary_json" not in cols:
-        conn.execute(
-            "ALTER TABLE pr_scores ADD COLUMN threat_summary_json TEXT NOT NULL DEFAULT '{}'"
-        )
-    if "static_threat_nature" not in cols:
-        conn.execute("ALTER TABLE pr_scores ADD COLUMN static_threat_nature TEXT")
-    if "accepted_by" not in cols:
-        conn.execute("ALTER TABLE pr_scores ADD COLUMN accepted_by TEXT")
-    if "accepted_at" not in cols:
-        conn.execute("ALTER TABLE pr_scores ADD COLUMN accepted_at TEXT")
-    if "findings_json" not in cols:
-        conn.execute("ALTER TABLE pr_scores ADD COLUMN findings_json TEXT")
-    repo_cols = {row[1] for row in conn.execute("PRAGMA table_info(repo_settings)").fetchall()}
-    if "layers_enabled_json" not in repo_cols:
-        conn.execute(
-            "ALTER TABLE repo_settings ADD COLUMN layers_enabled_json TEXT NOT NULL DEFAULT '{}'"
-        )
-    if "block_on_high" not in repo_cols:
-        conn.execute(
-            "ALTER TABLE repo_settings ADD COLUMN block_on_high BOOLEAN NOT NULL DEFAULT 1"
-        )
-    if "require_feedback_on_high" not in repo_cols:
-        conn.execute(
-            "ALTER TABLE repo_settings "
-            "ADD COLUMN require_feedback_on_high BOOLEAN NOT NULL DEFAULT 0"
-        )
-    if "risk_colors_json" not in repo_cols:
-        conn.execute(
-            "ALTER TABLE repo_settings ADD COLUMN risk_colors_json TEXT NOT NULL DEFAULT '{}'"
-        )
-    org_cols = {row[1] for row in conn.execute("PRAGMA table_info(org_settings)").fetchall()}
-    if org_cols and "risk_colors_json" not in org_cols:
-        conn.execute(
-            "ALTER TABLE org_settings ADD COLUMN risk_colors_json TEXT NOT NULL DEFAULT '{}'"
-        )
-    ui_cols = {row[1] for row in conn.execute("PRAGMA table_info(ui_settings)").fetchall()}
-    if ui_cols and "logo_data_url" not in ui_cols:
-        conn.execute("ALTER TABLE ui_settings ADD COLUMN logo_data_url TEXT")
-    conn.commit()
-    ensure_org_settings(conn)
-    ensure_llm_settings(conn)
-    ensure_ui_settings(conn)
+def _get_engine(db_path: Path | None) -> Engine:
+    target = _database_url(db_path)
+    if target not in _engines:
+        with _engines_lock:
+            if target not in _engines:
+                _engines[target] = build_engine(target)
+    return _engines[target]
+
+
+_MIGRATION_HINT = (
+    "Aplica la migración pendiente con `alembic -c alembic_dashboard.ini "
+    "upgrade head` (o, si es un entorno de desarrollo sin datos que "
+    "conservar, borra/recrea la base de datos) antes de arrancar esta "
+    "versión. Si la base de datos ya tenía estas tablas de antes de "
+    "adoptar Alembic, primero hace falta `alembic -c alembic_dashboard.ini "
+    "stamp head` una sola vez -- ver docs/despliegue.md."
+)
+
+
+def _init_schema(target_engine: Engine) -> None:
+    check_schema_matches_metadata(
+        target_engine, DashboardBase.metadata, migration_hint=_MIGRATION_HINT
+    )
+    DashboardBase.metadata.create_all(target_engine)
+    with Session(target_engine) as session:
+        ensure_org_settings(session)
+        ensure_llm_settings(session)
+        ensure_ui_settings(session)
+
+
+def init_db(session: Session) -> None:
+    """Crea el esquema si falta (idempotente). `db_session()` ya lo hace una
+    vez por proceso/motor destino automáticamente (ver ahí el motivo real,
+    un deadlock de Postgres reproducido bajo DDL concurrente) -- esta
+    función queda pública porque `main.py` (arranque) y los tests la llaman
+    también explícitamente, sin coste real de más: `create_all()`/el guard
+    de columnas son solo lecturas de catálogo + DDL condicional
+    (`CREATE TABLE IF NOT EXISTS`)."""
+    engine = session.get_bind()
+    assert isinstance(engine, Engine)
+    _init_schema(engine)
 
 
 _initialized_targets: set[str] = set()
@@ -316,40 +201,36 @@ _init_lock = threading.Lock()
 
 
 @contextmanager
-def db_session(db_path: Path | None = None) -> Iterator[DBConnection]:
-    conn = connect(db_path)
-    target = _connection_target(db_path)
+def db_session(db_path: Path | None = None) -> Iterator[Session]:
+    target_engine = _get_engine(db_path)
+    target = _database_url(db_path)
+    # Bug real encontrado desplegando contra Postgres real: inicializar el
+    # esquema (DDL con lock exclusivo de tabla) en CADA llamada a
+    # `db_session()` -- es decir, en cada request de cada router -- hacía
+    # que dos peticiones concurrentes ejecutando el mismo DDL a la vez
+    # deadlockearan de verdad entre sí (`psycopg.errors.DeadlockDetected`,
+    # reproducido en vivo). SQLite nunca lo mostró porque su locking es de
+    # fichero completo, no por fila/tabla como Postgres. La inicialización
+    # en sí ya es idempotente (`CREATE TABLE IF NOT EXISTS`), pero eso no
+    # evita la carrera de dos conexiones comprobando/creando el mismo
+    # esquema a la vez -- el problema no era el resultado final, era
+    # ejecutarlo más de una vez por proceso sin necesidad. Con
+    # double-checked locking, por cada motor destino real solo la primera
+    # llamada del proceso inicializa el esquema; el resto la salta.
+    if target not in _initialized_targets:
+        with _init_lock:
+            if target not in _initialized_targets:
+                _init_schema(target_engine)
+                _initialized_targets.add(target)
+    session = Session(target_engine)
     try:
-        # Bug real encontrado desplegando contra Postgres real: `init_db()`
-        # (incluye `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`, DDL que exige
-        # un lock exclusivo) se ejecutaba en CADA llamada a `db_session()` --
-        # es decir, en cada request de cada router. Bajo tráfico concurrente
-        # real (varias pestañas/peticiones en paralelo cargando el
-        # Dashboard, exactamente lo que hace un navegador), dos peticiones
-        # ejecutando el mismo ALTER TABLE a la vez podían deadlockear de
-        # verdad entre sí (`psycopg.errors.DeadlockDetected`, reproducido en
-        # vivo). SQLite nunca lo mostró porque su locking es de fichero
-        # completo, no por fila/tabla como Postgres.
-        #
-        # `init_db()` en sí ya es idempotente en efecto (todo `IF NOT
-        # EXISTS`), pero eso no evita la carrera de dos conexiones
-        # comprobando y alterando el mismo esquema a la vez -- el problema
-        # no era el resultado final, era ejecutarlo más de una vez por
-        # proceso sin necesidad. Con double-checked locking, por cada base
-        # de datos destino (`target`) real solo la primera llamada del
-        # proceso ejecuta la migración; el resto la salta.
-        if target not in _initialized_targets:
-            with _init_lock:
-                if target not in _initialized_targets:
-                    init_db(conn)
-                    _initialized_targets.add(target)
-        yield conn
-        conn.commit()
+        yield session
+        session.commit()
     except Exception:
-        conn.rollback()
+        session.rollback()
         raise
     finally:
-        conn.close()
+        session.close()
 
 
 def _pr_number_from_pr_id(pr_id: str) -> int:
@@ -379,7 +260,7 @@ def _serialize_findings(layers: dict[str, LayerResult]) -> str | None:
 
 
 def insert_aggregated(
-    conn: DBConnection,
+    session: Session,
     result: AggregatedResult,
     *,
     author_login: str | None = None,
@@ -413,70 +294,48 @@ def insert_aggregated(
         else None
     )
 
-    insert_sql = """
-        INSERT INTO pr_scores (
-          repo, pr_number, timestamp, score, semaforo,
-          static_score, static_skipped,
-          deps_score, deps_skipped,
-          vulnerabilities_score, vulnerabilities_skipped,
-          reputation_score, reputation_skipped,
-          semantic_score, semantic_skipped, semantic_justification,
-          weights_json, author_login, human_feedback,
-          threat_summary_json, static_threat_nature, findings_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)
-        """
-    params = (
-        result.repo,
-        _pr_number_from_pr_id(result.pr_id),
-        result.timestamp,
-        result.score,
-        result.semaforo.value,
-        score_of("static"),
-        skipped_of("static"),
-        score_of("deps"),
-        skipped_of("deps"),
-        score_of("vulnerabilities"),
-        skipped_of("vulnerabilities"),
-        score_of("reputation"),
-        skipped_of("reputation"),
-        score_of("semantic"),
-        skipped_of("semantic"),
-        justification,
-        json.dumps(result.weights_used),
-        author_login,
-        json.dumps(result.threat_summary),
-        static_threat_nature,
-        _serialize_findings(layers),
+    record = DashboardPRScore(
+        repo=result.repo,
+        pr_number=_pr_number_from_pr_id(result.pr_id),
+        timestamp=result.timestamp,
+        score=result.score,
+        semaforo=result.semaforo.value,
+        static_score=score_of("static"),
+        static_skipped=skipped_of("static"),
+        deps_score=score_of("deps"),
+        deps_skipped=skipped_of("deps"),
+        vulnerabilities_score=score_of("vulnerabilities"),
+        vulnerabilities_skipped=skipped_of("vulnerabilities"),
+        reputation_score=score_of("reputation"),
+        reputation_skipped=skipped_of("reputation"),
+        semantic_score=score_of("semantic"),
+        semantic_skipped=skipped_of("semantic"),
+        semantic_justification=justification,
+        weights_json=json.dumps(result.weights_used),
+        author_login=author_login,
+        human_feedback=None,
+        threat_summary_json=json.dumps(result.threat_summary),
+        static_threat_nature=static_threat_nature,
+        findings_json=_serialize_findings(layers),
     )
-
-    if isinstance(conn, PostgresConnection):
-        # sqlite3.Cursor.lastrowid no tiene equivalente en psycopg -- pedimos
-        # el id insertado explícitamente en la misma sentencia.
-        row = conn.execute(insert_sql + " RETURNING id", params).fetchone()
-        assert row is not None
-        new_id = int(row["id"])
-    else:
-        cur = conn.execute(insert_sql, params)
-        new_id = int(cur.lastrowid or 0)
-    conn.commit()
-    return new_id
+    session.add(record)
+    session.commit()
+    session.refresh(record)
+    return record.id
 
 
-def _row_to_score_out(row: Row) -> ScoreOut:
-    keys = row.keys()
-    static_threat_nature_raw = (
-        row["static_threat_nature"] if "static_threat_nature" in keys else None
-    )
-    findings_raw = row["findings_json"] if "findings_json" in keys else None
+def _record_to_score_out(record: DashboardPRScore) -> ScoreOut:
+    findings_raw = record.findings_json
     findings_by_layer: dict[str, dict[str, Any]] = json.loads(findings_raw) if findings_raw else {}
 
     layer_results: dict[str, LayerResult] = {}
     for name, score_col, skip_col in _LAYER_COLS:
-        skipped = bool(row[skip_col]) if row[skip_col] is not None else True
-        raw_score = row[score_col]
+        skipped_val = getattr(record, skip_col)
+        skipped = bool(skipped_val) if skipped_val is not None else True
+        raw_score = getattr(record, score_col)
         justification = ""
         if name == "semantic":
-            justification = row["semantic_justification"] or ""
+            justification = record.semantic_justification or ""
 
         extra = findings_by_layer.get(name, {})
         findings = [Finding.model_validate(f) for f in extra.get("findings", [])]
@@ -486,8 +345,8 @@ def _row_to_score_out(row: Row) -> ScoreOut:
         # Filas antiguas (o insertadas antes de que findings_json existiera)
         # solo tienen la naturaleza de la capa estática en su columna
         # dedicada -- se usa como respaldo cuando el blob no la trae.
-        if name == "static" and threat_nature is None and static_threat_nature_raw:
-            threat_nature = ThreatNature(static_threat_nature_raw)
+        if name == "static" and threat_nature is None and record.static_threat_nature:
+            threat_nature = ThreatNature(record.static_threat_nature)
 
         layer_results[name] = LayerResult(
             layer_name=name,
@@ -501,199 +360,191 @@ def _row_to_score_out(row: Row) -> ScoreOut:
             skip_reason="omitida" if skipped else None,
         )
 
-    weights_raw = row["weights_json"] if "weights_json" in keys else "{}"
-    weights = json.loads(weights_raw or "{}")
-    author = row["author_login"] if "author_login" in keys else None
-    threat_summary_raw = row["threat_summary_json"] if "threat_summary_json" in keys else "{}"
-    threat_summary = json.loads(threat_summary_raw or "{}")
+    weights = json.loads(record.weights_json or "{}")
+    threat_summary = json.loads(record.threat_summary_json or "{}")
     result = AggregatedResult(
-        score=int(row["score"]),
-        semaforo=Semaforo(row["semaforo"]),
+        score=int(record.score),
+        semaforo=Semaforo(record.semaforo),
         layer_results=layer_results,
         weights_used=weights,
-        pr_id=str(row["pr_number"]),
-        repo=row["repo"],
-        timestamp=row["timestamp"],
+        pr_id=str(record.pr_number),
+        repo=record.repo,
+        timestamp=record.timestamp,
         threat_summary=threat_summary,
     )
-    feedback = row["human_feedback"]
-    accepted_by = row["accepted_by"] if "accepted_by" in keys else None
-    accepted_at = row["accepted_at"] if "accepted_at" in keys else None
     return ScoreOut.from_aggregated(
-        score_id=int(row["id"]),
+        score_id=record.id,
         result=result,
-        human_feedback=feedback,
-        author_login=author,
-        accepted_by=accepted_by,
-        accepted_at=accepted_at,
+        human_feedback=cast("FeedbackValue | None", record.human_feedback),
+        author_login=record.author_login,
+        accepted_by=record.accepted_by,
+        accepted_at=record.accepted_at,
     )
 
 
-def list_scores(conn: DBConnection, repo: str, limit: int | None = None) -> list[ScoreOut]:
+def list_scores(session: Session, repo: str, limit: int | None = None) -> list[ScoreOut]:
     """`limit=None` (por defecto) trae todo el histórico, como antes -- lo
     usa el propio dashboard. Los callers que ya sabían cuántas filas
     necesitaban (p. ej. `agent_access.py::repo_score_history`) recortaban en
     Python después de traer la tabla entera; pasar `limit` aquí mueve el
     corte al propio SQL (el índice `idx_repo_timestamp` ya cubre el
     WHERE+ORDER BY, así que LIMIT no cuesta un escaneo completo)."""
-    if limit is not None:
-        rows = conn.execute(
-            "SELECT * FROM pr_scores WHERE repo = ? ORDER BY timestamp DESC LIMIT ?",
-            (repo, limit),
-        ).fetchall()
-    else:
-        rows = conn.execute(
-            "SELECT * FROM pr_scores WHERE repo = ? ORDER BY timestamp DESC",
-            (repo,),
-        ).fetchall()
-    return [_row_to_score_out(row) for row in rows]
-
-
-def get_score(conn: DBConnection, score_id: int) -> ScoreOut | None:
-    row = conn.execute("SELECT * FROM pr_scores WHERE id = ?", (score_id,)).fetchone()
-    return None if row is None else _row_to_score_out(row)
-
-
-def set_feedback(conn: DBConnection, score_id: int, feedback: FeedbackValue) -> ScoreOut | None:
-    cur = conn.execute(
-        "UPDATE pr_scores SET human_feedback = ? WHERE id = ?",
-        (feedback, score_id),
+    stmt = (
+        select(DashboardPRScore)
+        .where(DashboardPRScore.repo == repo)
+        .order_by(DashboardPRScore.timestamp.desc())
     )
-    conn.commit()
-    if cur.rowcount == 0:
+    if limit is not None:
+        stmt = stmt.limit(limit)
+    records = session.execute(stmt).scalars().all()
+    return [_record_to_score_out(r) for r in records]
+
+
+def get_score(session: Session, score_id: int) -> ScoreOut | None:
+    record = session.get(DashboardPRScore, score_id)
+    return None if record is None else _record_to_score_out(record)
+
+
+def set_feedback(session: Session, score_id: int, feedback: FeedbackValue) -> ScoreOut | None:
+    record = session.get(DashboardPRScore, score_id)
+    if record is None:
         return None
-    return get_score(conn, score_id)
+    record.human_feedback = feedback
+    session.commit()
+    session.refresh(record)
+    return _record_to_score_out(record)
 
 
-def set_accepted(conn: DBConnection, score_id: int, user_login: str) -> ScoreOut | None:
+def set_accepted(session: Session, score_id: int, user_login: str) -> ScoreOut | None:
     """Gate de aprobación manual: un mantenedor/admin marca un PR en amarillo/
     rojo como revisado y aceptado a sabiendas del riesgo. Distinto del
     `human_feedback` de arriba (que valora si el ANÁLISIS acertó, no si el
     riesgo real se acepta) -- deliberadamente independiente para no mezclar
     "el score está mal" con "el score está bien pero seguimos adelante"."""
-    cur = conn.execute(
-        "UPDATE pr_scores SET accepted_by = ?, accepted_at = ? WHERE id = ?",
-        (normalize_login(user_login), datetime.now(UTC).isoformat(), score_id),
-    )
-    conn.commit()
-    if cur.rowcount == 0:
+    record = session.get(DashboardPRScore, score_id)
+    if record is None:
         return None
-    return get_score(conn, score_id)
+    record.accepted_by = normalize_login(user_login)
+    record.accepted_at = datetime.now(UTC).isoformat()
+    session.commit()
+    session.refresh(record)
+    return _record_to_score_out(record)
 
 
-def clear_accepted(conn: DBConnection, score_id: int) -> ScoreOut | None:
-    cur = conn.execute(
-        "UPDATE pr_scores SET accepted_by = NULL, accepted_at = NULL WHERE id = ?",
-        (score_id,),
-    )
-    conn.commit()
-    if cur.rowcount == 0:
+def clear_accepted(session: Session, score_id: int) -> ScoreOut | None:
+    record = session.get(DashboardPRScore, score_id)
+    if record is None:
         return None
-    return get_score(conn, score_id)
+    record.accepted_by = None
+    record.accepted_at = None
+    session.commit()
+    session.refresh(record)
+    return _record_to_score_out(record)
 
 
-def get_role(conn: DBConnection, user_login: str, repo: str) -> RoleName | None:
-    row = conn.execute(
-        "SELECT role FROM repo_roles WHERE user_login = ? AND repo = ?",
-        (normalize_login(user_login), repo),
-    ).fetchone()
-    if row is None:
-        return None
-    res_role: str = row["role"]
-    return cast(RoleName, res_role)
+def get_role(session: Session, user_login: str, repo: str) -> RoleName | None:
+    record = session.get(RepoRole, (normalize_login(user_login), repo))
+    return None if record is None else cast("RoleName", record.role)
 
 
-def upsert_role(conn: DBConnection, user_login: str, repo: str, role: RoleName) -> None:
-    conn.execute(
-        """
-        INSERT INTO repo_roles (user_login, repo, role) VALUES (?, ?, ?)
-        ON CONFLICT(user_login, repo) DO UPDATE SET role = excluded.role
-        """,
-        (normalize_login(user_login), repo, role),
+def _dialect_insert(session: Session) -> Any:
+    """`sqlalchemy.dialects.{postgresql,sqlite}.insert` según el dialecto
+    de `session` -- ambos exponen `.on_conflict_do_update(...)`, mismo
+    patrón dialect-aware ya establecido en
+    `watchgate.db.repository.record_token_usage`, reusado (no reinventado)
+    en cada upsert de este módulo."""
+    dialect = session.get_bind().dialect.name
+    if dialect == "postgresql":
+        from sqlalchemy.dialects.postgresql import insert as _insert
+
+        return _insert
+    from sqlalchemy.dialects.sqlite import insert as _insert  # type: ignore[assignment]
+
+    return _insert
+
+
+def upsert_role(session: Session, user_login: str, repo: str, role: RoleName) -> None:
+    table = RepoRole.__table__
+    insert_ = _dialect_insert(session)
+    stmt = insert_(table).values(user_login=normalize_login(user_login), repo=repo, role=role)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[table.c.user_login, table.c.repo],
+        set_={"role": stmt.excluded.role},
     )
-    conn.commit()
+    session.execute(stmt)
+    session.commit()
 
 
-def delete_role(conn: DBConnection, user_login: str, repo: str) -> bool:
-    cur = conn.execute(
-        "DELETE FROM repo_roles WHERE user_login = ? AND repo = ?",
-        (normalize_login(user_login), repo),
-    )
-    conn.commit()
-    return cur.rowcount > 0
+def delete_role(session: Session, user_login: str, repo: str) -> bool:
+    record = session.get(RepoRole, (normalize_login(user_login), repo))
+    if record is None:
+        return False
+    session.delete(record)
+    session.commit()
+    return True
 
 
-def list_roles(conn: DBConnection, repo: str | None = None) -> list[Row]:
-    # sqlite3.Cursor.fetchall() está tipado como list[Any] en sus stubs (no
-    # conoce row_factory=sqlite3.Row en tiempo de tipado) -- cast explícito a
-    # la interfaz real que devuelve en ejecución.
+def list_roles(session: Session, repo: str | None = None) -> list[dict[str, str]]:
+    stmt = select(RepoRole)
     if repo is None:
-        rows = conn.execute(
-            "SELECT user_login, repo, role FROM repo_roles ORDER BY repo, user_login"
-        ).fetchall()
+        stmt = stmt.order_by(RepoRole.repo, RepoRole.user_login)
     else:
-        rows = conn.execute(
-            "SELECT user_login, repo, role FROM repo_roles WHERE repo = ? ORDER BY user_login",
-            (repo,),
-        ).fetchall()
-    return cast("list[Row]", rows)
+        stmt = stmt.where(RepoRole.repo == repo).order_by(RepoRole.user_login)
+    records = session.execute(stmt).scalars().all()
+    return [{"user_login": r.user_login, "repo": r.repo, "role": r.role} for r in records]
 
 
-def list_repos_for_user(conn: DBConnection, user_login: str, is_admin: bool) -> list[str]:
+def list_repos_for_user(session: Session, user_login: str, is_admin: bool) -> list[str]:
     if is_admin:
-        from_scores = {
-            r["repo"] for r in conn.execute("SELECT DISTINCT repo FROM pr_scores").fetchall()
-        }
-        from_roles = {
-            r["repo"] for r in conn.execute("SELECT DISTINCT repo FROM repo_roles").fetchall()
-        }
-        from_settings = {
-            r["repo"] for r in conn.execute("SELECT DISTINCT repo FROM repo_settings").fetchall()
-        }
+        from_scores = set(session.execute(select(DashboardPRScore.repo).distinct()).scalars().all())
+        from_roles = set(session.execute(select(RepoRole.repo).distinct()).scalars().all())
+        from_settings = set(
+            session.execute(select(RepoSettingsRow.repo).distinct()).scalars().all()
+        )
         return sorted(from_scores | from_roles | from_settings)
 
-    rows = conn.execute(
-        "SELECT DISTINCT repo FROM repo_roles WHERE user_login = ? ORDER BY repo",
-        (normalize_login(user_login),),
-    ).fetchall()
-    return [r["repo"] for r in rows]
-
-
-def user_is_org_admin(conn: DBConnection, user_login: str) -> bool:
-    row = conn.execute(
-        """
-        SELECT 1 FROM repo_roles
-        WHERE user_login = ? AND role = 'admin_organizacion'
-        LIMIT 1
-        """,
-        (normalize_login(user_login),),
-    ).fetchone()
-    return row is not None
-
-
-def ensure_org_settings(conn: DBConnection) -> None:
-    row = conn.execute("SELECT 1 FROM org_settings WHERE id = 1").fetchone()
-    if row is not None:
-        return
-    conn.execute(
-        """
-        INSERT INTO org_settings (
-          id, weights_json, thresholds_json, layers_enabled_json, risk_colors_json,
-          block_on_high, require_feedback_on_high
-        ) VALUES (1, ?, ?, ?, ?, 1, 0)
-        """,
-        (
-            json.dumps(DEFAULT_WEIGHTS),
-            json.dumps(DEFAULT_THRESHOLDS),
-            json.dumps(DEFAULT_LAYERS),
-            json.dumps(DEFAULT_RISK_COLORS),
-        ),
+    stmt = (
+        select(RepoRole.repo)
+        .distinct()
+        .where(RepoRole.user_login == normalize_login(user_login))
+        .order_by(RepoRole.repo)
     )
-    conn.commit()
+    return list(session.execute(stmt).scalars().all())
 
 
-def _settings_from_row(row: Row | None, *, source: Literal["default", "repo"]) -> RepoSettings:
-    if row is None:
+def user_is_org_admin(session: Session, user_login: str) -> bool:
+    stmt = (
+        select(RepoRole)
+        .where(
+            RepoRole.user_login == normalize_login(user_login),
+            RepoRole.role == "admin_organizacion",
+        )
+        .limit(1)
+    )
+    return session.execute(stmt).scalars().first() is not None
+
+
+def ensure_org_settings(session: Session) -> None:
+    if session.get(OrgSettingsRow, 1) is not None:
+        return
+    session.add(
+        OrgSettingsRow(
+            id=1,
+            weights_json=json.dumps(DEFAULT_WEIGHTS),
+            thresholds_json=json.dumps(DEFAULT_THRESHOLDS),
+            layers_enabled_json=json.dumps(DEFAULT_LAYERS),
+            risk_colors_json=json.dumps(DEFAULT_RISK_COLORS),
+            block_on_high=True,
+            require_feedback_on_high=False,
+        )
+    )
+    session.commit()
+
+
+def _settings_from_record(
+    record: RepoSettingsRow | OrgSettingsRow | None, *, source: Literal["default", "repo"]
+) -> RepoSettings:
+    if record is None:
         return RepoSettings(
             weights=dict(DEFAULT_WEIGHTS),
             thresholds=dict(DEFAULT_THRESHOLDS),
@@ -703,98 +554,73 @@ def _settings_from_row(row: Row | None, *, source: Literal["default", "repo"]) -
             require_feedback_on_high=False,
             source=source,
         )
-    keys = row.keys()
-    layers_raw = row["layers_enabled_json"] if "layers_enabled_json" in keys else "{}"
-    layers = json.loads(layers_raw or "{}") or dict(DEFAULT_LAYERS)
-    colors_raw = row["risk_colors_json"] if "risk_colors_json" in keys else "{}"
-    colors = json.loads(colors_raw or "{}") or dict(DEFAULT_RISK_COLORS)
+    layers = json.loads(record.layers_enabled_json or "{}") or dict(DEFAULT_LAYERS)
+    colors = json.loads(record.risk_colors_json or "{}") or dict(DEFAULT_RISK_COLORS)
     merged_colors = {**DEFAULT_RISK_COLORS, **colors}
     return RepoSettings(
-        weights=json.loads(row["weights_json"]),
-        thresholds=json.loads(row["thresholds_json"]),
+        weights=json.loads(record.weights_json),
+        thresholds=json.loads(record.thresholds_json),
         layers_enabled=layers,
         risk_colors=merged_colors,
-        block_on_high=bool(row["block_on_high"]) if "block_on_high" in keys else True,
-        require_feedback_on_high=(
-            bool(row["require_feedback_on_high"]) if "require_feedback_on_high" in keys else False
-        ),
+        block_on_high=bool(record.block_on_high),
+        require_feedback_on_high=bool(record.require_feedback_on_high),
         source=source,
     )
 
 
-def get_org_settings(conn: DBConnection) -> RepoSettings:
-    ensure_org_settings(conn)
-    row = conn.execute("SELECT * FROM org_settings WHERE id = 1").fetchone()
-    return _settings_from_row(row, source="default")
+def get_org_settings(session: Session) -> RepoSettings:
+    ensure_org_settings(session)
+    return _settings_from_record(session.get(OrgSettingsRow, 1), source="default")
 
 
-def set_org_settings(conn: DBConnection, settings: RepoSettings) -> RepoSettings:
-    ensure_org_settings(conn)
-    conn.execute(
-        """
-        UPDATE org_settings SET
-          weights_json = ?,
-          thresholds_json = ?,
-          layers_enabled_json = ?,
-          risk_colors_json = ?,
-          block_on_high = ?,
-          require_feedback_on_high = ?
-        WHERE id = 1
-        """,
-        (
-            json.dumps(settings.weights),
-            json.dumps(settings.thresholds),
-            json.dumps(settings.layers_enabled),
-            json.dumps(settings.risk_colors),
-            int(settings.block_on_high),
-            int(settings.require_feedback_on_high),
-        ),
-    )
-    conn.commit()
-    return get_org_settings(conn)
+def set_org_settings(session: Session, settings: RepoSettings) -> RepoSettings:
+    ensure_org_settings(session)
+    record = session.get(OrgSettingsRow, 1)
+    assert record is not None
+    record.weights_json = json.dumps(settings.weights)
+    record.thresholds_json = json.dumps(settings.thresholds)
+    record.layers_enabled_json = json.dumps(settings.layers_enabled)
+    record.risk_colors_json = json.dumps(settings.risk_colors)
+    record.block_on_high = settings.block_on_high
+    record.require_feedback_on_high = settings.require_feedback_on_high
+    session.commit()
+    return get_org_settings(session)
 
 
-def get_settings(conn: DBConnection, repo: str) -> RepoSettings:
-    row = conn.execute("SELECT * FROM repo_settings WHERE repo = ?", (repo,)).fetchone()
-    if row is None:
-        defaults = get_org_settings(conn)
+def get_settings(session: Session, repo: str) -> RepoSettings:
+    record = session.get(RepoSettingsRow, repo)
+    if record is None:
+        defaults = get_org_settings(session)
         return defaults.model_copy(update={"source": "default"})
-    return _settings_from_row(row, source="repo")
+    return _settings_from_record(record, source="repo")
 
 
-def set_settings(conn: DBConnection, repo: str, settings: RepoSettings) -> RepoSettings:
-    conn.execute(
-        """
-        INSERT INTO repo_settings (
-          repo, weights_json, thresholds_json, layers_enabled_json, risk_colors_json,
-          block_on_high, require_feedback_on_high
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(repo) DO UPDATE SET
-          weights_json = excluded.weights_json,
-          thresholds_json = excluded.thresholds_json,
-          layers_enabled_json = excluded.layers_enabled_json,
-          risk_colors_json = excluded.risk_colors_json,
-          block_on_high = excluded.block_on_high,
-          require_feedback_on_high = excluded.require_feedback_on_high
-        """,
-        (
-            repo,
-            json.dumps(settings.weights),
-            json.dumps(settings.thresholds),
-            json.dumps(settings.layers_enabled),
-            json.dumps(settings.risk_colors),
-            int(settings.block_on_high),
-            int(settings.require_feedback_on_high),
-        ),
-    )
-    conn.commit()
-    return get_settings(conn, repo)
+def set_settings(session: Session, repo: str, settings: RepoSettings) -> RepoSettings:
+    table = RepoSettingsRow.__table__
+    values = {
+        "repo": repo,
+        "weights_json": json.dumps(settings.weights),
+        "thresholds_json": json.dumps(settings.thresholds),
+        "layers_enabled_json": json.dumps(settings.layers_enabled),
+        "risk_colors_json": json.dumps(settings.risk_colors),
+        "block_on_high": settings.block_on_high,
+        "require_feedback_on_high": settings.require_feedback_on_high,
+    }
+    insert_ = _dialect_insert(session)
+    stmt = insert_(table).values(**values)
+    update_cols = {k: getattr(stmt.excluded, k) for k in values if k != "repo"}
+    stmt = stmt.on_conflict_do_update(index_elements=[table.c.repo], set_=update_cols)
+    session.execute(stmt)
+    session.commit()
+    return get_settings(session, repo)
 
 
-def clear_repo_settings(conn: DBConnection, repo: str) -> RepoSettings:
-    conn.execute("DELETE FROM repo_settings WHERE repo = ?", (repo,))
-    conn.commit()
-    return get_settings(conn, repo)
+def clear_repo_settings(session: Session, repo: str) -> RepoSettings:
+    record = session.get(RepoSettingsRow, repo)
+    if record is not None:
+        session.delete(record)
+        session.commit()
+    return get_settings(session, repo)
 
 
 def _mask_api_key(api_key: str | None) -> str | None:
@@ -805,144 +631,109 @@ def _mask_api_key(api_key: str | None) -> str | None:
     return f"{api_key[:4]}…{api_key[-4:]}"
 
 
-def ensure_llm_settings(conn: DBConnection) -> None:
-    row = conn.execute("SELECT 1 FROM llm_settings WHERE id = 1").fetchone()
-    if row is not None:
+def ensure_llm_settings(session: Session) -> None:
+    if session.get(LlmSettingsRow, 1) is not None:
         return
-    conn.execute(
-        """
-        INSERT INTO llm_settings (
-          id, provider, model, base_url, api_key, monthly_budget_tokens, max_diff_tokens
-        ) VALUES (1, ?, ?, ?, NULL, ?, ?)
-        """,
-        (
-            DEFAULT_LLM["provider"],
-            DEFAULT_LLM["model"],
-            DEFAULT_LLM["base_url"],
-            DEFAULT_LLM["monthly_budget_tokens"],
-            DEFAULT_LLM["max_diff_tokens"],
-        ),
+    session.add(
+        LlmSettingsRow(
+            id=1,
+            provider=DEFAULT_LLM["provider"],
+            model=DEFAULT_LLM["model"],
+            base_url=DEFAULT_LLM["base_url"],
+            api_key=None,
+            monthly_budget_tokens=DEFAULT_LLM["monthly_budget_tokens"],
+            max_diff_tokens=DEFAULT_LLM["max_diff_tokens"],
+        )
     )
-    conn.commit()
+    session.commit()
 
 
-def get_llm_settings(conn: DBConnection) -> LlmSettingsOut:
-    ensure_llm_settings(conn)
-    row = conn.execute("SELECT * FROM llm_settings WHERE id = 1").fetchone()
-    assert row is not None
-    api_key = row["api_key"]
+def get_llm_settings(session: Session) -> LlmSettingsOut:
+    ensure_llm_settings(session)
+    record = session.get(LlmSettingsRow, 1)
+    assert record is not None
+    api_key = record.api_key
     return LlmSettingsOut(
-        provider=row["provider"],
-        model=row["model"],
-        base_url=row["base_url"],
+        provider=record.provider,  # type: ignore[arg-type]
+        model=record.model,
+        base_url=record.base_url,
         api_key_set=bool(api_key),
         api_key_masked=_mask_api_key(api_key),
-        monthly_budget_tokens=row["monthly_budget_tokens"],
-        max_diff_tokens=row["max_diff_tokens"],
+        monthly_budget_tokens=record.monthly_budget_tokens,
+        max_diff_tokens=record.max_diff_tokens,
     )
 
 
-def set_llm_settings(conn: DBConnection, body: LlmSettingsIn) -> LlmSettingsOut:
-    ensure_llm_settings(conn)
-    current = conn.execute("SELECT api_key FROM llm_settings WHERE id = 1").fetchone()
-    current_key = current["api_key"] if current is not None else None
+def set_llm_settings(session: Session, body: LlmSettingsIn) -> LlmSettingsOut:
+    ensure_llm_settings(session)
+    record = session.get(LlmSettingsRow, 1)
+    assert record is not None
+    current_key = record.api_key
     if body.clear_api_key:
         new_key = None
     elif body.api_key is not None and body.api_key.strip():
         new_key = body.api_key.strip()
     else:
         new_key = current_key
-    conn.execute(
-        """
-        UPDATE llm_settings SET
-          provider = ?,
-          model = ?,
-          base_url = ?,
-          api_key = ?,
-          monthly_budget_tokens = ?,
-          max_diff_tokens = ?
-        WHERE id = 1
-        """,
-        (
-            body.provider,
-            body.model,
-            body.base_url,
-            new_key,
-            body.monthly_budget_tokens,
-            body.max_diff_tokens,
-        ),
-    )
-    conn.commit()
-    return get_llm_settings(conn)
+    record.provider = body.provider
+    record.model = body.model
+    record.base_url = body.base_url
+    record.api_key = new_key
+    record.monthly_budget_tokens = body.monthly_budget_tokens
+    record.max_diff_tokens = body.max_diff_tokens
+    session.commit()
+    return get_llm_settings(session)
 
 
-def ensure_ui_settings(conn: DBConnection) -> None:
-    row = conn.execute("SELECT 1 FROM ui_settings WHERE id = 1").fetchone()
-    if row is not None:
+def ensure_ui_settings(session: Session) -> None:
+    if session.get(UiSettingsRow, 1) is not None:
         return
     defaults = DEFAULT_UI
-    conn.execute(
-        """
-        INSERT INTO ui_settings (
-          id, primary_color, accent_color, radius, font_scale, density, default_theme
-        ) VALUES (1, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            defaults.primary_color,
-            defaults.accent_color,
-            defaults.radius,
-            defaults.font_scale,
-            defaults.density,
-            defaults.default_theme,
-        ),
+    session.add(
+        UiSettingsRow(
+            id=1,
+            primary_color=defaults.primary_color,
+            accent_color=defaults.accent_color,
+            radius=defaults.radius,
+            font_scale=defaults.font_scale,
+            density=defaults.density,
+            default_theme=defaults.default_theme,
+        )
     )
-    conn.commit()
+    session.commit()
 
 
-def get_ui_settings(conn: DBConnection) -> UiSettings:
-    ensure_ui_settings(conn)
-    row = conn.execute("SELECT * FROM ui_settings WHERE id = 1").fetchone()
-    assert row is not None
+def get_ui_settings(session: Session) -> UiSettings:
+    ensure_ui_settings(session)
+    record = session.get(UiSettingsRow, 1)
+    assert record is not None
     return UiSettings(
-        primary_color=row["primary_color"],
-        accent_color=row["accent_color"],
-        radius=row["radius"],
-        font_scale=row["font_scale"],
-        density=row["density"],
-        default_theme=row["default_theme"],
-        logo_data_url=row["logo_data_url"],
+        primary_color=record.primary_color,
+        accent_color=record.accent_color,
+        radius=record.radius,  # type: ignore[arg-type]
+        font_scale=record.font_scale,  # type: ignore[arg-type]
+        density=record.density,  # type: ignore[arg-type]
+        default_theme=record.default_theme,  # type: ignore[arg-type]
+        logo_data_url=record.logo_data_url,
     )
 
 
-def set_ui_settings(conn: DBConnection, settings: UiSettings) -> UiSettings:
-    ensure_ui_settings(conn)
-    conn.execute(
-        """
-        UPDATE ui_settings SET
-          primary_color = ?,
-          accent_color = ?,
-          radius = ?,
-          font_scale = ?,
-          density = ?,
-          default_theme = ?,
-          logo_data_url = ?
-        WHERE id = 1
-        """,
-        (
-            settings.primary_color,
-            settings.accent_color,
-            settings.radius,
-            settings.font_scale,
-            settings.density,
-            settings.default_theme,
-            settings.logo_data_url,
-        ),
-    )
-    conn.commit()
-    return get_ui_settings(conn)
+def set_ui_settings(session: Session, settings: UiSettings) -> UiSettings:
+    ensure_ui_settings(session)
+    record = session.get(UiSettingsRow, 1)
+    assert record is not None
+    record.primary_color = settings.primary_color
+    record.accent_color = settings.accent_color
+    record.radius = settings.radius
+    record.font_scale = settings.font_scale
+    record.density = settings.density
+    record.default_theme = settings.default_theme
+    record.logo_data_url = settings.logo_data_url
+    session.commit()
+    return get_ui_settings(session)
 
 
-def compute_org_metrics(conn: DBConnection, repos: list[str]) -> OrgMetrics:
+def compute_org_metrics(session: Session, repos: list[str]) -> OrgMetrics:
     if not repos:
         return OrgMetrics(
             total_prs=0,
@@ -963,15 +754,15 @@ def compute_org_metrics(conn: DBConnection, repos: list[str]) -> OrgMetrics:
             trend=[],
         )
 
-    placeholders = ",".join("?" for _ in repos)
-    rows = conn.execute(
-        f"SELECT {_METRICS_COLUMNS_SQL} FROM pr_scores "
-        f"WHERE repo IN ({placeholders}) ORDER BY timestamp ASC",
-        repos,
-    ).fetchall()
+    stmt = (
+        select(*_METRICS_COLUMNS)
+        .where(DashboardPRScore.repo.in_(repos))
+        .order_by(DashboardPRScore.timestamp.asc())
+    )
+    rows = session.execute(stmt).all()
 
     total = len(rows)
-    avg_score = round(sum(int(r["score"]) for r in rows) / total, 1) if total else 0.0
+    avg_score = round(sum(int(r.score) for r in rows) / total, 1) if total else 0.0
     by_semaforo = {"verde": 0, "amarillo": 0, "rojo": 0}
     feedback_correct = 0
     feedback_fp = 0
@@ -987,10 +778,10 @@ def compute_org_metrics(conn: DBConnection, repos: list[str]) -> OrgMetrics:
     by_day: dict[str, list[int]] = {}
 
     for r in rows:
-        sem = r["semaforo"]
+        sem = r.semaforo
         if sem in by_semaforo:
             by_semaforo[sem] += 1
-        fb = r["human_feedback"]
+        fb = r.human_feedback
         if fb == "correcto":
             feedback_correct += 1
         elif fb == "falso_positivo":
@@ -1000,14 +791,14 @@ def compute_org_metrics(conn: DBConnection, repos: list[str]) -> OrgMetrics:
 
         # Misma tripleta (nombre, columna score, columna skipped) que
         # _LAYER_COLS -- reutilizada en vez de duplicada, para no tener que
-        # acordarse de actualizar dos sitios el día que cambien las capas
-        # (ya pasaba antes de esta ronda: esta tupla vivía por su cuenta,
-        # desincronizada de _LAYER_COLS aunque tuviera la misma forma).
+        # acordarse de actualizar dos sitios el día que cambien las capas.
         for layer, score_col, skip_col in _LAYER_COLS:
-            if not r[skip_col] and r[score_col] is not None:
-                layer_sums[layer].append(int(r[score_col]))
+            skip_val = getattr(r, skip_col)
+            score_val = getattr(r, score_col)
+            if not skip_val and score_val is not None:
+                layer_sums[layer].append(int(score_val))
 
-        repo = r["repo"]
+        repo = r.repo
         bucket = per_repo.setdefault(
             repo,
             {
@@ -1020,14 +811,14 @@ def compute_org_metrics(conn: DBConnection, repos: list[str]) -> OrgMetrics:
             },
         )
         bucket["prs"] = int(bucket["prs"]) + 1
-        bucket["score_sum"] = float(bucket["score_sum"]) + int(r["score"])
+        bucket["score_sum"] = float(bucket["score_sum"]) + int(r.score)
         if sem in ("verde", "amarillo", "rojo"):
             bucket[sem] = int(bucket[sem]) + 1
         if fb is None:
             bucket["feedback_pending"] = int(bucket["feedback_pending"]) + 1
 
-        day = str(r["timestamp"])[:10]
-        by_day.setdefault(day, []).append(int(r["score"]))
+        day = str(r.timestamp)[:10]
+        by_day.setdefault(day, []).append(int(r.score))
 
     layer_avg = {k: round(sum(v) / len(v), 1) if v else 0.0 for k, v in layer_sums.items()}
     by_repo = [
@@ -1085,18 +876,23 @@ def verify_password(password: str, stored: str) -> bool:
     return secrets.compare_digest(digest, expected)
 
 
-def upsert_user(conn: DBConnection, login: str, password: str, display_name: str) -> None:
-    conn.execute(
-        """
-        INSERT INTO dashboard_users (login, password_hash, display_name)
-        VALUES (?, ?, ?)
-        ON CONFLICT(login) DO UPDATE SET
-          password_hash = excluded.password_hash,
-          display_name = excluded.display_name
-        """,
-        (normalize_login(login), hash_password(password), display_name),
+def upsert_user(session: Session, login: str, password: str, display_name: str) -> None:
+    table = DashboardUser.__table__
+    insert_ = _dialect_insert(session)
+    stmt = insert_(table).values(
+        login=normalize_login(login),
+        password_hash=hash_password(password),
+        display_name=display_name,
     )
-    conn.commit()
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[table.c.login],
+        set_={
+            "password_hash": stmt.excluded.password_hash,
+            "display_name": stmt.excluded.display_name,
+        },
+    )
+    session.execute(stmt)
+    session.commit()
 
 
 # Hash de relleno con el mismo coste (120.000 iteraciones PBKDF2) que un
@@ -1105,7 +901,7 @@ def upsert_user(conn: DBConnection, login: str, password: str, display_name: str
 _DUMMY_PASSWORD_HASH = hash_password("watchgate-dummy-timing-safe-password")
 
 
-def authenticate_user(conn: DBConnection, login: str, password: str) -> bool:
+def authenticate_user(session: Session, login: str, password: str) -> bool:
     """Antes, un login inexistente devolvía `False` de inmediato, mientras
     que uno existente calculaba un PBKDF2 de 120.000 iteraciones (lento a
     propósito) antes de comparar -- la diferencia de tiempo es medible y
@@ -1113,18 +909,28 @@ def authenticate_user(conn: DBConnection, login: str, password: str) -> bool:
     ningún rate limiting delante. Ahora siempre se ejecuta un PBKDF2 de
     verdad, exista o no el usuario, comparando contra un hash de relleno
     fijo cuando no existe."""
-    row = conn.execute(
-        "SELECT password_hash FROM dashboard_users WHERE login = ?",
-        (normalize_login(login),),
-    ).fetchone()
-    if row is None:
+    record = session.get(DashboardUser, normalize_login(login))
+    if record is None:
         verify_password(password, _DUMMY_PASSWORD_HASH)
         return False
-    return verify_password(password, row["password_hash"])
+    return verify_password(password, record.password_hash)
+
+
+def list_pr_numbers_for_repo(session: Session, repo: str) -> set[str]:
+    """Números de PR (como texto) ya presentes en el histórico del
+    Dashboard para `repo` -- usado por el barrido de polling
+    (`watchgate.service.repo_polling`) para no reencolar análisis ya
+    hechos. Antes esto era una query SQL inline contra una columna
+    `pr_id` que NUNCA existió en esta tabla (es `pr_number`, ver
+    `DashboardPRScore`) -- envuelta en un `except Exception: pass` que la
+    tragaba en silencio, así que ese filtro nunca aportó nada (hallazgo
+    real de esta migración)."""
+    stmt = select(DashboardPRScore.pr_number).where(DashboardPRScore.repo == repo)
+    return {str(n) for n in session.execute(stmt).scalars().all()}
 
 
 def _insert_sample(
-    conn: DBConnection,
+    session: Session,
     *,
     repo: str,
     pr: int,
@@ -1150,7 +956,7 @@ def _insert_sample(
         sum(layer_results[n].risk_score * weights[n] for n in weights) / sum(weights.values())
     )
     score_id = insert_aggregated(
-        conn,
+        session,
         AggregatedResult(
             score=min(100, score),
             semaforo=semaforo,
@@ -1163,26 +969,28 @@ def _insert_sample(
         author_login=author_login,
     )
     if feedback is not None:
-        set_feedback(conn, score_id, feedback)
+        set_feedback(session, score_id, feedback)
 
 
-def seed_demo(conn: DBConnection) -> None:
+def seed_demo(session: Session) -> None:
     """Usuarios locales + histórico falso para probar el dashboard sin CI."""
     # Cuentas locales (usuario / contraseña) — independientes de GitHub/GitLab.
-    upsert_user(conn, "admin", "admin123", "Admin demo")
-    upsert_user(conn, "maintainer", "maint123", "Mantenedor demo")
-    upsert_user(conn, "reviewer", "review123", "Revisor demo")
+    upsert_user(session, "admin", "Admin123", "Admin demo")
+    upsert_user(session, "maintainer", "maint123", "Mantenedor demo")
+    upsert_user(session, "reviewer", "review123", "Revisor demo")
 
-    upsert_role(conn, "admin", "acme/payments-api", "admin_organizacion")
-    upsert_role(conn, "admin", "acme/auth-service", "admin_organizacion")
-    upsert_role(conn, "admin", "acme/infra-terraform", "admin_organizacion")
-    upsert_role(conn, "maintainer", "acme/payments-api", "mantenedor")
-    upsert_role(conn, "maintainer", "acme/auth-service", "mantenedor")
-    upsert_role(conn, "reviewer", "acme/payments-api", "revisor")
-    upsert_role(conn, "reviewer", "acme/auth-service", "revisor")
+    upsert_role(session, "admin", "acme/payments-api", "admin_organizacion")
+    upsert_role(session, "admin", "acme/auth-service", "admin_organizacion")
+    upsert_role(session, "admin", "acme/infra-terraform", "admin_organizacion")
+    upsert_role(session, "maintainer", "acme/payments-api", "mantenedor")
+    upsert_role(session, "maintainer", "acme/auth-service", "mantenedor")
+    upsert_role(session, "reviewer", "acme/payments-api", "revisor")
+    upsert_role(session, "reviewer", "acme/auth-service", "revisor")
 
-    existing = conn.execute("SELECT COUNT(*) AS n FROM pr_scores").fetchone()
-    if existing and int(existing["n"]) > 0:
+    existing_count = session.execute(
+        select(func.count()).select_from(DashboardPRScore)
+    ).scalar_one()
+    if existing_count > 0:
         return
 
     now = datetime.now(UTC)
@@ -1339,7 +1147,7 @@ def seed_demo(conn: DBConnection) -> None:
     for i, (repo, pr, semaforo, layer_map, justification, author, feedback) in enumerate(samples):
         ts = (now - timedelta(days=len(samples) - i)).isoformat()
         _insert_sample(
-            conn,
+            session,
             repo=repo,
             pr=pr,
             semaforo=semaforo,
@@ -1352,7 +1160,7 @@ def seed_demo(conn: DBConnection) -> None:
         )
 
     set_org_settings(
-        conn,
+        session,
         RepoSettings(
             weights=weights,
             thresholds={"amarillo": 34, "rojo": 66},
@@ -1365,7 +1173,7 @@ def seed_demo(conn: DBConnection) -> None:
     )
     # Un repo con override de ejemplo; el resto hereda el default de organización.
     set_settings(
-        conn,
+        session,
         "acme/payments-api",
         RepoSettings(
             weights={
@@ -1389,29 +1197,53 @@ def seed_demo(conn: DBConnection) -> None:
     )
 
 
-def compute_agent_metrics(conn: DBConnection) -> AgentUsageMetrics:
-    try:
-        rows = conn.execute(
-            "SELECT agent_id, score FROM pr_scores WHERE agent_id IS NOT NULL AND agent_id != ''"
-        ).fetchall()
-    except Exception:
-        rows = []
+def compute_agent_metrics(engine_session: Session) -> AgentUsageMetrics:
+    """Recibe una `Session` de la ENGINE DB (`watchgate.db.connection.get_session`/
+    `get_db_session`), no del Dashboard -- antes esta función consultaba
+    `agent_id`/`user_token_usage` contra la base de datos del Dashboard,
+    donde NINGUNA de las dos existe: `agent_id` no es columna de
+    `pr_scores` aquí, y `user_token_usage` es una tabla de la Engine DB
+    (`watchgate.db.models.UserTokenUsage`). El `try/except Exception` que
+    envolvía cada SELECT lo tragaba en silencio, así que esta función nunca
+    devolvió datos reales (hallazgo real de esta migración). Ahora consulta
+    directamente donde esos datos sí existen."""
+    from watchgate.db.models import PRScore as EnginePRScore
+    from watchgate.db.models import UserTokenUsage
+
+    # `select(Model.columna, ...)` con columnas sueltas (en vez de
+    # `select(Model)` completo) no está bien tipado por mypy contra clases
+    # SQLModel -- a nivel de clase, `EnginePRScore.agent_id` resuelve al tipo
+    # Pydantic del campo (`str | None`), no a un `InstrumentedAttribute` de
+    # SQLAlchemy, así que ni `select(...)` ni `.is_not()`/`!=` casan con las
+    # firmas esperadas. Mismo motivo por el que `record_token_usage`
+    # (repository.py) ya necesita `# type: ignore[attr-defined]` en
+    # `Model.__table__` -- limitación conocida de tipado SQLModel, no un
+    # error real (cubierto por tests reales contra SQLite/Postgres).
+    rows = engine_session.execute(
+        select(  # type: ignore[call-overload]
+            EnginePRScore.agent_id, EnginePRScore.score
+        ).where(
+            EnginePRScore.agent_id.is_not(None),  # type: ignore[union-attr]
+            EnginePRScore.agent_id != "",
+        )
+    ).all()
 
     agent_data: dict[str, dict[str, Any]] = {}
-    for r in rows:
-        agent_id = str(r["agent_id"])
+    for agent_id_raw, score_raw in rows:
+        agent_id = str(agent_id_raw)
         bucket = agent_data.setdefault(agent_id, {"count": 0, "score_sum": 0.0})
         bucket["count"] += 1
-        bucket["score_sum"] += float(r["score"])
+        bucket["score_sum"] += float(score_raw)
 
     token_usage: dict[str, int] = {}
-    try:
-        tu_rows = conn.execute("SELECT user_id, tokens_used FROM user_token_usage").fetchall()
-        for tr in tu_rows:
-            u_id = str(tr["user_id"])
-            token_usage[u_id] = token_usage.get(u_id, 0) + int(tr["tokens_used"])
-    except Exception:
-        pass
+    tu_rows = engine_session.execute(
+        select(  # type: ignore[call-overload]
+            UserTokenUsage.user_id, UserTokenUsage.tokens_used
+        )
+    ).all()
+    for user_id_raw, tokens_raw in tu_rows:
+        u_id = str(user_id_raw)
+        token_usage[u_id] = token_usage.get(u_id, 0) + int(tokens_raw)
 
     agent_rows: list[AgentMetricRow] = []
     total_tokens = sum(token_usage.values())

@@ -15,11 +15,24 @@ from watchgate.core.models import AggregatedResult
 from watchgate.db.models import (
     Organization,
     PRScore,
-    SemanticCache,
     User,
     UserAPIKey,
     UserTokenUsage,
 )
+
+# get_semantic_cache/set_semantic_cache/record_repo_token_usage/
+# get_repo_token_usage viven en watchgate.db.token_cache (reexportadas aquí
+# para no romper a los callers existentes de este módulo) -- ver el
+# docstring de ese fichero: es una hoja sin dependencia hacia
+# watchgate.dashboard, a diferencia de este módulo (check_user_repo_permission
+# más abajo importa watchgate.dashboard.backend.db), así que
+# watchgate/core/cost_control.py puede depender de esas cuatro funciones sin
+# que watchgate.core alcance watchgate.dashboard transitivamente (contrato
+# de arquitectura, ver tests/unit/test_architecture.py).
+from watchgate.db.token_cache import get_repo_token_usage as get_repo_token_usage
+from watchgate.db.token_cache import get_semantic_cache as get_semantic_cache
+from watchgate.db.token_cache import record_repo_token_usage as record_repo_token_usage
+from watchgate.db.token_cache import set_semantic_cache as set_semantic_cache
 
 _TOKEN_PREFIX_LIVE = "wg_live_"
 _TOKEN_PREFIX_TEST = "wg_test_"
@@ -369,38 +382,3 @@ def save_pr_score(
     session.commit()
     session.refresh(score_record)
     return score_record
-
-
-def get_semantic_cache(
-    session: Session, diff_hash_value: str, org_id: str = "default-org"
-) -> str | None:
-    """Recupera la respuesta JSON en caché de la capa semántica aislada por organización."""
-    stmt = select(SemanticCache).where(
-        SemanticCache.diff_hash == diff_hash_value, SemanticCache.org_id == org_id
-    )
-    cached = session.exec(stmt).first()
-    return cached.output_json if cached else None
-
-
-def set_semantic_cache(
-    session: Session, diff_hash_value: str, output_json: str, org_id: str = "default-org"
-) -> SemanticCache:
-    """Guarda una respuesta JSON en la caché semántica aislada por organización."""
-    stmt = select(SemanticCache).where(
-        SemanticCache.diff_hash == diff_hash_value, SemanticCache.org_id == org_id
-    )
-    existing = session.exec(stmt).first()
-
-    if existing:
-        existing.output_json = output_json
-        existing.created_at = datetime.now(UTC)
-        cache_record = existing
-    else:
-        cache_record = SemanticCache(
-            org_id=org_id, diff_hash=diff_hash_value, output_json=output_json
-        )
-
-    session.add(cache_record)
-    session.commit()
-    session.refresh(cache_record)
-    return cache_record
