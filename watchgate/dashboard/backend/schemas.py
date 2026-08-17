@@ -107,6 +107,11 @@ class RepoRoleOut(BaseModel):
     user_login: str
     repo: str
     role: RoleName
+    # "audited" | "managed" (ver MonitoredRepo.monitor_type, Engine DB) --
+    # `None` si `repo` no está conectado como repo externo (p. ej. llegó
+    # por ingesta directa del adaptador de GitHub Action, sin pasar nunca
+    # por "Auditoría Externa"). Ver list_all_roles en routers/feedback.py.
+    monitor_type: str | None = None
 
 
 class DashboardUserOut(BaseModel):

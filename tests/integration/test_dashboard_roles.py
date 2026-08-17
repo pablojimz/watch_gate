@@ -355,6 +355,42 @@ def test_admin_can_manage_users(client: TestClient) -> None:
     assert client.delete("/api/admin/users/nueva.persona").status_code == 404
 
 
+def test_admin_roles_list_shows_connected_repo_type(client: TestClient) -> None:
+    """/api/admin/roles enriquece cada fila con `monitor_type`, resuelto
+    contra MonitoredRepo (Engine DB) por repo_path -- "audited"/"managed"
+    si el repo está conectado en Auditoría Externa, `None` si no (p. ej.
+    llegó por ingesta directa del adaptador de CI, como acme/payments-api
+    en este mismo fixture)."""
+    from sqlmodel import Session
+
+    from watchgate.db.models import MonitoredRepo, Organization
+
+    with Session(db_connection.default_engine) as session:
+        org = Organization(id="org-roles-test", name="Org Roles Test")
+        session.add(org)
+        session.add(
+            MonitoredRepo(
+                id="repo-roles-test",
+                org_id=org.id,
+                repo_path="acme/auth-service",
+                monitor_type="audited",
+                status="active",
+            )
+        )
+        session.commit()
+
+    _login(client, "admin", "admin_organizacion")
+    roles = client.get("/api/admin/roles").json()
+
+    auth_service_role = next(r for r in roles if r["repo"] == "acme/auth-service")
+    assert auth_service_role["monitor_type"] == "audited"
+
+    # acme/payments-api tiene rol asignado (seed del fixture `client`) pero
+    # nunca se conectó como repo externo -- no está en MonitoredRepo.
+    payments_role = next(r for r in roles if r["repo"] == "acme/payments-api")
+    assert payments_role["monitor_type"] is None
+
+
 def test_revisor_and_mantenedor_cannot_manage_users(client: TestClient) -> None:
     _login(client, "viewer", "revisor")
     assert client.get("/api/admin/users").status_code == 403

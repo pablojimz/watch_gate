@@ -1059,6 +1059,7 @@ export default function AdminPage() {
                   <tr>
                     <th className="px-4 py-3 font-medium">{t('admin.user')}</th>
                     <th className="px-4 py-3 font-medium">{t('admin.repo')}</th>
+                    <th className="px-4 py-3 font-medium">{t('admin.repoType')}</th>
                     <th className="px-4 py-3 font-medium">{t('admin.role')}</th>
                     <th className="px-4 py-3" />
                   </tr>
@@ -1068,6 +1069,13 @@ export default function AdminPage() {
                     <tr key={`${item.user_login}:${item.repo}`} className="border-t">
                       <td className="px-4 py-3">{item.user_login}</td>
                       <td className="px-4 py-3">{item.repo}</td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {item.monitor_type === 'audited'
+                          ? t('externalRepos.typeAudited')
+                          : item.monitor_type === 'managed'
+                            ? t('externalRepos.typeManaged')
+                            : t('admin.repoTypeUnlinked')}
+                      </td>
                       <td className="px-4 py-3">{t(`roles.${item.role}`)}</td>
                       <td className="px-4 py-3 text-right">
                         <Button size="sm" variant="outline" onClick={() => void removeRole(item)}>

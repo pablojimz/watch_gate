@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from typing import cast
+from typing import Annotated, cast
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlmodel import Session, select
 
 from watchgate.dashboard.backend import db as database
 from watchgate.dashboard.backend.auth import CurrentUser, require_role
@@ -18,8 +19,12 @@ from watchgate.dashboard.backend.schemas import (
     ScoreOut,
     normalize_login,
 )
+from watchgate.db.connection import get_db_session
+from watchgate.db.models import MonitoredRepo
 
 router = APIRouter(tags=["feedback"])
+
+EngineDBSession = Annotated[Session, Depends(get_db_session)]
 
 
 @router.post("/scores/{score_id}/feedback", response_model=ScoreOut)
@@ -66,7 +71,9 @@ def unaccept_score(score_id: int, request: Request, user: CurrentUser) -> ScoreO
 
 
 @router.get("/admin/roles", response_model=list[RepoRoleOut])
-def list_all_roles(request: Request, user: CurrentUser) -> list[RepoRoleOut]:
+def list_all_roles(
+    request: Request, user: CurrentUser, engine_session: EngineDBSession
+) -> list[RepoRoleOut]:
     with database.db_session() as conn:
         if not database.user_is_org_admin(conn, user.login):
             raise HTTPException(
@@ -74,8 +81,37 @@ def list_all_roles(request: Request, user: CurrentUser) -> list[RepoRoleOut]:
                 detail="Se requiere admin_organizacion",
             )
         rows = database.list_roles(conn)
+
+    # `repo_roles` (Dashboard DB) es solo (user_login, repo, role) -- no
+    # sabe si `repo` está conectado como repo externo, eso vive en
+    # MonitoredRepo (Engine DB). Un solo IN(...) contra la Engine DB en
+    # vez de una consulta por fila -- mismo motivo que compute_org_metrics
+    # ya documenta para SELECT * vs columnas explícitas: evitar N
+    # consultas donde una basta.
+    distinct_repos = {r["repo"] for r in rows}
+    monitor_types: dict[str, str] = {}
+    if distinct_repos:
+        monitored = engine_session.exec(
+            select(MonitoredRepo).where(
+                MonitoredRepo.repo_path.in_(distinct_repos)  # type: ignore[attr-defined]
+            )
+        ).all()
+        for m in monitored:
+            # Dos organizaciones distintas pueden auditar el mismo
+            # repo_path (ver comentario en
+            # routers/repos.py::_enqueue_main_branch_scan) -- si difieren
+            # en monitor_type, se queda con el primero que aparezca; es
+            # solo informativo en esta tabla, no una fuente de verdad de
+            # a qué organización pertenece el rol.
+            monitor_types.setdefault(m.repo_path, m.monitor_type)
+
     return [
-        RepoRoleOut(user_login=r["user_login"], repo=r["repo"], role=cast(RoleName, r["role"]))
+        RepoRoleOut(
+            user_login=r["user_login"],
+            repo=r["repo"],
+            role=cast(RoleName, r["role"]),
+            monitor_type=monitor_types.get(r["repo"]),
+        )
         for r in rows
     ]
 
