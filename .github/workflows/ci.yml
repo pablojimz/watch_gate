@@ -114,7 +114,7 @@ jobs:
       - name: Run pytest on PostgreSQL
         env:
           WATCHGATE_DASHBOARD_DATABASE_URL: postgresql://watchgate:watchgate_password@localhost:5432/watchgate_test
-        run: poetry run python -m pytest tests/integration/test_dashboard_postgres.py
+        run: poetry run python -m pytest tests/unit/test_db_postgres.py
 
   trivy-scan:
     runs-on: ubuntu-latest
