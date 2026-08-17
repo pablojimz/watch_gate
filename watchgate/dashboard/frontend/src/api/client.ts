@@ -149,6 +149,9 @@ export interface RepoRole {
   user_login: string
   repo: string
   role: RoleName
+  // 'audited' | 'managed' | null (null = repo no conectado en Auditoría
+  // Externa, p. ej. llegó por ingesta directa del adaptador de CI).
+  monitor_type: string | null
 }
 
 // Cuenta local (login/contraseña) del Dashboard -- distinto de RepoRole,
@@ -291,7 +294,10 @@ export const api = {
   unacceptScore: (scoreId: number) =>
     request<ScoreOut>(`/scores/${scoreId}/accept`, { method: 'DELETE' }),
   listRoles: () => request<RepoRole[]>('/admin/roles'),
-  upsertRole: (body: RepoRole) =>
+  // Sin `monitor_type`: es informativo, solo de lectura (se resuelve en
+  // el servidor a partir de MonitoredRepo, no algo que se pueda asignar
+  // aquí).
+  upsertRole: (body: Pick<RepoRole, 'user_login' | 'repo' | 'role'>) =>
     request<RepoRole>('/admin/roles', {
       method: 'PUT',
       body: JSON.stringify(body),
