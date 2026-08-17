@@ -5,32 +5,40 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import sqlite3
-import threading
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import final
 
 import tiktoken
+from sqlalchemy import Engine
+from sqlmodel import Session, SQLModel, create_engine
 
 from watchgate.core.layers._semantic.client import SemanticOutput
 from watchgate.core.models import FileChange, LayerResult, NormalizedDiff
+from watchgate.db.models import RepoTokenUsage, SemanticCache
+
+# De watchgate.db.token_cache, NO de watchgate.db.repository: ese módulo
+# tiene un import diferido hacia watchgate.dashboard.backend.db
+# (check_user_repo_permission) que el contrato de arquitectura
+# (tests/unit/test_architecture.py) cuenta como alcanzable incluso estando
+# dentro de una función -- importar de aquí evita que watchgate.core
+# alcance watchgate.dashboard transitivamente. Ver el docstring de
+# watchgate/db/token_cache.py.
+from watchgate.db.token_cache import (
+    get_repo_token_usage,
+    get_semantic_cache,
+    record_repo_token_usage,
+    set_semantic_cache,
+)
 
 logger = logging.getLogger("watchgate.core.cost_control")
 
-_SCHEMA = """
-CREATE TABLE IF NOT EXISTS semantic_cache (
-    diff_hash TEXT PRIMARY KEY,
-    output_json TEXT,
-    created_at DATETIME
-);
-CREATE TABLE IF NOT EXISTS token_usage (
-    repo TEXT,
-    month TEXT,
-    tokens_used INTEGER,
-    PRIMARY KEY (repo, month)
-);
-"""
+# Sin concepto de organización/tenant real (modo CLI/engine local, un solo
+# repo analizado directamente) -- reusa el modelo `SemanticCache` de
+# `watchgate.db.models` (misma tabla que usa el modo SaaS) fijando siempre
+# el mismo `org_id` por defecto, para que el lookup siga siendo solo por
+# `diff_hash` (comportamiento idéntico al de antes de esta migración).
+_LOCAL_ORG_ID = "default-org"
 
 _TRUNCATION_MARKER = "[...truncado, {n} líneas adicionales sin hallazgos previos...]"
 _CHARS_PER_TOKEN_ESTIMATE = 4  # fallback si tiktoken no está disponible (ver estimate_tokens)
@@ -85,8 +93,7 @@ class CostController:
     db_path: str
     max_diff_tokens: int
     monthly_budget_tokens: int | None
-    _conn: sqlite3.Connection | None
-    _lock: threading.Lock
+    _engine: Engine | None
 
     def __init__(
         self, db_path: str, max_diff_tokens: int, monthly_budget_tokens: int | None
@@ -95,19 +102,36 @@ class CostController:
         self.max_diff_tokens = max_diff_tokens
         self.monthly_budget_tokens = monthly_budget_tokens
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-        # check_same_thread=False + Lock: orchestrator.py ejecuta las capas en
-        # un ThreadPoolExecutor, así que esta instancia se usa desde un hilo
-        # distinto al que la construyó. El timeout=30.0 previene bloqueos de SQLite.
-        self._conn = sqlite3.connect(db_path, check_same_thread=False, timeout=30.0)
-        self._lock = threading.Lock()
-        with self._lock:
-            _ = self._conn.executescript(_SCHEMA)
-            self._conn.commit()
+        # Motor SQLAlchemy propio y aislado -- NO el compartido de
+        # `watchgate.db.connection` (Engine DB/SaaS): esta es una caché de
+        # PROCESO por repositorio/fichero, sin concepto de organización ni
+        # tenant. `check_same_thread=False`: orchestrator.py ejecuta las
+        # capas en un ThreadPoolExecutor, así que esta instancia se usa
+        # desde un hilo distinto al que la construyó. `timeout=30.0`
+        # previene bloqueos de SQLite bajo escrituras concurrentes.
+        self._engine = create_engine(
+            f"sqlite:///{db_path}",
+            connect_args={"check_same_thread": False, "timeout": 30.0},
+        )
+        # Solo las dos tablas que este fichero usa de verdad -- `SemanticCache`/
+        # `RepoTokenUsage` viven en `SQLModel.metadata` junto con el resto del
+        # esquema de la Engine DB, pero este fichero SQLite es su propia base
+        # de datos aislada, no la Engine DB compartida (`.watchgate/app.db`):
+        # sin `tables=[...]`, `create_all()` intentaría crear TODAS las tablas
+        # del esquema (organizations, users, ...) también aquí.
+        # `Model.__table__` no está en los stubs de SQLModel (limitación de
+        # tipado conocida, ya presente en record_token_usage/
+        # record_repo_token_usage) -- no es un error real.
+        tables = [
+            SemanticCache.__table__,  # type: ignore[attr-defined]
+            RepoTokenUsage.__table__,  # type: ignore[attr-defined]
+        ]
+        SQLModel.metadata.create_all(self._engine, tables=tables)
 
-    def _get_conn(self) -> sqlite3.Connection:
-        if self._conn is None:
+    def _get_engine(self) -> Engine:
+        if self._engine is None:
             raise RuntimeError("CostController se ha cerrado.")
-        return self._conn
+        return self._engine
 
     def __enter__(self) -> CostController:
         return self
@@ -116,12 +140,12 @@ class CostController:
         self.close()
 
     def close(self) -> None:
-        if self._conn is not None:
+        if self._engine is not None:
             try:
-                self._conn.close()
+                self._engine.dispose()
             except Exception:  # noqa: BLE001
                 pass
-            self._conn = None
+            self._engine = None
 
     def __del__(self) -> None:
         self.close()
@@ -198,27 +222,17 @@ class CostController:
         en `_semantic/layer.py`) -- guardar/leer un `dict` suelto rompía esa
         integración (`store_cached` no podía serializar un `SemanticOutput`
         con `json.dumps` directo; reproducido en la revisión)."""
-        conn = self._get_conn()
-        with self._lock:
-            row: tuple[str] | None = conn.execute(
-                "SELECT output_json FROM semantic_cache WHERE diff_hash = ?", (diff_hash_value,)
-            ).fetchone()
-        if row is None:
+        with Session(self._get_engine()) as session:
+            raw_json = get_semantic_cache(session, diff_hash_value, org_id=_LOCAL_ORG_ID)
+        if raw_json is None:
             return None
-        raw_json = str(row[0])
         return SemanticOutput.model_validate(json.loads(raw_json))
 
     def store_cached(self, diff_hash_value: str, output: SemanticOutput) -> None:
-        conn = self._get_conn()
-        with self._lock:
-            _ = conn.execute(
-                """
-                INSERT OR REPLACE INTO semantic_cache (diff_hash, output_json, created_at)
-                VALUES (?, ?, ?)
-                """,
-                (diff_hash_value, output.model_dump_json(), datetime.now(UTC).isoformat()),
+        with Session(self._get_engine()) as session:
+            set_semantic_cache(
+                session, diff_hash_value, output.model_dump_json(), org_id=_LOCAL_ORG_ID
             )
-            conn.commit()
 
     # -- Presupuesto mensual ------------------------------------------------
 
@@ -227,17 +241,8 @@ class CostController:
 
     def record_usage(self, repo: str, tokens_used: int) -> None:
         month = self._current_month()
-        conn = self._get_conn()
-        with self._lock:
-            _ = conn.execute(
-                """
-                INSERT INTO token_usage (repo, month, tokens_used) VALUES (?, ?, ?)
-                ON CONFLICT(repo, month) DO UPDATE SET
-                    tokens_used = tokens_used + excluded.tokens_used
-                """,
-                (repo, month, tokens_used),
-            )
-            conn.commit()
+        with Session(self._get_engine()) as session:
+            record_repo_token_usage(session, repo, tokens_used, month=month)
 
     def budget_remaining(self, repo: str) -> int:
         # None = sin tope configurado (ilimitado a propósito). <= 0 es lo
@@ -250,12 +255,8 @@ class CostController:
         if self.monthly_budget_tokens <= 0:
             return 0
         month = self._current_month()
-        conn = self._get_conn()
-        with self._lock:
-            row: tuple[int] | None = conn.execute(
-                "SELECT tokens_used FROM token_usage WHERE repo = ? AND month = ?", (repo, month)
-            ).fetchone()
-        used = int(row[0]) if row else 0
+        with Session(self._get_engine()) as session:
+            used = get_repo_token_usage(session, repo, month=month)
         return self.monthly_budget_tokens - used
 
     def should_skip(self, repo: str) -> bool:

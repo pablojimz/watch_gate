@@ -36,8 +36,13 @@ COPY README.md ./
 # reutiliza esta imagen) pueden ejecutar `alembic upgrade head` -- migrar el
 # esquema queda forzosamente atado al contenedor engine-api, que sí los trae
 # (ver docker/engine-api.Dockerfile y docs/despliegue.md).
+# alembic_dashboard.ini/alembic_dashboard: segundo entorno Alembic, esquema
+# propio del Dashboard DB (watchgate/dashboard/backend/models.py) -- este
+# SÍ es el contenedor natural desde el que correrlo (ver docs/despliegue.md).
 COPY alembic.ini ./
 COPY alembic ./alembic
+COPY alembic_dashboard.ini ./
+COPY alembic_dashboard ./alembic_dashboard
 RUN poetry install --only main --extras analysis
 
 
@@ -57,6 +62,8 @@ COPY --from=builder /app/watchgate /app/watchgate
 COPY --from=builder /app/README.md /app/README.md
 COPY --from=builder /app/alembic.ini /app/alembic.ini
 COPY --from=builder /app/alembic /app/alembic
+COPY --from=builder /app/alembic_dashboard.ini /app/alembic_dashboard.ini
+COPY --from=builder /app/alembic_dashboard /app/alembic_dashboard
 COPY --from=builder /app/pyproject.toml /app/pyproject.toml
 
 ENV PATH="/app/.venv/bin:$PATH" \

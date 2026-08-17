@@ -123,14 +123,16 @@ Además, ya activo por defecto en cualquier entorno (no solo producción):
 
 ## Migraciones de esquema
 
-Dos esquemas, dos mecanismos distintos -- no se unificaron porque son
-tecnologías distintas (uno SQLAlchemy/SQLModel, el otro SQL crudo) y cada
-uno ya encajaba mejor con su propia herramienta:
+Dos esquemas, dos entornos Alembic **separados** -- son dos bases de datos
+físicamente distintas (`WATCHGATE_DATABASE_URL` vs
+`WATCHGATE_DASHBOARD_DATABASE_URL`), cada una con su propio historial de
+migraciones; compartir uno mezclaría el esquema de una dentro de la otra en
+cuanto se corriera `upgrade head` contra el motor equivocado. Ambos usan
+**Alembic** de verdad, con el mismo flujo:
 
 **Esquema SQLModel** (`watchgate/db/` -- organizations, users,
-user_api_keys, user_token_usage, semantic_cache, pr_scores; lo usan Engine
-API y la gestión de API keys del Dashboard) usa **Alembic** de verdad
-desde ahora:
+user_api_keys, user_token_usage, repo_token_usage, semantic_cache,
+pr_scores; lo usan Engine API y la gestión de API keys del Dashboard):
 
 ```bash
 # Aplicar migraciones pendientes (local o dentro del contenedor):
@@ -141,31 +143,41 @@ docker compose exec engine-api alembic upgrade head   # Docker
 make migration m="descripción del cambio"
 ```
 
-**Importante para una base de datos que ya existía antes de adoptar
-Alembic** (cualquier despliegue de antes de esta versión): las tablas ya
-están creadas, así que `alembic upgrade head` no debe volver a crearlas.
-Una sola vez, marca la base de datos como ya al día sin ejecutar nada:
+**Esquema propio del Dashboard** (`watchgate/dashboard/backend/models.py`
+-- pr_scores, repo_roles, repo_settings, org_settings, dashboard_users,
+llm_settings, ui_settings), segundo entorno Alembic (`alembic_dashboard/`,
+`alembic_dashboard.ini`):
 
 ```bash
-docker compose exec engine-api alembic stamp head
+# Aplicar migraciones pendientes (local o dentro del contenedor):
+make migrate-dashboard                                                    # local
+docker compose exec dashboard-backend alembic -c alembic_dashboard.ini upgrade head   # Docker
+
+# Generar una migración nueva tras cambiar watchgate/dashboard/backend/models.py:
+make migration-dashboard m="descripción del cambio"
 ```
 
-Después de eso, `alembic upgrade head` funciona con normalidad para
-cualquier migración futura. Deliberadamente **no se ejecuta sola en cada
-arranque del contenedor** (a diferencia del chequeo de `init_db()`, que sí
-es automático) -- aplicar un cambio de esquema es un paso explícito de
-despliegue, no algo que deba correr sin supervisión, sobre todo si algún
-día hay más de una réplica arrancando a la vez contra la misma base de
-datos (mismo motivo por el que se arregló el deadlock de `db_session()`
-del Dashboard, ver más abajo).
+**Importante para una base de datos que ya existía antes de adoptar
+Alembic** (cualquier despliegue de antes de esta versión, en cualquiera de
+las dos bases): las tablas ya están creadas, así que `upgrade head` no
+debe volver a crearlas. Una sola vez, marca la base de datos como ya al
+día sin ejecutar nada:
 
-**Esquema propio del Dashboard** (`watchgate/dashboard/backend/db.py` --
-pr_scores, repo_roles, repo_settings, org_settings...) sigue con su
-mecanismo de guardas existente (`init_db()` comprueba columna a columna
-con `PRAGMA table_info`/`information_schema` y aplica `ALTER TABLE
-IF NOT EXISTS` idempotentes) -- SQL crudo, no SQLAlchemy, así que Alembic
-no encaja de forma nativa; el mecanismo actual ya es seguro y automático,
-adaptar esto a Alembic sería una reescritura mayor sin beneficio real hoy.
+```bash
+docker compose exec engine-api alembic upgrade head                                 # se
+# encarga solo si hace falta -- si ya tenía las tablas de antes de Alembic:
+docker compose exec engine-api alembic stamp head
+docker compose exec dashboard-backend alembic -c alembic_dashboard.ini stamp head
+```
+
+Después de eso, `upgrade head` funciona con normalidad para cualquier
+migración futura, en cualquiera de los dos esquemas. Deliberadamente **no
+se ejecuta solo en cada arranque del contenedor** (a diferencia del
+chequeo de `init_db()`, que sí es automático en ambos) -- aplicar un
+cambio de esquema es un paso explícito de despliegue, no algo que deba
+correr sin supervisión, sobre todo si algún día hay más de una réplica
+arrancando a la vez contra la misma base de datos (mismo motivo por el que
+se arregló el deadlock de `db_session()` del Dashboard, ver más abajo).
 
 ## Backups de Postgres
 
@@ -242,10 +254,10 @@ Ver `.env.example` para la lista completa y comentada. Resumen por bloque:
 - Rate limiting de login: compartido entre réplicas si `WATCHGATE_REDIS_URL`
   está configurada (ver arriba); en memoria de proceso si no, que sigue
   siendo el default (no rompe nada para quien no lo necesita).
-- El esquema propio del Dashboard (a diferencia del esquema SQLModel, ver
-  "Migraciones de esquema" arriba) sigue sin Alembic -- su mecanismo de
-  guardas ya es seguro y automático, pero no genera un historial de
-  migraciones versionado como Alembic.
+- Los dos esquemas (Engine DB y Dashboard) usan Alembic, pero con
+  historiales de migración **separados** (ver "Migraciones de esquema"
+  arriba) -- un cambio que toca ambos esquemas a la vez necesita dos
+  migraciones y dos `upgrade head`, no uno solo.
 - Backups de Postgres: automatizados (`postgres-backup` en
   `docker-compose.prod.yml`, ver arriba), pero solo en el mismo host que
   los datos -- sin copia fuera de la máquina (S3 o equivalente).

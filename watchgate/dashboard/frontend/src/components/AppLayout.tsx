@@ -10,7 +10,7 @@ import {
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { Toaster, toast } from 'sonner'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { api } from '@/api/client'
@@ -28,7 +28,7 @@ function navLinkClass({ isActive }: { isActive: boolean }) {
 
 export function AppLayout({ isAdmin }: { isAdmin: boolean }) {
   const { t } = useTranslation()
-  const { mode, setMode } = useTheme()
+  const { setMode } = useTheme()
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
 
   useEffect(() => {
@@ -107,7 +107,6 @@ export function AppLayout({ isAdmin }: { isAdmin: boolean }) {
       <main className="min-h-0 flex-1 overflow-auto">
         <Outlet />
       </main>
-      <Toaster theme={mode === 'dark' || mode === 'light' ? mode : 'system'} closeButton toastOptions={{ duration: 5000 }} />
     </div>
   )
 }

@@ -12,8 +12,10 @@ from watchgate.db.models import User, UserAPIKey
 from watchgate.db.repository import (
     create_api_key,
     create_user,
+    get_repo_token_usage,
     get_semantic_cache,
     get_token_usage,
+    record_repo_token_usage,
     record_token_usage,
     save_pr_score,
     set_semantic_cache,
@@ -148,6 +150,22 @@ def test_record_token_usage_atomic_under_concurrency(tmp_path) -> None:
     session = Session(test_engine)
     total = get_token_usage(session, user_id="agentA", month="2026-08")
     assert total == n_threads * tokens_per_call
+
+
+def test_record_repo_token_usage() -> None:
+    """Contraparte de `test_record_token_usage`, pero para `CostController`
+    (modo CLI/engine local, cuota por repositorio, no por usuario)."""
+    session = _get_memory_session()
+
+    record_repo_token_usage(session, "acme/payments-api", tokens_used=500, month="2026-08")
+    assert get_repo_token_usage(session, "acme/payments-api", month="2026-08") == 500
+
+    record_repo_token_usage(session, "acme/payments-api", tokens_used=250, month="2026-08")
+    assert get_repo_token_usage(session, "acme/payments-api", month="2026-08") == 750
+
+    # Otro repo/mes no interfiere.
+    assert get_repo_token_usage(session, "acme/other-repo", month="2026-08") == 0
+    assert get_repo_token_usage(session, "acme/payments-api", month="2026-09") == 0
 
 
 def test_save_pr_score() -> None:

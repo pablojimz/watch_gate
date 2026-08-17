@@ -96,7 +96,7 @@ def test_password_login_with_seeded_user(monkeypatch: pytest.MonkeyPatch, tmp_pa
         with TestClient(app) as client:
             bad = client.post("/api/auth/login", json={"username": "admin", "password": "wrong"})
             assert bad.status_code == 401
-            ok = client.post("/api/auth/login", json={"username": "admin", "password": "admin123"})
+            ok = client.post("/api/auth/login", json={"username": "admin", "password": "Admin123"})
             assert ok.status_code == 200
             assert client.get("/api/repos").status_code == 200
             assert len(client.get("/api/repos").json()) >= 2

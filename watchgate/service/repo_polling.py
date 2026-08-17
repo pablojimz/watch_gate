@@ -173,14 +173,12 @@ class RepoPollingService:
 
         try:
             from watchgate.dashboard.backend.db import db_session as dash_db_session
+            from watchgate.dashboard.backend.db import list_pr_numbers_for_repo
 
-            with dash_db_session() as dash_conn:
-                rows = dash_conn.execute(
-                    "SELECT pr_id FROM pr_scores WHERE repo = ?", (candidate["repo_path"],)
-                ).fetchall()
-                for r in rows:
-                    if r[0]:
-                        analyzed_pr_ids.add(str(r[0]))
+            with dash_db_session() as dash_session:
+                analyzed_pr_ids.update(
+                    list_pr_numbers_for_repo(dash_session, candidate["repo_path"])
+                )
         except Exception:
             pass
 

@@ -29,13 +29,16 @@ from __future__ import annotations
 import json
 import logging
 import os
-import sqlite3
 import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import httpx
+from sqlalchemy import Engine, create_engine
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
+from sqlalchemy.pool import StaticPool
 
 from watchgate.core.layers._shared import (
     DEPENDENCY_MANIFEST_FILENAMES,
@@ -53,6 +56,24 @@ _CACHE_TTL_HOURS = 24
 _HARD_MAX_BATCH_SIZE = 20
 
 
+class _OSVCacheBase(DeclarativeBase):
+    """Base declarativa propia y aislada -- esta caché vive en su propio
+    fichero SQLite (`~/.watchgate/cache.db`, o el que resuelva
+    `_resolve_db_path`), una TERCERA base de datos física distinta tanto de
+    la Engine DB como del Dashboard DB, así que necesita su propio
+    `MetaData` igual que ellas."""
+
+
+class OSVCacheEntry(_OSVCacheBase):
+    __tablename__ = "osv_cache"
+
+    name: Mapped[str] = mapped_column(primary_key=True)
+    ecosystem: Mapped[str] = mapped_column(primary_key=True)
+    version: Mapped[str] = mapped_column(primary_key=True)
+    response_json: Mapped[str] = mapped_column(nullable=False)
+    fetched_at: Mapped[str] = mapped_column(nullable=False)
+
+
 class OSVCache:
     """Caché SQLite para respuestas de OSV.dev con TTL de 24 horas y tolerancia a fallos
     en la ruta del archivo (fallback a /tmp o :memory: si la ruta home falla).
@@ -60,7 +81,7 @@ class OSVCache:
 
     def __init__(self, db_path: str | None = None) -> None:
         self._lock = threading.Lock()
-        self._conn: sqlite3.Connection | None = None
+        self._engine: Engine | None = None
         self.db_path = self._resolve_db_path(db_path)
         self._init_db()
 
@@ -88,49 +109,64 @@ class OSVCache:
 
     def _init_db(self) -> None:
         try:
-            self._conn = sqlite3.connect(self.db_path, check_same_thread=False, timeout=30.0)
-            with self._lock:
-                self._conn.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS osv_cache (
-                        name TEXT,
-                        ecosystem TEXT,
-                        version TEXT,
-                        response_json TEXT,
-                        fetched_at TEXT,
-                        PRIMARY KEY (name, ecosystem, version)
-                    )
-                    """
+            connect_args = {"check_same_thread": False, "timeout": 30.0}
+            if self.db_path == ":memory:":
+                # SQLite en memoria es POR CONEXIÓN: sin `StaticPool` (que
+                # mantiene una única conexión física viva para todo el
+                # engine), cada checkout del pool vería una base de datos en
+                # blanco distinta -- el `sqlite3.Connection` original,
+                # reusado tal cual durante toda la vida de la instancia,
+                # evitaba esto de forma implícita al ser una única conexión.
+                engine = create_engine(
+                    "sqlite:///:memory:", connect_args=connect_args, poolclass=StaticPool
                 )
-                self._conn.commit()
+            else:
+                engine = create_engine(f"sqlite:///{self.db_path}", connect_args=connect_args)
+            with self._lock:
+                _OSVCacheBase.metadata.create_all(engine)
+            self._engine = engine
         except Exception as exc:  # noqa: BLE001
             logger.warning("Fallo al inicializar la base de datos de caché OSV (%r)", exc)
-            self._conn = None
+            self._engine = None
 
     def get(self, name: str, ecosystem: str, version: str | None) -> dict[str, Any] | None:
-        if self._conn is None:
+        if self._engine is None:
             return None
         v_key = version or ""
         with self._lock:
             try:
-                row = self._conn.execute(
-                    """
-                    SELECT response_json, fetched_at FROM osv_cache
-                    WHERE name = ? AND ecosystem = ? AND version = ?
-                    """,
-                    (name, ecosystem, v_key),
-                ).fetchone()
-                if not row:
+                with Session(self._engine) as session:
+                    record = session.get(OSVCacheEntry, (name, ecosystem, v_key))
+                if record is None:
                     return None
-                resp_json, fetched_at_str = str(row[0]), str(row[1])
-                fetched_at = datetime.fromisoformat(fetched_at_str)
+                fetched_at = datetime.fromisoformat(record.fetched_at)
                 if datetime.now(UTC) - fetched_at > timedelta(hours=_CACHE_TTL_HOURS):
                     return None
-                data: dict[str, Any] = json.loads(resp_json)
+                data: dict[str, Any] = json.loads(record.response_json)
                 return data
             except Exception as exc:  # noqa: BLE001
                 logger.debug("Fallo al leer de la caché OSV para %s (%r)", name, exc)
                 return None
+
+    def _upsert(
+        self, session: Session, name: str, ecosystem: str, version: str, resp_json: str, now: str
+    ) -> None:
+        table = OSVCacheEntry.__table__
+        stmt = sqlite_insert(table).values(  # type: ignore[arg-type]
+            name=name,
+            ecosystem=ecosystem,
+            version=version,
+            response_json=resp_json,
+            fetched_at=now,
+        )
+        stmt = stmt.on_conflict_do_update(
+            index_elements=[table.c.name, table.c.ecosystem, table.c.version],
+            set_={
+                "response_json": stmt.excluded.response_json,
+                "fetched_at": stmt.excluded.fetched_at,
+            },
+        )
+        session.execute(stmt)
 
     def set(
         self,
@@ -139,22 +175,16 @@ class OSVCache:
         version: str | None,
         response_data: dict[str, Any],
     ) -> None:
-        if self._conn is None:
+        if self._engine is None:
             return
         v_key = version or ""
         now_str = datetime.now(UTC).isoformat()
         resp_json = json.dumps(response_data)
         with self._lock:
             try:
-                self._conn.execute(
-                    """
-                    INSERT OR REPLACE INTO osv_cache
-                    (name, ecosystem, version, response_json, fetched_at)
-                    VALUES (?, ?, ?, ?, ?)
-                    """,
-                    (name, ecosystem, v_key, resp_json, now_str),
-                )
-                self._conn.commit()
+                with Session(self._engine) as session:
+                    self._upsert(session, name, ecosystem, v_key, resp_json, now_str)
+                    session.commit()
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Fallo al guardar en caché OSV para %s (%r)", name, exc)
 
@@ -162,34 +192,27 @@ class OSVCache:
         self,
         records: list[tuple[str, str, str | None, dict[str, Any]]],
     ) -> None:
-        if self._conn is None or not records:
+        if self._engine is None or not records:
             return
         now_str = datetime.now(UTC).isoformat()
-        rows = [
-            (name, ecosystem, version or "", json.dumps(resp), now_str)
-            for name, ecosystem, version, resp in records
-        ]
         with self._lock:
             try:
-                self._conn.executemany(
-                    """
-                    INSERT OR REPLACE INTO osv_cache
-                    (name, ecosystem, version, response_json, fetched_at)
-                    VALUES (?, ?, ?, ?, ?)
-                    """,
-                    rows,
-                )
-                self._conn.commit()
+                with Session(self._engine) as session:
+                    for name, ecosystem, version, resp in records:
+                        self._upsert(
+                            session, name, ecosystem, version or "", json.dumps(resp), now_str
+                        )
+                    session.commit()
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Fallo al guardar lote en caché OSV (%r)", exc)
 
     def close(self) -> None:
-        if self._conn is not None:
+        if self._engine is not None:
             try:
-                self._conn.close()
+                self._engine.dispose()
             except Exception:  # noqa: BLE001
                 pass
-            self._conn = None
+            self._engine = None
 
 
 def _is_high_or_critical_vuln(vuln: dict[str, Any]) -> bool:

@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 from fastapi import APIRouter, HTTPException, Request, status
 
 from watchgate.dashboard.backend import db as database
 from watchgate.dashboard.backend.auth import CurrentUser, require_role
-from watchgate.dashboard.backend.schemas import FeedbackIn, RepoRoleIn, RepoRoleOut, ScoreOut
+from watchgate.dashboard.backend.schemas import (
+    FeedbackIn,
+    RepoRoleIn,
+    RepoRoleOut,
+    RoleName,
+    ScoreOut,
+)
 
 router = APIRouter(tags=["feedback"])
 
@@ -63,7 +71,10 @@ def list_all_roles(request: Request, user: CurrentUser) -> list[RepoRoleOut]:
                 detail="Se requiere admin_organizacion",
             )
         rows = database.list_roles(conn)
-    return [RepoRoleOut(user_login=r["user_login"], repo=r["repo"], role=r["role"]) for r in rows]
+    return [
+        RepoRoleOut(user_login=r["user_login"], repo=r["repo"], role=cast(RoleName, r["role"]))
+        for r in rows
+    ]
 
 
 @router.put("/admin/roles", response_model=RepoRoleOut)

@@ -1,9 +1,10 @@
 """Test de regresión: el arranque real del dashboard debe dejar listo el
 esquema de API keys (spec §13 + Tarea 5.1 de la Engine API).
 
-`routers/keys.py` usa `watchgate/db/` (SQLModel), un esquema aparte del que
-usa el resto del dashboard (`watchgate/dashboard/backend/db.py`, sqlite3
-crudo). `default_engine` en `watchgate/db/connection.py` es un singleton de
+`routers/keys.py` usa `watchgate/db/` (SQLModel, la Engine DB), un esquema
+aparte del que usa el resto del dashboard
+(`watchgate/dashboard/backend/db.py`/`models.py`, su propia base de datos
+ORM). `default_engine` en `watchgate/db/connection.py` es un singleton de
 módulo construido una sola vez al importarse -- fijar
 `WATCHGATE_DATABASE_URL` por test no tiene ningún efecto una vez importado
 (y deja un `.watchgate/app.db` real compartido entre tests si no se tiene
