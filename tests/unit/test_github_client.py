@@ -35,6 +35,18 @@ def _mock_stream_response(
     return cm
 
 
+def test_github_client_custom_api_url_and_token(monkeypatch):
+    client = GitHubClient(token="custom_tok", api_url="https://github.enterprise.com/api/v3")
+    assert client._api_base == "https://github.enterprise.com/api/v3"
+    assert client._headers["Authorization"] == "Bearer custom_tok"
+
+    monkeypatch.setenv("WATCHGATE_GITHUB_TOKEN", "env_tok")
+    monkeypatch.setenv("WATCHGATE_GITHUB_API_URL", "https://env-github.com/api/v3")
+    client_env = GitHubClient()
+    assert client_env._api_base == "https://env-github.com/api/v3"
+    assert client_env._headers["Authorization"] == "Bearer env_tok"
+
+
 def test_get_pr_diff_shas_reads_base_and_head_from_event_payload():
     client = GitHubClient(token="fake-token")
     pr_event = {

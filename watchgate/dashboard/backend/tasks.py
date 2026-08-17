@@ -17,7 +17,13 @@ from watchgate.db.models import MonitoredRepo, VCSConnection
 from watchgate.service.quota import QuotaService
 
 
-def run_managed_scan(repo_path: str, pr_number: int, installation_id: str) -> None:
+def run_managed_scan(
+    repo_path: str,
+    pr_number: int,
+    installation_id: str,
+    github_token: str | None = None,
+    github_api_url: str | None = None,
+) -> None:
     """Tarea principal para repositorios gestionados vía webhook."""
     with next(get_session()) as session:
         # Buscar la conexión y org a partir de installation_id
@@ -29,9 +35,17 @@ def run_managed_scan(repo_path: str, pr_number: int, installation_id: str) -> No
 
         org_id = vcs.org_id
 
-        # Descargar Diff y Metadata
-        token = vcs.access_token if vcs.access_token else None
-        client = GitHubClient(token)
+        from watchgate.dashboard.backend.db import db_session as dashboard_db_session
+        from watchgate.dashboard.backend.db import resolve_github_credentials
+
+        token, api_url = github_token, github_api_url
+        if not token or not api_url:
+            with dashboard_db_session() as dash_conn:
+                res_tok, res_url = resolve_github_credentials(dash_conn, repo_path=repo_path)
+                token = token or res_tok
+                api_url = api_url or res_url
+
+        client = GitHubClient(token, api_url=api_url)
         owner, repo_name = repo_path.split("/", 1)
 
         diff_text, metadata = client.get_pull_request_data(owner, repo_name, pr_number)
@@ -115,7 +129,14 @@ def get_queue() -> Queue:
 MAIN_BRANCH_SCAN_PR_ID = "main"
 
 
-def run_main_branch_scan(repo_path: str, org_id: str, vcs_connection_id: str | None) -> None:
+def run_main_branch_scan(
+    repo_path: str,
+    org_id: str,
+    vcs_connection_id: str | None,
+    user_login: str | None = None,
+    github_token: str | None = None,
+    github_api_url: str | None = None,
+) -> None:
     """Escaneo de línea base: analiza TODO el contenido actual de la rama
     por defecto (no una PR concreta), disparado UNA VEZ al dar de alta un
     repositorio en auditoría externa -- ver
@@ -130,15 +151,19 @@ def run_main_branch_scan(repo_path: str, org_id: str, vcs_connection_id: str | N
     `get_pull_request_data`, y no hay `pr_number` real, así que se usa
     `MAIN_BRANCH_SCAN_PR_ID` como identificador."""
     with next(get_session()) as session:
-        token = None
-        if vcs_connection_id:
-            vcs = session.exec(
-                select(VCSConnection).where(VCSConnection.id == vcs_connection_id)
-            ).first()
-            if vcs and vcs.access_token:
-                token = vcs.access_token
+        from watchgate.dashboard.backend.db import db_session as dashboard_db_session
+        from watchgate.dashboard.backend.db import resolve_github_credentials
 
-        client = GitHubClient(token)
+        token, api_url = github_token, github_api_url
+        if not token or not api_url:
+            with dashboard_db_session() as dash_conn:
+                res_tok, res_url = resolve_github_credentials(
+                    dash_conn, user_login=user_login, repo_path=repo_path
+                )
+                token = token or res_tok
+                api_url = api_url or res_url
+
+        client = GitHubClient(token, api_url=api_url)
         owner, repo_name = repo_path.split("/", 1)
 
         diff_text, metadata = client.get_default_branch_scan_data(owner, repo_name)
@@ -206,21 +231,30 @@ def run_main_branch_scan(repo_path: str, org_id: str, vcs_connection_id: str | N
 
 
 def run_audit_scan(
-    repo_path: str, pr_number: int, org_id: str, vcs_connection_id: str | None
+    repo_path: str,
+    pr_number: int,
+    org_id: str,
+    vcs_connection_id: str | None,
+    user_login: str | None = None,
+    github_token: str | None = None,
+    github_api_url: str | None = None,
 ) -> None:
     """Tarea principal de auditoría ejecutada por el worker."""
     with next(get_session()) as session:
-        # 1. Obtener token si existe
-        token = None
-        if vcs_connection_id:
-            vcs = session.exec(
-                select(VCSConnection).where(VCSConnection.id == vcs_connection_id)
-            ).first()
-            if vcs and vcs.access_token:
-                token = vcs.access_token  # Ya está descifrado gracias a EncryptedString
+        from watchgate.dashboard.backend.db import db_session as dashboard_db_session
+        from watchgate.dashboard.backend.db import resolve_github_credentials
+
+        token, api_url = github_token, github_api_url
+        if not token or not api_url:
+            with dashboard_db_session() as dash_conn:
+                res_tok, res_url = resolve_github_credentials(
+                    dash_conn, user_login=user_login, repo_path=repo_path
+                )
+                token = token or res_tok
+                api_url = api_url or res_url
 
         # 2. Descargar Diff y Metadata
-        client = GitHubClient(token)
+        client = GitHubClient(token, api_url=api_url)
         owner, repo_name = repo_path.split("/", 1)
 
         diff_text, metadata = client.get_pull_request_data(owner, repo_name, pr_number)

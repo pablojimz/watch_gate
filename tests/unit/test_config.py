@@ -89,3 +89,12 @@ def test_config_satisfies_orchestrator_protocol_structurally():
 
     config = load_config(yaml_path="/nonexistent/.watchgate.yml")
     assert isinstance(config, OrchestratorProtocol)
+
+
+def test_github_token_and_api_url_config(monkeypatch):
+    monkeypatch.setenv("WATCHGATE_GITHUB_TOKEN", "gh_secret_123")
+    monkeypatch.setenv("WATCHGATE_GITHUB_API_URL", "https://github.enterprise.local/api/v3")
+
+    config = load_config(yaml_path="/nonexistent/.watchgate.yml")
+    assert config.github_token == "gh_secret_123"
+    assert config.github_api_url == "https://github.enterprise.local/api/v3"

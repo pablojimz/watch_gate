@@ -6,6 +6,7 @@ import {
   Settings2,
   Shield,
   Eye,
+  User,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
@@ -83,6 +84,10 @@ export function AppLayout({ isAdmin }: { isAdmin: boolean }) {
           <NavLink to="/api-keys" className={navLinkClass}>
             <KeyRound className="size-4" strokeWidth={1.75} />
             <span className="hidden sm:inline">{t('nav.apiKeys')}</span>
+          </NavLink>
+          <NavLink to="/user-settings" className={navLinkClass}>
+            <User className="size-4" strokeWidth={1.75} />
+            <span className="hidden sm:inline">{t('nav.userSettings')}</span>
           </NavLink>
           {isAdmin ? (
             <NavLink to="/admin" className={navLinkClass}>
