@@ -1,4 +1,10 @@
-"""Tests unitarios para la monitorización automática y periódica de PRs externas."""
+"""Tests unitarios para el escaneo bajo demanda de repositorios externos.
+
+Antes cubría también el repolling PERIÓDICO automático (scheduler +
+auto_scan_prs + scan_interval_minutes) -- eliminado a petición explícita:
+todo escaneo de un repo ya conectado requiere pulsar "Escanear" en el
+Dashboard. Ver `watchgate/service/repo_polling.py`.
+"""
 
 from __future__ import annotations
 
@@ -62,76 +68,54 @@ def test_github_client_list_pull_requests_with_etag_304():
         assert etag == '"etag_123"'
 
 
-def test_repo_polling_service_get_candidate_repos(test_db_session):
-    with patch("watchgate.service.repo_polling.get_session", return_value=iter([test_db_session])):
-        org = create_organization(test_db_session, "Org AutoScan")
+def test_get_candidate_repo_by_id_returns_none_for_paused_repo(test_db_session):
+    """Un repo pausado no se puede escanear ni siquiera a mano -- hay que
+    reactivarlo primero vía PATCH .../status=active."""
+    sess_target = "watchgate.service.repo_polling.get_session"
+    with patch(sess_target, side_effect=lambda: iter([test_db_session])):
+        org = create_organization(test_db_session, "Org Paused")
+        repo = MonitoredRepo(
+            id="repo-paused",
+            org_id=org.id,
+            repo_path="owner/pausedrepo",
+            monitor_type="audited",
+            status="paused",
+        )
+        test_db_session.add(repo)
+        test_db_session.commit()
+
+        assert RepoPollingService.get_candidate_repo_by_id("repo-paused") is None
+
+
+def test_get_candidate_repo_by_id_resolves_token_from_vcs_connection(test_db_session):
+    sess_target = "watchgate.service.repo_polling.get_session"
+    with patch(sess_target, side_effect=lambda: iter([test_db_session])):
+        org = create_organization(test_db_session, "Org Candidate")
         vcs = VCSConnection(id="vcs-1", org_id=org.id, access_token="token_vcs")
         test_db_session.add(vcs)
-
-        repo1 = MonitoredRepo(
+        repo = MonitoredRepo(
             id="repo-1",
             org_id=org.id,
             vcs_connection_id=vcs.id,
             repo_path="owner/repo1",
             monitor_type="audited",
             status="active",
-            auto_scan_prs=True,
-            scan_interval_minutes=15,
-        )
-        repo_managed = MonitoredRepo(
-            id="repo-2",
-            org_id=org.id,
-            repo_path="owner/repo2",
-            monitor_type="managed",
-            status="active",
-            auto_scan_prs=True,
-        )
-        repo_no_token = MonitoredRepo(
-            id="repo-3",
-            org_id=org.id,
-            repo_path="owner/repo3",
-            monitor_type="audited",
-            status="active",
-            auto_scan_prs=True,
-        )
-        test_db_session.add_all([repo1, repo_managed, repo_no_token])
-        test_db_session.commit()
-
-        with patch.dict(os.environ, {}, clear=True):
-            candidates = RepoPollingService.get_candidate_repos()
-            assert len(candidates) == 3
-            assert candidates[0]["repo_path"] == "owner/repo1"
-            assert candidates[0]["token"] == "token_vcs"
-
-
-def test_repo_polling_service_get_candidate_repos_ignore_interval(test_db_session):
-    from datetime import UTC, datetime
-
-    sess_target = "watchgate.service.repo_polling.get_session"
-    with patch(sess_target, side_effect=lambda: iter([test_db_session])):
-        org = create_organization(test_db_session, "Org AutoScan Ignore")
-        repo = MonitoredRepo(
-            id="repo-recent",
-            org_id=org.id,
-            repo_path="owner/recentrepo",
-            status="active",
-            auto_scan_prs=True,
-            scan_interval_minutes=60,
-            last_polled_at=datetime.now(UTC),
         )
         test_db_session.add(repo)
         test_db_session.commit()
 
-        normal_candidates = RepoPollingService.get_candidate_repos(ignore_interval=False)
-        assert len(normal_candidates) == 0
+        with patch.dict(os.environ, {}, clear=True):
+            candidate = RepoPollingService.get_candidate_repo_by_id("repo-1")
+            assert candidate is not None
+            assert candidate["repo_path"] == "owner/repo1"
+            assert candidate["token"] == "token_vcs"
 
-        ignored_candidates = RepoPollingService.get_candidate_repos(ignore_interval=True)
-        assert len(ignored_candidates) == 1
-        assert ignored_candidates[0]["repo_path"] == "owner/recentrepo"
 
-
-def test_repo_polling_service_poll_all_candidates_enqueues_and_handles_errors(test_db_session):
-    org = create_organization(test_db_session, "Org AutoScan 2")
+def test_poll_repo_by_id_enqueues_and_handles_repeated_errors(test_db_session):
+    """poll_repo_by_id() es el único punto de entrada real ahora (botón
+    "Escanear") -- sigue marcando status="error" tras 5 fallos seguidos,
+    igual que hacía antes el barrido periódico."""
+    org = create_organization(test_db_session, "Org Scan")
     vcs = VCSConnection(id="vcs-2", org_id=org.id, access_token="token_vcs2")
     test_db_session.add(vcs)
 
@@ -142,8 +126,6 @@ def test_repo_polling_service_poll_all_candidates_enqueues_and_handles_errors(te
         repo_path="owner/scanrepo",
         monitor_type="audited",
         status="active",
-        auto_scan_prs=True,
-        scan_interval_minutes=15,
     )
     test_db_session.add(repo)
     test_db_session.commit()
@@ -159,37 +141,29 @@ def test_repo_polling_service_poll_all_candidates_enqueues_and_handles_errors(te
         patch(target_prs) as mock_fetch,
     ):
         mock_fetch.return_value = [{"number": 101}, {"number": 102}]
-        enqueued = RepoPollingService.poll_all_candidates()
+        enqueued = RepoPollingService.poll_repo_by_id("repo-scan-1")
 
         assert enqueued == 2
         assert mock_queue.enqueue.call_count == 2
 
-        # Probamos cuando ocurre un error continuo
+        # Cinco escaneos seguidos fallando -> el repo pasa a status="error".
         mock_fetch.side_effect = Exception("GitHub API Down")
         for _ in range(5):
-            repo_to_reset = test_db_session.get(MonitoredRepo, "repo-scan-1")
-            if repo_to_reset:
-                repo_to_reset.last_polled_at = None
-                test_db_session.commit()
-            RepoPollingService.poll_all_candidates()
+            RepoPollingService.poll_repo_by_id("repo-scan-1")
 
         repo_updated = test_db_session.get(MonitoredRepo, "repo-scan-1")
         assert repo_updated.status == "error"
         assert repo_updated.consecutive_errors >= 5
 
 
-def test_poll_all_candidates_malformed_repo_path_does_not_block_others(
-    test_db_session, monkeypatch
-):
-    """Regresión de un bug real reproducido en vivo: un repo_path sin '/'
-    (residuo de una prueba con un repo git local) hacía que
+def test_poll_repo_by_id_malformed_repo_path_does_not_raise(test_db_session, monkeypatch):
+    """Regresión de un bug real: un repo_path sin '/' (residuo de una
+    prueba con un repo git local) hacía que
     `owner, repo_name = repo_path.split("/", 1)` lanzara ValueError SIN
-    capturar -- eso mataba `poll_all_candidates` entero, así que NINGÚN
-    repo, ni siquiera los válidos, se llegaba a comprobar mientras
-    existiera esa fila. Ahora debe: 1) no propagar la excepción, 2) seguir
-    encolando el repo válido, 3) marcar el mal formado como un fallo más
-    (mismo camino de consecutive_errors que un fallo de red de verdad)."""
-    org = create_organization(test_db_session, "Org AutoScan Malformed")
+    capturar. Ahora debe: 1) no propagar la excepción, 2) marcarlo como un
+    fallo más (mismo camino de consecutive_errors que un fallo de red de
+    verdad)."""
+    org = create_organization(test_db_session, "Org Malformed")
 
     malformed = MonitoredRepo(
         id="repo-malformed",
@@ -197,53 +171,21 @@ def test_poll_all_candidates_malformed_repo_path_does_not_block_others(
         repo_path="prueba-1",  # sin "/" -- exactamente el caso reproducido en producción
         monitor_type="audited",
         status="active",
-        auto_scan_prs=True,
-        scan_interval_minutes=15,
     )
-    valid = MonitoredRepo(
-        id="repo-valid",
-        org_id=org.id,
-        repo_path="owner/validrepo",
-        monitor_type="audited",
-        status="active",
-        auto_scan_prs=True,
-        scan_interval_minutes=15,
-    )
-    test_db_session.add_all([malformed, valid])
+    test_db_session.add(malformed)
     test_db_session.commit()
 
     monkeypatch.setenv("WATCHGATE_GITHUB_TOKEN", "fake-token")
 
-    mock_queue = MagicMock()
-    mock_queue.fetch_job.return_value = None
-
-    target_prs = "watchgate.adapters.github_client.GitHubClient.list_all_open_pull_requests"
     target_sess = "watchgate.service.repo_polling.get_session"
-    with (
-        patch(target_sess, side_effect=lambda: iter([test_db_session])),
-        patch("watchgate.dashboard.backend.tasks.get_queue", return_value=mock_queue),
-        patch(target_prs, return_value=[{"number": 201}]),
-    ):
+    with patch(target_sess, side_effect=lambda: iter([test_db_session])):
         for _ in range(5):
-            repo_to_reset = test_db_session.get(MonitoredRepo, "repo-malformed")
-            repo_to_reset.last_polled_at = None
-            valid_repo = test_db_session.get(MonitoredRepo, "repo-valid")
-            valid_repo.last_polled_at = None
-            test_db_session.commit()
-
-            enqueued = RepoPollingService.poll_all_candidates()  # no debe lanzar
-
-            # El repo válido se sigue encolando en TODAS las pasadas, con
-            # independencia de que el mal formado siga fallando al lado.
-            assert enqueued >= 1
+            enqueued = RepoPollingService.poll_repo_by_id("repo-malformed")  # no debe lanzar
+            assert enqueued == 0
 
     malformed_updated = test_db_session.get(MonitoredRepo, "repo-malformed")
     assert malformed_updated.consecutive_errors >= 5
     assert malformed_updated.status == "error"
-
-    valid_updated = test_db_session.get(MonitoredRepo, "repo-valid")
-    assert valid_updated.consecutive_errors == 0
-    assert valid_updated.status == "active"
 
 
 def test_patch_external_repo_endpoint_and_rbac(test_db_session):
@@ -266,8 +208,6 @@ def test_patch_external_repo_endpoint_and_rbac(test_db_session):
         repo_path="acme/patchrepo",
         monitor_type="audited",
         status="active",
-        auto_scan_prs=True,
-        scan_interval_minutes=30,
     )
     test_db_session.add(repo)
     test_db_session.commit()
@@ -288,23 +228,18 @@ def test_patch_external_repo_endpoint_and_rbac(test_db_session):
 
     # 1. Usuario revisor intenta actualizar -> 403 Forbidden
     client.cookies.set("watchgate_session", token_revisor)
-    response = client.patch("/api/repos/external/repo-patch-1", json={"scan_interval_minutes": 15})
+    response = client.patch("/api/repos/external/repo-patch-1", json={"status": "paused"})
     assert response.status_code == 403
 
-    # 2. Usuario admin actualiza con intervalo demasiado bajo (< 5 min) -> 400 Bad Request
+    # 2. Usuario admin actualiza con un estado inválido -> 400 Bad Request
     client.cookies.set("watchgate_session", token_admin)
-    response = client.patch("/api/repos/external/repo-patch-1", json={"scan_interval_minutes": 2})
+    response = client.patch("/api/repos/external/repo-patch-1", json={"status": "bogus"})
     assert response.status_code == 400
 
     # 3. Usuario admin actualiza correctamente
-    response = client.patch(
-        "/api/repos/external/repo-patch-1",
-        json={"auto_scan_prs": False, "scan_interval_minutes": 60, "status": "paused"},
-    )
+    response = client.patch("/api/repos/external/repo-patch-1", json={"status": "paused"})
     assert response.status_code == 200
     data = response.json()
-    assert data["auto_scan_prs"] is False
-    assert data["scan_interval_minutes"] == 60
     assert data["status"] == "paused"
 
     app.dependency_overrides.clear()
@@ -340,7 +275,6 @@ def test_add_external_repo_triggers_instant_poll(test_db_session):
         assert data["repo_path"] == "openclaw/instantrepo"
         assert mock_poll.called
         assert mock_poll.call_args[0][0] == data["id"]
-        assert mock_poll.call_args[1].get("ignore_interval") is True
 
     app.dependency_overrides.clear()
 
