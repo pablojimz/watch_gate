@@ -1,4 +1,15 @@
-"""Servicio de polling de repositorios externos (Clean Architecture & SRP)."""
+"""Escaneo bajo demanda de repositorios externos (Clean Architecture & SRP).
+
+Antes había también un barrido PERIÓDICO automático (cada
+`scan_interval_minutes`, disparado por un proceso `scheduler` aparte) --
+eliminado a petición explícita: todo escaneo de PRs de un repo ya
+conectado ahora requiere que alguien pulse "Escanear" en el Dashboard
+(`POST /api/repos/external/{id}/scan`, ver `routers/repos.py`) o, en el
+caso de `run_main_branch_scan`, se dispara una única vez al dar de alta el
+repo (evento puntual de onboarding, no periódico -- eso sigue igual). Este
+módulo ya solo resuelve UN repo concreto por su id, nunca "todos los
+candidatos vencidos".
+"""
 
 from __future__ import annotations
 
@@ -39,38 +50,11 @@ class RepoPollingService:
         }
 
     @classmethod
-    def get_candidate_repos(cls, ignore_interval: bool = False) -> list[dict[str, Any]]:
-        """Obtiene la lista de repositorios candidatos cerrando la sesión de DB inmediatamente."""
-        now = datetime.now(UTC)
-        candidates: list[dict[str, Any]] = []
-        default_token = os.environ.get("WATCHGATE_GITHUB_TOKEN") or os.environ.get("GITHUB_TOKEN")
-
-        with next(get_session()) as session:
-            repos = session.exec(
-                select(MonitoredRepo).where(
-                    MonitoredRepo.status == "active",
-                    (MonitoredRepo.auto_scan_prs != False),  # noqa: E712
-                )
-            ).all()
-
-            for repo in repos:
-                if not ignore_interval and repo.last_polled_at:
-                    interval = repo.scan_interval_minutes or 30
-                    elapsed = (now - repo.last_polled_at.replace(tzinfo=UTC)).total_seconds() / 60.0
-                    if elapsed < interval:
-                        continue
-
-                cand = cls._build_candidate_dict(repo, default_token, session)
-                candidates.append(cand)
-
-        return candidates
-
-    @classmethod
-    def get_candidate_repo_by_id(
-        cls, repo_id: str, ignore_interval: bool = True
-    ) -> dict[str, Any] | None:
-        """Obtiene un único candidato por ID para barrido inmediato."""
-        now = datetime.now(UTC)
+    def get_candidate_repo_by_id(cls, repo_id: str) -> dict[str, Any] | None:
+        """Resuelve un repo concreto para un escaneo manual inmediato --
+        `None` si no existe o está `paused`/`error` (un repo pausado no se
+        escanea ni a mano; hay que reactivarlo primero vía
+        `PATCH /api/repos/external/{id}` con `status: "active"`)."""
         default_token = os.environ.get("WATCHGATE_GITHUB_TOKEN") or os.environ.get("GITHUB_TOKEN")
 
         with next(get_session()) as session:
@@ -78,25 +62,18 @@ class RepoPollingService:
                 select(MonitoredRepo).where(
                     MonitoredRepo.id == repo_id,
                     MonitoredRepo.status == "active",
-                    (MonitoredRepo.auto_scan_prs != False),  # noqa: E712
                 )
             ).first()
 
             if not repo:
                 return None
 
-            if not ignore_interval and repo.last_polled_at:
-                interval = repo.scan_interval_minutes or 30
-                elapsed = (now - repo.last_polled_at.replace(tzinfo=UTC)).total_seconds() / 60.0
-                if elapsed < interval:
-                    return None
-
             return cls._build_candidate_dict(repo, default_token, session)
 
     @classmethod
     def _record_poll_outcome(cls, repo_id: str, now: datetime, success: bool) -> None:
         """Actualiza `last_polled_at`/`consecutive_errors`/`status` tras UN
-        intento de barrido -- extraído a helper para poder llamarlo también
+        intento de escaneo -- extraído a helper para poder llamarlo también
         desde el caso "repo_path mal formado" (ver `_poll_single_candidate`),
         que antes crasheaba ANTES de llegar aquí y nunca contaba como
         fallo."""
@@ -104,10 +81,6 @@ class RepoPollingService:
             repo_db = session.get(MonitoredRepo, repo_id)
             if repo_db:
                 repo_db.last_polled_at = now
-                if repo_db.auto_scan_prs is None:
-                    repo_db.auto_scan_prs = True
-                if not repo_db.scan_interval_minutes:
-                    repo_db.scan_interval_minutes = 30
                 if success:
                     repo_db.consecutive_errors = 0
                 else:
@@ -126,22 +99,14 @@ class RepoPollingService:
         if len(owner_repo) != 2 or not owner_repo[0] or not owner_repo[1]:
             # repo_path no tiene forma "owner/repo" (p. ej. quedó de una
             # prueba con un repo git local, sin dueño de GitHub) --
-            # GitHubClient no tiene nada que consultar. Antes esto hacía
-            # `owner, repo_name = repo_path.split("/", 1)` a pelo, SIN
-            # capturar: un ValueError sin coger aquí no solo mataba este
-            # candidato, se propagaba hasta el `with redis_conn.lock(...)`
-            # del scheduler y abortaba el barrido ENTERO -- ningún otro
-            # repo (ni siquiera los válidos) se llegaba a comprobar
-            # mientras existiera un solo repo_path mal formado en la BD
-            # (hallazgo real, no hipotético: reproducido en vivo con dos
-            # filas de prueba `prueba-1`/`prueba_watchgate` sin "/").
-            # Se cuenta como un fallo más, por el MISMO camino de
-            # consecutive_errors que un fallo de red -- tras 5 barridos
-            # seguidos así, el repo pasa a status="error" y queda visible
-            # en el dashboard en vez de fallar en silencio para siempre.
+            # GitHubClient no tiene nada que consultar. Se cuenta como un
+            # fallo más, por el MISMO camino de consecutive_errors que un
+            # fallo de red -- tras 5 escaneos seguidos así, el repo pasa a
+            # status="error" y queda visible en el dashboard en vez de
+            # fallar en silencio para siempre.
             logger.warning(
                 "repo_path '%s' (id=%s) no tiene forma 'owner/repo' -- se omite y "
-                "cuenta como fallo de barrido.",
+                "cuenta como fallo de escaneo.",
                 repo_path,
                 candidate["id"],
             )
@@ -213,33 +178,12 @@ class RepoPollingService:
         return total_enqueued
 
     @classmethod
-    def poll_repo_by_id(cls, repo_id: str, ignore_interval: bool = True) -> int:
-        """Efectúa el barrido de un repositorio concreto de forma inmediata."""
-        candidate = cls.get_candidate_repo_by_id(repo_id, ignore_interval=ignore_interval)
+    def poll_repo_by_id(cls, repo_id: str) -> int:
+        """Escanea un repositorio concreto ahora mismo -- único punto de
+        entrada de este servicio: `POST /api/repos/external/{id}/scan`
+        (botón "Escanear" del Dashboard) y el escaneo puntual al conectar
+        un repo nuevo (`routers/repos.py::add_external_repo`)."""
+        candidate = cls.get_candidate_repo_by_id(repo_id)
         if not candidate:
             return 0
         return cls._poll_single_candidate(candidate)
-
-    @classmethod
-    def poll_all_candidates(cls, ignore_interval: bool = False) -> int:
-        """Efectúa el barrido con llamadas HTTP sin bloqueo de transacciones DB."""
-        candidates = cls.get_candidate_repos(ignore_interval=ignore_interval)
-        total_enqueued = 0
-
-        for candidate in candidates:
-            try:
-                total_enqueued += cls._poll_single_candidate(candidate)
-            except Exception as exc:  # noqa: BLE001 -- un fallo inesperado en UN
-                # candidato (bug no previsto, no solo el repo_path mal formado ya
-                # cubierto arriba) nunca debe impedir que se compruebe el resto --
-                # hallazgo real: sin este aislamiento, dos filas de prueba con
-                # repo_path sin "/" bastaban para que NINGÚN repo, ni siquiera los
-                # válidos, se comprobara nunca en todo el proceso del scheduler.
-                logger.warning(
-                    "Fallo inesperado barriendo el repo '%s' (id=%s): %r",
-                    candidate.get("repo_path"),
-                    candidate.get("id"),
-                    exc,
-                )
-
-        return total_enqueued

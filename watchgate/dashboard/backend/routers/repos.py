@@ -36,8 +36,6 @@ class MonitoredRepoResponse(BaseModel):
     repo_path: str
     monitor_type: str
     status: str
-    auto_scan_prs: bool
-    scan_interval_minutes: int
     last_scanned_at: datetime | None
     last_polled_at: datetime | None
     consecutive_errors: int
@@ -45,10 +43,6 @@ class MonitoredRepoResponse(BaseModel):
 
 
 class MonitoredRepoUpdate(BaseModel):
-    auto_scan_prs: bool | None = Field(default=None)
-    scan_interval_minutes: int | None = Field(
-        default=None, description="Intervalo en minutos (ej: 15, 30, 60, 120, 1440)"
-    )
     status: str | None = Field(default=None, description="'active', 'paused' o 'error'")
 
 
@@ -123,10 +117,11 @@ def add_external_repo(
     # llega vía GitHub App/webhook), se encola un análisis del contenido
     # COMPLETO de su rama por defecto, no solo de sus PRs futuras -- ver
     # tasks.py:run_main_branch_scan. Sin esto, un repo con historial ya
-    # existente se queda sin ninguna foto de riesgo hasta que alguien abra
-    # la primera PR nueva. Se dispara siempre que el repo es "audited", con
-    # independencia de auto_scan_prs (ese toggle solo controla el repolling
-    # PERIÓDICO de PRs, no este escaneo puntual de alta).
+    # existente se queda sin ninguna foto de riesgo hasta que alguien pulse
+    # "Escanear" o abra la primera PR nueva. Evento ÚNICO al conectar el
+    # repo, no periódico -- el repolling automático se eliminó (ver
+    # watchgate/service/repo_polling.py); todo escaneo POSTERIOR de un
+    # repo ya conectado requiere pulsar "Escanear" en el Dashboard.
     #
     # job_id incluye org_id (no solo repo_path): dos organizaciones
     # distintas pueden auditar el MISMO repo_path (la unicidad de arriba
@@ -155,11 +150,12 @@ def add_external_repo(
                 job_id=job_id,
             )
 
-    # Si tiene auto_scan_prs activo, iniciar análisis inmediato de todas sus PRs abiertas
-    if new_repo.auto_scan_prs:
-        from watchgate.service.repo_polling import RepoPollingService
+    # Escaneo inmediato (único, al conectar) de todas las PRs abiertas ya
+    # existentes -- igual que el escaneo de línea base de arriba, evento de
+    # onboarding, no repolling periódico.
+    from watchgate.service.repo_polling import RepoPollingService
 
-        RepoPollingService.poll_repo_by_id(new_repo.id, ignore_interval=True)
+    RepoPollingService.poll_repo_by_id(new_repo.id)
 
     return new_repo
 
@@ -213,7 +209,7 @@ def scan_audited_repo(
 
     from watchgate.service.repo_polling import RepoPollingService
 
-    enqueued = RepoPollingService.poll_repo_by_id(repo.id, ignore_interval=True)
+    enqueued = RepoPollingService.poll_repo_by_id(repo.id)
     return {
         "message": f"Escaneo de todas las PRs abiertas encolado ({enqueued} PRs)",
         "repo_path": repo.repo_path,
@@ -229,7 +225,7 @@ def update_external_repo(
     session: DBSession,
     request: Request,
 ) -> Any:
-    """Actualiza la configuración de automatización e intervalo de un repositorio externo."""
+    """Actualiza el estado (activo/pausado) de un repositorio externo."""
     user_login = normalize_login(current_user.login)
     db_user = _get_or_create_db_user(session, user_login)
     org_id = db_user.org_id
@@ -245,12 +241,6 @@ def update_external_repo(
     # Verificación de permisos RBAC
     require_role(current_user, repo.repo_path, min_role="mantenedor", request=request)
 
-    if data.auto_scan_prs is not None:
-        repo.auto_scan_prs = data.auto_scan_prs
-    if data.scan_interval_minutes is not None:
-        if data.scan_interval_minutes < 5:
-            raise HTTPException(status_code=400, detail="El intervalo mínimo es de 5 minutos")
-        repo.scan_interval_minutes = data.scan_interval_minutes
     if data.status is not None:
         if data.status not in ("active", "paused", "error"):
             raise HTTPException(status_code=400, detail="Estado inválido")

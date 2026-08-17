@@ -52,19 +52,6 @@ export default function ExternalReposPage() {
     }
   }
 
-  async function handleUpdateRepo(
-    repoId: string,
-    data: { auto_scan_prs?: boolean; scan_interval_minutes?: number; status?: string }
-  ) {
-    try {
-      const updated = await api.updateExternalRepo(repoId, data)
-      toast.success('Configuración actualizada')
-      setRepos(prev => (prev ? prev.map(r => (r.id === repoId ? updated : r)) : null))
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Error al actualizar')
-    }
-  }
-
   async function handleScanPr(repoId: string) {
     const prInput = scanPrs[repoId]
     const prNumber = parseInt(prInput, 10)
@@ -196,34 +183,6 @@ export default function ExternalReposPage() {
               </div>
 
               <div className="space-y-3 pt-2 border-t">
-                <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium">Auto Escaneo PRs:</span>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={repo.auto_scan_prs}
-                        onChange={e => handleUpdateRepo(repo.id, { auto_scan_prs: e.target.checked })}
-                        className="sr-only peer"
-                      />
-                      <div className="w-9 h-5 bg-muted peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
-                    </label>
-                  </div>
-
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-medium">Intervalo:</span>
-                    <select
-                      className="h-8 rounded border border-input bg-transparent px-2 text-xs"
-                      value={repo.scan_interval_minutes}
-                      onChange={e => handleUpdateRepo(repo.id, { scan_interval_minutes: parseInt(e.target.value, 10) })}
-                    >
-                      <option value={15}>15 minutos</option>
-                      <option value={30}>30 minutos</option>
-                      <option value={60}>1 hora</option>
-                      <option value={120}>2 horas</option>
-                      <option value={1440}>24 horas</option>
-                    </select>
-                  </div>
-
                   <Button
                     variant="outline"
                     size="sm"
