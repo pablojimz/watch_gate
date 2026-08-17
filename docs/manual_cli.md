@@ -134,6 +134,15 @@ watchgate analyze --base main --head dev \
 watchgate analyze --base main --head dev --threshold red=80 --threshold yellow=30
 ```
 
+### 5.3 Credenciales y URL de la API de GitHub (`--github-token` y `--github-api-url`)
+```bash
+watchgate analyze --base main --head dev \
+  --github-token ghp_1234567890abcdef \
+  --github-api-url https://github.mycompany.com/api/v3
+```
+
+> **Aumento de Cuota (Rate Limit):** Configurar un Personal Access Token (PAT) mediante `--github-token` o la variable `WATCHGATE_GITHUB_TOKEN` eleva el límite de peticiones HTTP de 60 req/h a 5.000 req/h al escanear repositorios externos. `--github-api-url` permite conectar con servidores privados de GitHub Enterprise Server.
+
 ---
 
 # 6. Control de Diagnóstico y Logs

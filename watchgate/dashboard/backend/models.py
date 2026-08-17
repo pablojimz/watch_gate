@@ -35,6 +35,8 @@ from __future__ import annotations
 from sqlalchemy import CheckConstraint, Index
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+from watchgate.db.crypto import EncryptedString
+
 
 class DashboardBase(DeclarativeBase):
     """Base declarativa propia del Dashboard DB -- `DashboardBase.metadata`
@@ -151,6 +153,9 @@ class DashboardUser(DashboardBase):
     login: Mapped[str] = mapped_column(primary_key=True)
     password_hash: Mapped[str] = mapped_column(nullable=False)
     display_name: Mapped[str] = mapped_column(nullable=False)
+    github_api_url: Mapped[str | None] = mapped_column(default=None)
+    github_token: Mapped[str | None] = mapped_column(EncryptedString, default=None)
+    ui_settings_json: Mapped[str | None] = mapped_column(default=None)
 
 
 class LlmSettingsRow(DashboardBase):
@@ -166,6 +171,8 @@ class LlmSettingsRow(DashboardBase):
     api_key: Mapped[str | None] = mapped_column(default=None)
     monthly_budget_tokens: Mapped[int | None] = mapped_column(default=None)
     max_diff_tokens: Mapped[int | None] = mapped_column(default=None)
+    github_api_url: Mapped[str | None] = mapped_column(default=None)
+    github_token: Mapped[str | None] = mapped_column(EncryptedString, default=None)
 
 
 class UiSettingsRow(DashboardBase):

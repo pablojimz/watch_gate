@@ -83,6 +83,12 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     analyze_parser.add_argument("--author-email", default="", help="Email del autor del commit")
     analyze_parser.add_argument(
+        "--github-token", default="", help="Token de GitHub/PAT para elevar la cuota de peticiones"
+    )
+    analyze_parser.add_argument(
+        "--github-api-url", default="", help="URL de la API de GitHub (ej: https://api.github.com)"
+    )
+    analyze_parser.add_argument(
         "--weight",
         action="append",
         help="Override dinámico de peso de capa (ej: --weight static=0.35)",
@@ -176,6 +182,12 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
         config = apply_cli_overrides(
             config, weight_overrides=args.weight, threshold_overrides=args.threshold
         )
+        if getattr(args, "github_token", None):
+            config.github_token = args.github_token
+            os.environ["WATCHGATE_GITHUB_TOKEN"] = args.github_token
+        if getattr(args, "github_api_url", None):
+            config.github_api_url = args.github_api_url
+            os.environ["WATCHGATE_GITHUB_API_URL"] = args.github_api_url
     except (yaml.YAMLError, TypeError, ValueError) as exc:
         logger.debug("Fallo cargando/aplicando configuración", exc_info=True)
         if not args.quiet:

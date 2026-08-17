@@ -52,7 +52,9 @@ class ScanRequest(BaseModel):
     )
 
 
-def _enqueue_main_branch_scan(org_id: str, repo: MonitoredRepo) -> bool:
+def _enqueue_main_branch_scan(
+    org_id: str, repo: MonitoredRepo, user_login: str | None = None
+) -> bool:
     """Encola `run_main_branch_scan` (análisis del contenido COMPLETO de la
     rama por defecto, no solo de PRs) -- extraído para reusarse tanto al
     conectar un repo nuevo (`add_external_repo`, evento único de
@@ -72,6 +74,14 @@ def _enqueue_main_branch_scan(org_id: str, repo: MonitoredRepo) -> bool:
     mismo id -- se actualizan sus datos pero, si RQ ya lo sacó una vez de
     la lista de la cola, se queda "atascado" sin que ningún worker lo
     recoja nunca (comprobado en vivo).
+
+    `user_login` (si se pasa) deja que `run_main_branch_scan` resuelva el
+    token/URL de GitHub con prioridad al personal de ESE usuario (ver
+    `resolve_github_credentials`, cascada de 5 niveles) -- en
+    `add_external_repo` es quien conecta el repo; en `scan_main_branch` es
+    quien pulsa el botón. Sin él, cae directamente al resto de la cascada
+    (VCSConnection del repo / fallback de organización / variables de
+    entorno / anónimo).
     """
     queue = get_queue()
     job_id = f"main_branch_scan:{org_id}:{repo.repo_path}"
@@ -85,6 +95,7 @@ def _enqueue_main_branch_scan(org_id: str, repo: MonitoredRepo) -> bool:
         repo.repo_path,
         org_id,
         repo.vcs_connection_id,
+        user_login=user_login,
         job_id=job_id,
     )
     return True
@@ -162,7 +173,7 @@ def add_external_repo(
     # repo ya conectado requiere pulsar un botón "Escanear..." en el
     # Dashboard (ver `scan_main_branch`/`scan_audited_repo` más abajo).
     if new_repo.monitor_type == "audited":
-        _enqueue_main_branch_scan(org_id, new_repo)
+        _enqueue_main_branch_scan(org_id, new_repo, user_login=user_login)
 
     # Escaneo inmediato (único, al conectar) de todas las PRs abiertas ya
     # existentes -- igual que el escaneo de línea base de arriba, evento de
@@ -213,7 +224,12 @@ def scan_audited_repo(
     if scan_data.pr_number and scan_data.pr_number > 0:
         queue = get_queue()
         queue.enqueue(
-            run_audit_scan, repo.repo_path, scan_data.pr_number, org_id, repo.vcs_connection_id
+            run_audit_scan,
+            repo.repo_path,
+            scan_data.pr_number,
+            org_id,
+            repo.vcs_connection_id,
+            user_login=user_login,
         )
         return {
             "message": "Escaneo de PR encolado",
@@ -258,7 +274,7 @@ def scan_main_branch(
     if not repo:
         raise HTTPException(status_code=404, detail="Repositorio no encontrado")
 
-    enqueued = _enqueue_main_branch_scan(org_id, repo)
+    enqueued = _enqueue_main_branch_scan(org_id, repo, user_login=user_login)
     return {
         "message": "Escaneo de la rama principal encolado"
         if enqueued

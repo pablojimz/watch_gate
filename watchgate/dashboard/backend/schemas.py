@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import ipaddress
+import os
+import urllib.parse
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
@@ -229,6 +232,29 @@ class AgentUsageMetrics(BaseModel):
     by_agent: list[AgentMetricRow]
 
 
+def validate_github_api_url(value: str | None) -> str:
+    if not value or not value.strip():
+        return "https://api.github.com"
+    val = value.strip()
+    parsed = urllib.parse.urlparse(val)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError("github_api_url debe comenzar con http:// o https://")
+
+    hostname = (parsed.hostname or "").lower()
+    dev_mode = os.environ.get("WATCHGATE_DASHBOARD_DEV_MODE", "1") == "1"
+    if not dev_mode:
+        if hostname in ("localhost", "127.0.0.1", "::1", "169.254.169.254"):
+            raise ValueError("No se permiten URLs locales o de metadatos en modo producción")
+        try:
+            ip = ipaddress.ip_address(hostname)
+        except ValueError:
+            ip = None
+
+        if ip and (ip.is_private or ip.is_loopback or ip.is_link_local):
+            raise ValueError("No se permiten direcciones IP privadas/locales en modo producción")
+    return val
+
+
 LlmProvider = Literal["anthropic", "gemini", "openai", "local"]
 
 
@@ -240,6 +266,9 @@ class LlmSettingsOut(BaseModel):
     api_key_masked: str | None = None
     monthly_budget_tokens: int | None = 2_000_000
     max_diff_tokens: int | None = 80_000
+    github_api_url: str = "https://api.github.com"
+    github_token_set: bool = False
+    github_token_masked: str | None = None
 
 
 class LlmSettingsIn(BaseModel):
@@ -250,6 +279,37 @@ class LlmSettingsIn(BaseModel):
     clear_api_key: bool = False
     monthly_budget_tokens: int | None = 2_000_000
     max_diff_tokens: int | None = 80_000
+    github_api_url: str | None = "https://api.github.com"
+    github_token: str | None = None
+    clear_github_token: bool = False
+
+    @field_validator("github_api_url")
+    @classmethod
+    def _validate_github_api_url(cls, value: str | None) -> str | None:
+        return validate_github_api_url(value)
+
+
+class UserSettingsOut(BaseModel):
+    login: str
+    display_name: str
+    role: RoleName
+    github_api_url: str = "https://api.github.com"
+    github_token_set: bool = False
+    github_token_masked: str | None = None
+    ui_settings: UiSettings | None = None
+
+
+class UserSettingsIn(BaseModel):
+    display_name: str | None = None
+    github_api_url: str | None = "https://api.github.com"
+    github_token: str | None = None
+    clear_github_token: bool = False
+    ui_settings: UiSettings | None = None
+
+    @field_validator("github_api_url")
+    @classmethod
+    def _validate_github_api_url(cls, value: str | None) -> str | None:
+        return validate_github_api_url(value)
 
 
 # Cap del logo como data: URL embebida directamente en ui_settings (nunca un

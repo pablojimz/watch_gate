@@ -5,6 +5,7 @@
     "externalRepos": "Auditoría Externa",
     "metrics": "Métricas",
     "apiKeys": "API Keys",
+    "userSettings": "Mi Cuenta",
     "admin": "Configuración",
     "feedback": "Feedback",
     "logout": "Salir"
@@ -273,5 +274,23 @@
     "light": "Tema claro",
     "dark": "Tema oscuro",
     "system": "Tema del sistema"
+  },
+  "user": {
+    "pageTitle": "Mi Cuenta",
+    "pageHint": "Configura tu conexión personal con GitHub y las preferencias visuales de tu interfaz.",
+    "githubSectionTitle": "Mi Integración con GitHub",
+    "githubSectionHint": "Un token personal (PAT) eleva la cuota de peticiones HTTP de 60 req/h a 5.000 req/h para analizar repositorios externos.",
+    "githubUrl": "URL de la API de GitHub",
+    "githubToken": "Token de GitHub personal (PAT)",
+    "githubTokenSet": "Configurado ({{masked}}). Déjalo vacío para no cambiarlo.",
+    "githubTokenEmpty": "Pega aquí tu Personal Access Token (ghp_... o github_pat_...)",
+    "githubClearToken": "Borrar token guardado",
+    "profileTitle": "Mi Perfil",
+    "displayName": "Nombre visible",
+    "login": "Usuario",
+    "role": "Rol asignado",
+    "appearanceTitle": "Apariencia Local",
+    "appearanceHint": "Ajustes visuales aplicados exclusivamente a tu sesión local.",
+    "saved": "Ajustes guardados correctamente"
   }
 }
