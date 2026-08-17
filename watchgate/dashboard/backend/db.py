@@ -233,9 +233,20 @@ def db_session(db_path: Path | None = None) -> Iterator[Session]:
         session.close()
 
 
+# Mismo literal que watchgate.dashboard.backend.tasks.MAIN_BRANCH_SCAN_PR_ID
+# -- no se importa desde aquí para no crear un ciclo (tasks.py ya importa
+# de este módulo). `pr_number` es un INTEGER NOT NULL (no puede guardar
+# "main" tal cual); 0 es un sentinel seguro porque un PR real de GitHub
+# nunca es <= 0 -- `_record_to_score_out` deshace el mapeo al leer.
+_MAIN_BRANCH_SCAN_PR_ID = "main"
+_MAIN_BRANCH_SCAN_PR_NUMBER = 0
+
+
 def _pr_number_from_pr_id(pr_id: str) -> int:
+    if pr_id == _MAIN_BRANCH_SCAN_PR_ID:
+        return _MAIN_BRANCH_SCAN_PR_NUMBER
     digits = "".join(ch for ch in pr_id if ch.isdigit())
-    return int(digits) if digits else 0
+    return int(digits) if digits else _MAIN_BRANCH_SCAN_PR_NUMBER
 
 
 def _serialize_findings(layers: dict[str, LayerResult]) -> str | None:
@@ -367,7 +378,11 @@ def _record_to_score_out(record: DashboardPRScore) -> ScoreOut:
         semaforo=Semaforo(record.semaforo),
         layer_results=layer_results,
         weights_used=weights,
-        pr_id=str(record.pr_number),
+        pr_id=(
+            _MAIN_BRANCH_SCAN_PR_ID
+            if record.pr_number == _MAIN_BRANCH_SCAN_PR_NUMBER
+            else str(record.pr_number)
+        ),
         repo=record.repo,
         timestamp=record.timestamp,
         threat_summary=threat_summary,
