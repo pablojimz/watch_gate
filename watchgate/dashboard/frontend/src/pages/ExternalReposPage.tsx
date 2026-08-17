@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Eye, Plus, RefreshCw, FolderGit2, GitBranch } from 'lucide-react'
 import { toast } from 'sonner'
@@ -21,11 +21,18 @@ export default function ExternalReposPage() {
   const [scanPrs, setScanPrs] = useState<Record<string, string>>({})
   const [isScanning, setIsScanning] = useState<Record<string, boolean>>({})
 
-  useEffect(() => {
-    void fetchRepos()
-  }, [])
+  // Sondeo tras encolar un escaneo: sin esto, tras el toast de "encolado"
+  // el usuario no tenía ninguna señal posterior -- ni de que terminó bien
+  // (last_scanned_at/status se actualizan en el backend, pero la lista en
+  // memoria del frontend se queda congelada) ni de que falló (el nuevo
+  // status="error"/consecutive_errors que ahora sí refleja un fallo del
+  // ANÁLISIS -- ver tasks.py -- tampoco se vería sin recargar a mano).
+  // refetchTimerRef guarda el intervalo activo para poder cancelarlo si el
+  // usuario dispara otro escaneo mientras el anterior aún se está
+  // sondeando (evita duplicar intervalos apilados).
+  const refetchTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  async function fetchRepos() {
+  const fetchRepos = useCallback(async () => {
     try {
       const data = await api.listExternalRepos()
       setRepos(data)
@@ -33,6 +40,31 @@ export default function ExternalReposPage() {
       toast.error(err instanceof Error ? err.message : 'Error')
       setRepos([])
     }
+  }, [])
+
+  useEffect(() => {
+    void fetchRepos()
+    return () => {
+      if (refetchTimerRef.current) clearInterval(refetchTimerRef.current)
+    }
+  }, [fetchRepos])
+
+  // Refresca cada 5s durante 1 minuto tras encolar un escaneo -- ventana
+  // generosa para escaneos de PRs individuales (típicamente segundos) y
+  // para el de rama principal (puede tardar más); pasado ese tiempo se
+  // asume que el usuario ya recargará si sigue interesado, en vez de
+  // sondear indefinidamente un job que quizá se quedó colgado.
+  function pollAfterScan() {
+    if (refetchTimerRef.current) clearInterval(refetchTimerRef.current)
+    let ticks = 0
+    refetchTimerRef.current = setInterval(() => {
+      ticks += 1
+      void fetchRepos()
+      if (ticks >= 12 && refetchTimerRef.current) {
+        clearInterval(refetchTimerRef.current)
+        refetchTimerRef.current = null
+      }
+    }, 5000)
   }
 
   async function handleAddRepo(e: React.FormEvent) {
@@ -66,6 +98,7 @@ export default function ExternalReposPage() {
       const res = await api.scanExternalRepo(repoId, prNumber)
       toast.success(res.message || t('externalRepos.scanEnqueued'))
       setScanPrs(prev => ({ ...prev, [repoId]: '' }))
+      pollAfterScan()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error al escanear')
     } finally {
@@ -78,6 +111,7 @@ export default function ExternalReposPage() {
     try {
       const res = await api.scanExternalRepo(repoId, 0)
       toast.success(res.message || 'Escaneo de todas las PRs abiertas encolado')
+      pollAfterScan()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error al escanear')
     } finally {
@@ -90,6 +124,7 @@ export default function ExternalReposPage() {
     try {
       const res = await api.scanMainBranch(repoId)
       toast.success(res.message)
+      pollAfterScan()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error al escanear la rama principal')
     } finally {
@@ -189,7 +224,11 @@ export default function ExternalReposPage() {
                 )}
                 {repo.status === 'error' && (
                   <div className="text-xs text-destructive font-medium">
-                    Error en peticiones ({repo.consecutive_errors} fallos)
+                    {/* consecutive_errors ya cuenta tanto fallos al listar PRs
+                        como fallos del propio análisis (token inválido, PR
+                        borrada, fallo de red...) -- ver tasks.py -- así que
+                        el texto no debe sugerir que es solo lo primero. */}
+                    Repositorio con errores ({repo.consecutive_errors} fallos seguidos)
                   </div>
                 )}
               </div>

@@ -76,7 +76,7 @@ class RepoPollingService:
         intento de escaneo -- extraído a helper para poder llamarlo también
         desde el caso "repo_path mal formado" (ver `_poll_single_candidate`),
         que antes crasheaba ANTES de llegar aquí y nunca contaba como
-        fallo."""
+        fallo, y desde `record_scan_outcome` (ver más abajo)."""
         with next(get_session()) as session:
             repo_db = session.get(MonitoredRepo, repo_id)
             if repo_db:
@@ -88,6 +88,24 @@ class RepoPollingService:
                     if repo_db.consecutive_errors >= 5:
                         repo_db.status = "error"
                 session.commit()
+
+    @classmethod
+    def record_scan_outcome(cls, repo_id: str, success: bool) -> None:
+        """Punto de entrada público para que `dashboard/backend/tasks.py`
+        refleje en `MonitoredRepo` el resultado de un escaneo QUE YA SE
+        EJECUTÓ (`run_audit_scan`/`run_managed_scan`/`run_main_branch_scan`),
+        no solo el de listar las PRs abiertas (que es lo único que cubría
+        `_record_poll_outcome` hasta ahora, llamado únicamente desde
+        `_poll_single_candidate`). Antes de esto, una excepción del propio
+        análisis (token inválido, PR inexistente, fallo de red al llamar a
+        la API de GitHub...) no dejaba ningún rastro en `consecutive_errors`
+        ni `status` -- el repo se quedaba "active" aunque cada escaneo
+        real fallase en silencio. Mismo criterio de "5 fallos seguidos ->
+        status=error" que ya usa el resto del servicio, deliberadamente
+        unificado en un solo contador por repo en vez de uno por tipo de
+        fallo (listar vs. analizar): para el usuario ambos significan
+        "este repo lleva un tiempo sin poder hablar con GitHub"."""
+        cls._record_poll_outcome(repo_id, datetime.now(UTC), success)
 
     @classmethod
     def _poll_single_candidate(cls, candidate: dict[str, Any]) -> int:
