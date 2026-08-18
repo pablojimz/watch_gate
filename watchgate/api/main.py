@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import logging
-import re
 import threading
 import time
 from collections.abc import AsyncGenerator, Callable
@@ -15,53 +13,14 @@ from fastapi.responses import JSONResponse
 
 from watchgate.api.routers import agent, analyze, webhooks
 from watchgate.db.connection import init_db
-from watchgate.logging_config import configure_logging
+from watchgate.logging_config import (
+    configure_logging,
+    configure_sentry,
+    setup_logging_sanitizer,
+)
 
 # Límite máximo de payload HTTP: 10 MB
 MAX_PAYLOAD_BYTES = 10 * 1024 * 1024
-
-_SECRET_PATTERNS = [
-    re.compile(r"wg_live_[a-f0-9]{64}"),
-    re.compile(r"wg_test_[a-f0-9]{64}"),
-    re.compile(r"wg_live_[a-zA-Z0-9_-]{16,}"),
-    re.compile(r"wg_test_[a-zA-Z0-9_-]{16,}"),
-    re.compile(r"sk-ant-[a-zA-Z0-9_-]{20,}"),
-    re.compile(r"AIzaSy[a-zA-Z0-9_-]{30,}"),
-    re.compile(r"sk-[a-zA-Z0-9_-]{32,}"),
-]
-
-
-class CryptographicLogFilter(logging.Filter):
-    """Filtro de logging que enmascara claves API y secretos antes de emitirlos."""
-
-    def filter(self, record: logging.LogRecord) -> bool:
-        if isinstance(record.msg, str):
-            record.msg = self.redact(record.msg)
-        if record.args:
-            if isinstance(record.args, dict):
-                record.args = {
-                    k: self.redact(v) if isinstance(v, str) else v for k, v in record.args.items()
-                }
-            elif isinstance(record.args, tuple):
-                record.args = tuple(
-                    self.redact(arg) if isinstance(arg, str) else arg for arg in record.args
-                )
-        return True
-
-    @staticmethod
-    def redact(text: str) -> str:
-        for pattern in _SECRET_PATTERNS:
-            text = pattern.sub("[REDACTED_SECRET]", text)
-        return text
-
-
-def setup_logging_sanitizer() -> None:
-    """Aplica el filtro de sanitización criptográfica a los loggers principales."""
-    log_filter = CryptographicLogFilter()
-    root_logger = logging.getLogger()
-    root_logger.addFilter(log_filter)
-    for handler in root_logger.handlers:
-        handler.addFilter(log_filter)
 
 
 @asynccontextmanager
@@ -86,6 +45,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 # sutileza de `logging`).
 configure_logging("engine-api")
 setup_logging_sanitizer()
+configure_sentry("engine-api")
 
 app = FastAPI(
     title="WatchGate Engine API",
