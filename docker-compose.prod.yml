@@ -64,6 +64,22 @@ services:
       PGPASSWORD: watchgate
       WATCHGATE_BACKUP_CRON: ${WATCHGATE_BACKUP_CRON:-0 3 * * *}
       WATCHGATE_BACKUP_RETENTION_DAYS: ${WATCHGATE_BACKUP_RETENTION_DAYS:-14}
+      # Copia a S3 opcional -- sin WATCHGATE_BACKUP_S3_BUCKET (por defecto),
+      # el backup se queda solo en el volumen local de siempre, mismo
+      # comportamiento que antes de esto. Ver docker/postgres-backup/backup.sh.
+      WATCHGATE_BACKUP_S3_BUCKET: ${WATCHGATE_BACKUP_S3_BUCKET:-}
+      WATCHGATE_BACKUP_S3_PREFIX: ${WATCHGATE_BACKUP_S3_PREFIX:-watchgate-backups}
+      WATCHGATE_BACKUP_S3_REGION: ${WATCHGATE_BACKUP_S3_REGION:-us-east-1}
+      # Vacío = S3 real de AWS. Relleno = cualquier proveedor compatible
+      # (MinIO, Backblaze B2, Wasabi, Cloudflare R2...).
+      WATCHGATE_BACKUP_S3_ENDPOINT: ${WATCHGATE_BACKUP_S3_ENDPOINT:-}
+      # Vacío = "AWS" si no hay endpoint propio, "Minio" si lo hay (ver
+      # backup.sh) -- fuerza un valor concreto si tu proveedor lo necesita
+      # explícito (p. ej. "Wasabi", "IBMCOS"; valores que reconoce rclone).
+      WATCHGATE_BACKUP_S3_PROVIDER: ${WATCHGATE_BACKUP_S3_PROVIDER:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
     volumes:
       - postgres_backups:/backups
     depends_on:
