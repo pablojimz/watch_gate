@@ -219,15 +219,15 @@ files = [
 
 [[package]]
 name = "anthropic"
-version = "0.121.0"
+version = "0.122.0"
 description = "The official Python library for the anthropic API"
 optional = true
 python-versions = ">=3.9"
 groups = ["main"]
 markers = "extra == \"analysis\""
 files = [
-    {file = "anthropic-0.121.0-py3-none-any.whl", hash = "sha256:6048713fa441e59e1cba8363171cd2a86273b25bd213e9c7ac70a523af88b011"},
-    {file = "anthropic-0.121.0.tar.gz", hash = "sha256:e79d6e08ab3376602fc9a70d4d5ea3540817c76cf7e16658bed790834e1833d6"},
+    {file = "anthropic-0.122.0-py3-none-any.whl", hash = "sha256:45ec906452ffae6b5f7f0c53d01f50bfb7e4ce878d7ae8e4309d13171e557e67"},
+    {file = "anthropic-0.122.0.tar.gz", hash = "sha256:ffec56ae96657c8d19fa575ec96f140f380c353a07ab7d61b92eb18ee6536601"},
 ]
 
 [package.dependencies]
@@ -8015,4 +8015,4 @@ analysis = ["anthropic", "chromadb", "google-genai", "langchain-text-splitters",
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11"
-content-hash = "b2b64c250ffa9d0c58c32da946feeae77c20621b0222b290e6cefbc6e9b2c48f"
+content-hash = "7fe3ea4d9e62594f01d82302309b5848e1d535dda33f2bb07a04a4f43689a486"
