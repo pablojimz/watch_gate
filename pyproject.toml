@@ -71,7 +71,7 @@ watchgate = "watchgate.cli:main"
 packages = [{ include = "watchgate" }]
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^8.2"
+pytest = "^9.1"
 pytest-cov = "^5.0"
 ruff = "^0.5"
 mypy = "^1.10"
