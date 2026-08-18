@@ -96,7 +96,5 @@ def build_llm_client(provider: str | None = None) -> LLMClient:
         or os.environ.get("OPENAI_API_KEY")
         or os.environ.get("OPENROUTER_API_KEY")
     )
-    timeout = float(
-        os.environ.get("WATCHGATE_LLM_TIMEOUT_SECONDS", _DEFAULT_LOCAL_TIMEOUT_SECONDS)
-    )
+    timeout = float(os.environ.get("WATCHGATE_LLM_TIMEOUT_SECONDS", _DEFAULT_LOCAL_TIMEOUT_SECONDS))
     return OpenAICompatibleClient(base_url=base_url, model=model, api_key=api_key, timeout=timeout)
