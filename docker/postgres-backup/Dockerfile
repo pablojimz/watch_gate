@@ -8,6 +8,13 @@
 # Build: docker build -f docker/postgres-backup/Dockerfile -t watchgate-postgres-backup docker/postgres-backup
 FROM postgres:16-alpine
 
+# rclone: subida opcional del backup a S3 (o cualquier proveedor
+# compatible -- MinIO, Backblaze B2, Wasabi, Cloudflare R2...) vía
+# WATCHGATE_BACKUP_S3_BUCKET, ver backup.sh. Un solo binario estático de
+# apk, sin dependencias de Python/Go extra que arrastrar a esta imagen ya
+# de por sí mínima.
+RUN apk add --no-cache rclone
+
 COPY backup.sh /usr/local/bin/backup.sh
 RUN chmod +x /usr/local/bin/backup.sh
 

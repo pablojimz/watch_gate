@@ -39,3 +39,46 @@ echo "[backup] completado: $(du -h "${OUT_FILE}" | cut -f1)"
 find "${BACKUP_DIR}" -maxdepth 1 -name 'watchgate-*.sql.gz' -mtime "+${RETENTION_DAYS}" -print -delete
 
 echo "[backup] retención aplicada (>${RETENTION_DAYS} días borrados)"
+
+# Copia fuera de la máquina (opcional): sin WATCHGATE_BACKUP_S3_BUCKET, el
+# volumen local (postgres_backups) sigue siendo el único sitio con el
+# backup -- protege de un error humano/de aplicación, pero no de perder la
+# máquina entera (limitación documentada en docs/despliegue.md). Con la
+# variable puesta, sube el fichero recién creado a un bucket S3 (o
+# compatible) vía rclone -- RCLONE_CONFIG_S3_ENV_AUTH=true hace que rclone
+# lea las credenciales de las variables estándar AWS_ACCESS_KEY_ID/
+# AWS_SECRET_ACCESS_KEY/AWS_SESSION_TOKEN en vez de exigir un fichero de
+# configuración propio montado aparte.
+if [ -n "${WATCHGATE_BACKUP_S3_BUCKET:-}" ]; then
+    S3_PREFIX="${WATCHGATE_BACKUP_S3_PREFIX:-watchgate-backups}"
+    # "Minio" por defecto en cuanto hay un endpoint propio (nunca es AWS S3
+    # real si se apunta a otro sitio) -- explícito en vez de dejar el
+    # provider vacío: probado en vivo contra un MinIO real, sin esto rclone
+    # avisa "s3 provider "" not known" (funciona igual por los defaults
+    # genéricos, pero sin garantía de que siga siendo así para siempre).
+    S3_PROVIDER="${WATCHGATE_BACKUP_S3_PROVIDER:-}"
+    if [ -z "${S3_PROVIDER}" ]; then
+        if [ -n "${WATCHGATE_BACKUP_S3_ENDPOINT:-}" ]; then
+            S3_PROVIDER="Minio"
+        else
+            S3_PROVIDER="AWS"
+        fi
+    fi
+    export RCLONE_CONFIG_S3_TYPE=s3
+    export RCLONE_CONFIG_S3_ENV_AUTH=true
+    export RCLONE_CONFIG_S3_PROVIDER="${S3_PROVIDER}"
+    export RCLONE_CONFIG_S3_REGION="${WATCHGATE_BACKUP_S3_REGION:-us-east-1}"
+    export RCLONE_CONFIG_S3_ENDPOINT="${WATCHGATE_BACKUP_S3_ENDPOINT:-}"
+
+    echo "[backup] subiendo a s3://${WATCHGATE_BACKUP_S3_BUCKET}/${S3_PREFIX}/ (provider=${S3_PROVIDER})"
+    rclone copyto "${OUT_FILE}" \
+        "s3:${WATCHGATE_BACKUP_S3_BUCKET}/${S3_PREFIX}/$(basename "${OUT_FILE}")" \
+        --s3-no-check-bucket
+    echo "[backup] subida a S3 completada"
+
+    # Misma retención que en local, aplicada también al bucket -- si no,
+    # crece sin límite mientras el volumen local sí se poda.
+    rclone delete "s3:${WATCHGATE_BACKUP_S3_BUCKET}/${S3_PREFIX}/" \
+        --min-age "${RETENTION_DAYS}d" --include "watchgate-*.sql.gz"
+    echo "[backup] retención aplicada en S3 (>${RETENTION_DAYS} días borrados)"
+fi

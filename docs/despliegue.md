@@ -224,12 +224,33 @@ gunzip watchgate-backup.sql.gz
 psql -h <host> -U postgres -f watchgate-backup.sql
 ```
 
-No sustituye backups fuera de la propia máquina (a S3 o equivalente) -- el
-volumen `postgres_backups` vive en el mismo host que `postgres_data`, así
-que protege de un error humano/de aplicación (borrar una fila por
-accidente, una migración mal aplicada) pero no de perder la máquina
-entera. Llevarlo a un destino externo queda fuera de lo que puede resolver
-este repo por su cuenta (necesita credenciales de un proveedor real).
+### Copia fuera de la máquina (S3 o compatible)
+
+Sin `WATCHGATE_BACKUP_S3_BUCKET`, el volumen `postgres_backups` sigue
+siendo el único sitio con el backup -- protege de un error humano/de
+aplicación (borrar una fila por accidente, una migración mal aplicada),
+pero no de perder la máquina entera. Con la variable puesta, cada backup
+se sube además a un bucket S3 (o cualquier proveedor compatible -- MinIO,
+Backblaze B2, Wasabi, Cloudflare R2...) vía `rclone`, con la misma
+retención que el volumen local:
+
+```bash
+export WATCHGATE_BACKUP_S3_BUCKET="mi-bucket-de-backups"
+export AWS_ACCESS_KEY_ID="..."
+export AWS_SECRET_ACCESS_KEY="..."
+# Solo si NO es AWS S3 real (MinIO, Backblaze, R2...):
+export WATCHGATE_BACKUP_S3_ENDPOINT="https://s3.mi-proveedor.example"
+export WATCHGATE_BACKUP_S3_REGION="auto"  # algunos proveedores S3-compatibles lo exigen así
+```
+
+```bash
+# Restaurar desde S3 en vez de desde el volumen local:
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec postgres-backup \
+  rclone copy "s3:mi-bucket-de-backups/watchgate-backups/watchgate-<timestamp>.sql.gz" /backups/
+```
+
+Requiere credenciales de un proveedor real -- no lo resuelve este repo
+por su cuenta, solo automatiza la subida una vez las tienes.
 
 ## Variables de entorno
 
@@ -268,8 +289,9 @@ Ver `.env.example` para la lista completa y comentada. Resumen por bloque:
   arriba) -- un cambio que toca ambos esquemas a la vez necesita dos
   migraciones y dos `upgrade head`, no uno solo.
 - Backups de Postgres: automatizados (`postgres-backup` en
-  `docker-compose.prod.yml`, ver arriba), pero solo en el mismo host que
-  los datos -- sin copia fuera de la máquina (S3 o equivalente).
+  `docker-compose.prod.yml`, ver arriba). Copia fuera de la máquina (S3 o
+  compatible) disponible pero opcional vía `WATCHGATE_BACKUP_S3_BUCKET` --
+  sin ella, el volumen local sigue siendo el único sitio con el backup.
 - Logs estructurados (`WATCHGATE_LOG_FORMAT=json`) ya activos en
   producción, grepables/parseables por un agregador real si se conecta
   uno. Alerting proactivo (Sentry) opcional vía `WATCHGATE_SENTRY_DSN` --
