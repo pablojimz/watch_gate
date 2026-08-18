@@ -1,5 +1,5 @@
 import { defineConfig, mergeConfig } from 'vitest/config'
-import viteConfig from './vite.config'
+import viteConfig from './vite.config.ts'
 
 // Config de test separada de vite.config.ts (en vez de meter el bloque
 // `test` ahí) para no forzar a `vite.config.ts` -- que hoy solo importa
