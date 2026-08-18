@@ -404,9 +404,7 @@ def run_audit_scan(
             # motivo: sin esto, un token inválido/PR borrada/fallo de red
             # desaparecía en silencio sin dejar ningún rastro en
             # `MonitoredRepo` ni en ningún log de aplicación.
-            logger.exception(
-                "Fallo al analizar %s#%d (org=%s)", repo_path, pr_number, org_id
-            )
+            logger.exception("Fallo al analizar %s#%d (org=%s)", repo_path, pr_number, org_id)
             session.rollback()
             repo_id = _repo_id_for(org_id, repo_path)
             if repo_id:
