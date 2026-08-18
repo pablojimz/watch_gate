@@ -88,9 +88,7 @@ def test_run_audit_scan_failure_marks_repo_error_and_reraises(test_db_session):
         poll_sess_patch,
         patch("watchgate.dashboard.backend.tasks.GitHubClient") as MockClient,
     ):
-        MockClient.return_value.get_pull_request_data.side_effect = Exception(
-            "GitHub API caída"
-        )
+        MockClient.return_value.get_pull_request_data.side_effect = Exception("GitHub API caída")
 
         for _ in range(5):
             with pytest.raises(Exception, match="GitHub API caída"):
@@ -173,9 +171,7 @@ def test_run_managed_scan_failure_marks_repo_error_and_reraises(test_db_session)
         poll_sess_patch,
         patch("watchgate.dashboard.backend.tasks.GitHubClient") as MockClient,
     ):
-        MockClient.return_value.get_pull_request_data.side_effect = Exception(
-            "Rate limit excedido"
-        )
+        MockClient.return_value.get_pull_request_data.side_effect = Exception("Rate limit excedido")
 
         for _ in range(5):
             with pytest.raises(Exception, match="Rate limit excedido"):
