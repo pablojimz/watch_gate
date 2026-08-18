@@ -116,3 +116,74 @@ def test_authenticate_user_roundtrip_in_postgres(dashboard_session) -> None:
 
     assert database.authenticate_user(dashboard_session, login, "wrong-password") is False
     assert database.authenticate_user(dashboard_session, login, "correct-horse") is True
+
+
+def test_compute_org_metrics_aggregates_in_postgres(dashboard_session) -> None:
+    """compute_org_metrics() pasó de traer cada fila y sumar en Python a
+    AVG()/SUM() en SQL (perf(dashboard): agregación en SQL en vez de en
+    Python). Merece un test contra Postgres real y no solo SQLite porque
+    `AVG()` sobre una columna INTEGER devuelve `NUMERIC` (`Decimal` en
+    psycopg), no `float` como en SQLite -- si `compute_org_metrics()` no
+    convirtiera explícitamente antes de `round()`, este test reventaría
+    aquí y pasaría en SQLite."""
+    from watchgate.core.models import AggregatedResult, LayerResult, Semaforo
+    from watchgate.dashboard.backend import db as database
+
+    repo_with_data = f"acme/{uuid.uuid4().hex[:8]}"
+    repo_without_data = f"acme/{uuid.uuid4().hex[:8]}"
+
+    def _seed(score: int, semaforo: Semaforo, *, skip_static: bool = False) -> None:
+        layers = {
+            name: LayerResult(
+                layer_name=name,
+                risk_score=score,
+                justification="",
+                skipped=skip_static and name == "static",
+            )
+            for name in ("static", "deps", "reputation", "semantic")
+        }
+        database.insert_aggregated(
+            dashboard_session,
+            AggregatedResult(
+                score=score,
+                semaforo=semaforo,
+                layer_results=layers,
+                weights_used={
+                    "static": 0.25,
+                    "deps": 0.25,
+                    "reputation": 0.15,
+                    "semantic": 0.35,
+                },
+                pr_id=str(score),
+                repo=repo_with_data,
+                timestamp="2026-08-17T12:00:00+00:00",
+            ),
+        )
+
+    _seed(75, Semaforo.ROJO)
+    _seed(25, Semaforo.VERDE, skip_static=True)
+
+    metrics = database.compute_org_metrics(
+        dashboard_session, [repo_with_data, repo_without_data]
+    )
+
+    assert metrics.total_prs == 2
+    assert metrics.repos_count == 2
+    assert metrics.avg_score == 50.0
+    assert metrics.by_semaforo == {"verde": 1, "amarillo": 0, "rojo": 1}
+    # static estaba skipped en la fila de score=25 -- la media solo cuenta
+    # la otra (75.0), no (75+25)/2.
+    assert metrics.layer_avg["static"] == 75.0
+    assert metrics.layer_avg["deps"] == 50.0
+
+    by_repo = {row.repo: row for row in metrics.by_repo}
+    assert by_repo[repo_with_data].prs == 2
+    assert by_repo[repo_with_data].avg_score == 50.0
+    # repo_without_data no tiene ninguna fila -- GROUP BY no lo produce,
+    # igual que el diccionario Python de antes solo se poblaba iterando
+    # filas reales.
+    assert repo_without_data not in by_repo
+
+    assert len(metrics.trend) == 1
+    assert metrics.trend[0].count == 2
+    assert metrics.trend[0].avg_score == 50.0
