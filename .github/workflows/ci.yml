@@ -22,7 +22,7 @@ jobs:
   backend:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Liberar espacio en disco en el runner
         run: |
@@ -72,7 +72,7 @@ jobs:
       run:
         working-directory: watchgate/dashboard/frontend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:
@@ -113,7 +113,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -127,7 +127,7 @@ jobs:
   trivy-scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Liberar espacio en disco en el runner
         run: |
           sudo rm -rf /usr/share/dotnet
