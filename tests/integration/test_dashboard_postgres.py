@@ -163,9 +163,7 @@ def test_compute_org_metrics_aggregates_in_postgres(dashboard_session) -> None:
     _seed(75, Semaforo.ROJO)
     _seed(25, Semaforo.VERDE, skip_static=True)
 
-    metrics = database.compute_org_metrics(
-        dashboard_session, [repo_with_data, repo_without_data]
-    )
+    metrics = database.compute_org_metrics(dashboard_session, [repo_with_data, repo_without_data])
 
     assert metrics.total_prs == 2
     assert metrics.repos_count == 2
