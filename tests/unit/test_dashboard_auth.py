@@ -9,6 +9,7 @@ de `POST /api/scores` (la Action no tiene cookie de sesión de usuario).
 from __future__ import annotations
 
 import pytest
+from cryptography.fernet import Fernet
 from fastapi import HTTPException
 from starlette.requests import Request
 
@@ -17,6 +18,9 @@ from watchgate.dashboard.backend.auth import (
     ensure_safe_startup_config,
     require_ingest_token,
 )
+from watchgate.db import crypto as db_crypto
+
+_A_REAL_FERNET_KEY = Fernet.generate_key().decode()
 
 
 def _request_with_auth_header(value: str | None) -> Request:
@@ -81,7 +85,32 @@ def test_starts_with_dev_mode_off_and_real_secret_and_ingest_token(monkeypatch) 
     )
     monkeypatch.setenv("WATCHGATE_DASHBOARD_INGEST_TOKEN", "un-token-real")
     monkeypatch.setenv("WATCHGATE_DASHBOARD_SECURE_COOKIE", "1")
+    monkeypatch.setattr(db_crypto, "_fernet", Fernet(_A_REAL_FERNET_KEY.encode()))
     ensure_safe_startup_config()  # no debe lanzar
+
+
+def test_refuses_to_start_without_db_secret_and_dev_mode_off(monkeypatch) -> None:
+    """Regresión: sin WATCHGATE_DB_SECRET, el proceso arrancaba igual (crypto.py
+    no falla al importarse a propósito) y el primer intento real de guardar un
+    secreto en DB (PAT de GitHub personal, fallback de organización, credencial
+    de VCS) reventaba con un RuntimeError sin capturar mucho más tarde, en
+    medio de un `session.commit()` -- un 500 opaco en vez de un rechazo claro
+    aquí, en el arranque, como el resto de esta función."""
+    monkeypatch.setenv("WATCHGATE_DASHBOARD_DEV_MODE", "0")
+    monkeypatch.setenv(
+        "WATCHGATE_DASHBOARD_SECRET", "un-secreto-real-de-produccion-largo-de-verdad"
+    )
+    monkeypatch.setenv("WATCHGATE_DASHBOARD_INGEST_TOKEN", "un-token-real")
+    monkeypatch.setenv("WATCHGATE_DASHBOARD_SECURE_COOKIE", "1")
+    monkeypatch.setattr(db_crypto, "_fernet", None)
+    with pytest.raises(RuntimeError, match="WATCHGATE_DB_SECRET"):
+        ensure_safe_startup_config()
+
+
+def test_db_secret_missing_is_allowed_while_dev_mode_stays_on(monkeypatch) -> None:
+    monkeypatch.delenv("WATCHGATE_DASHBOARD_DEV_MODE", raising=False)  # default "1"
+    monkeypatch.setattr(db_crypto, "_fernet", None)
+    ensure_safe_startup_config()  # no debe lanzar: es la comodidad de dev local
 
 
 def test_default_secret_is_allowed_while_dev_mode_stays_on(monkeypatch) -> None:
