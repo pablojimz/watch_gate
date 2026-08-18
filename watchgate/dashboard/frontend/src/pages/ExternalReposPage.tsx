@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Eye, Plus, RefreshCw, FolderGit2, GitBranch } from 'lucide-react'
+import { Eye, Plus, RefreshCw, FolderGit2, GitBranch, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { api, type MonitoredRepoResponse } from '@/api/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -20,6 +20,7 @@ export default function ExternalReposPage() {
   // Scan states
   const [scanPrs, setScanPrs] = useState<Record<string, string>>({})
   const [isScanning, setIsScanning] = useState<Record<string, boolean>>({})
+  const [isDeleting, setIsDeleting] = useState<Record<string, boolean>>({})
 
   // Sondeo tras encolar un escaneo: sin esto, tras el toast de "encolado"
   // el usuario no tenía ninguna señal posterior -- ni de que terminó bien
@@ -129,6 +130,21 @@ export default function ExternalReposPage() {
       toast.error(err instanceof Error ? err.message : 'Error al escanear la rama principal')
     } finally {
       setIsScanning(prev => ({ ...prev, [repoId]: false }))
+    }
+  }
+
+  async function handleDeleteRepo(repoId: string, repoPath: string) {
+    if (!window.confirm(t('externalRepos.confirmDelete', { repo: repoPath }))) return
+
+    setIsDeleting(prev => ({ ...prev, [repoId]: true }))
+    try {
+      await api.deleteExternalRepo(repoId)
+      toast.success(t('externalRepos.deleteSuccess'))
+      setRepos(prev => (prev ? prev.filter(r => r.id !== repoId) : prev))
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al eliminar repositorio')
+    } finally {
+      setIsDeleting(prev => ({ ...prev, [repoId]: false }))
     }
   }
 
@@ -264,9 +280,9 @@ export default function ExternalReposPage() {
                       className="h-9 text-xs"
                       disabled={isScanning[repo.id]}
                     />
-                    <Button 
-                      variant="secondary" 
-                      size="sm" 
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       className="h-9 text-xs gap-1.5 whitespace-nowrap"
                       disabled={!scanPrs[repo.id] || isScanning[repo.id]}
                       onClick={() => handleScanPr(repo.id)}
@@ -274,6 +290,17 @@ export default function ExternalReposPage() {
                       Audit PR
                     </Button>
                   </div>
+
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full h-8 text-xs gap-1.5 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    disabled={isDeleting[repo.id]}
+                    onClick={() => handleDeleteRepo(repo.id, repo.repo_path)}
+                  >
+                    <Trash2 className="size-3.5" />
+                    {t('externalRepos.deleteButton')}
+                  </Button>
                 </div>
             </CardContent>
           </Card>

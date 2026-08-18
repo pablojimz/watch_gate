@@ -98,6 +98,14 @@ class DashboardPRScore(DashboardBase):
     findings_json: Mapped[str | None] = mapped_column(default=None)
     threat_summary_json: Mapped[str] = mapped_column(nullable=False, default="{}")
     static_threat_nature: Mapped[str | None] = mapped_column(default=None)
+    # "open" (default, incluye los análisis de rama principal -- pr_number=0
+    # no es una PR real de GitHub, así que nunca puede "cerrarse") | "closed".
+    # RepoPollingService._poll_single_candidate (watchgate/service/
+    # repo_polling.py) la pasa a "closed" cuando una PR que sí estaba
+    # trackeada deja de aparecer en la lista de PRs abiertas de GitHub --
+    # nunca se borra la fila (el histórico de auditoría no se destruye),
+    # solo deja de contar/mostrarse como pendiente en el dashboard.
+    pr_state: Mapped[str] = mapped_column(nullable=False, default="open")
 
 
 class RepoRole(DashboardBase):

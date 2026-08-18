@@ -63,7 +63,16 @@ export function ScoresTable({
                   className="cursor-pointer border-t hover:bg-muted/30"
                   onClick={() => setOpenId(open ? null : score.id)}
                 >
-                  <td className="px-4 py-3 font-medium">#{score.pr_id}</td>
+                  <td className="px-4 py-3 font-medium">
+                    <div className="flex items-center gap-2">
+                      #{score.pr_id}
+                      {score.pr_state === 'closed' ? (
+                        <span className="inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                          {t('repo.prClosed')}
+                        </span>
+                      ) : null}
+                    </div>
+                  </td>
                   <td className="px-4 py-3 text-muted-foreground">
                     {score.author_login ?? '—'}
                   </td>

@@ -13,7 +13,7 @@ from watchgate.dashboard.backend.routers.keys import _get_or_create_db_user
 from watchgate.dashboard.backend.schemas import normalize_login
 from watchgate.dashboard.backend.tasks import get_queue, run_audit_scan, run_main_branch_scan
 from watchgate.db.connection import get_db_session
-from watchgate.db.models import MonitoredRepo, VCSConnection
+from watchgate.db.models import MonitoredRepo, UserAPIKey, VCSConnection
 
 DBSession = Annotated[Session, Depends(get_db_session)]
 
@@ -316,3 +316,55 @@ def update_external_repo(
     session.commit()
     session.refresh(repo)
     return repo
+
+
+@router.delete("/{repo_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_external_repo(
+    repo_id: str,
+    current_user: CurrentUser,
+    session: DBSession,
+    request: Request,
+) -> None:
+    """Deja de monitorizar/auditar un repositorio externo.
+
+    Decisión explícita del equipo (2026-08-17): borra solo el registro de
+    `MonitoredRepo` (deja de escanearse y desaparece de la lista) -- NUNCA
+    el histórico de análisis ya hechos (`pr_scores` en la base del
+    Dashboard, tabla separada sin FK hacia `monitored_repos`, ver
+    `db.py::DashboardPRScore`). Un repo que se deja de auditar no debe
+    perder su rastro de auditoría pasado.
+
+    Bloquea el borrado (409) si hay alguna API key de agente atada a este
+    repo (`UserAPIKey.monitored_repo_id`, FK real hacia esta tabla) -- en
+    vez de dejar que la FK reviente con un IntegrityError opaco, o (la
+    alternativa fácil pero peligrosa) poner esa columna a NULL en silencio,
+    lo que degradaría esa key a "legado" validada solo por org_id sin que
+    quien la creó se entere de que perdió su alcance acotado a un repo."""
+    user_login = normalize_login(current_user.login)
+    db_user = _get_or_create_db_user(session, user_login)
+    org_id = db_user.org_id
+    assert org_id is not None
+
+    repo = session.exec(
+        select(MonitoredRepo).where(MonitoredRepo.id == repo_id, MonitoredRepo.org_id == org_id)
+    ).first()
+
+    if not repo:
+        raise HTTPException(status_code=404, detail="Repositorio no encontrado")
+
+    require_role(current_user, repo.repo_path, min_role="mantenedor", request=request)
+
+    bound_keys = session.exec(
+        select(UserAPIKey).where(UserAPIKey.monitored_repo_id == repo_id)
+    ).all()
+    if bound_keys:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"No se puede eliminar: hay {len(bound_keys)} API key(s) de agente atadas a "
+                "este repositorio. Revócalas o reasígnalas a otro repo primero."
+            ),
+        )
+
+    session.delete(repo)
+    session.commit()

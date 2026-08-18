@@ -27,6 +27,11 @@ export default function RepoPage() {
   const [scores, setScores] = useState<ScoreOut[] | null>(null)
   const [role, setRole] = useState<RoleName | null>(null)
   const [tab, setTab] = useState<Tab>('history')
+  // Por defecto se ocultan las PRs ya cerradas/mergeadas (pr_state==='closed',
+  // ver RepoPollingService.mark_prs_closed) -- siguen en el histórico
+  // (nunca se borran), pero no aportan nada como "pendientes de revisar".
+  // Un toggle deja verlas todas sin tener que ir a otro sitio.
+  const [showClosed, setShowClosed] = useState(false)
 
   useEffect(() => {
     // Guarda de "sigue siendo la respuesta actual": sin esto, navegar rápido
@@ -96,9 +101,20 @@ export default function RepoPage() {
             <div className="min-w-0 flex-1">
               {tab === 'history' ? (
                 <div>
-                  <h2 className="mb-3 text-lg font-semibold">{t('repo.recent')}</h2>
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <h2 className="text-lg font-semibold">{t('repo.recent')}</h2>
+                    <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        checked={showClosed}
+                        onChange={(e) => setShowClosed(e.target.checked)}
+                        className="size-3.5 rounded border-input"
+                      />
+                      {t('repo.showClosedPrs')}
+                    </label>
+                  </div>
                   <ScoresTable
-                    scores={scores}
+                    scores={showClosed ? scores : scores.filter((s) => s.pr_state !== 'closed')}
                     canAccept={canFeedback}
                     onScoreUpdated={(updated) =>
                       setScores((prev) =>
