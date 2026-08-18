@@ -191,9 +191,9 @@ def test_cone_mode_leaks_ancestor_file_but_it_stays_unresolved(rules_repo_fixtur
     lrc._sync_worktree(cache_dir, "v1", "", [f"{lrc.CUSTOM_PREFIX}/python"])
 
     leaked = cache_dir / "rules/semgrep/config.yaml"
-    assert (
-        leaked.exists()
-    ), "cone mode debería colar config.yaml (si no, el test ya no es representativo)"
+    assert leaked.exists(), (
+        "cone mode debería colar config.yaml (si no, el test ya no es representativo)"
+    )
     assert b"version https://git-lfs.github.com/spec" in leaked.read_bytes()[:200]
 
 

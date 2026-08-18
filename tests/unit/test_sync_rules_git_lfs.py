@@ -135,12 +135,12 @@ def test_cone_mode_leaks_ancestor_file_but_it_stays_unresolved(rules_repo_fixtur
     )
 
     leaked = dest / "rules/semgrep/config.yaml"
-    assert (
-        leaked.exists()
-    ), "cone mode debería colar config.yaml (si no, el test ya no es representativo)"
-    assert (
-        b"version https://git-lfs.github.com/spec" in leaked.read_bytes()[:200]
-    ), "config.yaml debería seguir siendo un puntero LFS sin resolver, nunca contenido real"
+    assert leaked.exists(), (
+        "cone mode debería colar config.yaml (si no, el test ya no es representativo)"
+    )
+    assert b"version https://git-lfs.github.com/spec" in leaked.read_bytes()[:200], (
+        "config.yaml debería seguir siendo un puntero LFS sin resolver, nunca contenido real"
+    )
 
 
 def test_assert_no_lfs_pointers_raises_on_unresolved_pointer(rules_repo_fixture, tmp_path):
