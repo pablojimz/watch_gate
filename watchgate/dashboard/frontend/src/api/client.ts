@@ -48,6 +48,11 @@ export interface ScoreOut {
   // Conteo de hallazgos de TODA la PR por naturaleza, p. ej.
   // { malicioso: 1, vulnerabilidad: 3, incertidumbre: 0 }.
   threat_summary: Record<string, number>
+  // 'open' (por defecto) | 'closed' -- la PR se cerró/mergeó en GitHub
+  // desde el último barrido (ver RepoPollingService.mark_prs_closed). El
+  // análisis y su histórico se conservan igual, solo deja de contar como
+  // pendiente.
+  pr_state: 'open' | 'closed'
 }
 
 export interface MeResponse {
@@ -94,10 +99,18 @@ export interface LlmSettingsUpdate {
   clear_github_token?: boolean
 }
 
+export interface MyRepoRole {
+  repo: string
+  role: RoleName
+}
+
 export interface UserSettings {
   login: string
   display_name: string
+  // Rol más alto agregado -- repo_roles de abajo es el desglose completo
+  // (un elemento por repo), ver watchgate/dashboard/backend/db.py::get_user_settings.
   role: RoleName
+  repo_roles: MyRepoRole[]
   github_api_url: string
   github_token_set: boolean
   github_token_masked?: string | null
@@ -278,6 +291,11 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(body),
     }),
+  changePassword: (current_password: string, new_password: string) =>
+    request<void>('/settings/user/password', {
+      method: 'PUT',
+      body: JSON.stringify({ current_password, new_password }),
+    }),
   getUiSettings: () => request<UiSettings>('/settings/ui'),
   putUiSettings: (body: UiSettings) =>
     request<UiSettings>('/settings/ui', {
@@ -307,10 +325,20 @@ export const api = {
       method: 'DELETE',
     }),
   listUsers: () => request<DashboardUser[]>('/admin/users'),
-  createUser: (login: string, display_name: string, password: string) =>
+  // repo/role opcionales: si se pasan los dos, el alta asigna ese rol
+  // inicial en el mismo paso (ver DashboardUserCreate en schemas.py) --
+  // sin repetir el viaje aparte a la gestión de roles para el caso más
+  // común (usuario nuevo con acceso a un solo repo).
+  createUser: (
+    login: string,
+    display_name: string,
+    password: string,
+    repo?: string,
+    role?: RoleName,
+  ) =>
     request<DashboardUser>('/admin/users', {
       method: 'POST',
-      body: JSON.stringify({ login, display_name, password }),
+      body: JSON.stringify({ login, display_name, password, repo: repo || null, role: role || null }),
     }),
   deleteUser: (login: string) =>
     request<void>(`/admin/users/${encodeURIComponent(login)}`, { method: 'DELETE' }),
@@ -345,4 +373,6 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(data),
     }),
+  deleteExternalRepo: (id: string) =>
+    request<void>(`/repos/external/${id}`, { method: 'DELETE' }),
 }

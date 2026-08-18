@@ -165,6 +165,32 @@ class RepoPollingService:
         except Exception:
             pass
 
+        open_pr_ids = {str(p["number"]) for p in prs}
+
+        # PRs ya analizadas (trackeadas) que ya NO aparecen en la lista de
+        # abiertas de GitHub -- se cerraron o se mergearon desde el último
+        # barrido. Se marcan (pr_state="closed"), nunca se borran: el
+        # análisis y su histórico se conservan, solo dejan de contar como
+        # "pendientes" en el dashboard (ver db.py::mark_prs_closed). Best
+        # effort igual que el resto de escritura en la BD del Dashboard de
+        # este método -- un fallo aquí no debe tumbar el resto del barrido
+        # (encolar las PRs nuevas de abajo sigue siendo lo prioritario).
+        closed_pr_ids = analyzed_pr_ids - open_pr_ids
+        if closed_pr_ids:
+            try:
+                from watchgate.dashboard.backend.db import db_session as dash_db_session
+                from watchgate.dashboard.backend.db import mark_prs_closed
+
+                with dash_db_session() as dash_session:
+                    mark_prs_closed(dash_session, candidate["repo_path"], closed_pr_ids)
+            except Exception:
+                logger.warning(
+                    "No se pudieron marcar como cerradas las PRs %s de '%s' -- se reintentará "
+                    "en el próximo barrido.",
+                    closed_pr_ids,
+                    candidate["repo_path"],
+                )
+
         # Filtrar PRs abiertas nuevas (no analizadas aún)
         new_prs = [p for p in prs if str(p["number"]) not in analyzed_pr_ids]
 

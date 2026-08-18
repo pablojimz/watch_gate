@@ -60,6 +60,10 @@ class ScoreOut(BaseModel):
     # / formatters/console.py), para que el dashboard muestre el mismo
     # desglose 🚨/⚠️/❓.
     threat_summary: dict[str, int] = Field(default_factory=dict)
+    # "open" (por defecto) | "closed" -- ver DashboardPRScore.pr_state. El
+    # análisis de rama principal (pr_id="main") siempre queda "open": no es
+    # una PR real de GitHub, nunca puede "cerrarse" por polling.
+    pr_state: str = "open"
 
     @classmethod
     def from_aggregated(
@@ -70,6 +74,7 @@ class ScoreOut(BaseModel):
         author_login: str | None = None,
         accepted_by: str | None = None,
         accepted_at: str | None = None,
+        pr_state: str = "open",
     ) -> ScoreOut:
         return cls(
             id=score_id,
@@ -84,6 +89,7 @@ class ScoreOut(BaseModel):
             human_feedback=human_feedback,
             accepted_by=accepted_by,
             accepted_at=accepted_at,
+            pr_state=pr_state,
             threat_summary=result.threat_summary,
         )
 
@@ -127,6 +133,14 @@ class DashboardUserCreate(BaseModel):
     login: str
     display_name: str
     password: str = Field(min_length=8, description="Mínimo 8 caracteres")
+    # Ambos opcionales: si se rellenan los dos, el alta asigna ese rol
+    # inicial en el mismo paso (vía el `upsert_role` ya existente, no
+    # lógica nueva) -- sin repetir el viaje aparte a la gestión de roles
+    # por repo para el caso más común (usuario nuevo que solo necesita
+    # acceso a un repo). Esa gestión separada se mantiene igual para
+    # cambios posteriores o roles en más repos.
+    repo: str | None = None
+    role: RoleName | None = None
 
     @field_validator("login")
     @classmethod
@@ -314,10 +328,24 @@ class LlmSettingsIn(BaseModel):
         return validate_github_api_url(value)
 
 
+class ChangePasswordIn(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=8, description="Mínimo 8 caracteres")
+
+
+class MyRepoRole(BaseModel):
+    repo: str
+    role: RoleName
+
+
 class UserSettingsOut(BaseModel):
     login: str
     display_name: str
+    # Rol más alto agregado de todos los repos (compatibilidad con lo que
+    # ya consumía el frontend) -- `repo_roles` de abajo es el desglose
+    # completo, un elemento por repo, para "en qué repos soy qué".
     role: RoleName
+    repo_roles: list[MyRepoRole] = Field(default_factory=list)
     github_api_url: str = "https://api.github.com"
     github_token_set: bool = False
     github_token_masked: str | None = None
