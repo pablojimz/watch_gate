@@ -271,11 +271,10 @@ Ver `.env.example` para la lista completa y comentada. Resumen por bloque:
   `docker-compose.prod.yml`, ver arriba), pero solo en el mismo host que
   los datos -- sin copia fuera de la máquina (S3 o equivalente).
 - Logs estructurados (`WATCHGATE_LOG_FORMAT=json`) ya activos en
-  producción, pero sin alerting -- nada avisa proactivamente si algo va
-  mal, hay que ir a mirar los logs. Los bugs reales que ha encontrado el
-  equipo hasta ahora se han diagnosticado leyendo `docker compose logs` a
-  mano; con JSON al menos ya es grepable/parseable por un agregador real
-  si se conecta uno.
+  producción, grepables/parseables por un agregador real si se conecta
+  uno. Alerting proactivo (Sentry) opcional vía `WATCHGATE_SENTRY_DSN` --
+  sin ella, sigue siendo cierto que nada avisa solo, hay que ir a mirar
+  los logs a mano.
 - Publicar en PyPI requiere antes decidir un nombre de paquete distinto
   (`watchgate` ya está registrado por un proyecto sin relación) -- no
   bloquea usar la GitHub Action (ver `action.yml`, se instala desde su

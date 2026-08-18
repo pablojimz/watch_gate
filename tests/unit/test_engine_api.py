@@ -11,9 +11,10 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session, SQLModel, create_engine
 
 from watchgate.api.dependencies import get_db_session
-from watchgate.api.main import CryptographicLogFilter, app
+from watchgate.api.main import app
 from watchgate.db.models import MonitoredRepo
 from watchgate.db.repository import create_api_key, create_organization, create_user
+from watchgate.logging_config import CryptographicLogFilter
 
 
 @pytest.fixture

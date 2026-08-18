@@ -35,6 +35,7 @@ dependencies = [
   "alembic (>=1.19.1,<2.0.0)",
   "redis (>=8.1.0,<9.0.0)",
   "rq (>=1.16,<2.0)",
+  "sentry-sdk (>=2.68.0,<3.0.0)",
 ]
 
 # Extra "analysis": lo que de verdad hace pesada la imagen (~1.5 GB, sobre
