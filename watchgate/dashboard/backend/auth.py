@@ -22,6 +22,7 @@ from watchgate.dashboard.backend.schemas import (
     User,
     normalize_login,
 )
+from watchgate.db import crypto as db_crypto
 
 SESSION_COOKIE = "watchgate_session"
 ROLE_RANK: dict[RoleName, int] = {
@@ -208,6 +209,21 @@ def ensure_safe_startup_config() -> None:
             "WATCHGATE_DASHBOARD_SECURE_COOKIE no está activado (la cookie de sesión, que "
             "puede llevar embebido un token de acceso de GitHub, viajaría sin el flag "
             "Secure)"
+        )
+    if db_crypto._fernet is None:
+        # Sin este check, el proceso arranca igual (crypto.py no falla al
+        # importarse a propósito) y el primer intento real de alguien de
+        # guardar un secreto en DB (PAT de GitHub personal en Mi Cuenta, PAT
+        # de fallback de organización, token de una VCSConnection...) revienta
+        # con un RuntimeError sin capturar en medio de `session.commit()`
+        # (`EncryptedString.process_bind_param` -> `encrypt_secret` ->
+        # `_get_fernet()`) -- un 500 opaco muy más tarde, sin relación
+        # aparente con "falta una variable de entorno", en vez de un rechazo
+        # claro aquí, en el arranque, como el resto de esta función.
+        problems.append(
+            "WATCHGATE_DB_SECRET no está configurado o no es una clave Fernet válida "
+            "(guardar cualquier secreto en la base de datos -- token de GitHub personal, "
+            "fallback de organización, credencial de VCS -- fallaría con un error opaco)"
         )
     if problems:
         raise RuntimeError(
