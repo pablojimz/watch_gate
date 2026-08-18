@@ -18,6 +18,31 @@
 # aplican las migraciones del esquema SQLModel (watchgate/db/):
 #   docker compose exec engine-api alembic upgrade head
 # Ver docs/despliegue.md.
+#
+# --- Hallazgos de trivy-scan (ci.yml) que quedan deliberadamente sin tocar ---
+# Investigados a fondo (build local + inspección directa de la imagen +
+# `poetry show`), no son accionables desde este repo:
+#
+# - msgpack GHSA-6v7p-g79w-8964 (1.1.2 -> 1.2.1): NO es una dependencia del
+#   proyecto -- `poetry show msgpack` no la encuentra. Viene vendorizada
+#   dentro de pip mismo (`pip._vendor.msgpack`), tanto en el pip de sistema
+#   de la imagen base python:3.14-slim como en el pip que trae el venv que
+#   crea Poetry. pip 26.2.1 (la última versión publicada en el momento de
+#   este análisis) sigue vendorizando esa versión de msgpack -- no hay un
+#   pip más nuevo que lo arregle. Exposición real: nula -- este servicio
+#   nunca invoca pip en runtime (arranca directo con
+#   `uvicorn watchgate.api.main:app`), así que el módulo vendorizado no es
+#   alcanzable desde ningún endpoint. Revisar cuando pip publique una
+#   versión que vendorice msgpack >=1.2.1.
+#
+# - setuptools CVE-2025-47273 (70.3.0 -> 78.1.1): falso positivo del
+#   escáner. El único setuptools realmente instalado como paquete en la
+#   imagen es el que resuelve Poetry (84.0.0 en el venv del proyecto, por
+#   encima ya del fix). La cadena "setuptools==70.3.0" que trivy detecta
+#   proviene de `pip/_vendor/vendor.txt` y `pip/_vendor/bom.cdx.json` --
+#   metadatos de PROVENANCIA (con qué se construyó el propio pip), no un
+#   paquete instalado ni importable. trivy los parsea como si fueran un
+#   manifiesto de dependencias instaladas.
 
 FROM python:3.14-slim AS builder
 
