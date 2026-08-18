@@ -20,5 +20,13 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src"]
+  "include": ["src"],
+  // Los ficheros de test viven bajo src/ (junto al código que ejercen,
+  // convención estándar de Vitest) pero no deben pasar por `tsc -b`: usan
+  // los globals de Vitest (describe/it/expect/vi) que este tsconfig -- el
+  // que gatea `npm run build` -- no tiene tipados, y no forman parte del
+  // bundle que se despliega. Vitest transpila estos ficheros con esbuild
+  // (vía vite-node) sin pasar por este tsconfig, así que excluirlos aquí
+  // no afecta a que los tests se ejecuten.
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/test/**"]
 }
