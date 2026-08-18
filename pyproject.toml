@@ -54,7 +54,17 @@ analysis = [
   "semgrep>=1.78,<2",
   "yara-python>=4.5,<5",
   "chromadb>=0.5,<1",
-  "sentence-transformers>=3.0,<4",
+  # >=6.0: sentence-transformers 3.x-5.x fijan transformers<5.0.0; 6.0 es la
+  # primera versión que sube ese tope a transformers>=5.0,<6.0 -- necesario
+  # para corregir CVE-2026-4372/CVE-2026-5241 (RCE/ejecución de código
+  # arbitrario) en transformers 4.57.6, que sin este bump quedaría fijado
+  # de forma transitiva sin fix disponible. Ver el commit que introdujo
+  # este bump para el análisis de exposición y la verificación hecha
+  # (tests/unit/test_rag*.py, test_semantic_layer.py -- la única superficie
+  # de este paquete en el repo es `SentenceTransformer(EMBEDDING_MODEL_NAME)
+  # .encode(...)` en watchgate/core/rag/retriever.py, con un nombre de
+  # modelo fijo -- nunca definido por el usuario ni por el diff analizado).
+  "sentence-transformers>=6.0,<7",
   "langchain-text-splitters>=0.2,<1",
   "anthropic>=0.122.0,<1",
   "google-genai>=1.0,<3",
