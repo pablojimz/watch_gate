@@ -19,7 +19,7 @@
 #   docker compose exec engine-api alembic upgrade head
 # Ver docs/despliegue.md.
 
-FROM python:3.11-slim AS builder
+FROM python:3.14-slim AS builder
 
 # build-essential: sentence-transformers/chromadb traen dependencias con
 # extensiones nativas que a veces no publican wheel para todas las
@@ -51,7 +51,7 @@ COPY alembic ./alembic
 RUN poetry install --only main --extras analysis
 
 
-FROM python:3.11-slim AS runtime
+FROM python:3.14-slim AS runtime
 
 # curl: healthcheck contra GET /health (ver más abajo). git: GitPython
 # (watchgate.core.diffparser) lo necesita en runtime, no solo durante el

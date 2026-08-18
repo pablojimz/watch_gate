@@ -13,7 +13,7 @@
 # Build:  docker build -f docker/dashboard-backend.Dockerfile -t watchgate-dashboard-backend .
 # Run:    docker run -p 8000:8000 --env-file .env watchgate-dashboard-backend
 
-FROM python:3.11-slim AS builder
+FROM python:3.14-slim AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
@@ -46,7 +46,7 @@ COPY alembic_dashboard ./alembic_dashboard
 RUN poetry install --only main --extras analysis
 
 
-FROM python:3.11-slim AS runtime
+FROM python:3.14-slim AS runtime
 
 # curl: healthcheck. git: GitPython (watchgate.core.diffparser) es una
 # dependencia transitiva del paquete `watchgate` -- aunque el Dashboard
