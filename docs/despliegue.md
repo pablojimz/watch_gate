@@ -108,6 +108,15 @@ imposible olvidarlos -- pero conviene saber por qué:
   activo) -- el overlay de arriba lo da gratis.
 - `WATCHGATE_DASHBOARD_INGEST_TOKEN`: protege `POST /api/scores` (la vía
   por la que la Action persiste resultados en el dashboard).
+- `WATCHGATE_DB_SECRET`: clave Fernet (32 bytes, `Fernet.generate_key()`)
+  que cifra en la base de datos cualquier secreto que un usuario guarde
+  (PAT de GitHub personal en Mi Cuenta, fallback de organización en
+  Configuración, `access_token` de una `VCSConnection`). Sin ella,
+  `watchgate/db/crypto.py` no falla al importarse (comodidad en local),
+  pero el primer intento real de guardar uno de esos secretos revienta con
+  un `RuntimeError` -- `ensure_safe_startup_config()` lo detecta al
+  arrancar en vez de dejar que explote más tarde, opaco, en medio de un
+  `PUT /api/settings/user`.
 
 Además, ya activo por defecto en cualquier entorno (no solo producción):
 
