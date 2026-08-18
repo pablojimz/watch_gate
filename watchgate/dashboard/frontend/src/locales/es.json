@@ -55,7 +55,9 @@
     "authorsTitle": "Análisis por autor",
     "authorsHint": "Agregado de PRs, score medio y distribución de riesgo por usuario.",
     "authorsEmpty": "No hay autores en este repositorio.",
-    "commitsVsThreats": "Commits analizados vs. amenazas por día"
+    "commitsVsThreats": "Commits analizados vs. amenazas por día",
+    "prClosed": "Cerrada",
+    "showClosedPrs": "Mostrar PRs cerradas"
   },
   "report": {
     "title": "Informe del PR #{{pr}}",
@@ -179,6 +181,8 @@
     "password": "Contraseña",
     "passwordHint": "Mínimo 8 caracteres. Compártela con la persona por un canal aparte.",
     "userFormInvalid": "Rellena usuario, nombre y una contraseña de al menos 8 caracteres",
+    "initialRoleHint": "Opcional: repo + rol para asignárselo ya en el alta.",
+    "noInitialRole": "Sin rol inicial",
     "createUser": "Crear usuario",
     "userCreated": "Usuario creado",
     "userRemoved": "Usuario eliminado",
@@ -236,7 +240,10 @@
     "neverScanned": "Nunca",
     "scanEnqueued": "Escaneo encolado en segundo plano.",
     "addSuccess": "Repositorio añadido a la monitorización.",
-    "status": "Estado"
+    "status": "Estado",
+    "deleteButton": "Eliminar",
+    "confirmDelete": "¿Dejar de monitorizar \"{{repo}}\"? El historial de análisis ya hechos se conserva.",
+    "deleteSuccess": "Repositorio eliminado de la monitorización."
   },
   "metrics": {
     "title": "Métricas generales",
@@ -301,6 +308,21 @@
     "displayName": "Nombre visible",
     "login": "Usuario",
     "role": "Rol asignado",
+    "permissionsTitle": "Mis permisos por repositorio",
+    "permissionsHint": "Rol asignado en cada repositorio al que tienes acceso.",
+    "permissionsRepo": "Repositorio",
+    "permissionsRole": "Rol",
+    "permissionsEmpty": "No tienes ningún repositorio asignado todavía.",
+    "passwordSectionTitle": "Cambiar contraseña",
+    "passwordSectionHint": "Solo para cuentas locales (usuario/contraseña) -- si entras con GitHub/OIDC, no aplica.",
+    "currentPassword": "Contraseña actual",
+    "newPassword": "Contraseña nueva",
+    "confirmPassword": "Confirmar contraseña nueva",
+    "passwordChangeButton": "Cambiar contraseña",
+    "passwordChanging": "Cambiando...",
+    "passwordChanged": "Contraseña actualizada",
+    "passwordTooShort": "La contraseña nueva debe tener al menos 8 caracteres",
+    "passwordMismatch": "Las contraseñas nuevas no coinciden",
     "appearanceTitle": "Apariencia Local",
     "appearanceHint": "Ajustes visuales aplicados exclusivamente a tu sesión local.",
     "saved": "Ajustes guardados correctamente"

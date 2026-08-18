@@ -56,6 +56,7 @@ from watchgate.dashboard.backend.schemas import (
     FeedbackValue,
     LlmSettingsIn,
     LlmSettingsOut,
+    MyRepoRole,
     OrgMetrics,
     RepoMetricRow,
     RepoSettings,
@@ -397,6 +398,7 @@ def _record_to_score_out(record: DashboardPRScore) -> ScoreOut:
         author_login=record.author_login,
         accepted_by=record.accepted_by,
         accepted_at=record.accepted_at,
+        pr_state=record.pr_state,
     )
 
 
@@ -510,6 +512,19 @@ def list_roles(session: Session, repo: str | None = None) -> list[dict[str, str]
         stmt = stmt.where(RepoRole.repo == repo).order_by(RepoRole.user_login)
     records = session.execute(stmt).scalars().all()
     return [{"user_login": r.user_login, "repo": r.repo, "role": r.role} for r in records]
+
+
+def list_roles_for_user(session: Session, user_login: str) -> list[dict[str, str]]:
+    """Desglose de `repo_roles` de un usuario concreto, un elemento por
+    repo -- distinto de `get_user_highest_role` (un único rol agregado, el
+    más alto de todos) y de `list_roles` (todos los usuarios de un repo, o
+    todo `repo_roles` entero sin filtrar). Usado por
+    `get_user_settings`/`GET /api/settings/user` para que cada quien pueda
+    ver en qué repos tiene qué rol, no solo su rol más alto."""
+    norm_login = normalize_login(user_login)
+    stmt = select(RepoRole.repo, RepoRole.role).where(RepoRole.user_login == norm_login)
+    stmt = stmt.order_by(RepoRole.repo)
+    return [{"repo": repo, "role": role} for repo, role in session.execute(stmt).all()]
 
 
 def list_repos_for_user(session: Session, user_login: str, is_admin: bool) -> list[str]:
@@ -746,10 +761,16 @@ def get_user_settings(session: Session, login: str) -> UserSettingsOut:
         except Exception:
             pass
 
+    repo_roles = [
+        MyRepoRole(repo=r["repo"], role=cast("RoleName", r["role"]))
+        for r in list_roles_for_user(session, norm_login)
+    ]
+
     return UserSettingsOut(
         login=user.login,
         display_name=user.display_name,
         role=role,
+        repo_roles=repo_roles,
         github_api_url=user.github_api_url or "https://api.github.com",
         github_token_set=bool(gh_token),
         github_token_masked=_mask_api_key(gh_token),
@@ -1096,6 +1117,22 @@ def get_user(session: Session, login: str) -> DashboardUser | None:
     return session.get(DashboardUser, normalize_login(login))
 
 
+def change_password(session: Session, login: str, new_password: str) -> bool:
+    """Actualiza solo `password_hash` -- a diferencia de `upsert_user`
+    (que también sobrescribe `display_name`, pensado para el alta desde
+    Configuración), esto es para que un usuario cambie su propia
+    contraseña sin arriesgarse a pisar su nombre para mostrar con un valor
+    obsoleto. Devuelve `False` si el login no tiene cuenta local (usuario
+    solo-OAuth/OIDC, sin fila en `dashboard_users`) -- el caller decide qué
+    mensaje dar."""
+    record = session.get(DashboardUser, normalize_login(login))
+    if record is None:
+        return False
+    record.password_hash = hash_password(new_password)
+    session.commit()
+    return True
+
+
 def list_users(session: Session) -> list[DashboardUser]:
     stmt = select(DashboardUser).order_by(DashboardUser.login)
     return list(session.execute(stmt).scalars().all())
@@ -1149,6 +1186,40 @@ def list_pr_numbers_for_repo(session: Session, repo: str) -> set[str]:
     real de esta migración)."""
     stmt = select(DashboardPRScore.pr_number).where(DashboardPRScore.repo == repo)
     return {str(n) for n in session.execute(stmt).scalars().all()}
+
+
+def mark_prs_closed(session: Session, repo: str, closed_pr_numbers: set[str]) -> int:
+    """Marca como `pr_state="closed"` las filas de `repo` cuyo `pr_number`
+    esté en `closed_pr_numbers` y sigan en "open" -- llamado desde
+    `RepoPollingService._poll_single_candidate` (watchgate/service/
+    repo_polling.py) cuando una PR que sí estaba trackeada deja de aparecer
+    en la lista de PRs abiertas de GitHub.
+
+    Nunca borra ni toca el análisis en sí (score/justificación/hallazgos
+    intactos) -- solo dejan de contar como "pendiente" en el dashboard. Se
+    excluye a propósito `pr_number = 0` (análisis de rama principal,
+    `_MAIN_BRANCH_SCAN_PR_NUMBER`): no es una PR real de GitHub, nunca debe
+    poder "cerrarse" por este camino aunque su número textual coincidiera
+    por accidente con el de una PR real cerrada.
+
+    Devuelve cuántas filas se actualizaron (0 si `closed_pr_numbers` está
+    vacío o ninguna coincide -- caso normal en la mayoría de barridos)."""
+    if not closed_pr_numbers:
+        return 0
+    numeric = {int(n) for n in closed_pr_numbers if n.isdigit() and int(n) != 0}
+    if not numeric:
+        return 0
+    stmt = (
+        select(DashboardPRScore)
+        .where(DashboardPRScore.repo == repo)
+        .where(DashboardPRScore.pr_number.in_(numeric))
+        .where(DashboardPRScore.pr_state == "open")
+    )
+    records = session.execute(stmt).scalars().all()
+    for record in records:
+        record.pr_state = "closed"
+    session.commit()
+    return len(records)
 
 
 def _insert_sample(

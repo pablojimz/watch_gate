@@ -26,7 +26,7 @@ watchgate.db.crypto._fernet = Fernet("1Vn6eB6nE7xO4yH0JkL4A-9tN1X5mK3bH2P8gV0zM8
 from watchgate.adapters.github_client import GitHubClient  # noqa: E402
 from watchgate.dashboard.backend.main import app  # noqa: E402
 from watchgate.db.connection import build_engine, get_db_session  # noqa: E402
-from watchgate.db.models import MonitoredRepo, VCSConnection  # noqa: E402
+from watchgate.db.models import MonitoredRepo, UserAPIKey, VCSConnection  # noqa: E402
 from watchgate.db.repository import create_organization  # noqa: E402
 from watchgate.service.repo_polling import RepoPollingService  # noqa: E402
 
@@ -241,6 +241,125 @@ def test_patch_external_repo_endpoint_and_rbac(test_db_session):
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "paused"
+
+    app.dependency_overrides.clear()
+
+
+def _setup_admin_and_revisor(test_db_session, repo_path):
+    from watchgate.dashboard.backend.db import db_session as dash_db_session
+    from watchgate.dashboard.backend.db import upsert_role
+    from watchgate.dashboard.backend.routers.keys import _get_or_create_db_user
+
+    user_admin = _get_or_create_db_user(test_db_session, "admin@corp.com")
+    user_revisor = _get_or_create_db_user(test_db_session, "revisor@corp.com")
+    user_revisor.org_id = user_admin.org_id
+    test_db_session.add(user_revisor)
+    test_db_session.commit()
+
+    with dash_db_session() as dash_conn:
+        upsert_role(dash_conn, "admin@corp.com", repo_path, "admin_organizacion")
+        upsert_role(dash_conn, "revisor@corp.com", repo_path, "revisor")
+
+    return user_admin
+
+
+def test_delete_external_repo_removes_it_and_keeps_history(test_db_session):
+    """El repo desaparece de MonitoredRepo, pero el histórico de análisis
+    (tabla `pr_scores` del Dashboard, sin FK hacia monitored_repos) no se
+    toca -- decisión explícita del equipo, ver conversación 2026-08-17."""
+
+    def get_test_db():
+        yield test_db_session
+
+    app.dependency_overrides[get_db_session] = get_test_db
+
+    user_admin = _setup_admin_and_revisor(test_db_session, "acme/deleterepo")
+    repo = MonitoredRepo(
+        id="repo-delete-1",
+        org_id=user_admin.org_id,
+        repo_path="acme/deleterepo",
+        monitor_type="audited",
+        status="active",
+    )
+    test_db_session.add(repo)
+    test_db_session.commit()
+
+    client = TestClient(app)
+    from watchgate.dashboard.backend.auth import create_session_token
+
+    # Revisor no puede borrar (min_role="mantenedor")
+    client.cookies.set("watchgate_session", create_session_token("revisor@corp.com"))
+    response = client.delete("/api/repos/external/repo-delete-1")
+    assert response.status_code == 403
+
+    # Admin sí puede
+    client.cookies.set("watchgate_session", create_session_token("admin@corp.com"))
+    response = client.delete("/api/repos/external/repo-delete-1")
+    assert response.status_code == 204
+
+    assert test_db_session.get(MonitoredRepo, "repo-delete-1") is None
+
+    app.dependency_overrides.clear()
+
+
+def test_delete_external_repo_404_for_unknown_repo(test_db_session):
+    def get_test_db():
+        yield test_db_session
+
+    app.dependency_overrides[get_db_session] = get_test_db
+    _setup_admin_and_revisor(test_db_session, "acme/whatever")
+
+    client = TestClient(app)
+    from watchgate.dashboard.backend.auth import create_session_token
+
+    client.cookies.set("watchgate_session", create_session_token("admin@corp.com"))
+    response = client.delete("/api/repos/external/does-not-exist")
+    assert response.status_code == 404
+
+    app.dependency_overrides.clear()
+
+
+def test_delete_external_repo_blocked_when_api_key_bound_to_it(test_db_session):
+    """Regresión: `UserAPIKey.monitored_repo_id` tiene FK real hacia
+    monitored_repos.id -- borrar el repo sin comprobar esto primero
+    dejaría la key con una FK rota (o exigiría poner monitored_repo_id a
+    NULL en silencio, degradando su alcance sin que el dueño se entere)."""
+
+    def get_test_db():
+        yield test_db_session
+
+    app.dependency_overrides[get_db_session] = get_test_db
+
+    user_admin = _setup_admin_and_revisor(test_db_session, "acme/keyedrepo")
+    repo = MonitoredRepo(
+        id="repo-delete-keyed",
+        org_id=user_admin.org_id,
+        repo_path="acme/keyedrepo",
+        monitor_type="audited",
+        status="active",
+    )
+    test_db_session.add(repo)
+    test_db_session.add(
+        UserAPIKey(
+            id="key-1",
+            user_id=user_admin.id,
+            org_id=user_admin.org_id,
+            monitored_repo_id="repo-delete-keyed",
+            name="CI runner",
+            key_prefix="wg_live_abcd",
+            key_hash="x" * 64,
+        )
+    )
+    test_db_session.commit()
+
+    client = TestClient(app)
+    from watchgate.dashboard.backend.auth import create_session_token
+
+    client.cookies.set("watchgate_session", create_session_token("admin@corp.com"))
+    response = client.delete("/api/repos/external/repo-delete-keyed")
+    assert response.status_code == 409
+    assert "API key" in response.json()["detail"]
+    assert test_db_session.get(MonitoredRepo, "repo-delete-keyed") is not None
 
     app.dependency_overrides.clear()
 
