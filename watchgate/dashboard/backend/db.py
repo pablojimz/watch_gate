@@ -28,7 +28,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal, cast
 
-from sqlalchemy import Engine, func, select
+from sqlalchemy import Engine, case, func, select
 from sqlalchemy.orm import Session
 
 from watchgate.core.models import (
@@ -102,27 +102,6 @@ _LAYER_COLS = (
     ("vulnerabilities", "vulnerabilities_score", "vulnerabilities_skipped"),
     ("reputation", "reputation_score", "reputation_skipped"),
     ("semantic", "semantic_score", "semantic_skipped"),
-)
-
-# Columnas que compute_org_metrics() lee de verdad -- a diferencia de
-# _record_to_score_out() (que sí necesita la fila completa, incluidos
-# findings_json/semantic_justification, para reconstruir un AggregatedResult
-# real), esta función solo agrega números/etiquetas. Seleccionar la entidad
-# completa traería esos blobs (hallazgos con fichero/línea/mensaje de cada
-# capa, texto del LLM) para cada fila de TODO el histórico visible de la
-# organización -- payload real que ni se deserializaba aquí, solo se
-# descartaba.
-_METRICS_COLUMNS = (
-    DashboardPRScore.repo,
-    DashboardPRScore.timestamp,
-    DashboardPRScore.score,
-    DashboardPRScore.semaforo,
-    DashboardPRScore.human_feedback,
-    *(
-        getattr(DashboardPRScore, col)
-        for _, score_col, skip_col in _LAYER_COLS
-        for col in (score_col, skip_col)
-    ),
 )
 
 
@@ -951,92 +930,127 @@ def compute_org_metrics(session: Session, repos: list[str]) -> OrgMetrics:
             trend=[],
         )
 
-    stmt = (
-        select(*_METRICS_COLUMNS)
-        .where(DashboardPRScore.repo.in_(repos))
-        .order_by(DashboardPRScore.timestamp.asc())
-    )
-    rows = session.execute(stmt).all()
+    # Agregación en SQL en vez de traer TODO el histórico visible de la
+    # organización fila a fila y sumar en Python -- antes, una organización
+    # con años de PRs analizados cargaba cada score entero a memoria del
+    # proceso del dashboard-backend solo para calcular medias y conteos que
+    # Postgres/SQLite ya saben hacer en el motor. `func.avg()` ignora NULL
+    # solo (no falsos ceros), igual que el filtro `score_val is not None`
+    # de la versión anterior; el redondeo a 1 decimal se sigue haciendo en
+    # Python (no en SQL) para no depender de que SQLite/Postgres redondeen
+    # igual entre sí ni igual que `round()`.
+    filters = (DashboardPRScore.repo.in_(repos),)
 
-    total = len(rows)
-    avg_score = round(sum(int(r.score) for r in rows) / total, 1) if total else 0.0
-    by_semaforo = {"verde": 0, "amarillo": 0, "rojo": 0}
-    feedback_correct = 0
-    feedback_fp = 0
-    feedback_pending = 0
-    layer_sums: dict[str, list[int]] = {
-        "static": [],
-        "deps": [],
-        "vulnerabilities": [],
-        "reputation": [],
-        "semantic": [],
-    }
-    per_repo: dict[str, dict[str, int | float]] = {}
-    by_day: dict[str, list[int]] = {}
-
-    for r in rows:
-        sem = r.semaforo
-        if sem in by_semaforo:
-            by_semaforo[sem] += 1
-        fb = r.human_feedback
-        if fb == "correcto":
-            feedback_correct += 1
-        elif fb == "falso_positivo":
-            feedback_fp += 1
-        else:
-            feedback_pending += 1
-
-        # Misma tripleta (nombre, columna score, columna skipped) que
-        # _LAYER_COLS -- reutilizada en vez de duplicada, para no tener que
-        # acordarse de actualizar dos sitios el día que cambien las capas.
-        for layer, score_col, skip_col in _LAYER_COLS:
-            skip_val = getattr(r, skip_col)
-            score_val = getattr(r, score_col)
-            if not skip_val and score_val is not None:
-                layer_sums[layer].append(int(score_val))
-
-        repo = r.repo
-        bucket = per_repo.setdefault(
-            repo,
-            {
-                "prs": 0,
-                "score_sum": 0,
-                "verde": 0,
-                "amarillo": 0,
-                "rojo": 0,
-                "feedback_pending": 0,
-            },
+    def _skipped_or_missing(score_col: str, skip_col: str) -> Any:
+        included = (getattr(DashboardPRScore, skip_col).is_not(True)) & (
+            getattr(DashboardPRScore, score_col).isnot(None)
         )
-        bucket["prs"] = int(bucket["prs"]) + 1
-        bucket["score_sum"] = float(bucket["score_sum"]) + int(r.score)
-        if sem in ("verde", "amarillo", "rojo"):
-            bucket[sem] = int(bucket[sem]) + 1
-        if fb is None:
-            bucket["feedback_pending"] = int(bucket["feedback_pending"]) + 1
+        return func.avg(case((included, getattr(DashboardPRScore, score_col)), else_=None))
 
-        day = str(r.timestamp)[:10]
-        by_day.setdefault(day, []).append(int(r.score))
+    # `SUM()` sobre cero filas (un repo recién añadido, sin histórico
+    # todavía) devuelve SQL NULL, no 0 -- a diferencia de `COUNT()`, que sí
+    # devuelve 0. Sin `coalesce()` aquí, `int(overall.feedback_pending)` (y
+    # el resto de sumas) reventaría con `TypeError: int() argument ... NoneType`
+    # justo en el caso "repo sin PRs todavía" que el guard `if not repos`
+    # de arriba no cubre (ahí `repos` no está vacío, son sus *filas* las
+    # que están vacías).
+    def _sum_case(*whens: Any, else_: int) -> Any:
+        return func.coalesce(func.sum(case(*whens, else_=else_)), 0)
 
-    layer_avg = {k: round(sum(v) / len(v), 1) if v else 0.0 for k, v in layer_sums.items()}
+    layer_avg_cols = {layer: f"layer_avg_{layer}" for layer, _, _ in _LAYER_COLS}
+    overall_stmt = select(
+        func.count().label("total"),
+        func.avg(DashboardPRScore.score).label("avg_score"),
+        *(
+            _sum_case((DashboardPRScore.semaforo == sem, 1), else_=0).label(f"semaforo_{sem}")
+            for sem in ("verde", "amarillo", "rojo")
+        ),
+        _sum_case((DashboardPRScore.human_feedback == "correcto", 1), else_=0).label(
+            "feedback_correct"
+        ),
+        _sum_case((DashboardPRScore.human_feedback == "falso_positivo", 1), else_=0).label(
+            "feedback_fp"
+        ),
+        # Pendiente = ni "correcto" ni "falso_positivo" (incluye NULL) --
+        # misma rama `else` que la versión en Python, no solo `IS NULL`.
+        _sum_case(
+            (DashboardPRScore.human_feedback == "correcto", 0),
+            (DashboardPRScore.human_feedback == "falso_positivo", 0),
+            else_=1,
+        ).label("feedback_pending"),
+        *(
+            _skipped_or_missing(score_col, skip_col).label(layer_avg_cols[layer])
+            for layer, score_col, skip_col in _LAYER_COLS
+        ),
+    ).where(*filters)
+    overall = session.execute(overall_stmt).one()
+
+    def _round_avg(value: float | None) -> float:
+        return round(float(value), 1) if value is not None else 0.0
+
+    total = int(overall.total)
+    avg_score = _round_avg(overall.avg_score)
+    by_semaforo = {
+        sem: int(getattr(overall, f"semaforo_{sem}")) for sem in ("verde", "amarillo", "rojo")
+    }
+    feedback_correct = int(overall.feedback_correct)
+    feedback_fp = int(overall.feedback_fp)
+    feedback_pending = int(overall.feedback_pending)
+    layer_avg = {
+        layer: _round_avg(getattr(overall, layer_avg_cols[layer])) for layer, _, _ in _LAYER_COLS
+    }
+
+    per_repo_stmt = (
+        select(
+            DashboardPRScore.repo,
+            func.count().label("prs"),
+            func.avg(DashboardPRScore.score).label("avg_score"),
+            func.sum(case((DashboardPRScore.semaforo == "verde", 1), else_=0)).label("verde"),
+            func.sum(case((DashboardPRScore.semaforo == "amarillo", 1), else_=0)).label("amarillo"),
+            func.sum(case((DashboardPRScore.semaforo == "rojo", 1), else_=0)).label("rojo"),
+            func.sum(case((DashboardPRScore.human_feedback.is_(None), 1), else_=0)).label(
+                "feedback_pending"
+            ),
+        )
+        .where(*filters)
+        .group_by(DashboardPRScore.repo)
+        .order_by(DashboardPRScore.repo)
+    )
     by_repo = [
         RepoMetricRow(
-            repo=repo,
-            prs=int(data["prs"]),
-            avg_score=round(float(data["score_sum"]) / int(data["prs"]), 1),
-            verde=int(data["verde"]),
-            amarillo=int(data["amarillo"]),
-            rojo=int(data["rojo"]),
-            feedback_pending=int(data["feedback_pending"]),
+            repo=row.repo,
+            prs=int(row.prs),
+            avg_score=_round_avg(row.avg_score),
+            verde=int(row.verde),
+            amarillo=int(row.amarillo),
+            rojo=int(row.rojo),
+            feedback_pending=int(row.feedback_pending),
         )
-        for repo, data in sorted(per_repo.items())
+        for row in session.execute(per_repo_stmt)
     ]
-    trend = [
-        TrendPoint(
-            day=day,
-            avg_score=round(sum(scores) / len(scores), 1),
-            count=len(scores),
+
+    # `timestamp` se guarda como TEXT ISO 8601 (ver DashboardPRScore), no un
+    # tipo temporal real -- `substr(..., 1, 10)` extrae "AAAA-MM-DD" igual
+    # en SQLite y Postgres (alias estándar de `substring`), sin depender de
+    # funciones de fecha específicas de cada dialecto.
+    day_expr = func.substr(DashboardPRScore.timestamp, 1, 10)
+    trend_stmt = (
+        select(
+            day_expr.label("day"),
+            func.avg(DashboardPRScore.score).label("avg_score"),
+            # Etiqueta "pr_count", no "count" -- Row hereda `count()` de
+            # tuple, y `row.count` resolvería al método heredado en vez de
+            # a la columna (mypy lo pilla; en runtime habría devuelto un
+            # `Callable` en vez de un `int`).
+            func.count().label("pr_count"),
         )
-        for day, scores in sorted(by_day.items())
+        .where(*filters)
+        .group_by(day_expr)
+        .order_by(day_expr)
+    )
+    trend = [
+        TrendPoint(day=row.day, avg_score=_round_avg(row.avg_score), count=int(row.pr_count))
+        for row in session.execute(trend_stmt)
     ]
 
     return OrgMetrics(
