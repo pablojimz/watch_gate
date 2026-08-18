@@ -93,6 +93,73 @@ def test_user_settings_get_and_put(client: TestClient, tmp_path: Path):
         assert user_row.github_token == "ghp_1234567890abcdef"
 
 
+def test_user_settings_includes_per_repo_role_breakdown(client: TestClient):
+    """`repo_roles` (nuevo) es el desglose completo por repo -- distinto de
+    `role`, que ya existía y es solo el más alto agregado. Ver
+    db.py::list_roles_for_user."""
+    login_resp = client.post(
+        "/api/auth/login", json={"username": "reviewer", "password": "review123"}
+    )
+    assert login_resp.status_code == 200
+
+    resp = client.get("/api/settings/user")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["repo_roles"] == [{"repo": "acme/payments-api", "role": "revisor"}]
+
+
+def test_change_own_password_requires_correct_current_password(client: TestClient):
+    login_resp = client.post(
+        "/api/auth/login", json={"username": "reviewer", "password": "review123"}
+    )
+    assert login_resp.status_code == 200
+
+    # Contraseña actual incorrecta -> 401, no cambia nada.
+    wrong = client.put(
+        "/api/settings/user/password",
+        json={"current_password": "not-the-real-password", "new_password": "nuevaClave123"},
+    )
+    assert wrong.status_code == 401
+
+    # Sigue pudiendo entrar con la contraseña de siempre.
+    still_works = client.post(
+        "/api/auth/login", json={"username": "reviewer", "password": "review123"}
+    )
+    assert still_works.status_code == 200
+
+    # Contraseña nueva demasiado corta -> 422 (validación de schema).
+    weak = client.put(
+        "/api/settings/user/password",
+        json={"current_password": "review123", "new_password": "corta"},
+    )
+    assert weak.status_code == 422
+
+
+def test_change_own_password_success_updates_login_credentials(client: TestClient):
+    login_resp = client.post(
+        "/api/auth/login", json={"username": "reviewer", "password": "review123"}
+    )
+    assert login_resp.status_code == 200
+
+    changed = client.put(
+        "/api/settings/user/password",
+        json={"current_password": "review123", "new_password": "nuevaClaveSegura456"},
+    )
+    assert changed.status_code == 204
+
+    # La contraseña vieja ya no sirve para entrar de nuevo.
+    old_login = client.post(
+        "/api/auth/login", json={"username": "reviewer", "password": "review123"}
+    )
+    assert old_login.status_code == 401
+
+    # La nueva sí.
+    new_login = client.post(
+        "/api/auth/login", json={"username": "reviewer", "password": "nuevaClaveSegura456"}
+    )
+    assert new_login.status_code == 200
+
+
 def test_user_settings_rbac_isolation(client: TestClient):
     """Condition 4: User 'reviewer' can update profile, forbidden from /settings/llm or /ui."""
     login_resp = client.post(
