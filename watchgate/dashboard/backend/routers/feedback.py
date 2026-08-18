@@ -178,6 +178,8 @@ def create_user(body: DashboardUserCreate, request: Request, user: CurrentUser) 
                 detail=f"Ya existe una cuenta local con el login '{body.login}'",
             )
         database.upsert_user(conn, body.login, body.password, body.display_name)
+        if body.repo and body.role:
+            database.upsert_role(conn, body.login, body.repo, body.role)
     return DashboardUserOut(login=body.login, display_name=body.display_name)
 
 

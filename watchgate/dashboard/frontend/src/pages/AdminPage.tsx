@@ -725,6 +725,12 @@ export default function AdminPage() {
   const [newUserLogin, setNewUserLogin] = useState('')
   const [newUserDisplayName, setNewUserDisplayName] = useState('')
   const [newUserPassword, setNewUserPassword] = useState('')
+  // Opcionales: rol inicial en el mismo formulario de alta (ver addUser).
+  // Vacíos por defecto -- si se dejan así, el usuario se crea sin ningún
+  // rol asignado, igual que antes de este campo (la gestión de roles por
+  // repo, más abajo, sigue disponible para asignárselo después).
+  const [newUserRepo, setNewUserRepo] = useState('')
+  const [newUserRole, setNewUserRole] = useState<RoleName | ''>('')
   const [creatingUser, setCreatingUser] = useState(false)
 
   async function reloadRoles() {
@@ -869,11 +875,20 @@ export default function AdminPage() {
     }
     setCreatingUser(true)
     try {
-      await api.createUser(normalizedLogin, newUserDisplayName.trim(), newUserPassword)
+      await api.createUser(
+        normalizedLogin,
+        newUserDisplayName.trim(),
+        newUserPassword,
+        newUserRepo.trim() || undefined,
+        newUserRole || undefined,
+      )
       setNewUserLogin('')
       setNewUserDisplayName('')
       setNewUserPassword('')
+      setNewUserRepo('')
+      setNewUserRole('')
       await reloadUsers()
+      if (newUserRepo.trim() && newUserRole) await reloadRoles()
       toast.success(t('admin.userCreated'))
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error')
@@ -980,6 +995,30 @@ export default function AdminPage() {
                     {t('admin.passwordHint')}
                   </p>
                 </div>
+                <div>
+                  <Input
+                    placeholder={t('admin.repo')}
+                    value={newUserRepo}
+                    onChange={(e) => setNewUserRepo(e.target.value)}
+                    disabled={creatingUser}
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {t('admin.initialRoleHint')}
+                  </p>
+                </div>
+                <select
+                  className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+                  value={newUserRole}
+                  onChange={(e) => setNewUserRole(e.target.value as RoleName | '')}
+                  disabled={creatingUser}
+                >
+                  <option value="">{t('admin.noInitialRole')}</option>
+                  {ROLES.map((r) => (
+                    <option key={r} value={r}>
+                      {t(`roles.${r}`)}
+                    </option>
+                  ))}
+                </select>
                 <Button disabled={creatingUser} onClick={() => void addUser()}>
                   {t('admin.createUser')}
                 </Button>

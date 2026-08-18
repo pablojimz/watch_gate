@@ -39,6 +39,14 @@ export function UserSettingsPage() {
   const [githubToken, setGithubToken] = useState('')
   const [clearToken, setClearToken] = useState(false)
 
+  // Cambio de contraseña -- formulario aparte (no forma parte del guardado
+  // de perfil de arriba): exige la contraseña actual, ver
+  // routers/user_settings.py::change_own_password.
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [changingPassword, setChangingPassword] = useState(false)
+
   // Appearance
   const [primaryColor, setPrimaryColor] = useState('#3b6ea5')
   const [accentColor, setAccentColor] = useState('#5b7c99')
@@ -111,6 +119,30 @@ export function UserSettingsPage() {
     }
   }
 
+  async function handleChangePassword(e: React.FormEvent) {
+    e.preventDefault()
+    if (newPassword.length < 8) {
+      toast.error(t('user.passwordTooShort'))
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error(t('user.passwordMismatch'))
+      return
+    }
+    setChangingPassword(true)
+    try {
+      await api.changePassword(currentPassword, newPassword)
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+      toast.success(t('user.passwordChanged'))
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al cambiar la contraseña')
+    } finally {
+      setChangingPassword(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="mx-auto max-w-4xl space-y-6 p-6">
@@ -147,6 +179,31 @@ export function UserSettingsPage() {
               />
             </div>
           </div>
+        </SectionCard>
+
+        <SectionCard title={t('user.permissionsTitle')} hint={t('user.permissionsHint')}>
+          {settings?.repo_roles.length ? (
+            <div className="overflow-hidden rounded-lg border">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50 text-left text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-2 font-medium">{t('user.permissionsRepo')}</th>
+                    <th className="px-4 py-2 font-medium">{t('user.permissionsRole')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {settings.repo_roles.map((item) => (
+                    <tr key={item.repo} className="border-t">
+                      <td className="px-4 py-2">{item.repo}</td>
+                      <td className="px-4 py-2">{t(`roles.${item.role}`)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">{t('user.permissionsEmpty')}</p>
+          )}
         </SectionCard>
 
         <SectionCard
@@ -273,6 +330,55 @@ export function UserSettingsPage() {
             {saving ? 'Guardando...' : 'Guardar Cambios'}
           </Button>
         </div>
+      </form>
+
+      <form onSubmit={(e) => void handleChangePassword(e)}>
+        <SectionCard title={t('user.passwordSectionTitle')} hint={t('user.passwordSectionHint')}>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div>
+              <span className="mb-1 block text-xs text-muted-foreground">
+                {t('user.currentPassword')}
+              </span>
+              <Input
+                type="password"
+                autoComplete="current-password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+              />
+            </div>
+            <div>
+              <span className="mb-1 block text-xs text-muted-foreground">
+                {t('user.newPassword')}
+              </span>
+              <Input
+                type="password"
+                autoComplete="new-password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+              />
+            </div>
+            <div>
+              <span className="mb-1 block text-xs text-muted-foreground">
+                {t('user.confirmPassword')}
+              </span>
+              <Input
+                type="password"
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="mt-4 flex justify-end">
+            <Button
+              type="submit"
+              variant="secondary"
+              disabled={changingPassword || !currentPassword || !newPassword}
+            >
+              {changingPassword ? t('user.passwordChanging') : t('user.passwordChangeButton')}
+            </Button>
+          </div>
+        </SectionCard>
       </form>
     </div>
   )

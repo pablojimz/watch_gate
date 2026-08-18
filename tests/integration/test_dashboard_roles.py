@@ -355,6 +355,44 @@ def test_admin_can_manage_users(client: TestClient) -> None:
     assert client.delete("/api/admin/users/nueva.persona").status_code == 404
 
 
+def test_admin_can_assign_an_initial_role_when_creating_a_user(client: TestClient) -> None:
+    """`repo`/`role` en POST /api/admin/users son opcionales -- si se pasan
+    los dos, el alta asigna ese rol inicial en el mismo paso (mismo
+    upsert_role que la gestión de roles por repo, PUT /api/admin/roles, ya
+    usaba por separado), sin bloquear la creación de usuarios sin rol."""
+    _login(client, "admin", "admin_organizacion")
+
+    created = client.post(
+        "/api/admin/users",
+        json={
+            "login": "con.rol",
+            "display_name": "Con Rol",
+            "password": "correcto123",
+            "repo": "acme/payments-api",
+            "role": "mantenedor",
+        },
+    )
+    assert created.status_code == 201
+
+    roles = client.get("/api/admin/roles").json()
+    assert any(
+        r["user_login"] == "con.rol"
+        and r["repo"] == "acme/payments-api"
+        and r["role"] == "mantenedor"
+        for r in roles
+    )
+
+    # Sin repo/role (los dos opcionales, por defecto None) -- se crea sin
+    # ningún rol asignado, comportamiento de siempre.
+    created_without_role = client.post(
+        "/api/admin/users",
+        json={"login": "sin.rol", "display_name": "Sin Rol", "password": "correcto123"},
+    )
+    assert created_without_role.status_code == 201
+    roles_after = client.get("/api/admin/roles").json()
+    assert not any(r["user_login"] == "sin.rol" for r in roles_after)
+
+
 def test_admin_roles_list_shows_connected_repo_type(client: TestClient) -> None:
     """/api/admin/roles enriquece cada fila con `monitor_type`, resuelto
     contra MonitoredRepo (Engine DB) por repo_path -- "audited"/"managed"
