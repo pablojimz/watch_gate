@@ -12,6 +12,19 @@ CRON_SCHEDULE="${WATCHGATE_BACKUP_CRON:-0 3 * * *}"
     echo "PGUSER=${PGUSER:-watchgate}"
     echo "WATCHGATE_BACKUP_DIR=${WATCHGATE_BACKUP_DIR:-/backups}"
     echo "WATCHGATE_BACKUP_RETENTION_DAYS=${WATCHGATE_BACKUP_RETENTION_DAYS:-14}"
+    # Copia a S3 opcional (ver backup.sh) -- mismo motivo que las de arriba:
+    # crond no hereda ninguna variable de entorno del contenedor por su
+    # cuenta, así que sin volcarlas aquí también, el backup del cron
+    # correría sin credenciales aunque el backup inicial de más abajo
+    # (mismo proceso que este script, sí las hereda) funcionase bien.
+    echo "WATCHGATE_BACKUP_S3_BUCKET=${WATCHGATE_BACKUP_S3_BUCKET:-}"
+    echo "WATCHGATE_BACKUP_S3_PREFIX=${WATCHGATE_BACKUP_S3_PREFIX:-}"
+    echo "WATCHGATE_BACKUP_S3_REGION=${WATCHGATE_BACKUP_S3_REGION:-}"
+    echo "WATCHGATE_BACKUP_S3_ENDPOINT=${WATCHGATE_BACKUP_S3_ENDPOINT:-}"
+    echo "WATCHGATE_BACKUP_S3_PROVIDER=${WATCHGATE_BACKUP_S3_PROVIDER:-}"
+    echo "AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}"
+    echo "AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}"
+    echo "AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN:-}"
     echo "${CRON_SCHEDULE} /usr/local/bin/backup.sh >> /proc/1/fd/1 2>&1"
 } > /etc/crontabs/root
 
