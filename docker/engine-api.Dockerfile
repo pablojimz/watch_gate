@@ -71,7 +71,17 @@ FROM python:3.14-slim AS runtime
 # smudge/clean en /etc/gitconfig (aplica a cualquier usuario, incluido
 # "watchgate" más abajo, sin depender de en qué HOME se ejecute) para que
 # cualquier `git clone` posterior resuelva el contenido real de LFS solo.
-RUN apt-get update && apt-get install -y --no-install-recommends curl git git-lfs \
+#
+# `apt-get upgrade -y` antes de instalar: la imagen base python:3.14-slim
+# trae paquetes del sistema (p. ej. bsdutils/util-linux) fijados en el
+# snapshot en que se publicó, que quedan desactualizados frente a parches de
+# seguridad de Debian que salen después (ver trivy-scan en ci.yml -- así se
+# detectó CVE-2026-53615 en bsdutils 1:2.41-5, ya con fix publicado en
+# trixie-security como 1:2.41.5-0+deb13u1). Sin este upgrade, cada build
+# hereda cualquier CVE de paquete de sistema ya parcheado upstream en el
+# momento del build.
+RUN apt-get update && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends curl git git-lfs \
     && git lfs install --system \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --uid 1000 watchgate
