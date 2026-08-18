@@ -1513,7 +1513,19 @@ def compute_agent_metrics(engine_session: Session) -> AgentUsageMetrics:
     (`watchgate.db.models.UserTokenUsage`). El `try/except Exception` que
     envolvía cada SELECT lo tragaba en silencio, así que esta función nunca
     devolvió datos reales (hallazgo real de esta migración). Ahora consulta
-    directamente donde esos datos sí existen."""
+    directamente donde esos datos sí existen.
+
+    Agregación en SQL en vez de en Python -- mismo motivo/patrón que
+    `compute_org_metrics()` (perf(dashboard): agregación en SQL en vez de
+    en Python): antes traía CADA fila de `pr_scores`/`user_token_usage` sin
+    filtro alguno de fecha/organización y sumaba a mano, así que el
+    histórico completo de la plataforma (todo agente, todo usuario, todo
+    mes) se cargaba entero a memoria del proceso del dashboard-backend en
+    cada carga del panel de agentes. `func.avg()`/`func.sum()` con
+    `GROUP BY agent_id`/`user_id` hacen ese trabajo en el motor; el
+    redondeo a 1 decimal se sigue haciendo en Python, no en SQL, por la
+    misma razón que en `compute_org_metrics()`: no depender de que
+    SQLite/Postgres redondeen igual entre sí ni igual que `round()`."""
     from watchgate.db.models import PRScore as EnginePRScore
     from watchgate.db.models import UserTokenUsage
 
@@ -1526,48 +1538,60 @@ def compute_agent_metrics(engine_session: Session) -> AgentUsageMetrics:
     # (repository.py) ya necesita `# type: ignore[attr-defined]` en
     # `Model.__table__` -- limitación conocida de tipado SQLModel, no un
     # error real (cubierto por tests reales contra SQLite/Postgres).
-    rows = engine_session.execute(
-        select(  # type: ignore[call-overload]
-            EnginePRScore.agent_id, EnginePRScore.score
-        ).where(
-            EnginePRScore.agent_id.is_not(None),  # type: ignore[union-attr]
-            EnginePRScore.agent_id != "",
+    agent_stmt = select(  # type: ignore[call-overload]
+        EnginePRScore.agent_id,
+        func.count().label("analyses_count"),
+        func.avg(EnginePRScore.score).label("avg_score"),
+    ).where(
+        EnginePRScore.agent_id.is_not(None),  # type: ignore[union-attr]
+        EnginePRScore.agent_id != "",
+    )
+    agent_stmt = agent_stmt.group_by(EnginePRScore.agent_id)
+
+    # `avg_score` puede ser NULL en teoría (columna `score` nula), aunque en
+    # la práctica `PRScore.score` es NOT NULL -- se guarda como `None` en el
+    # diccionario y se resuelve a 0.0 más abajo, mismo patrón que el resto
+    # de la función para no asumir invariantes de esquema que no son de
+    # este código. IMPORTANTE: contra Postgres, `AVG()` sobre una columna
+    # entera devuelve `Decimal`, no `float` como en SQLite -- de ahí el
+    # `float()` explícito antes de `round()` (mismo bug que ya atrapó
+    # `compute_org_metrics()` contra Postgres real).
+    agent_agg: dict[str, tuple[int, float | None]] = {
+        str(row.agent_id): (
+            int(row.analyses_count),
+            float(row.avg_score) if row.avg_score is not None else None,
         )
-    ).all()
+        for row in engine_session.execute(agent_stmt)
+    }
 
-    agent_data: dict[str, dict[str, Any]] = {}
-    for agent_id_raw, score_raw in rows:
-        agent_id = str(agent_id_raw)
-        bucket = agent_data.setdefault(agent_id, {"count": 0, "score_sum": 0.0})
-        bucket["count"] += 1
-        bucket["score_sum"] += float(score_raw)
+    # `SUM()` agrupado por `user_id` nunca es NULL para un grupo que existe
+    # de verdad (el GROUP BY solo produce filas con >=1 fila real detrás) --
+    # a diferencia del `SUM()` sin agrupar de `compute_org_metrics()`, aquí
+    # no hay caso "cero filas" posible por grupo. El `coalesce()` es
+    # defensivo (una fila con `tokens_used` NULL a mano, fuera del camino
+    # normal de escritura) más que estrictamente necesario.
+    token_stmt = select(  # type: ignore[call-overload]
+        UserTokenUsage.user_id,
+        func.coalesce(func.sum(UserTokenUsage.tokens_used), 0).label("tokens_used"),
+    ).group_by(UserTokenUsage.user_id)
+    token_usage: dict[str, int] = {
+        str(row.user_id): int(row.tokens_used) for row in engine_session.execute(token_stmt)
+    }
 
-    token_usage: dict[str, int] = {}
-    tu_rows = engine_session.execute(
-        select(  # type: ignore[call-overload]
-            UserTokenUsage.user_id, UserTokenUsage.tokens_used
-        )
-    ).all()
-    for user_id_raw, tokens_raw in tu_rows:
-        u_id = str(user_id_raw)
-        token_usage[u_id] = token_usage.get(u_id, 0) + int(tokens_raw)
-
-    agent_rows: list[AgentMetricRow] = []
     total_tokens = sum(token_usage.values())
 
-    all_agent_ids = set(agent_data.keys()).union(token_usage.keys())
+    all_agent_ids = set(agent_agg.keys()).union(token_usage.keys())
     if not all_agent_ids:
         all_agent_ids = {"default-agent"}
 
+    agent_rows: list[AgentMetricRow] = []
     for aid in sorted(all_agent_ids):
-        info = agent_data.get(aid, {"count": 0, "score_sum": 0.0})
-        cnt = info["count"]
-        avg_s = round(info["score_sum"] / cnt, 1) if cnt > 0 else 0.0
-        toks = token_usage.get(aid, 0)
+        cnt, avg_raw = agent_agg.get(aid, (0, None))
+        avg_s = round(avg_raw, 1) if avg_raw is not None else 0.0
         agent_rows.append(
             AgentMetricRow(
                 agent_id=aid,
-                tokens_used=toks,
+                tokens_used=token_usage.get(aid, 0),
                 analyses_count=cnt,
                 avg_score=avg_s,
             )
