@@ -116,8 +116,7 @@ def test_parsers() -> None:
     assert pkgbuild[1].name == "openssl"
 
     go_hunk = (
-        "+\n+require github.com/gin-gonic/gin v1.9.1\n"
-        "+replace github.com/foo/bar => ../local/foo\n"
+        "+\n+require github.com/gin-gonic/gin v1.9.1\n+replace github.com/foo/bar => ../local/foo\n"
     )
     go_mod = parse_go_mod(go_hunk)
     assert len(go_mod) == 2

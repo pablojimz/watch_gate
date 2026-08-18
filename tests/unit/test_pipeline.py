@@ -104,9 +104,9 @@ def test_shortcircuit_enabled_does_not_rerun_non_semantic_layers_when_it_does_no
 
     result = run_full_analysis(_empty_diff(), metadata, config)
 
-    assert (
-        len(reputation_calls) == 1
-    ), f"reputation.analyze() se llamó {len(reputation_calls)} veces, se esperaba 1"
+    assert len(reputation_calls) == 1, (
+        f"reputation.analyze() se llamó {len(reputation_calls)} veces, se esperaba 1"
+    )
     assert len(semantic_calls) == 1
     assert result.layer_results["reputation"].risk_score == 50
     assert result.layer_results["semantic"].risk_score == 10
