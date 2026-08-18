@@ -82,10 +82,18 @@ jobs:
 
       - run: npm ci
 
-      # No hay tests unitarios de frontend todavía (ver package.json) --
-      # `build` sí ejercita `tsc -b` (typecheck estricto) + el build real de
-      # Vite, así que como mínimo detecta errores de tipos/compilación antes
-      # de fusionar.
+      # Vitest + Testing Library cubren los flujos de frontend con mayor
+      # riesgo silencioso -- borrado de repos externos, cambio de
+      # contraseña, alta de usuarios -- donde un handler roto o una
+      # validación que no bloquea el submit compilan perfectamente en
+      # TypeScript pero fallan en runtime. `--run` en vez del modo watch
+      # por defecto de `vitest`: en CI el proceso debe terminar solo, no
+      # quedarse esperando cambios de fichero.
+      - run: npm run test:run
+
+      # `build` ejercita además `tsc -b` (typecheck estricto) + el build
+      # real de Vite, detectando errores de tipos/compilación que los tests
+      # unitarios de arriba no cubren.
       - run: npm run build
 
   postgres-test:
