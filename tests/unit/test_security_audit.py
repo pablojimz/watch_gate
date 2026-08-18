@@ -8,10 +8,11 @@ from unittest.mock import MagicMock
 
 from fastapi.testclient import TestClient
 
-from watchgate.api.main import CryptographicLogFilter, app
+from watchgate.api.main import app
 from watchgate.api.routers.webhooks import _verify_github_signature, _verify_gitlab_token
 from watchgate.core.layers._semantic.tools import _resolve_git_object_spec, fetch_referenced_file
 from watchgate.core.layers._shared import find_prompt_injection_attempts
+from watchgate.logging_config import CryptographicLogFilter
 
 
 def test_git_flag_injection_prevention() -> None:

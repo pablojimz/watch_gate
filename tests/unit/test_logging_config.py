@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import json
 import logging
+from unittest.mock import patch
 
 import pytest
 
-from watchgate.logging_config import configure_logging
+from watchgate.logging_config import _scrub_sentry_event, configure_logging, configure_sentry
 
 
 @pytest.fixture(autouse=True)
@@ -81,7 +82,7 @@ def test_secret_redaction_survives_configure_logging(
     test de regresión directo sobre esa integración, no solo sobre
     CryptographicLogFilter en aislado (que ya cubre test_security_audit.py)."""
     monkeypatch.setenv("WATCHGATE_LOG_FORMAT", "json")
-    from watchgate.api.main import setup_logging_sanitizer
+    from watchgate.logging_config import setup_logging_sanitizer
 
     configure_logging("engine-api")
     setup_logging_sanitizer()
@@ -91,3 +92,75 @@ def test_secret_redaction_survives_configure_logging(
     out = capsys.readouterr().out
     assert "wg_live_9f8e7d6c5b4a3f2e" not in out
     assert "[REDACTED_SECRET]" in out
+
+
+def test_secret_redaction_covers_github_personal_access_tokens(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regresión: el filtro original solo cubría claves propias de
+    WatchGate/LLM -- ni un PAT de GitHub clásico (ghp_...) ni uno
+    fine-grained (github_pat_...) se redactaban, pese a ser justo lo que
+    las credenciales VCS por usuario (Mi Cuenta) manejan ahora."""
+    from watchgate.logging_config import setup_logging_sanitizer
+
+    monkeypatch.setenv("WATCHGATE_LOG_FORMAT", "json")
+    configure_logging("dashboard-backend")
+    setup_logging_sanitizer()
+
+    logging.getLogger("watchgate.test").warning(
+        "token classic=ghp_abcdefghijklmnopqrstuvwxyz0123456789 "
+        "fine-grained=github_pat_11ABCDEFG0123456789abcdefghijklmnopqrstuvwxyz"
+    )
+
+    out = capsys.readouterr().out
+    assert "ghp_abcdefghijklmnopqrstuvwxyz0123456789" not in out
+    assert "github_pat_11ABCDEFG0123456789abcdefghijklmnopqrstuvwxyz" not in out
+    assert out.count("[REDACTED_SECRET]") == 2
+
+
+def test_configure_sentry_is_a_noop_without_dsn(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("WATCHGATE_SENTRY_DSN", raising=False)
+    with patch("sentry_sdk.init") as mock_init:
+        configure_sentry("test-service")
+    mock_init.assert_not_called()
+
+
+def test_configure_sentry_initializes_with_safe_defaults_when_dsn_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No basta con que Sentry se active -- tiene que activarse SIN abrir
+    una vía nueva de fuga de secretos (variables locales de un traceback,
+    o el propio filtro de redacción de logging quedando bypaseado por el
+    handler que el SDK añade por su cuenta)."""
+    monkeypatch.setenv("WATCHGATE_SENTRY_DSN", "https://fake@sentry.example/1")
+    with patch("sentry_sdk.init") as mock_init:
+        configure_sentry("dashboard-backend")
+
+    mock_init.assert_called_once()
+    kwargs = mock_init.call_args.kwargs
+    assert kwargs["dsn"] == "https://fake@sentry.example/1"
+    assert kwargs["server_name"] == "dashboard-backend"
+    assert kwargs["send_default_pii"] is False
+    assert kwargs["include_local_variables"] is False
+    assert kwargs["before_send"] is _scrub_sentry_event
+    # Integración de logging desactivada a propósito -- ver docstring de
+    # configure_sentry.
+    (logging_integration,) = kwargs["integrations"]
+    assert logging_integration._handler is None
+    assert logging_integration._breadcrumb_handler is None
+
+
+def test_scrub_sentry_event_redacts_message_and_exception_values() -> None:
+    leaked_token = "ghp_abcdefghijklmnopqrstuvwxyz0123456789"
+    event = {
+        "message": "fallo con key wg_live_9f8e7d6c5b4a3f2e",
+        "exception": {
+            "values": [{"type": "ValueError", "value": f"token inválido: {leaked_token}"}]
+        },
+    }
+    scrubbed = _scrub_sentry_event(event, {})
+    assert scrubbed is not None
+    assert "wg_live_9f8e7d6c5b4a3f2e" not in scrubbed["message"]
+    assert "[REDACTED_SECRET]" in scrubbed["message"]
+    exc_value = scrubbed["exception"]["values"][0]["value"]
+    assert leaked_token not in exc_value

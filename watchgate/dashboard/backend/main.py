@@ -27,7 +27,7 @@ from watchgate.dashboard.backend.routers.ui_settings import router as ui_router
 from watchgate.dashboard.backend.routers.user_settings import router as user_settings_router
 from watchgate.dashboard.backend.routers.webhooks import router as webhooks_router
 from watchgate.db.connection import init_db as init_api_keys_db
-from watchgate.logging_config import configure_logging
+from watchgate.logging_config import configure_logging, configure_sentry, setup_logging_sanitizer
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +56,12 @@ def create_app() -> FastAPI:
     # que si esto fuera después esos mensajes se emitirían con el
     # formato/handler por defecto de Python en vez del elegido aquí.
     configure_logging("dashboard-backend")
+    # A diferencia del Engine API (api/main.py), este servicio nunca había
+    # tenido el filtro de redacción de secretos -- justo donde viven ahora
+    # las credenciales VCS por usuario (PAT de GitHub personal, fallback de
+    # organización).
+    setup_logging_sanitizer()
+    configure_sentry("dashboard-backend")
     ensure_safe_startup_config()
     if _dev_mode():
         logger.warning(
