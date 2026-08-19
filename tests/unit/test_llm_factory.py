@@ -16,6 +16,29 @@ def test_defaults_to_anthropic_when_nothing_is_configured(monkeypatch):
     assert client._model == "claude-sonnet-5"
 
 
+def test_defaults_temperature_to_zero_for_deterministic_scoring(monkeypatch):
+    """Determinismo, no "creatividad" -- ver _DEFAULT_TEMPERATURE en
+    llm_factory.py. Cubre los tres proveedores: el default no debe colarse
+    solo en uno de ellos."""
+    monkeypatch.delenv("WATCHGATE_LLM_TEMPERATURE", raising=False)
+    monkeypatch.delenv("WATCHGATE_LLM_PROVIDER", raising=False)
+    assert build_llm_client()._temperature == 0.0
+
+    monkeypatch.setenv("WATCHGATE_LLM_PROVIDER", "gemini")
+    monkeypatch.setenv("WATCHGATE_LLM_API_KEY", "fake-key")
+    assert build_llm_client()._temperature == 0.0
+
+    monkeypatch.setenv("WATCHGATE_LLM_PROVIDER", "local")
+    assert build_llm_client()._temperature == 0.0
+
+
+def test_temperature_can_be_overridden_via_environment(monkeypatch):
+    monkeypatch.delenv("WATCHGATE_LLM_PROVIDER", raising=False)
+    monkeypatch.setenv("WATCHGATE_LLM_TEMPERATURE", "0.7")
+    client = build_llm_client()
+    assert client._temperature == 0.7
+
+
 def test_reads_provider_from_environment(monkeypatch):
     monkeypatch.setenv("WATCHGATE_LLM_PROVIDER", "gemini")
     monkeypatch.setenv("WATCHGATE_LLM_API_KEY", "fake-key")

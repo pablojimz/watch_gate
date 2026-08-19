@@ -87,6 +87,18 @@ def test_gemini_returns_output_when_model_answers_directly_with_valid_json():
     assert output.confidence == Confidence.ALTA
 
 
+def test_gemini_sends_configured_temperature():
+    """Determinismo del score, no "creatividad" -- ver GeminiClient.__init__."""
+    fake = _FakeGenaiClient([_gemini_text_response(_valid_json())])
+    client = GeminiClient(client=fake, temperature=0.3)
+
+    client.complete_structured(
+        "sys", "user", tools=[], tool_executor=lambda n, i: None, max_tool_calls=3
+    )
+
+    assert fake.models.calls[0]["config"].temperature == 0.3
+
+
 def test_gemini_executes_function_call_and_continues_the_conversation():
     responses = [
         _gemini_function_call_response("fetch_referenced_file", {"path": "a"}),
@@ -238,6 +250,25 @@ def _local_client(responses: list[dict]) -> tuple[OpenAICompatibleClient, _FakeT
         base_url="http://localhost:11434/v1", model="llama3.1", client=httpx_client
     )
     return client, transport
+
+
+def test_local_sends_configured_temperature():
+    """Determinismo del score, no "creatividad" -- ver OpenAICompatibleClient.__init__."""
+    transport = _FakeTransport([_chat_response({"role": "assistant", "content": _valid_json()})])
+    httpx_client = httpx.Client(transport=transport)
+    client = OpenAICompatibleClient(
+        base_url="http://localhost:11434/v1",
+        model="llama3.1",
+        client=httpx_client,
+        temperature=0.3,
+    )
+
+    client.complete_structured(
+        "sys", "user", tools=[], tool_executor=lambda n, i: None, max_tool_calls=3
+    )
+
+    sent_payload = json.loads(transport.requests[0].content)
+    assert sent_payload["temperature"] == 0.3
 
 
 def test_local_returns_output_when_model_answers_directly_with_valid_json():

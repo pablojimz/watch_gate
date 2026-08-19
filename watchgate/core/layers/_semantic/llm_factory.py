@@ -29,6 +29,13 @@ _DEFAULT_LOCAL_BASE_URL = "http://localhost:11434/v1"
 # capa se marcaba "skipped" (timeout), no por peor razonamiento -- justo en
 # los casos más difíciles, que es donde menos conviene perder la señal.
 _DEFAULT_LOCAL_TIMEOUT_SECONDS = 120.0
+# 0.0, no "cercano a 0": el LLM aquí es un clasificador estructurado
+# (risk_score/categoría/justificación vía SemanticOutput), no generación
+# creativa -- cualquier temperatura > 0 sigue introduciendo varianza entre
+# ejecuciones del mismo PR, justo donde más duele (score cerca de un umbral
+# de semáforo). Configurable vía WATCHGATE_LLM_TEMPERATURE por si algún
+# proveedor/modelo concreto lo necesita, pero el default es determinista.
+_DEFAULT_TEMPERATURE = 0.0
 
 # Prefijos de clave estables y documentados por cada proveedor (Anthropic
 # siempre "sk-ant-", Google AI Studio siempre "AIzaSy") -- suficientes para
@@ -72,7 +79,8 @@ def build_llm_client(provider: str | None = None) -> LLMClient:
     `WATCHGATE_LLM_PROVIDER` (por defecto "anthropic"). El modelo concreto se
     puede forzar con `WATCHGATE_LLM_MODEL`; si no, cada proveedor usa un
     valor por defecto razonable. Para "local", `WATCHGATE_LLM_BASE_URL` fija
-    el servidor (por defecto, el de Ollama en localhost).
+    el servidor (por defecto, el de Ollama en localhost). `WATCHGATE_LLM_TEMPERATURE`
+    fuerza la temperatura de muestreo (por defecto 0.0 -- ver _DEFAULT_TEMPERATURE).
     """
     resolved_provider = provider or os.environ.get("WATCHGATE_LLM_PROVIDER", "anthropic")
     if resolved_provider not in _DEFAULT_MODELS:
@@ -81,14 +89,15 @@ def build_llm_client(provider: str | None = None) -> LLMClient:
             f"{', '.join(_DEFAULT_MODELS)}."
         )
     model = os.environ.get("WATCHGATE_LLM_MODEL") or _DEFAULT_MODELS[resolved_provider]
+    temperature = float(os.environ.get("WATCHGATE_LLM_TEMPERATURE", _DEFAULT_TEMPERATURE))
 
     if resolved_provider == "anthropic":
         _check_key_matches_provider(resolved_provider, os.environ.get("WATCHGATE_LLM_API_KEY"))
-        return AnthropicClient(model=model)
+        return AnthropicClient(model=model, temperature=temperature)
     if resolved_provider == "gemini":
         gemini_key = os.environ.get("WATCHGATE_LLM_API_KEY") or os.environ.get("GEMINI_API_KEY")
         _check_key_matches_provider(resolved_provider, gemini_key)
-        return GeminiClient(model=model)
+        return GeminiClient(model=model, temperature=temperature)
 
     base_url = os.environ.get("WATCHGATE_LLM_BASE_URL", _DEFAULT_LOCAL_BASE_URL)
     api_key = (
@@ -97,4 +106,6 @@ def build_llm_client(provider: str | None = None) -> LLMClient:
         or os.environ.get("OPENROUTER_API_KEY")
     )
     timeout = float(os.environ.get("WATCHGATE_LLM_TIMEOUT_SECONDS", _DEFAULT_LOCAL_TIMEOUT_SECONDS))
-    return OpenAICompatibleClient(base_url=base_url, model=model, api_key=api_key, timeout=timeout)
+    return OpenAICompatibleClient(
+        base_url=base_url, model=model, api_key=api_key, timeout=timeout, temperature=temperature
+    )
