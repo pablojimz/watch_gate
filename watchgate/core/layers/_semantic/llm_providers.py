@@ -43,7 +43,12 @@ from watchgate.core.layers._semantic.tools import FORCE_FINAL_ANSWER_MESSAGE, To
 class GeminiClient(LLMClient):
     """Implementación contra la API de Google Gemini (SDK `google-genai`)."""
 
-    def __init__(self, client: Any = None, model: str = "gemini-3.6-flash") -> None:
+    def __init__(
+        self,
+        client: Any = None,
+        model: str = "gemini-3.6-flash",
+        temperature: float = 0.0,
+    ) -> None:
         if client is None:
             from google import genai
 
@@ -51,6 +56,9 @@ class GeminiClient(LLMClient):
             client = genai.Client(api_key=api_key)
         self._client = client
         self._model = model
+        # Ver AnthropicClient.__init__ en client.py -- mismo razonamiento:
+        # 0.0 por defecto, clasificador estructurado, no generación creativa.
+        self._temperature = temperature
 
     def complete_structured(
         self,
@@ -80,6 +88,7 @@ class GeminiClient(LLMClient):
                 config=types.GenerateContentConfig(
                     system_instruction=system_prompt,
                     tools=gemini_tools if not budget.exhausted else [],
+                    temperature=self._temperature,
                 ),
             )
             # A diferencia de AnthropicClient (itera response.content, que si
@@ -156,7 +165,9 @@ class GeminiClient(LLMClient):
         retry_response = self._client.models.generate_content(
             model=self._model,
             contents=retry_contents,
-            config=types.GenerateContentConfig(system_instruction=system_prompt),
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt, temperature=self._temperature
+            ),
         )
         if not retry_response.candidates:
             block_reason = getattr(retry_response, "prompt_feedback", None)
@@ -190,11 +201,17 @@ class OpenAICompatibleClient(LLMClient):
         api_key: str | None = None,
         client: httpx.Client | None = None,
         timeout: float = 60.0,
+        temperature: float = 0.0,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._model = model
         headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
         self._client = client or httpx.Client(timeout=timeout, headers=headers)
+        # Ver AnthropicClient.__init__ en client.py -- mismo razonamiento:
+        # 0.0 por defecto, clasificador estructurado, no generación creativa.
+        # Motores locales (Ollama/llama.cpp/vLLM) también soportan este campo
+        # vía el protocolo estándar de chat-completions.
+        self._temperature = temperature
 
     def complete_structured(
         self,
@@ -279,7 +296,11 @@ class OpenAICompatibleClient(LLMClient):
         )
 
     def _chat(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> dict[str, Any]:
-        payload: dict[str, Any] = {"model": self._model, "messages": messages}
+        payload: dict[str, Any] = {
+            "model": self._model,
+            "messages": messages,
+            "temperature": self._temperature,
+        }
         if tools:
             payload["tools"] = tools
         response = self._client.post(f"{self._base_url}/chat/completions", json=payload)

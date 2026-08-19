@@ -71,6 +71,21 @@ def test_returns_output_when_llm_answers_directly_with_valid_json():
     assert output.confidence == Confidence.ALTA
 
 
+def test_sends_configured_temperature_to_the_api():
+    """Determinismo del score, no "creatividad" -- ver AnthropicClient.__init__.
+    Cubre también el reintento (segunda llamada, tras JSON inválido)."""
+    fake = _FakeAnthropic(
+        [_response(_text_block("no es json")), _response(_text_block(_valid_json()))]
+    )
+    client = AnthropicClient(client=fake, temperature=0.3)
+
+    client.complete_structured(
+        "sys", "user", tools=[], tool_executor=lambda n, i: None, max_tool_calls=3
+    )
+
+    assert [call["temperature"] for call in fake.messages.calls] == [0.3, 0.3]
+
+
 def test_extracts_json_even_when_wrapped_in_markdown_fences_or_prose():
     """Aunque se le pida responder solo con JSON, es habitual que el modelo
     lo envuelva en ```json ... ``` o añada una frase alrededor."""

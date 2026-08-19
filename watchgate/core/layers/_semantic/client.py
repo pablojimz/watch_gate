@@ -114,13 +114,24 @@ def _anthropic_system_param(system_prompt: str) -> str | list[dict[str, Any]]:
 class AnthropicClient(LLMClient):
     """Implementación concreta inicial contra la API de Anthropic."""
 
-    def __init__(self, client: Any = None, model: str = "claude-sonnet-5") -> None:
+    def __init__(
+        self, client: Any = None, model: str = "claude-sonnet-5", temperature: float = 0.0
+    ) -> None:
         if client is None:
             import anthropic
 
             client = anthropic.Anthropic(api_key=os.environ.get("WATCHGATE_LLM_API_KEY"))
         self._client = client
         self._model = model
+        # 0.0 (no "cercano a 0") a propósito: esta capa usa el LLM como
+        # clasificador estructurado (risk_score/categoría/justificación), no
+        # para generación creativa -- cualquier temperatura > 0 sigue
+        # introduciendo varianza entre ejecuciones del mismo PR, justo en los
+        # casos que más importan (score cerca de un umbral de semáforo). El
+        # riesgo típico de temperature=0 (bucle repetitivo por muestreo
+        # greedy) ya está cubierto por el corte de `max_turns` de abajo,
+        # independiente del valor de temperatura.
+        self._temperature = temperature
 
     def complete_structured(
         self,
@@ -145,6 +156,7 @@ class AnthropicClient(LLMClient):
             response = self._client.messages.create(
                 model=self._model,
                 max_tokens=1024,
+                temperature=self._temperature,
                 system=system_param,
                 messages=messages,
                 tools=tools if not budget.exhausted else [],
@@ -199,6 +211,7 @@ class AnthropicClient(LLMClient):
         retry_response = self._client.messages.create(
             model=self._model,
             max_tokens=1024,
+            temperature=self._temperature,
             system=system_param,
             messages=retry_messages,
         )
