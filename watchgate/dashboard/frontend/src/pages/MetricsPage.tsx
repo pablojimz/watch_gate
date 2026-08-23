@@ -158,7 +158,7 @@ export default function MetricsPage() {
           </CardContent>
         </Card>
 
-        <Card className="xl:col-span-2">
+        <Card>
           <CardHeader>
             <CardTitle className="text-sm text-muted-foreground">{t('metrics.trend')}</CardTitle>
           </CardHeader>
@@ -185,6 +185,39 @@ export default function MetricsPage() {
                     name={t('metrics.avgScore')}
                   />
                 </LineChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Mismo eje X (día) que la tarjeta de arriba, en un gráfico propio en
+            vez de un segundo eje Y superpuesto -- dos escalas distintas
+            (score 0-100 vs. recuento de commits) en un solo gráfico dificulta
+            la lectura de ambas series a la vez. Mismo patrón ya usado en
+            RepoPage.tsx (ScoreTrendChart + CommitsVsThreatsChart lado a
+            lado). */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm text-muted-foreground">
+              {t('metrics.commitsPerDay')}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="h-64">
+            {metrics.trend.length === 0 ? (
+              <p className="text-sm text-muted-foreground">{t('metrics.empty')}</p>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={metrics.trend}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis
+                    dataKey="day"
+                    tick={{ fontSize: 12 }}
+                    tickFormatter={(v) => String(v).slice(5)}
+                  />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 12 }} width={36} />
+                  <Tooltip />
+                  <Bar dataKey="count" fill="var(--primary)" radius={[4, 4, 0, 0]} />
+                </BarChart>
               </ResponsiveContainer>
             )}
           </CardContent>
