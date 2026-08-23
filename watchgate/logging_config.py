@@ -1,15 +1,18 @@
 """logging_config.py — logging para los servicios de larga duración
 (Engine API, Dashboard backend).
 
-Deliberadamente NO toca la CLI (`watchgate/cli.py` tiene su propia
-configuración en `_setup_logging()`, pensada para que la lea una persona
-en una terminal -- texto plano, niveles por flag `-v`/`--debug`/`-q`) ni el
-adaptador de GitHub Action (proceso corto, su salida son los prints del
-propio adaptador). El público de este módulo son los dos servicios HTTP
-que corren indefinidamente y cuyos logs se leen con `docker compose logs`
-o un agregador real (Datadog/CloudWatch/lo que sea) -- ahí un log de una
-sola línea de texto libre por evento es mucho más difícil de grepear/
-filtrar/alertar que un objeto JSON con campos consistentes.
+`configure_logging()` NO se usa desde la CLI (`watchgate/cli.py` tiene su
+propia configuración en `_setup_logging()`, pensada para que la lea una
+persona en una terminal -- texto plano, niveles por flag
+`-v`/`--debug`/`-q`) ni desde el adaptador de GitHub Action (proceso corto,
+su salida son los prints del propio adaptador). Su público son los dos
+servicios HTTP que corren indefinidamente y cuyos logs se leen con
+`docker compose logs` o un agregador real (Datadog/CloudWatch/lo que sea)
+-- ahí un log de una sola línea de texto libre por evento es mucho más
+difícil de grepear/filtrar/alertar que un objeto JSON con campos
+consistentes. `silence_noisy_third_party_loggers()` es la excepción: la
+capa semántica/RAG corre en los tres sitios (CLI incluida), así que
+`cli.py::_setup_logging()` también la importa de aquí en vez de duplicarla.
 
 `WATCHGATE_LOG_FORMAT=json` (recomendado en producción/contenedores) |
 `text` (por defecto -- más legible arrancando en local a mano).
@@ -30,6 +33,35 @@ if TYPE_CHECKING:
     from sentry_sdk.types import Event, Hint
 
 _UVICORN_LOGGER_NAMES = ("uvicorn", "uvicorn.error", "uvicorn.access")
+
+# Loggers ruidosos de librerías de terceros usadas por la capa semántica/RAG
+# (chromadb/httpx) -- compartido entre la CLI (cli.py::_setup_logging) y
+# ambos servidores (configure_logging() de aquí abajo) porque la capa RAG
+# corre en los tres sitios, no solo en la CLI.
+_NOISY_THIRD_PARTY_LOGGERS = ("chromadb", "chromadb.telemetry", "httpx")
+
+
+def silence_noisy_third_party_loggers() -> None:
+    """Sube el umbral de los loggers de terceros anteriores a ERROR --
+    reduce el ruido de INFO/WARNING sin ocultar un ERROR real de esas
+    librerías.
+
+    `chromadb.telemetry.product.posthog` es un caso aparte: el wrapper
+    interno de telemetría de ChromaDB (posthog) tiene un bug real de
+    incompatibilidad de versión -- `capture()` revienta con "takes 1
+    positional argument but 3 were given" en CADA llamada a la capa
+    semántica/RAG, y lo reporta en nivel ERROR. `setLevel(ERROR)` solo sube
+    el umbral MÍNIMO a mostrar (filtra por DEBAJO de ERROR), así que un
+    mensaje que YA se emite en ERROR sigue pasando igual -- de ahí que este
+    logger concreto necesite CRITICAL, no ERROR, para silenciarse de
+    verdad. No es señal real: la telemetría ya está desactivada
+    explícitamente vía `Settings(anonymized_telemetry=False)` en
+    `core/rag/indexer.py`; este fallo es del propio intento fallido de
+    ChromaDB de hacer phoning-home, no de código nuestro."""
+    for name in _NOISY_THIRD_PARTY_LOGGERS:
+        logging.getLogger(name).setLevel(logging.ERROR)
+    logging.getLogger("chromadb.telemetry.product.posthog").setLevel(logging.CRITICAL)
+
 
 # Antes solo vivía en watchgate/api/main.py (Engine API) -- el Dashboard
 # backend nunca tuvo este filtro, pese a ser justo donde viven las
@@ -120,6 +152,8 @@ def configure_logging(service_name: str) -> None:
         uv_logger = logging.getLogger(uvicorn_logger_name)
         uv_logger.handlers = [handler]
         uv_logger.propagate = False
+
+    silence_noisy_third_party_loggers()
 
 
 def _scrub_sentry_event(event: Event, _hint: Hint) -> Event | None:

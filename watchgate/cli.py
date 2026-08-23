@@ -25,6 +25,7 @@ from watchgate.core.rag.indexer import DEFAULT_INDEX_PATH, build_index
 from watchgate.formatters.console import render_console
 from watchgate.formatters.github import render_github_annotations
 from watchgate.formatters.sarif import render_sarif
+from watchgate.logging_config import silence_noisy_third_party_loggers
 
 logger = logging.getLogger("watchgate.cli")
 
@@ -143,15 +144,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _setup_logging(args: argparse.Namespace) -> None:
-    # Silenciar loggers ruidosos de telemetría de terceros
-    noisy_loggers = (
-        "chromadb",
-        "chromadb.telemetry",
-        "chromadb.telemetry.product.posthog",
-        "httpx",
-    )
-    for noisy_logger in noisy_loggers:
-        logging.getLogger(noisy_logger).setLevel(logging.ERROR)
+    # Compartido con los dos servidores (configure_logging() en
+    # logging_config.py) -- la capa semántica/RAG corre en los tres sitios,
+    # no solo en la CLI. Ver el docstring de silence_noisy_third_party_loggers
+    # para el motivo del caso especial de chromadb.telemetry.product.posthog.
+    silence_noisy_third_party_loggers()
 
     if args.quiet:
         logging.basicConfig(level=logging.ERROR, stream=sys.stderr, force=True)
