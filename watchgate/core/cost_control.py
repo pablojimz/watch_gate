@@ -11,6 +11,7 @@ from typing import final
 
 import tiktoken
 from sqlalchemy import Engine
+from sqlalchemy.exc import OperationalError
 from sqlmodel import Session, SQLModel, create_engine
 
 from watchgate.core.layers._semantic.client import SemanticOutput
@@ -221,17 +222,48 @@ class CostController:
         que `SemanticLayer` produce y espera de vuelta (`CostControllerLike`
         en `_semantic/layer.py`) -- guardar/leer un `dict` suelto rompía esa
         integración (`store_cached` no podía serializar un `SemanticOutput`
-        con `json.dumps` directo; reproducido en la revisión)."""
-        with Session(self._get_engine()) as session:
-            raw_json = get_semantic_cache(session, diff_hash_value, org_id=_LOCAL_ORG_ID)
+        con `json.dumps` directo; reproducido en la revisión).
+
+        `OperationalError` (típicamente "no such column") no se deja
+        propagar: `.watchgate/cost.db` es un fichero SQLite local por
+        repositorio, creado una vez con `create_all()` y nunca migrado --
+        si el modelo `SemanticCache` gana una columna nueva (como `org_id`),
+        cualquier fichero preexistente de un desarrollador queda con un
+        esquema desfasado para siempre (`create_all()` no altera tablas ya
+        creadas). Bug real reproducido en vivo: antes, esto tumbaba la capa
+        semántica ENTERA (la de más peso, 0.40 por defecto) con el mensaje
+        crudo de SQLAlchemy como única pista -- para una caché, cuyo único
+        propósito es evitar una llamada repetida al LLM, un fallo de lectura
+        debe degradar a "sin caché" (fuerza una llamada real), no abortar el
+        análisis semántico entero."""
+        try:
+            with Session(self._get_engine()) as session:
+                raw_json = get_semantic_cache(session, diff_hash_value, org_id=_LOCAL_ORG_ID)
+        except OperationalError:
+            logger.warning(
+                "No se pudo leer la caché semántica (esquema desfasado en %s -- "
+                "borra ese fichero para regenerarlo); se ignora la caché para esta llamada.",
+                self.db_path,
+            )
+            return None
         if raw_json is None:
             return None
         return SemanticOutput.model_validate(json.loads(raw_json))
 
     def store_cached(self, diff_hash_value: str, output: SemanticOutput) -> None:
-        with Session(self._get_engine()) as session:
-            set_semantic_cache(
-                session, diff_hash_value, output.model_dump_json(), org_id=_LOCAL_ORG_ID
+        """Mismo motivo que `get_cached()`: no dejar que un fallo al ESCRIBIR
+        en la caché tire un resultado real ya calculado (la llamada al LLM
+        ya se pagó e hizo; perderlo aquí sería peor que no cachear nada)."""
+        try:
+            with Session(self._get_engine()) as session:
+                set_semantic_cache(
+                    session, diff_hash_value, output.model_dump_json(), org_id=_LOCAL_ORG_ID
+                )
+        except OperationalError:
+            logger.warning(
+                "No se pudo escribir en la caché semántica (esquema desfasado en %s -- "
+                "borra ese fichero para regenerarlo); el resultado de este análisis no se cachea.",
+                self.db_path,
             )
 
     # -- Presupuesto mensual ------------------------------------------------
