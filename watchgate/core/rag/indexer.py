@@ -15,6 +15,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 import chromadb
+from chromadb.config import Settings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 CORPUS_DIR = Path(__file__).resolve().parent / "corpus"
@@ -54,14 +55,24 @@ def get_chroma_client(index_path: str = DEFAULT_INDEX_PATH) -> Any:
     instancia un `chromadb.HttpClient` para RAG distribuido en la nube / VPC.
     En caso contrario, utiliza `chromadb.PersistentClient(path=index_path)`.
     """
+    # `anonymized_telemetry=False`: la telemetría de ChromaDB (posthog) no
+    # solo es innecesaria aquí -- en la versión instalada su propia llamada
+    # interna a `capture()` lanza (`TypeError: capture() takes 1 positional
+    # argument but 3 were given`), volcando un ERROR en cada análisis pese a
+    # que `cli.py::_setup_logging` ya sube el nivel de los loggers de
+    # chromadb -- ese filtro no sirve de nada aquí porque el mensaje ya se
+    # emite en nivel ERROR (por encima del umbral). Desactivar la telemetría
+    # entera evita la llamada rota de raíz, en vez de intentar silenciar un
+    # síntoma que el filtro de nivel de log no llega a cubrir.
+    settings = Settings(anonymized_telemetry=False)
     chroma_url = os.environ.get("WATCHGATE_CHROMA_URL") or os.environ.get("CHROMA_URL")
     if chroma_url:
         parsed = urlparse(chroma_url)
         host = parsed.hostname or chroma_url
         port = parsed.port or (443 if parsed.scheme == "https" else 8000)
         ssl = parsed.scheme == "https"
-        return chromadb.HttpClient(host=host, port=port, ssl=ssl)
-    return chromadb.PersistentClient(path=index_path)
+        return chromadb.HttpClient(host=host, port=port, ssl=ssl, settings=settings)
+    return chromadb.PersistentClient(path=index_path, settings=settings)
 
 
 def load_corpus_documents(corpus_dir: Path = CORPUS_DIR) -> list[tuple[str, str]]:
