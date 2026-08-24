@@ -176,7 +176,14 @@ class LlmSettingsRow(DashboardBase):
     provider: Mapped[str] = mapped_column(nullable=False)
     model: Mapped[str] = mapped_column(nullable=False)
     base_url: Mapped[str | None] = mapped_column(default=None)
-    api_key: Mapped[str | None] = mapped_column(default=None)
+    # EncryptedString como github_token -- esta es la clave del proveedor
+    # LLM de la organización (Anthropic/Gemini/...), el secreto más caro de
+    # filtrar de toda esta tabla; era la ÚNICA columna sensible que se
+    # guardaba en claro. Sin migración de esquema: EncryptedString es un
+    # TypeDecorator sobre String (mismo DDL), y los valores legados en
+    # claro los tolera el fallback de lectura de crypto.py (se re-cifran en
+    # la siguiente escritura).
+    api_key: Mapped[str | None] = mapped_column(EncryptedString, default=None)
     monthly_budget_tokens: Mapped[int | None] = mapped_column(default=None)
     max_diff_tokens: Mapped[int | None] = mapped_column(default=None)
     github_api_url: Mapped[str | None] = mapped_column(default=None)

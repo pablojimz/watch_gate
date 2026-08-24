@@ -22,7 +22,9 @@ _SECRET = "test-github-webhook-secret"
 
 @pytest.fixture
 def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    monkeypatch.setattr(webhooks_module, "_WEBHOOK_SECRET", _SECRET)
+    # El secreto se lee del entorno POR PETICIÓN (no en import), así que se
+    # monkeypatchea la variable, no un atributo del módulo.
+    monkeypatch.setenv("WATCHGATE_GITHUB_WEBHOOK_SECRET", _SECRET)
     app = FastAPI()
     app.include_router(webhooks_module.router, prefix="/api")
     return TestClient(app)
@@ -114,3 +116,47 @@ def test_invalid_signature_is_rejected(client: TestClient) -> None:
         headers={"X-Hub-Signature-256": "sha256=deadbeef", "X-GitHub-Event": "pull_request"},
     )
     assert response.status_code == 403
+
+
+def test_missing_secret_fails_closed_with_503(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Regresión (fallo de seguridad real): sin la variable de entorno, la
+    firma se verificaba con clave VACÍA -- cualquiera podía calcular ese
+    HMAC y encolar escaneos falsos. Ahora la ausencia del secreto es un
+    error de configuración del servidor (503), fail-closed, igual que el
+    endpoint equivalente de la Engine API."""
+    monkeypatch.delenv("WATCHGATE_GITHUB_WEBHOOK_SECRET", raising=False)
+    monkeypatch.delenv("GITHUB_WEBHOOK_SECRET", raising=False)
+    app = FastAPI()
+    app.include_router(webhooks_module.router, prefix="/api")
+    no_secret_client = TestClient(app)
+
+    body = json.dumps({"action": "opened"}).encode("utf-8")
+    empty_key_signature = (
+        "sha256=" + hmac.new(b"", msg=body, digestmod=hashlib.sha256).hexdigest()
+    )
+    response = no_secret_client.post(
+        "/api/webhooks/github",
+        content=body,
+        headers={
+            "X-Hub-Signature-256": empty_key_signature,
+            "X-GitHub-Event": "pull_request",
+            "Content-Type": "application/json",
+        },
+    )
+    assert response.status_code == 503
+
+
+def test_malformed_payload_with_valid_signature_returns_400(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Un payload firmado pero sin repository.full_name / pull_request.number
+    (p. ej. un redelivery editado a mano) debe dar 400, no un 500 por
+    KeyError."""
+    monkeypatch.setattr(
+        webhooks_module,
+        "get_queue",
+        lambda: (_ for _ in ()).throw(AssertionError("no debería encolarse")),
+    )
+    payload = {"action": "opened", "installation": {"id": 999}}
+    response = _post(client, payload)
+    assert response.status_code == 400

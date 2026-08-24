@@ -6,11 +6,20 @@ o claves de API de terceros almacenados en la base de datos.
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any
 
 from cryptography.fernet import Fernet
 from sqlalchemy import String, TypeDecorator
+
+logger = logging.getLogger(__name__)
+
+# Todo token Fernet serializa a base64url empezando por el byte de versión
+# 0x80 -- "gAAAA..." como texto. Sirve para distinguir "esto ES un secreto
+# cifrado que no se pudo descifrar" (clave rotada/ausente) de "esto es un
+# valor legado guardado en claro antes de cifrar esta columna".
+_FERNET_TOKEN_PREFIX = "gAAAA"
 
 # Clave simétrica de 32 bytes (base64) para cifrar/descifrar secretos en DB.
 # En producción debe inyectarse vía variable de entorno.
@@ -67,9 +76,22 @@ class EncryptedString(TypeDecorator[str]):
             try:
                 return decrypt_secret(value)
             except Exception:
-                # Si falla el descifrado (ej. clave cambiada o datos sin cifrar previos),
-                # devolvemos raw o None, pero idealmente loggeamos. Aquí por seguridad
-                # devolvemos el valor original (asumiendo que pudo no estar cifrado
-                # si se introdujo manualmente).
+                if value.startswith(_FERNET_TOKEN_PREFIX):
+                    # Es un secreto cifrado que no se puede descifrar (clave
+                    # WATCHGATE_DB_SECRET rotada o ausente). Devolver el
+                    # ciphertext crudo aquí -- lo que se hacía antes -- lo
+                    # convertía en el "valor" del secreto para el resto del
+                    # código, que lo usaba tal cual como token real en
+                    # llamadas a APIs externas (fallo silencioso y opaco
+                    # aguas abajo). None + warning hace el fallo visible en
+                    # el punto donde ocurre.
+                    logger.warning(
+                        "No se pudo descifrar un secreto de la BD (¿WATCHGATE_DB_SECRET "
+                        "rotada o ausente?). Se devuelve None en vez del ciphertext."
+                    )
+                    return None
+                # Valor legado guardado en claro antes de que esta columna
+                # se cifrara: se devuelve tal cual y quedará cifrado en la
+                # siguiente escritura.
                 return value
         return value
