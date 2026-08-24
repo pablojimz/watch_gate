@@ -12,7 +12,17 @@ name: CI
 on:
   push:
     branches: [main]
+    # Cambios solo de documentación no pueden romper lint/tests/build --
+    # no gastan runners. OJO: los .md del corpus RAG viven bajo watchgate/
+    # (los parsea un test real), así que NO caen en este filtro y siguen
+    # disparando la CI, como debe ser.
+    paths-ignore:
+      - "docs/**"
+      - "*.md"
   pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "*.md"
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -114,36 +124,34 @@ jobs:
           --health-retries 5
     steps:
       - uses: actions/checkout@v7
+      # Este job instalaba TODO desde cero en cada ejecución (sin caché de
+      # pip ni del venv, a diferencia del job backend): ~8-12 min de
+      # instalación (torch incluido) para correr UN fichero de tests. Misma
+      # clave de caché que backend a propósito -- el venv de backend
+      # (--all-extras) es un superconjunto del que necesita este job, así
+      # que en caliente se reutiliza directamente.
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
+          cache: "pip"
       - run: pip install poetry
-      - run: poetry install --no-interaction
+      - name: Cachear el entorno virtual de Poetry
+        uses: actions/cache@v6
+        with:
+          path: .venv
+          key: poetry-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
+      - run: |
+          poetry config virtualenvs.in-project true
+          poetry install --no-interaction --all-extras
       - name: Run pytest on PostgreSQL
         env:
           WATCHGATE_DASHBOARD_DATABASE_URL: postgresql://watchgate:watchgate_password@localhost:5432/watchgate_test
         run: poetry run python -m pytest tests/integration/test_dashboard_postgres.py
 
-  trivy-scan:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - name: Liberar espacio en disco en el runner
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /usr/local/share/boost
-      - name: Build Docker Image
-        run: docker build -f docker/engine-api.Dockerfile -t watchgate-engine:latest .
-      - name: Scan Docker Image with Trivy
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: 'watchgate-engine:latest'
-          format: 'table'
-          exit-code: '0'
-          ignore-unfixed: true
-          vuln-type: 'os,library'
-          scanners: 'vuln'
-          timeout: '15m'
-          severity: 'CRITICAL,HIGH'
+# El escaneo Trivy de la imagen Docker vivía aquí como cuarto job, en CADA
+# push y CADA PR: construir la imagen del engine (torch dentro, varios GB)
+# son 15-20 min de runner por ejecución, y con exit-code 0 el escaneo es
+# puramente informativo -- nunca bloquea nada. El coste no guardaba ninguna
+# proporción con la frecuencia. Movido a .github/workflows/trivy.yml:
+# semanal + manual + PRs que tocan docker/ o las dependencias (lo único que
+# puede cambiar el resultado del escaneo).

@@ -1,7 +1,14 @@
 name: WatchGate
+# SOLO manual hasta que el Engine API esté desplegado en una URL alcanzable
+# desde los runners (ver el comentario de engine-api-url abajo): con el
+# trigger de pull_request activo, este job corría en CADA PR y fallaba
+# SIEMPRE en el paso 4 de entrypoint.sh (no hay servidor al que llamar) --
+# minutos de runner quemados y un email de fallo por PR, sin aportar nada.
+# Cuando el Engine API tenga URL y API Key reales en los secrets, restaurar:
+#   pull_request:
+#     types: [opened, synchronize]
 on:
-  pull_request:
-    types: [opened, synchronize]
+  workflow_dispatch: {}
 
 permissions:
   # checks:write -- publicar el Check Run (entrypoint.sh, paso 7).
