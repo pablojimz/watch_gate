@@ -15,12 +15,14 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from watchgate.dashboard.backend.auth import CurrentUser
 
 router = APIRouter(tags=["rag"])
+
+_SAFE_CASE_ID = re.compile(r"^[A-Za-z0-9_-]+$")
 
 # Mismo directorio que CORPUS_DIR en core/rag/indexer.py -- no se importa
 # esa constante para no arrastrar el import de chromadb (ver docstring del
@@ -40,6 +42,10 @@ class RagCorpusCase(BaseModel):
     title: str
     type: str
     summary: str
+
+
+class RagCorpusCaseDetail(RagCorpusCase):
+    content: str
 
 
 def _infer_type(title: str) -> str:
@@ -81,3 +87,24 @@ def list_rag_corpus(_user: CurrentUser) -> list[RagCorpusCase]:
         if (case := _parse_corpus_file(path)) is not None
     ]
     return sorted(cases, key=lambda c: c.title)
+
+
+@router.get("/rag/corpus/{case_id}", response_model=RagCorpusCaseDetail)
+def get_rag_corpus_case(case_id: str, _user: CurrentUser) -> RagCorpusCaseDetail:
+    # `case_id` viaja en la URL, controlado por quien llame -- validado
+    # contra un patrón cerrado (mismo alfabeto que un nombre de fichero real
+    # de este corpus) ANTES de construir la ruta, no después: evita
+    # traversal de directorio (`../../etc/passwd`) sin depender solo de que
+    # `.resolve()` lo detecte más tarde.
+    if not _SAFE_CASE_ID.match(case_id):
+        raise HTTPException(status_code=404, detail="Caso no encontrado")
+
+    path = _CORPUS_DIR / f"{case_id}.md"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Caso no encontrado")
+
+    case = _parse_corpus_file(path)
+    if case is None:
+        raise HTTPException(status_code=404, detail="Caso no encontrado")
+
+    return RagCorpusCaseDetail(**case.model_dump(), content=path.read_text(encoding="utf-8"))

@@ -269,6 +269,8 @@
     "searchPlaceholder": "Buscar por título o contenido...",
     "empty": "Aún no hay ningún caso indexado.",
     "noMatches": "Ningún caso coincide con la búsqueda.",
+    "viewFull": "Ver documento completo →",
+    "close": "Cerrar",
     "type": {
       "caso_real": "Caso real",
       "mitre_attck": "MITRE ATT&CK",
