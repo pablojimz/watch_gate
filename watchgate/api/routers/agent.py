@@ -9,7 +9,11 @@ from sqlmodel import Session
 
 from watchgate.api.auth import require_scope
 from watchgate.api.dependencies import get_db_session
-from watchgate.api.routers.analyze import AnalyzeRequest
+from watchgate.api.routers.analyze import (
+    AnalyzeRequest,
+    ensure_api_key_repo_binding,
+    requested_repo_for,
+)
 from watchgate.api.schemas.agent import (
     AgentAnalyzeResponse,
     AgentFeedbackRequest,
@@ -68,6 +72,12 @@ def agent_precheck(
     base_config = load_config()
     overridden_config = _apply_config_override_or_400(base_config, request.config_override)
 
+    # Misma puerta clave<->repo que /api/v1/analyze (ver
+    # ensure_api_key_repo_binding) -- tras validar el config_override, para
+    # que un override prohibido siga respondiendo 400 y no un 403 que
+    # enmascare el motivo real.
+    ensure_api_key_repo_binding(session, api_key, org, requested_repo_for(request))
+
     # Forzar desactivación de la capa semántica para precheck ultrarrápido --
     # esto lo decide el propio código, no la petición (config_override ya no
     # puede tocar "weights" en absoluto, ver _apply_config_override_or_400).
@@ -122,6 +132,9 @@ def agent_analyze(
     base_config = load_config()
     config = _apply_config_override_or_400(base_config, request.config_override)
 
+    # Misma puerta clave<->repo que /api/v1/analyze.
+    ensure_api_key_repo_binding(session, api_key, org, requested_repo_for(request))
+
     quota_service = QuotaService(session)
     result, _ = quota_service.analyze_with_quota(
         diff=diff,
@@ -149,6 +162,10 @@ def agent_verify_fix(
     api_key, user, org = auth
     base_config = load_config()
     config = _apply_config_override_or_400(base_config, request.config_override)
+
+    # Misma puerta clave<->repo que /api/v1/analyze: verify-fix lanza DOS
+    # análisis (doble coste de tokens), con más motivo debe estar atado.
+    ensure_api_key_repo_binding(session, api_key, org, str(request.repo_path or ""))
 
     quota_service = QuotaService(session)
 

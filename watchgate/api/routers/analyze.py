@@ -44,30 +44,27 @@ class AnalyzeRequest(BaseModel):
     )
 
 
-@router.post("/analyze", response_model=AggregatedResult)
-def analyze_pr(
-    request: AnalyzeRequest,
-    auth: tuple[UserAPIKey, User, Organization] = Depends(require_scope("analysis:write")),  # noqa: B008
-    session: Session = Depends(get_db_session),  # noqa: B008
-) -> AggregatedResult:
-    """Ejecuta el análisis completo de la PR enviada en texto plano respetando cuotas."""
-    api_key, user, org = auth
+def requested_repo_for(request: AnalyzeRequest) -> str:
+    """Repo efectivo de la petición. `metadata["repo"]` tiene prioridad
+    sobre `repo_path` para ser consistente con cómo `run_full_analysis`
+    rellena `result.repo` (ver watchgate/core/pipeline.py,
+    aggregate(repo=metadata.get("repo", "")))."""
+    return str(request.metadata.get("repo") or request.repo_path or "")
 
-    diff = parse_diff_from_text(
-        diff_text=request.diff_text,
-        base_sha=request.base_sha,
-        head_sha=request.head_sha,
-        repo_path=request.repo_path,
-        commit_messages=request.commit_messages,
-        authors=request.authors,
-    )
 
-    # Puerta 3: una API key solo puede analizar el repo al que pertenece.
-    # `metadata["repo"]` tiene prioridad sobre `repo_path` para ser
-    # consistente con cómo `run_full_analysis` rellena `result.repo` (ver
-    # watchgate/core/pipeline.py, aggregate(repo=metadata.get("repo", ""))).
-    requested_repo = str(request.metadata.get("repo") or request.repo_path or "")
+def ensure_api_key_repo_binding(
+    session: Session, api_key: UserAPIKey, org: Organization, requested_repo: str
+) -> None:
+    """Puerta 3: una API key solo puede analizar el repo al que pertenece.
 
+    Extraída de `analyze_pr` para que los endpoints de agente
+    (`/agent/precheck`, `/agent/analyze`, `/agent/verify-fix`) apliquen
+    EXACTAMENTE la misma puerta -- antes solo `/analyze` la comprobaba, y
+    una clave atada a un repo podía analizar cualquier otro pasando por los
+    endpoints de agente (mismo scope `analysis:write`, misma cuota), un
+    bypass directo de la decisión de keys.py de que "toda clave nueva debe
+    crearse atada a un repo concreto".
+    """
     if api_key.monitored_repo_id is None:
         # Clave legado (creada antes de este campo): sin relación directa a
         # un repo, se aplica como red de seguridad mínima la misma
@@ -89,6 +86,28 @@ def analyze_pr(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Esta API key solo es válida para el repo '{bound_repo_path}'.",
             )
+
+
+@router.post("/analyze", response_model=AggregatedResult)
+def analyze_pr(
+    request: AnalyzeRequest,
+    auth: tuple[UserAPIKey, User, Organization] = Depends(require_scope("analysis:write")),  # noqa: B008
+    session: Session = Depends(get_db_session),  # noqa: B008
+) -> AggregatedResult:
+    """Ejecuta el análisis completo de la PR enviada en texto plano respetando cuotas."""
+    api_key, user, org = auth
+
+    diff = parse_diff_from_text(
+        diff_text=request.diff_text,
+        base_sha=request.base_sha,
+        head_sha=request.head_sha,
+        repo_path=request.repo_path,
+        commit_messages=request.commit_messages,
+        authors=request.authors,
+    )
+
+    requested_repo = requested_repo_for(request)
+    ensure_api_key_repo_binding(session, api_key, org, requested_repo)
 
     # Carga de configuración base + overrides opcionales de la petición.
     # `apply_client_config_override` rechaza (400) cualquier intento de

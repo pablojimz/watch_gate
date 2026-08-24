@@ -2,13 +2,29 @@
 
 from __future__ import annotations
 
+from uuid import uuid4
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, SQLModel, create_engine
 
 from watchgate.api.dependencies import get_db_session
 from watchgate.api.main import app
+from watchgate.db.models import MonitoredRepo
 from watchgate.db.repository import create_api_key, create_organization, create_user
+
+
+def _monitored_repo(session: Session, org_id: str, repo_path: str) -> MonitoredRepo:
+    """Da de alta un MonitoredRepo real: desde que los endpoints de agente
+    aplican la misma puerta clave<->repo que /api/v1/analyze
+    (`ensure_api_key_repo_binding`), una clave atada a un id inexistente ya
+    no puede analizar nada."""
+    repo = MonitoredRepo(
+        id=str(uuid4()), org_id=org_id, repo_path=repo_path, monitor_type="audited"
+    )
+    session.add(repo)
+    session.commit()
+    return repo
 
 
 @pytest.fixture
@@ -35,11 +51,12 @@ def test_agent_precheck_fast_mode(api_client):
     client, session = api_client
     org = create_organization(session, name="Agent Org")
     user = create_user(session, email="agent@corp.com", name="Agent User", org_id=org.id)
+    repo = _monitored_repo(session, org.id, "acme/agent-app")
     _, raw_token = create_api_key(
         session,
         user_id=user.id,
         org_id=org.id,
-        monitored_repo_id="test-repo-id",
+        monitored_repo_id=repo.id,
         default_agent_name="opencode-bot",
     )
 
@@ -73,8 +90,9 @@ def test_agent_analyze_with_guidance(api_client):
     client, session = api_client
     org = create_organization(session, name="Agent Org 2")
     user = create_user(session, email="bot@corp.com", name="Bot User", org_id=org.id)
+    repo = _monitored_repo(session, org.id, "acme/bot-repo")
     _, raw_token = create_api_key(
-        session, user_id=user.id, org_id=org.id, monitored_repo_id="test-repo-id"
+        session, user_id=user.id, org_id=org.id, monitored_repo_id=repo.id
     )
 
     diff_text = """diff --git a/app.py b/app.py
@@ -110,8 +128,9 @@ def test_agent_verify_fix(api_client):
     client, session = api_client
     org = create_organization(session, name="Agent Org 3")
     user = create_user(session, email="fixer@corp.com", name="Fixer", org_id=org.id)
+    repo = _monitored_repo(session, org.id, "acme/fix-repo")
     _, raw_token = create_api_key(
-        session, user_id=user.id, org_id=org.id, monitored_repo_id="test-repo-id"
+        session, user_id=user.id, org_id=org.id, monitored_repo_id=repo.id
     )
 
     orig_diff = """diff --git a/package.json b/package.json
@@ -146,6 +165,7 @@ index 0000000..e69de29
         "candidate_diff": cand_diff,
         "base_sha": "0000000",
         "head_sha": "1111111",
+        "repo_path": "acme/fix-repo",
     }
 
     response = client.post("/api/v1/agent/verify-fix", headers=headers, json=payload)
@@ -157,6 +177,39 @@ index 0000000..e69de29
     assert data["previous_score"] >= data["new_score"]
     assert data["risk_reduced"] is True
     assert len(data["resolved_findings"]) > 0
+
+
+def test_agent_endpoints_enforce_the_key_repo_binding(api_client):
+    """Regresión (fallo de seguridad real): /api/v1/analyze aplicaba la
+    puerta clave<->repo pero los endpoints de agente NO -- una clave atada
+    al repo X podía analizar cualquier otro repo (mismo scope, misma cuota)
+    entrando por /agent/precheck, /agent/analyze o /agent/verify-fix."""
+    client, session = api_client
+    org = create_organization(session, name="Bound Org")
+    user = create_user(session, email="bound@corp.com", name="Bound User", org_id=org.id)
+    repo = _monitored_repo(session, org.id, "acme/allowed-repo")
+    _, raw_token = create_api_key(
+        session, user_id=user.id, org_id=org.id, monitored_repo_id=repo.id
+    )
+
+    headers = {"Authorization": f"Bearer {raw_token}"}
+    diff_text = "diff --git a/app.py b/app.py\n"
+
+    for path, payload in [
+        ("/api/v1/agent/precheck", {"diff_text": diff_text, "metadata": {"repo": "otra/cosa"}}),
+        ("/api/v1/agent/analyze", {"diff_text": diff_text, "metadata": {"repo": "otra/cosa"}}),
+        (
+            "/api/v1/agent/verify-fix",
+            {
+                "original_diff": diff_text,
+                "candidate_diff": diff_text,
+                "repo_path": "otra/cosa",
+            },
+        ),
+    ]:
+        response = client.post(path, headers=headers, json=payload)
+        assert response.status_code == 403, path
+        assert "acme/allowed-repo" in response.json()["detail"], path
 
 
 def test_agent_analyze_rejects_key_without_analysis_write_scope(api_client):
