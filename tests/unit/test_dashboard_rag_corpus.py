@@ -4,10 +4,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+from fastapi import HTTPException
+
 from watchgate.dashboard.backend.routers.rag import (
     _CORPUS_DIR,
     _infer_type,
     _parse_corpus_file,
+    get_rag_corpus_case,
     list_rag_corpus,
 )
 
@@ -90,3 +94,42 @@ def test_real_corpus_directory_parses_cleanly_end_to_end():
         # de la estructura exacta), pero sí un id derivado del nombre real.
         assert case.id
         assert Path(_CORPUS_DIR / f"{case.id}.md").is_file()
+
+
+def test_get_rag_corpus_case_returns_full_markdown_content():
+    detail = get_rag_corpus_case("xz_utils", _user=None)  # type: ignore[arg-type]
+
+    assert detail.id == "xz_utils"
+    assert detail.title.startswith("Caso: backdoor en xz-utils")
+    assert "## Resumen" in detail.content
+    # `content` es el markdown crudo (con saltos de línea reales dentro de
+    # cada párrafo), `summary` es la misma frase ya normalizada a una sola
+    # línea (ver _parse_corpus_file) -- no son substring exacto una de la
+    # otra a propósito, comparamos sin espacios para verificar que es el
+    # mismo texto real.
+    assert "".join(detail.summary.split()) in "".join(detail.content.split())
+
+
+def test_get_rag_corpus_case_404s_on_unknown_id():
+    with pytest.raises(HTTPException) as exc_info:
+        get_rag_corpus_case("no_existe_este_caso", _user=None)  # type: ignore[arg-type]
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.parametrize(
+    "malicious_id",
+    [
+        "../../../etc/passwd",
+        "..%2F..%2Fetc%2Fpasswd",
+        "foo/bar",
+        "foo\\bar",
+        "",
+    ],
+)
+def test_get_rag_corpus_case_rejects_path_traversal_attempts(malicious_id):
+    """`case_id` viaja en la URL -- validado contra un patrón cerrado ANTES
+    de construir la ruta al fichero, no solo confiando en que el fichero
+    resultante no exista."""
+    with pytest.raises(HTTPException) as exc_info:
+        get_rag_corpus_case(malicious_id, _user=None)  # type: ignore[arg-type]
+    assert exc_info.value.status_code == 404

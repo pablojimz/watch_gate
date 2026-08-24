@@ -155,6 +155,10 @@ export interface RagCorpusCase {
   summary: string
 }
 
+export interface RagCorpusCaseDetail extends RagCorpusCase {
+  content: string
+}
+
 export interface UiSettings {
   primary_color: string
   accent_color: string
@@ -287,6 +291,8 @@ export const api = {
   getMetrics: () => request<OrgMetrics>('/metrics'),
   getAgentUsageMetrics: () => request<AgentUsageMetrics>('/metrics/agent-usage'),
   getRagCorpus: () => request<RagCorpusCase[]>('/rag/corpus'),
+  getRagCorpusCase: (id: string) =>
+    request<RagCorpusCaseDetail>(`/rag/corpus/${encodeURIComponent(id)}`),
   getLlmSettings: () => request<LlmSettings>('/settings/llm'),
   putLlmSettings: (body: LlmSettingsUpdate) =>
     request<LlmSettings>('/settings/llm', {

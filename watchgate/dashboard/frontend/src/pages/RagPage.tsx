@@ -5,6 +5,7 @@ import { Library, Search } from 'lucide-react'
 import { api, type RagCorpusCase } from '@/api/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { RagCaseModal } from '@/components/dashboard/RagCaseModal'
 
 const TYPE_ORDER: RagCorpusCase['type'][] = ['caso_real', 'mitre_attck', 'tecnica', 'patron', 'otro']
 
@@ -27,6 +28,7 @@ export default function RagPage() {
   const { t } = useTranslation()
   const [cases, setCases] = useState<RagCorpusCase[] | null>(null)
   const [query, setQuery] = useState('')
+  const [selected, setSelected] = useState<RagCorpusCase | null>(null)
 
   useEffect(() => {
     void api
@@ -91,7 +93,11 @@ export default function RagPage() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {filtered.map((c) => (
-            <Card key={c.id}>
+            <Card
+              key={c.id}
+              className="cursor-pointer transition-colors hover:border-primary/50"
+              onClick={() => setSelected(c)}
+            >
               <CardHeader className="pb-2">
                 <span
                   className={`inline-block w-fit rounded-full px-2 py-0.5 text-xs font-medium ${typeBadgeClass(c.type)}`}
@@ -102,11 +108,29 @@ export default function RagPage() {
               </CardHeader>
               <CardContent>
                 <p className="line-clamp-4 text-sm text-muted-foreground">{c.summary}</p>
+                <button
+                  type="button"
+                  className="mt-3 text-xs font-medium text-primary hover:underline"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setSelected(c)
+                  }}
+                >
+                  {t('rag.viewFull')}
+                </button>
               </CardContent>
             </Card>
           ))}
         </div>
       )}
+
+      <RagCaseModal
+        caseSummary={selected}
+        open={selected !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelected(null)
+        }}
+      />
     </div>
   )
 }
