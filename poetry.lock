@@ -1681,15 +1681,15 @@ urllib3 = ["packaging (>=20.0)", "urllib3 (>=1.26.15,<3.0.0)"]
 
 [[package]]
 name = "google-genai"
-version = "2.17.0"
+version = "2.19.0"
 description = "GenAI Python SDK"
 optional = true
 python-versions = ">=3.10"
 groups = ["main"]
 markers = "extra == \"analysis\""
 files = [
-    {file = "google_genai-2.17.0-py3-none-any.whl", hash = "sha256:a4835563c60aee646c9c4b261c507aa4a624710d25017012d20dc65abf3d9a54"},
-    {file = "google_genai-2.17.0.tar.gz", hash = "sha256:6b640a2390c82b4a240873eddb9f518c6d2c33244b2de16ed3d14526a6da7f57"},
+    {file = "google_genai-2.19.0-py3-none-any.whl", hash = "sha256:36e0326dd886b52ef765be4c46042732b46b21f637abbe060e3db7c3de23974c"},
+    {file = "google_genai-2.19.0.tar.gz", hash = "sha256:d8f4126643793a7de230c396bcd142d21c948c8bb57507580e152549a7a41d9d"},
 ]
 
 [package.dependencies]
@@ -8038,4 +8038,4 @@ analysis = ["anthropic", "chromadb", "google-genai", "langchain-text-splitters",
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11"
-content-hash = "92b2cac049bfacf52b9e94caa9b63d6eceb469277af72fe29e5793eb790d0611"
+content-hash = "961dcb24949f6506c4ae0a5b572b432ff254818f4eb0c7a33cb93f5aa0390375"
