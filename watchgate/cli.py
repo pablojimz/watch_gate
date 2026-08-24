@@ -144,12 +144,10 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _setup_logging(args: argparse.Namespace) -> None:
-    # Compartido con los dos servidores (configure_logging() en
-    # logging_config.py) -- la capa semántica/RAG corre en los tres sitios,
-    # no solo en la CLI. Ver el docstring de silence_noisy_third_party_loggers
-    # para el motivo del caso especial de chromadb.telemetry.product.posthog.
-    silence_noisy_third_party_loggers()
-
+    # Silenciar loggers ruidosos -- ver silence_noisy_third_party_loggers()
+    # más abajo en main(), que cubre TODOS los subcomandos (este ajuste de
+    # verbosidad por flag es exclusivo de `analyze`, que es el único
+    # subcomando con -q/--debug/-v).
     if args.quiet:
         logging.basicConfig(level=logging.ERROR, stream=sys.stderr, force=True)
     elif args.debug:
@@ -345,6 +343,15 @@ def _cmd_mcp_serve(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
+
+    # Incondicional para TODOS los subcomandos (no solo `analyze`, que es
+    # el único con flags -q/--debug/-v -- ver _setup_logging): `rag
+    # reindex` y `mcp serve` también instancian ChromaDB (rag/indexer.py)
+    # y se veían igual de afectados por el bug de telemetría rota de
+    # ChromaDB/posthog (ver silence_noisy_third_party_loggers), pero antes
+    # nunca llegaban a pasar por _setup_logging() -- reproducido en vivo
+    # con `watchgate rag reindex`.
+    silence_noisy_third_party_loggers()
 
     if args.subcommand == "analyze":
         return _cmd_analyze(args)
