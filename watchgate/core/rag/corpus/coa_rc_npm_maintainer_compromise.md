@@ -25,20 +25,11 @@ esa ventana de tiempo, sin ningún cambio en su propio código.
   común de compromiso (p. ej. credenciales de npm reutilizadas o robadas de
   varios mantenedores a la vez).
 
-## Por qué es relevante para WatchGate
+## Patrón a vigilar
 
-- Es el caso que mejor ilustra el límite de "revisar el diff de un PR": si
-  el compromiso ocurre en la publicación al registro (`npm publish`) y no
-  en un commit al repositorio, ninguna herramienta que analice diffs de
-  PRs lo verá — mismo límite ya documentado en el caso SolarWinds, aquí a
-  nivel de un solo mantenedor en vez de infraestructura corporativa.
-- Refuerza por qué la consulta en vivo a OSV de las dependencias nuevas
-  (`gather_dependency_findings`) es una capa de defensa complementaria y
-  necesaria: es la única señal disponible cuando el ataque nunca pasó por
-  un diff de código revisable.
-- Dos paquetes de propósito completamente distinto comprometidos el mismo
-  día es en sí mismo un patrón: cuando aparece, conviene tratar cualquier
-  otra dependencia nueva del mismo periodo con sospecha reforzada.
+El compromiso ocurre en `npm publish`, no en un commit al repositorio —
+ningún diff de PR lo verá; solo la consulta en vivo a OSV de dependencias
+nuevas lo detecta.
 
 Técnica MITRE ATT&CK relacionada: T1195.001 (Compromise Software
 Dependencies and Development Tools).

@@ -32,20 +32,11 @@ agencias gubernamentales y grandes empresas.
   mando y control, dificultando la correlación con la actualización que lo
   introdujo.
 
-## Por qué es relevante para WatchGate
+## Patrón a vigilar
 
-- Es el límite explícito de lo que un PR-risk-scorer de código fuente
-  **puede y no puede** cubrir: si el compromiso ocurre en el sistema de
-  build/CI en vez de en un diff de código, ninguna capa que analice
-  `NormalizedDiff` lo verá — de ahí que la capa estática deba tratar
-  cualquier cambio a configuración de build/CI (`Makefile`,
-  `.github/workflows/*`, scripts de *release*, pipelines de firma) con el
-  mismo nivel de sospecha que el código de la aplicación, no como
-  "infraestructura de confianza" aparte.
-- Refuerza, en el extremo, la premisa central de la capa semántica: la
-  reputación (certificado válido, proveedor reconocido, canal oficial) es
-  una señal, no una garantía — el contenido real del cambio es lo único que
-  importa.
-- Técnica MITRE ATT&CK relacionada: T1195.001 (Compromise Software
-  Dependencies and Development Tools) / T1195.002 (Compromise Software
-  Supply Chain), aplicada al eslabón de build en vez de al de dependencias.
+Cambio en configuración de build/CI (`Makefile`, `.github/workflows/*`,
+scripts de release, pipelines de firma) — el compromiso no pasa por un
+diff de código de aplicación.
+
+Técnica MITRE ATT&CK relacionada: T1195.001 / T1195.002 (Compromise
+Software Supply Chain), aplicada al eslabón de build.

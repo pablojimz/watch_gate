@@ -48,21 +48,9 @@ código desde servidores remotos. El sufijo `-dev` es plausible para un
 desarrollador que busca una variante de desarrollo del paquete real,
 reduciendo la sospecha frente a un typosquat más burdo.
 
-## Por qué es relevante para WatchGate
+## Patrón a vigilar
 
-- Directamente relacionado con la consulta automática de dependencias
-  nuevas ya implementada (`gather_dependency_findings`): un paquete nuevo
-  en `requirements.txt` con un nombre que sigue la convención de nombrado
-  interna del proyecto (prefijo de la organización, sufijos tipo `-utils`,
-  `-common`, `-internal`) merece más escrutinio, no menos, precisamente
-  porque *parece* interno y de confianza. Lo mismo aplica a un nombre que
-  se parece mucho a un paquete popular real (`sympy-dev` vs. `sympy`,
-  `requestn` vs. `requests`): la similitud con algo confiable es la propia
-  señal de alarma, no una razón para bajar la guardia.
-- La capa semántica debe fijarse en si una dependencia nueva tiene sentido
-  para el ecosistema/dominio del proyecto: un paquete con nombre que suena
-  interno pero que se resuelve desde un registro público es la propia
-  definición de esta técnica.
-- Mismo objetivo final que el caso `ctx` (exfiltración vía dependencia),
-  pero el vector de entrada es la **resolución del gestor de paquetes**, no
-  el secuestro de un paquete ya existente y de confianza.
+Paquete nuevo con nombre que sigue la convención interna del proyecto
+(prefijo de organización, sufijos `-utils`/`-common`/`-internal`), o muy
+parecido a uno popular real (`sympy-dev` vs. `sympy`), resuelto desde un
+registro público.

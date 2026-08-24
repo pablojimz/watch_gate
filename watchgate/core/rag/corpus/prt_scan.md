@@ -25,21 +25,11 @@ era introducir modificaciones en *workflows* de CI/CD para exfiltrar secretos
   relacionados entre sí, sin interacción previa ni historial de
   contribuciones genuinas en esos proyectos.
 
-## Por qué es relevante para WatchGate
+## Patrón a vigilar
 
-- Es el caso de referencia para el vector "PR generado por IA adaptado al
-  lenguaje del proyecto": el *contenido* del diff puede parecer idiomático y
-  razonable a primera vista, por lo que la capa semántica debe fijarse en la
-  **intención funcional** del cambio (¿por qué un workflow de CI necesita
-  hacer una llamada de red con el valor de un secret?) y no solo en si el
-  estilo del código "encaja".
-- Refuerza la regla de forzado de capa semántica sobre cambios en
-  `.github/workflows/*.yml` (ver `shortcircuit.py`), y es un ejemplo directo
-  de por qué la capa estática debe marcar como sospechosa cualquier llamada
-  de red dentro de ficheros de build/CI (`network-call-in-build-script`).
-- La señal de reputación es también relevante aquí: cuentas con poco o ningún
-  historial de contribución al repositorio concreto, abriendo PRs no
-  solicitados.
+PR no solicitado, de una cuenta sin historial de contribución, que
+modifica `.github/workflows/*.yml` con una llamada de red usando el valor
+de un secret.
 
 Técnica MITRE ATT&CK relacionada: T1195 (Supply Chain Compromise) sobre la
-cadena de CI/CD, con exfiltración de credenciales como objetivo final.
+cadena de CI/CD.

@@ -35,18 +35,10 @@ que nadie hubiera tocado su propio `.github/workflows/*.yml`.
   reescritura, precisamente la mitigación que GitHub y la comunidad
   recomendaron tras el incidente.
 
-## Por qué es relevante para WatchGate
+## Patrón a vigilar
 
-- Ataque directo a la superficie que WatchGate vigila: un cambio en
-  `.github/workflows/*.yml` que introduce o actualiza una referencia a una
-  Action de terceros por etiqueta mutable, en vez de por SHA fijo, es
-  exactamente el patrón de riesgo que este caso demuestra como explotable
-  en producción, no solo en teoría.
-- El propio código de la Action comprometida no vivía en el repositorio
-  que sufría el ataque — vivía en una dependencia externa de CI/CD. Un
-  diff que "solo" añade o actualiza un `uses:` en un workflow parece
-  trivial, pero concede ejecución de código arbitrario con acceso a los
-  secretos del repositorio.
-- Técnica MITRE ATT&CK relacionada: T1195.002 (Compromise Software Supply
-  Chain), T1584 (Compromise Infrastructure — el token/Action previa en la
-  cadena).
+Referencia a una GitHub Action de terceros por etiqueta mutable
+(`uses: foo/bar@v45`) en vez de por SHA de commit fijo.
+
+Técnica MITRE ATT&CK relacionada: T1195.002 (Compromise Software Supply
+Chain), T1584 (Compromise Infrastructure).
