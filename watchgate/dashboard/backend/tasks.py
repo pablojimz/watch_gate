@@ -164,6 +164,55 @@ def run_managed_scan(
             )
 
 
+def run_rag_sync() -> None:
+    """Sincroniza avisos reales (GitHub Security Advisories) al corpus del
+    RAG y reindexa si hubo cambios -- la mitad "fuentes externas" del RAG
+    dinámico. La encola periódicamente el lifespan del dashboard-backend
+    (ver main.py::_rag_sync_loop) y la ejecuta este worker, que es quien
+    usa el índice en los análisis (pipeline -> retriever) y ya carga
+    chromadb/sentence-transformers de todos modos.
+
+    Imports diferidos: el backend encola esta tarea por su ruta con puntos
+    (string), así que este módulo no debe arrastrar chromadb al proceso
+    HTTP solo por definirla."""
+    from watchgate.core.rag.indexer import CORPUS_DIR, build_index
+    from watchgate.core.rag.threat_feed import sync_advisories_to_corpus
+
+    written = sync_advisories_to_corpus(CORPUS_DIR)
+    if not written:
+        logger.info("RAG sync: sin avisos nuevos ni actualizados -- no se reindexa.")
+        return
+    count = build_index()
+    logger.info(
+        "RAG sync: %d avisos nuevos/actualizados en el corpus, %d fragmentos reindexados.",
+        len(written),
+        count,
+    )
+
+
+def run_feedback_indexing(case_id: str, title: str, narrative: str, verdict: str) -> None:
+    """Indexa en la colección de feedback del RAG un caso confirmado por
+    revisión humana -- la mitad "aprendizaje propio" del RAG dinámico.
+
+    En el worker y no en el request HTTP del dashboard a propósito:
+    `add_confirmed_case` embebe el texto con sentence-transformers (carga
+    de modelo en la primera llamada), demasiado pesado para responder a un
+    click de "correcto"/"falso positivo"."""
+    from typing import cast
+
+    from watchgate.core.rag.feedback import Verdict, add_confirmed_case
+
+    if verdict not in ("true_positive", "false_positive"):
+        logger.warning("Feedback RAG: verdict desconocido %r, se ignora.", verdict)
+        return
+    fragments = add_confirmed_case(
+        case_id=case_id, title=title, narrative=narrative, verdict=cast(Verdict, verdict)
+    )
+    logger.info(
+        "Feedback RAG: caso %s indexado como %s (%d fragmentos).", case_id, verdict, fragments
+    )
+
+
 _REDIS_URL = os.environ.get("WATCHGATE_REDIS_URL", "redis://localhost:6379/0")
 
 
