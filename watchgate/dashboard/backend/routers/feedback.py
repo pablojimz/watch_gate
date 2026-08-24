@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -24,7 +25,50 @@ from watchgate.db.models import MonitoredRepo
 
 router = APIRouter(tags=["feedback"])
 
+logger = logging.getLogger(__name__)
+
 EngineDBSession = Annotated[Session, Depends(get_db_session)]
+
+
+def _enqueue_feedback_indexing(score: ScoreOut) -> None:
+    """Encola la incorporación de este veredicto humano al RAG (colección
+    `feedback_cases`, la señal con hueco garantizado en el retriever).
+
+    Cierra el bucle de feedback de la arquitectura: `add_confirmed_case`
+    (core/rag/feedback.py) existía y estaba testeada, pero NADIE la llamaba
+    desde producción -- marcar "correcto"/"falso positivo" solo tocaba la
+    fila de la BD y el RAG nunca aprendía del propio historial de revisión.
+
+    Best-effort a propósito: el feedback humano YA quedó guardado en la BD
+    cuando esto se ejecuta; si Redis está caído, el click del revisor no
+    debe fallar por no poder encolar el indexado."""
+    verdict = "true_positive" if score.human_feedback == "correcto" else "false_positive"
+    semantic = score.layer_results.get("semantic") or {}
+    justification = ""
+    if isinstance(semantic, dict):
+        justification = str(semantic.get("justification") or "").strip()
+    semaforo = getattr(score.semaforo, "value", score.semaforo)
+    narrative_parts = [
+        f"PR {score.pr_id} de {score.repo}: score {score.score}/100 ({semaforo}).",
+    ]
+    if justification:
+        narrative_parts.append(justification)
+    try:
+        from watchgate.dashboard.backend.tasks import get_queue
+
+        get_queue().enqueue(
+            "watchgate.dashboard.backend.tasks.run_feedback_indexing",
+            f"score_{score.id}",
+            f"Feedback humano: PR {score.pr_id} en {score.repo}",
+            "\n\n".join(narrative_parts),
+            verdict,
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception(
+            "No se pudo encolar el indexado RAG del feedback del score %d "
+            "(el feedback en sí ya quedó guardado).",
+            score.id,
+        )
 
 
 @router.post("/scores/{score_id}/feedback", response_model=ScoreOut)
@@ -39,6 +83,7 @@ def submit_feedback(
         updated = database.set_feedback(conn, score_id, body.feedback)
     if updated is None:
         raise HTTPException(status_code=404, detail="Score no encontrado")
+    _enqueue_feedback_indexing(updated)
     return updated
 
 

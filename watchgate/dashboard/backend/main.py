@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
 import os
 from collections.abc import AsyncIterator
@@ -9,6 +11,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.concurrency import run_in_threadpool
 from starlette.middleware.sessions import SessionMiddleware
 
 from watchgate.dashboard.backend import db as database
@@ -33,6 +36,44 @@ from watchgate.logging_config import configure_logging, configure_sentry, setup_
 logger = logging.getLogger(__name__)
 
 
+def _rag_sync_interval_hours() -> float:
+    """Cada cuántas horas se encola `run_rag_sync` (avisos de seguridad
+    reales -> corpus RAG -> reindexado, en el worker). 24 por defecto;
+    `WATCHGATE_RAG_SYNC_INTERVAL_HOURS=0` (o negativo) lo desactiva; un
+    valor no numérico cae al default en vez de tumbar el arranque."""
+    raw = os.environ.get("WATCHGATE_RAG_SYNC_INTERVAL_HOURS", "24")
+    try:
+        return float(raw)
+    except ValueError:
+        logger.warning(
+            "WATCHGATE_RAG_SYNC_INTERVAL_HOURS=%r no es un número; se usa 24.", raw
+        )
+        return 24.0
+
+
+async def _rag_sync_loop(interval_hours: float) -> None:
+    """Encola el RAG sync al arrancar y luego cada `interval_hours`.
+
+    Solo ENCOLA (redis-py bloqueante -> run_in_threadpool); el trabajo real
+    (descarga de avisos + embeddings + ChromaDB) corre en dashboard-worker,
+    que es quien usa el índice en los análisis. La tarea es idempotente
+    (mismo aviso -> mismo fichero, sin cambios -> sin reindexar), así que
+    un reinicio del backend que vuelva a encolar de inmediato es barato."""
+    from watchgate.dashboard.backend.tasks import get_queue
+
+    while True:
+        try:
+            await run_in_threadpool(
+                get_queue().enqueue, "watchgate.dashboard.backend.tasks.run_rag_sync"
+            )
+            logger.info(
+                "RAG sync encolado; el próximo se encolará en %.1f horas.", interval_hours
+            )
+        except Exception:  # noqa: BLE001 -- Redis caído no debe matar el loop
+            logger.exception("No se pudo encolar el RAG sync periódico; se reintentará.")
+        await asyncio.sleep(interval_hours * 3600)
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     with database.db_session() as conn:
@@ -47,7 +88,15 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     # inicializado).
     init_api_keys_db()
     setup_oidc()
+    interval_hours = _rag_sync_interval_hours()
+    rag_sync_task: asyncio.Task[None] | None = None
+    if interval_hours > 0:
+        rag_sync_task = asyncio.create_task(_rag_sync_loop(interval_hours))
     yield
+    if rag_sync_task is not None:
+        rag_sync_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await rag_sync_task
 
 
 def create_app() -> FastAPI:
