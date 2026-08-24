@@ -21,6 +21,7 @@ def test_infer_type_matches_each_known_prefix():
     assert _infer_type("MITRE ATT&CK T1027 — algo") == "mitre_attck"
     assert _infer_type("Técnica: algo") == "tecnica"
     assert _infer_type("Patrón: algo") == "patron"
+    assert _infer_type("Aviso: Malicious code in x (npm) (GHSA-xxxx)") == "aviso"
     assert _infer_type("Un título cualquiera") == "otro"
 
 
@@ -89,7 +90,7 @@ def test_real_corpus_directory_parses_cleanly_end_to_end():
     assert len(cases) == len(md_files)
     for case in cases:
         assert case.title
-        assert case.type in {"caso_real", "mitre_attck", "tecnica", "patron", "otro"}
+        assert case.type in {"caso_real", "aviso", "mitre_attck", "tecnica", "patron", "otro"}
         # No todos los ficheros garantizan un resumen no vacío (dependería
         # de la estructura exacta), pero sí un id derivado del nombre real.
         assert case.id
