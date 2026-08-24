@@ -2,6 +2,7 @@ import {
   BarChart3,
   FolderGit2,
   KeyRound,
+  Library,
   LogOut,
   Settings2,
   Shield,
@@ -80,6 +81,10 @@ export function AppLayout({ isAdmin }: { isAdmin: boolean }) {
           <NavLink to="/metrics" className={navLinkClass}>
             <BarChart3 className="size-4" strokeWidth={1.75} />
             <span className="hidden sm:inline">{t('nav.metrics')}</span>
+          </NavLink>
+          <NavLink to="/rag" className={navLinkClass}>
+            <Library className="size-4" strokeWidth={1.75} />
+            <span className="hidden sm:inline">{t('nav.rag')}</span>
           </NavLink>
           <NavLink to="/api-keys" className={navLinkClass}>
             <KeyRound className="size-4" strokeWidth={1.75} />
