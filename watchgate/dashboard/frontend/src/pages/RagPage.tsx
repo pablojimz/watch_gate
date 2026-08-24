@@ -7,12 +7,21 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { RagCaseModal } from '@/components/dashboard/RagCaseModal'
 
-const TYPE_ORDER: RagCorpusCase['type'][] = ['caso_real', 'mitre_attck', 'tecnica', 'patron', 'otro']
+const TYPE_ORDER: RagCorpusCase['type'][] = [
+  'caso_real',
+  'aviso',
+  'mitre_attck',
+  'tecnica',
+  'patron',
+  'otro',
+]
 
 function typeBadgeClass(type: RagCorpusCase['type']) {
   switch (type) {
     case 'caso_real':
       return 'bg-red-500/10 text-red-600 dark:text-red-400'
+    case 'aviso':
+      return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
     case 'mitre_attck':
       return 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
     case 'tecnica':

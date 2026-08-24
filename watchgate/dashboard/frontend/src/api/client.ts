@@ -151,7 +151,7 @@ export interface OrgMetrics {
 export interface RagCorpusCase {
   id: string
   title: string
-  type: 'caso_real' | 'mitre_attck' | 'tecnica' | 'patron' | 'otro'
+  type: 'caso_real' | 'aviso' | 'mitre_attck' | 'tecnica' | 'patron' | 'otro'
   summary: string
 }
 

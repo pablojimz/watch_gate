@@ -273,6 +273,7 @@
     "close": "Cerrar",
     "type": {
       "caso_real": "Caso real",
+      "aviso": "Aviso (CVE/malware)",
       "mitre_attck": "MITRE ATT&CK",
       "tecnica": "Técnica",
       "patron": "Patrón",
