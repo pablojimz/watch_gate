@@ -31,18 +31,10 @@ estuvieron publicadas.
   usaba una versión limpia, lo que dificultó dimensionar el impacto real
   hasta pasado un tiempo.
 
-## Por qué es relevante para WatchGate
+## Patrón a vigilar
 
-- Caso de referencia de que el compromiso puede llegar por una vía
-  totalmente ajena al propio código del repositorio auditado: nada en el
-  diff de un PR normal revela un maintainer de una dependencia
-  phisheado — el riesgo entra en el próximo `npm install`/actualización de
-  versión, no en un cambio de código local.
-- Relevante para la capa de dependencias: un `package.json`/lockfile que
-  actualiza `@solana/web3.js` (o cualquier paquete) a una versión recién
-  publicada, sin ventana de confianza tras su publicación, es
-  estructuralmente el mismo patrón de riesgo — versiones "recién salidas
-  del horno" tienen menos tiempo acumulado de escrutinio de la comunidad.
-- Técnica MITRE ATT&CK relacionada: T1078 (Valid Accounts — credenciales
-  legítimas de un mantenedor real, no explotación de una vulnerabilidad),
-  T1195.001 (Compromise Software Dependencies and Development Tools).
+Actualización de dependencia a una versión recién publicada, sin ventana
+de escrutinio de la comunidad transcurrida.
+
+Técnica MITRE ATT&CK relacionada: T1078 (Valid Accounts), T1195.001
+(Compromise Software Dependencies and Development Tools).

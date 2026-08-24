@@ -29,15 +29,11 @@ como "Scavenger") usando `rundll32`.
   sistema operativo (`rundll32.exe`), evadiendo así firmas que solo buscan
   JavaScript sospechoso.
 
-## Por qué es relevante para WatchGate
+## Patrón a vigilar
 
-- Cualquier cambio en `package.json` que añada o modifique un campo
-  `scripts.postinstall` (o `preinstall`/`prepare`) merece atención
-  reforzada — es el mecanismo de ejecución automática más directo que
-  ofrece npm, y el que este caso real explotó.
-- El binario malicioso vivía como un fichero nuevo en el propio paquete
-  (`node-gyp.dll`), no como código JavaScript — un recordatorio de que
-  "revisar el diff de código" no basta si el diff también añade binarios o
-  ficheros no-código nuevos sin justificación evidente.
-- Técnica MITRE ATT&CK relacionada: T1195.001 (Compromise Software
-  Dependencies and Development Tools), T1078 (Valid Accounts).
+Campo `scripts.postinstall`/`preinstall`/`prepare` nuevo o modificado en
+`package.json`, o un binario nuevo sin justificación evidente en el
+paquete.
+
+Técnica MITRE ATT&CK relacionada: T1195.001 (Compromise Software
+Dependencies and Development Tools), T1078 (Valid Accounts).

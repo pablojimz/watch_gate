@@ -24,19 +24,8 @@ datos de prueba), eliminando por completo el código funcional del paquete.
   original revocó intencionadamente el acceso de terceros para impedir que
   se revirtiera el cambio.
 
-## Por qué es relevante para WatchGate
+## Patrón a vigilar
 
-- Categoría de riesgo distinta a los demás casos del corpus: no es
-  exfiltración, backdoor ni escalada de privilegios — es **denegación de
-  servicio deliberada**, y aun así el mismo principio aplica: el contenido
-  del cambio importa más que quién lo firma, incluso si quien lo firma es
-  el propio mantenedor de siempre.
-- Útil para calibrar la categoría `ninguna` vs. una categoría de riesgo:
-  un bucle `for (i = 0; i < Infinity; i++)` sin ninguna condición de
-  salida, introducido sin relación con ningún cambio funcional descrito en
-  el commit, es una señal de sabotaje aunque no robe ni ejecute nada
-  externo.
-- Recordatorio de que "reputación heredada" (mismo autor de siempre, mismo
-  paquete de siempre) es exactamente la señal que un atacante —o un
-  mantenedor descontento— puede explotar mejor, porque es la que menos
-  escrutinio recibe por defecto.
+Bucle infinito o lógica destructiva sin relación con el cambio funcional
+descrito en el commit, introducida por el propio mantenedor habitual
+(denegación de servicio deliberada, no exfiltración/backdoor).

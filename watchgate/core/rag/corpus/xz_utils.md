@@ -28,20 +28,10 @@ legible en el repositorio git, sino:
 - La ofuscación usaba compresión y XOR sobre los payloads embebidos, de forma
   que un `grep` simple sobre el diff no encontraba cadenas sospechosas.
 
-## Por qué es relevante para WatchGate
+## Patrón a vigilar
 
-- El cambio "parece" legítimo si se mira solo el mensaje de commit y el
-  historial del autor (repuntación aparentemente sólida, acumulada durante
-  años) — de ahí la necesidad de evaluar el *contenido* del cambio con
-  independencia de la reputación declarada.
-- El payload vivía en scripts de *build* (`Makefile`, `m4/*.m4`,
-  `configure`) y en datos de test binarios, no en el código de la aplicación
-  — un patrón a vigilar especialmente en la capa estática (llamadas de red o
-  ejecución condicional dentro de ficheros de build) y en la capa semántica
-  (¿por qué un fichero de test de compresión necesita lógica condicional
-  sobre la arquitectura del compilador?).
-- La introducción fue gradual y a lo largo de múltiples PRs pequeños y
-  aparentemente inofensivos, no un único cambio grande y evidente.
+Lógica condicional sobre arquitectura/compilador en ficheros de test o
+build, o datos de test binarios sin relación con ningún caso documentado.
 
 Técnica MITRE ATT&CK relacionada: T1195.002 (Compromise Software Supply
 Chain), T1027 (Obfuscated Files or Information).

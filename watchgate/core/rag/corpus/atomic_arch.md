@@ -27,19 +27,10 @@ instalación.
   (subir de v1.2.3 a v1.2.4), un tipo de PR que habitualmente recibe muy poco
   escrutinio porque "solo" cambia un número de versión y checksums.
 
-## Por qué es relevante para WatchGate
+## Patrón a vigilar
 
-- Es el caso de referencia para la capa de **reputación**: la identidad
-  declarada del autor (nombre/email del commit) puede coincidir con la del
-  mantenedor legítimo aunque la cuenta real que ejecuta el push sea nueva, sin
-  contribuciones previas reales o sin verificación de email — señales que
-  *sí* son observables aunque el nombre/email se falsifiquen.
-- Confirma que los "bump de versión" rutinarios no deben tratarse como
-  automáticamente de bajo riesgo: un cambio pequeño en líneas pero con una
-  llamada de red nueva en un script de build/instalación es exactamente el
-  patrón que debe forzar revisión (ver `shortcircuit.py`, patrones que fuerzan
-  la capa semántica: `PKGBUILD$`).
+Bump de versión rutinario que añade una llamada de red nueva
+(`curl`/`wget`) en una función de instalación de un `PKGBUILD`.
 
 Técnica MITRE ATT&CK relacionada: T1195 (Supply Chain Compromise), T1548
-(Abuse Elevation Control Mechanism) cuando el payload persigue escalada de
-privilegios o persistencia tras la instalación.
+(Abuse Elevation Control Mechanism).

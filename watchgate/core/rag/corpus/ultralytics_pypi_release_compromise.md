@@ -27,21 +27,11 @@ público de GitHub**.
   automatizada que analice el repositorio de GitHub directamente en vez
   del paquete finalmente instalado.
 
-## Por qué es relevante para WatchGate
+## Patrón a vigilar
 
-- Documenta honestamente una limitación estructural del sistema: WatchGate
-  analiza diffs de **código fuente** (`NormalizedDiff`), no artefactos de
-  build ya empaquetados — un ataque como este, igual que SolarWinds, cae
-  fuera de lo que la capa semántica puede ver por diseño.
-- Refuerza por qué la consulta en vivo a OSV (`gather_dependency_findings`,
-  `lookup_package_registry`) es una capa de defensa independiente y
-  necesaria: es la única señal de este corpus capaz de detectar este tipo
-  de compromiso, precisamente porque no depende de leer código fuente.
-- El objetivo del payload (minería de criptomonedas al instanciar un
-  modelo YOLO) ilustra un patrón de activación distinto a los demás casos:
-  no se dispara al importar el módulo, sino en un punto de uso normal y
-  esperado de la librería, maximizando el número de máquinas afectadas sin
-  requerir ninguna acción inusual del usuario.
+No detectable en el diff de código fuente — el compromiso vive solo en el
+artefacto publicado (build/distribución), no en git. Detectable únicamente
+vía consulta en vivo al registro del paquete.
 
 Técnica MITRE ATT&CK relacionada: T1195.002 (Compromise Software Supply
-Chain), sobre el eslabón de build/distribución en vez del código fuente.
+Chain).

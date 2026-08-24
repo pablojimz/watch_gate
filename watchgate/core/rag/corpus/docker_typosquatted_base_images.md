@@ -35,23 +35,10 @@ son:
   repositorio (descargado en el propio `RUN`), en vez de arrancar
   directamente el proceso de la aplicación.
 
-## Por qué es relevante para WatchGate
+## Patrón a vigilar
 
-- El diff de un PR **sí** puede capturar el momento exacto en que se
-  introduce el riesgo (el cambio de `FROM` o el `RUN curl | sh`), aunque el
-  contenido malicioso final viva fuera del repositorio (en el registry de
-  imágenes) — la capa estática debe tratar un `Dockerfile` igual que un
-  script de build de cualquier otro ecosistema: llamadas de red y ejecución
-  de código descargado son señales de riesgo, no solo en PKGBUILD o en
-  workflows de CI.
-- Un cambio de imagen base a un tag mutable y sin firmar/pinnear es análogo a
-  "firmado con clave nunca vista" en la capa de reputación, pero aplicado a
-  dependencias de infraestructura en vez de a un commit: se pierde la
-  garantía de que lo que se revisó hoy es lo que se ejecutará mañana.
-- Para la capa semántica: la pregunta relevante no es solo "¿qué hace este
-  `RUN`?", sino "¿por qué esta imagen necesita construirse o arrancar
-  descargando algo que no está versionado en el propio repositorio?".
+Cambio de imagen base (`FROM`) a un tag mutable sin firmar/pinnear, o
+`RUN curl | sh` dentro de un `Dockerfile`.
 
 Técnicas MITRE ATT&CK relacionadas: T1195.002 (Compromise Software Supply
-Chain) y T1027 (Obfuscated Files or Information, el propio binario del
-minero suele venir empaquetado/ofuscado dentro de la imagen).
+Chain), T1027 (Obfuscated Files or Information).
