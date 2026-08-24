@@ -148,6 +148,13 @@ export interface OrgMetrics {
   trend: { day: string; avg_score: number; count: number }[]
 }
 
+export interface RagCorpusCase {
+  id: string
+  title: string
+  type: 'caso_real' | 'mitre_attck' | 'tecnica' | 'patron' | 'otro'
+  summary: string
+}
+
 export interface UiSettings {
   primary_color: string
   accent_color: string
@@ -279,6 +286,7 @@ export const api = {
     }),
   getMetrics: () => request<OrgMetrics>('/metrics'),
   getAgentUsageMetrics: () => request<AgentUsageMetrics>('/metrics/agent-usage'),
+  getRagCorpus: () => request<RagCorpusCase[]>('/rag/corpus'),
   getLlmSettings: () => request<LlmSettings>('/settings/llm'),
   putLlmSettings: (body: LlmSettingsUpdate) =>
     request<LlmSettings>('/settings/llm', {

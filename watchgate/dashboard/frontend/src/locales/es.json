@@ -4,6 +4,7 @@
     "repos": "Repositorios",
     "externalRepos": "Auditoría Externa",
     "metrics": "Métricas",
+    "rag": "Base de conocimiento",
     "apiKeys": "API Keys",
     "userSettings": "Mi Cuenta",
     "admin": "Configuración",
@@ -260,6 +261,21 @@
     "feedbackRate": "{{rate}}% marcado como correcto (sobre resueltos)",
     "byRepo": "Desglose por repositorio",
     "empty": "Aún no hay datos de análisis."
+  },
+  "rag": {
+    "title": "Base de conocimiento (RAG)",
+    "subtitle": "{{count}} casos documentados que la capa semántica usa como referencia al analizar un PR.",
+    "subtitleLoading": "Cargando...",
+    "searchPlaceholder": "Buscar por título o contenido...",
+    "empty": "Aún no hay ningún caso indexado.",
+    "noMatches": "Ningún caso coincide con la búsqueda.",
+    "type": {
+      "caso_real": "Caso real",
+      "mitre_attck": "MITRE ATT&CK",
+      "tecnica": "Técnica",
+      "patron": "Patrón",
+      "otro": "Otro"
+    }
   },
   "apiKeys": {
     "title": "Tus API keys",
