@@ -34,6 +34,9 @@ _TYPE_PREFIXES: dict[str, str] = {
     "MITRE ATT&CK": "mitre_attck",
     "Técnica:": "tecnica",
     "Patrón:": "patron",
+    # Documentos sincronizados desde la API de GitHub Security Advisories
+    # (`watchgate rag sync-cves` -- core/rag/threat_feed.py).
+    "Aviso:": "aviso",
 }
 
 

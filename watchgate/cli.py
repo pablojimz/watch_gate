@@ -125,6 +125,49 @@ def _build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_INDEX_PATH,
         help=f"Ruta al índice ChromaDB (default: {DEFAULT_INDEX_PATH})",
     )
+    sync_cves_parser = rag_subparsers.add_parser(
+        "sync-cves",
+        help=(
+            "Descarga avisos reales (paquetes maliciosos / CVEs) de la API de "
+            "GitHub Security Advisories al corpus del RAG y reindexa"
+        ),
+    )
+    sync_cves_parser.add_argument(
+        "--ecosystem",
+        action="append",
+        dest="ecosystems",
+        metavar="ECO",
+        help=(
+            "Ecosistema a sincronizar (npm, pip, rubygems, maven, go, rust...). "
+            "Repetible. Default: npm y pip."
+        ),
+    )
+    sync_cves_parser.add_argument(
+        "--type",
+        dest="advisory_type",
+        choices=["malware", "reviewed"],
+        default="malware",
+        help=(
+            "Tipo de aviso: 'malware' (paquetes maliciosos conocidos, default) "
+            "o 'reviewed' (CVEs curados por GitHub)"
+        ),
+    )
+    sync_cves_parser.add_argument(
+        "--limit",
+        type=int,
+        default=30,
+        help="Máximo de avisos por ecosistema (default: 30)",
+    )
+    sync_cves_parser.add_argument(
+        "--no-reindex",
+        action="store_true",
+        help="No reindexar el corpus en ChromaDB tras descargar los avisos",
+    )
+    sync_cves_parser.add_argument(
+        "--index-path",
+        default=DEFAULT_INDEX_PATH,
+        help=f"Ruta al índice ChromaDB (default: {DEFAULT_INDEX_PATH})",
+    )
 
     # Command: mcp
     mcp_parser = subparsers.add_parser("mcp", help="Servidor Model Context Protocol (MCP)")
@@ -334,6 +377,36 @@ def _cmd_rag_reindex(args: argparse.Namespace) -> int:
         return 3
 
 
+def _cmd_rag_sync_cves(args: argparse.Namespace) -> int:
+    # Import diferido: httpx ya es dependencia, pero no hace falta cargar el
+    # módulo (ni su logging) para el resto de subcomandos.
+    from watchgate.core.rag.indexer import CORPUS_DIR
+    from watchgate.core.rag.threat_feed import DEFAULT_ECOSYSTEMS, sync_advisories_to_corpus
+
+    ecosystems = tuple(args.ecosystems) if args.ecosystems else DEFAULT_ECOSYSTEMS
+    try:
+        written = sync_advisories_to_corpus(
+            corpus_dir=CORPUS_DIR,
+            ecosystems=ecosystems,
+            advisory_type=args.advisory_type,
+            limit_per_ecosystem=args.limit,
+        )
+    except Exception as exc:  # noqa: BLE001
+        print(f"[Error RAG] No se pudieron sincronizar los avisos: {exc}", file=sys.stderr)
+        return 3
+    print(
+        f"[WatchGate] {len(written)} avisos nuevos/actualizados en el corpus "
+        f"(type={args.advisory_type}, ecosistemas: {', '.join(ecosystems)})"
+    )
+    if args.no_reindex:
+        print("[WatchGate] Reindexado omitido (--no-reindex).")
+        return 0
+    if not written:
+        print("[WatchGate] Sin cambios en el corpus -- no hace falta reindexar.")
+        return 0
+    return _cmd_rag_reindex(args)
+
+
 def _cmd_mcp_serve(args: argparse.Namespace) -> int:
     from watchgate.mcp.server import run_stdio_server
 
@@ -358,6 +431,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.subcommand == "rag":
         if args.rag_subcommand == "reindex":
             return _cmd_rag_reindex(args)
+        if args.rag_subcommand == "sync-cves":
+            return _cmd_rag_sync_cves(args)
         parser.parse_args(["rag", "--help"])
         return 2
     if args.subcommand == "mcp":
