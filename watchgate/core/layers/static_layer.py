@@ -164,6 +164,27 @@ _yara_rules_cache: dict[str, yara.Rules | None] = {}
 # para reglas sin `finding_type` declarado, ver _run_semgrep_on_file).
 _semgrep_finding_type_cache: dict[str, dict[str, str]] = {}
 
+# Caché de PROCESO de la vista de reglas verificadas (paso 0 de
+# _get_rules_dir): (monotonic de la resolución, ruta de la vista). Una sola
+# entrada bajo la clave "view". Ver StaticLayer._get_verified_rules_dir --
+# sin esto, cada análisis con RULES_REPO_TOKEN configurado pagaba una
+# llamada a la Releases API + verificación de hashes.
+_verified_rules_view_cache: dict[str, tuple[float, Path]] = {}
+_DEFAULT_RULES_VERIFY_TTL_SECONDS = 3600.0
+
+
+def _rules_verify_ttl_seconds() -> float:
+    """TTL de la caché de la vista verificada. 1h por defecto; 0 (o
+    negativo) desactiva la caché y re-verifica en cada análisis (el
+    comportamiento anterior); un valor no numérico cae al default."""
+    raw = os.environ.get("WATCHGATE_RULES_VERIFY_TTL_SECONDS", "")
+    if not raw:
+        return _DEFAULT_RULES_VERIFY_TTL_SECONDS
+    try:
+        return float(raw)
+    except ValueError:
+        return _DEFAULT_RULES_VERIFY_TTL_SECONDS
+
 # Categoría de reglas custom/ que se aplica SIEMPRE, con independencia del
 # lenguaje detectado (patrones de secretos hardcodeados, cadenas de
 # conexión, etc. -- no son específicos de un lenguaje).
@@ -386,7 +407,45 @@ class StaticLayer(AnalysisLayer):
             self._refresh_rules_view_entry(src, dst)
 
     def _get_verified_rules_dir(self) -> Path | None:
-        """Paso 0 de `_get_rules_dir`: verifica contra la ÚLTIMA versión
+        """Paso 0 de `_get_rules_dir`, con caché de PROCESO y TTL.
+
+        `local_rules_client.get_verified_rules()` pide SIEMPRE el
+        manifest.json de la última Release a la API de GitHub (ver su
+        docstring) -- y el orquestador crea una StaticLayer NUEVA por
+        análisis (`LAYER_REGISTRY[name]()`), así que sin esta caché cada
+        PR analizado con RULES_REPO_TOKEN configurado pagaba una llamada
+        de red + verificación de hashes + materialización de la vista,
+        para un repo de reglas que publica versiones con poca frecuencia.
+        La caché es a nivel de módulo (sobrevive a la instancia) y expira
+        a `WATCHGATE_RULES_VERIFY_TTL_SECONDS` (1h por defecto; 0 =
+        verificar siempre, el comportamiento anterior).
+
+        Solo se cachean ÉXITOS: un fallo (sin red, verificación fallida)
+        devuelve None sin cachear, para que el siguiente análisis
+        reintente -- los pasos 1-4 de fallback son locales y baratos, y
+        una regla verificada de más nunca debe quedarse fuera una hora
+        por un fallo transitorio de red.
+        """
+        if not os.environ.get(_RULES_REPO_TOKEN_ENV):
+            # Sin token no hay paso 0 en absoluto -- ni caché que consultar.
+            return None
+
+        now = time.monotonic()
+        cached = _verified_rules_view_cache.get("view")
+        if cached is not None:
+            cached_at, cached_path = cached
+            # La vista puede haber desaparecido bajo los pies (limpieza de
+            # ~/.cache) -- en ese caso se ignora la caché y se re-resuelve.
+            if now - cached_at < _rules_verify_ttl_seconds() and cached_path.exists():
+                return cached_path
+
+        resolved = self._resolve_verified_rules_dir()
+        if resolved is not None:
+            _verified_rules_view_cache["view"] = (now, resolved)
+        return resolved
+
+    def _resolve_verified_rules_dir(self) -> Path | None:
+        """Resolución SIN caché del paso 0: verifica contra la ÚLTIMA versión
         publicada del repo de reglas (`local_rules_client.get_verified_rules`,
         catálogo completo: todos los lenguajes custom, todas las carpetas
         third-party, todas las categorías YARA) y materializa una vista
