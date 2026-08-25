@@ -44,9 +44,7 @@ def dashboard_client(test_db_session):
 def test_connect_git_server_repo_creates_repo_and_bound_key(dashboard_client):
     client, session = dashboard_client
 
-    response = client.post(
-        "/api/repos/external/git-server", json={"repo_path": "demo/repo-prueba"}
-    )
+    response = client.post("/api/repos/external/git-server", json={"repo_path": "demo/repo-prueba"})
     assert response.status_code == 201
     data = response.json()
 
@@ -66,9 +64,7 @@ def test_connect_git_server_repo_creates_repo_and_bound_key(dashboard_client):
     ).first()
     assert repo is not None
 
-    key = session.exec(
-        select(UserAPIKey).where(UserAPIKey.monitored_repo_id == repo.id)
-    ).first()
+    key = session.exec(select(UserAPIKey).where(UserAPIKey.monitored_repo_id == repo.id)).first()
     assert key is not None
     assert key.name == "Hook servidor Git: demo/repo-prueba"
 
