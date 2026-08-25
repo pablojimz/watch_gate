@@ -1,0 +1,62 @@
+# Overlay OPCIONAL, solo para desarrollo/pruebas: levanta un servidor Git
+# propio (Forgejo, un fork ligero de Gitea) para poder probar en local el
+# flujo de "servidor Git corporativo" (hook `pre-receive`, ver
+# docs/manual_git_hooks.md §1-§4) sin depender de una instancia real de
+# GitLab/Bitbucket/Gitolite -- justo lo que documenta la §6 (añadida junto
+# a este fichero).
+#
+# NO se combina automáticamente con `docker compose up` (a diferencia de
+# docker-compose.override.yml): hay que pedirlo explícitamente para no
+# levantar un servidor Git completo cada vez que se arranca la pila
+# principal. Se declara aparte (y no dentro de docker-compose.yml) porque
+# es una pieza de pruebas, no uno de los 4 servicios desplegables de
+# verdad.
+#
+# Uso:
+#   docker compose -f docker-compose.yml -f docker-compose.gitserver.yml up -d forgejo
+#   # UI: http://localhost:3050 (usuario/contraseña se crean en el primer
+#   # arranque, ver docs/manual_git_hooks.md §6.1)
+#
+# Requiere que engine-api (docker-compose.yml) esté levantado en la MISMA
+# pila (mismo `docker compose -f ... -f ...`, mismo proyecto/red por
+# defecto) -- el hook llama a http://engine-api:8080, el nombre de
+# servicio tal cual lo resuelve la red interna de Compose.
+
+services:
+  forgejo:
+    build:
+      context: .
+      dockerfile: docker/forgejo.Dockerfile
+    environment:
+      USER_UID: 1000
+      USER_GID: 1000
+      FORGEJO__database__DB_TYPE: sqlite3
+      # Sin esto, Forgejo arranca en modo "pendiente de instalar" (muestra
+      # el asistente web en `/`) y CUALQUIER comando `forgejo admin ...`
+      # falla con "Unable to load config file for a installed Forgejo
+      # instance" -- verificado en vivo. `INSTALL_LOCK=true` da por hecha
+      # la instalación usando la config ya completa de arriba (sqlite3 +
+      # dominio local), sin pasar por el asistente.
+      FORGEJO__security__INSTALL_LOCK: "true"
+      FORGEJO__server__DOMAIN: localhost
+      FORGEJO__server__ROOT_URL: http://localhost:3050/
+      FORGEJO__server__SSH_DOMAIN: localhost
+      FORGEJO__server__SSH_PORT: 2222
+      # Servidor de pruebas local: sin esto, Forgejo exige verificación de
+      # email antes de dejar hacer push/crear repos con un usuario recién
+      # creado por CLI.
+      FORGEJO__service__REGISTER_EMAIL_CONFIRM: "false"
+      FORGEJO__service__DISABLE_REGISTRATION: "true"
+    volumes:
+      - forgejo_data:/data
+    ports:
+      - "3050:3000"
+      - "2222:22"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  forgejo_data:

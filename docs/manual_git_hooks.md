@@ -368,19 +368,36 @@ docker compose up -d postgres engine-api
 ```
 
 2. Provisiona una API Key de prueba (una sola vez -- queda en el volumen
-   `postgres_data`, sobrevive a `docker compose down`/`up` sin `-v`):
+   `postgres_data`, sobrevive a `docker compose down`/`up` sin `-v`).
+   **Importante**: `monitored_repo_id` debe ser el `id` de un
+   `MonitoredRepo` real con `repo_path` IGUAL al nombre que el hook enviará
+   como `metadata.repo` (por defecto, el nombre de la carpeta del repo
+   local -- ver `$repo` en el script del §5.2) -- pasar cualquier otro
+   string ahí (como un slug suelto) hace que
+   `ensure_api_key_repo_binding` (`watchgate/api/routers/analyze.py`)
+   rechace la petición con 403 en el primer push, porque no encuentra
+   ningún `MonitoredRepo` con ese id:
 
 ```bash
 docker compose exec engine-api python3 -c "
 from watchgate.db.connection import get_session
 from watchgate.db.repository import create_organization, create_user, create_api_key
+from watchgate.db.models import MonitoredRepo
+import uuid
 with next(get_session()) as session:
     org = create_organization(session, name='Test', org_id='local-test')
     user = create_user(session, email='test@local', name='Test', org_id=org.id)
-    _, token = create_api_key(session, user_id=user.id, org_id=org.id, monitored_repo_id='local-repo')
+    repo = MonitoredRepo(id=str(uuid.uuid4()), org_id=org.id, repo_path='prueba_1', monitor_type='git_server')
+    session.add(repo)
+    session.commit()
+    session.refresh(repo)
+    _, token = create_api_key(session, user_id=user.id, org_id=org.id, monitored_repo_id=repo.id)
     print(token)
 "
 ```
+
+   (`docker/git-server-hooks/provision_repo.sh`, añadido junto con la §6,
+   automatiza exactamente este mismo paso.)
 
 3. Copia el script de §5.2 a `<tu-repo>/.git/hooks/pre-push` y márcalo
    ejecutable:
@@ -438,3 +455,231 @@ el hook, calcula el diff `main..feature/test-finding`, llama al Engine API
 real, y devuelve `score=33` con el hallazgo real de
 `hardcoded-aws-access-key` sobre `config.py:9` impreso en la terminal antes
 de que el push complete.
+
+---
+
+## 6. Probar el `pre-receive` real (§1-§4) en local con Forgejo (Docker)
+
+El §5 prueba el hook **client-side** (`pre-push`) sin necesitar ningún
+servidor Git real. Para probar el hook **server-side** de verdad (§1-§4,
+`watchgate/adapters/git_hook/pre_receive.py`) hace falta un servidor Git
+con soporte de hooks -- esta sección monta uno desechable en local con
+[Forgejo](https://forgejo.org/) (fork ligero de Gitea, un único contenedor,
+sin dependencias externas).
+
+**Importante -- esto NO usa `pre_receive.py`.** Ese módulo analiza EN
+PROCESO (importa el paquete `watchgate` y llama a `run_full_analysis`
+directamente), lo que exigiría instalar todo el paquete Python -- LLM,
+capa semántica, todas las dependencias -- dentro del contenedor del
+servidor Git. En su lugar, `docker/git-server-hooks/pre-receive` es un
+script bash (`git`+`curl`+`jq`, mismo patrón que el hook `pre-push` del
+§5.2) que llama al Engine API real por HTTP -- mismo servicio que ya usan
+la GitHub Action y el hook `pre-push`, solo que instalado del lado del
+servidor. La delegación a un Engine API central desde `pre_receive.py`
+está contemplada mediante sus parámetros `api_url`/`api_key`, pero el
+propio módulo avisa explícitamente que **todavía no está implementada**
+(ver su docstring) -- este script bash es, hoy, el único camino real para
+un hook `pre-receive` que hable con un Engine API centralizado en vez de
+analizar en local.
+
+### 6.1 Arquitectura
+
+```
++----------------------+   git push   +--------------------------------------+
+|  Desarrollador        | -----------> |  Contenedor forgejo (docker-compose   |
+|  (git clone del       |              |  .gitserver.yml)                      |
+|   repo de Forgejo)    |              |  hooks/pre-receive.d/watchgate        |
++----------------------+              +-----------------+----------------------+
+                                                          |
+                                          POST /api/v1/analyze
+                                          Authorization: Bearer <api key del repo>
+                                                          |
+                                                          v
+                                       +--------------------------------------+
+                                       |  Contenedor engine-api (misma pila,   |
+                                       |  docker-compose.yml)                  |
+                                       +-----------------+----------------------+
+                                                          |
+                                          Espejo best-effort (insert_aggregated)
+                                                          |
+                                                          v
+                                       +--------------------------------------+
+                                       |  Postgres: watchgate_dashboard        |
+                                       |  -> visible en /repos del Dashboard   |
+                                       +--------------------------------------+
+```
+
+Piezas nuevas, todas fuera de `docker-compose.yml` (que sigue
+representando solo los 4 servicios desplegables de verdad):
+
+* `docker/forgejo.Dockerfile` -- imagen oficial de Forgejo + `jq` (el hook
+  lo necesita para parsear la respuesta JSON del Engine API; `curl` ya
+  viene incluido).
+* `docker-compose.gitserver.yml` -- overlay que añade el servicio
+  `forgejo` a la MISMA red/proyecto que `docker-compose.yml` (de ahí que
+  el hook pueda llamar a `http://engine-api:8080` por nombre de
+  servicio). No se combina solo -- hay que pasar los dos `-f` a la vez.
+* `watchgate/adapters/git_hook/pre_receive_hook.sh` -- el script del hook
+  en sí. Vive DENTRO del paquete `watchgate` (no en `docker/`) a propósito:
+  así el Engine API puede servirlo por HTTP (`GET
+  /api/v1/hooks/pre-receive`, `watchgate/api/routers/hooks.py`) para
+  instalarlo en un servidor Git real sin tener este repo clonado ahí --
+  ver §6.3.
+* `docker/git-server-hooks/provision_repo.sh` -- crea el `MonitoredRepo` +
+  la API key atada a él (ver la corrección de la §5.3: la key tiene que
+  estar atada a un `MonitoredRepo` real con el mismo `repo_path` que se
+  analiza, o la puerta clave<->repo de `analyze.py` la rechaza).
+* `docker/git-server-hooks/install.sh` -- copia el hook + su API key
+  dentro del repo ya creado en el contenedor de Forgejo (solo para este
+  montaje local -- para un servidor real, usa el `curl` de §6.3).
+
+### 6.2 Paso a paso
+
+1. Levanta la pila principal + Forgejo (el `-f` doble es necesario para
+   que ambos queden en la misma red):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.gitserver.yml up -d --build
+```
+
+2. Abre `http://localhost:3050`, crea el primer usuario (Forgejo lo marca
+   admin automáticamente) y, desde su cuenta, crea un repo nuevo (con
+   README, para tener un `main` con el que comparar en el primer push que
+   sí lleve cambios).
+
+   Alternativa por CLI, sin pasar por la UI:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.gitserver.yml \
+  exec -u git forgejo forgejo admin user create \
+  --admin --username <tu-usuario> --password '<tu-contraseña>' \
+  --email tu@email.local --must-change-password=false
+
+curl -s -u <tu-usuario>:<tu-contraseña> -X POST \
+  http://localhost:3050/api/v1/user/repos \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"repo-prueba","auto_init":true}'
+```
+
+3. Da de alta el repo en WatchGate (crea el `MonitoredRepo` + una API key
+   atada a él; el `owner/repo` debe coincidir EXACTO con el de Forgejo):
+
+```bash
+API_KEY=$(./docker/git-server-hooks/provision_repo.sh <tu-usuario>/repo-prueba)
+echo "$API_KEY"   # guárdala -- solo se muestra en claro esta vez
+```
+
+4. Instala el hook en el repo dentro del contenedor de Forgejo:
+
+```bash
+./docker/git-server-hooks/install.sh <tu-usuario>/repo-prueba "$API_KEY"
+```
+
+5. Clona el repo (HTTP, con el usuario/contraseña de Forgejo) y prueba un
+   push con una vulnerabilidad deliberada:
+
+```bash
+git clone http://<tu-usuario>:<tu-contraseña>@localhost:3050/<tu-usuario>/repo-prueba.git
+cd repo-prueba
+echo 'AWS_KEY = "AKIAIOSFODNN7EXAMPLE"' > config.py
+git add config.py && git commit -m "test: clave hardcodeada"
+git push origin main
+```
+
+El push debe rechazarse (`❌ [WatchGate] PUSH RECHAZADO`, exit code
+distinto de cero en el lado del servidor -- git lo reporta como
+`! [remote rejected]`), y el análisis debe aparecer en
+`http://localhost:5173/repos` bajo `<tu-usuario>/repo-prueba` en cuanto
+recargues, gracias al espejo best-effort de `POST /api/v1/analyze` hacia
+`watchgate_dashboard` -- sin ningún paso manual adicional de alta en el
+Dashboard.
+
+### 6.3 Instalación en un servidor Git REAL (sin Forgejo local, sin clonar `watch_gate`)
+
+El §6.2 monta un Forgejo desechable para probar en local; esta sección es
+el camino para un servidor Git corporativo de verdad (GitLab
+self-managed, Gitea/Forgejo en producción, Bitbucket Server, Gitolite,
+bare SSH) -- pensado para que el administrador de ese servidor NO
+necesite tener este repo clonado, solo dos cosas: un `curl` y una clave.
+
+1. **Desde el Dashboard** (`/repos` → "Conectar repositorio" → pestaña
+   "Servidor Git propio"): mete la ruta del repo (igual que en tu
+   servidor Git, ej. `mi-org/mi-proyecto`) y pulsa "Registrar y generar
+   clave". Esto crea el `MonitoredRepo` (`monitor_type="git_server"`) y
+   una API key atada a él en un solo paso -- el Dashboard te da entonces
+   un comando de 3 líneas ya relleno con tu clave y la URL real del Engine
+   API (`WATCHGATE_ENGINE_API_PUBLIC_URL`, ver `.env.example`).
+
+2. **En el servidor Git**, dentro del repo bare (ej.
+   `/srv/git/mi-proyecto.git`), pega el comando que te dio el Dashboard --
+   equivalente a:
+
+```bash
+mkdir -p hooks/pre-receive.d
+curl -fsSL http://tu-engine-api:8080/api/v1/hooks/pre-receive \
+  -o hooks/pre-receive.d/watchgate
+chmod +x hooks/pre-receive.d/watchgate
+printf 'WATCHGATE_ENGINE_API_URL=http://tu-engine-api:8080\nWATCHGATE_ENGINE_API_KEY=wg_live_...\n' \
+  > hooks/watchgate.env
+```
+
+   Si el servidor Git NO soporta `hooks/<hookname>.d/*` (Forgejo/Gitea sí,
+   ver §6.1; un bare SSH plano no), copia el mismo fichero directo a
+   `hooks/pre-receive` en vez de a `pre-receive.d/watchgate` -- ver §3.1
+   para el resto de entornos (GitLab Custom Hooks, Bitbucket External
+   Hooks Plugin, Gitolite).
+
+3. Prueba con un `git push` cualquiera -- el hook lee
+   `hooks/watchgate.env` automáticamente (lo sourcea él mismo al
+   arrancar) y llama al Engine API real.
+
+Sin `WATCHGATE_ENGINE_API_PUBLIC_URL` configurada en el `.env` del
+Dashboard, el comando generado usa `http://localhost:8080` -- correcto
+solo si el servidor Git y WatchGate corren en la misma máquina/red; para
+un servidor Git remoto de verdad, hay que rellenar esa variable con la URL
+públicamente alcanzable del Engine API.
+
+### 6.4 Problemas reales encontrados al montarlo (2026-08-25)
+
+* **La base de datos de este `postgres_data` local nunca se había marcado
+  con Alembic** (no existía la tabla `alembic_version`) -- el esquema
+  llevaba tiempo creado directamente vía `create_all()` con una versión
+  antigua de `models.py`, y le faltaba la migración `c4f8a1d9e2b6` (borra
+  `auto_scan_prs`/`scan_interval_minutes` de `monitored_repos`). Esto
+  rompía CUALQUIER alta de `MonitoredRepo` nuevo -- no solo la de este
+  flujo, también el claim de la GitHub App y el diálogo "Conectar
+  repositorio" del Dashboard -- con un `IntegrityError` de columna
+  `NOT NULL`. Se corrigió con `alembic stamp b7e91c2a4d3f` (la revisión
+  real a la que correspondía el esquema existente) seguido de
+  `alembic upgrade head`, sin perder los datos que ya había. Si otro
+  entorno local tiene el mismo volumen antiguo, el síntoma es el mismo
+  error al intentar crear el primer repo nuevo tras actualizar código.
+* **Con `WATCHGATE_LLM_PROVIDER=local` (Ollama), el timeout de 60s que
+  traía este hook por defecto (copiado del `pre-push` del §5.2, pensado
+  para un LLM en la nube) se queda corto** -- verificado en vivo: un
+  modelo "thinking" de 27B sobre un diff real tarda más de un minuto
+  incluso con GPU A100 de por medio (la respuesta llega, pero pasados los
+  60s, lo que producía un rechazo por FAIL_CLOSED -- "fallo de
+  infraestructura" -- en vez de un veredicto real del análisis). Con el
+  timeout subido a `WATCHGATE_HOOK_TIMEOUT=240` (default actual del
+  script) la petición sí completa y devuelve el semáforo real. Con un
+  proveedor en la nube (Anthropic/Gemini) 60s vuelve a ser razonable --
+  ajustar hacia abajo si es tu caso.
+
+### 6.5 Limitaciones conocidas de este montaje
+
+* El hueco de UI sigue abierto: el repo aparece en `/repos` recién
+  DESPUÉS del primer push analizado, no antes -- no hay (todavía) una
+  pantalla para "dar de alta un repo de servidor Git antes de su primer
+  push", igual que con el hook `pre-receive` real contra un servidor Git
+  corporativo de verdad. `provision_repo.sh` sí crea el `MonitoredRepo`
+  de inmediato del lado de la base de datos, pero eso no es lo mismo que
+  un flujo guiado en el Dashboard.
+* Es un montaje de UN solo hook por repo, instalado a mano con
+  `install.sh` -- no hay forma de instalarlo automáticamente en todos los
+  repos nuevos que se creen en Forgejo (equivalente al problema, ya
+  documentado, de los "server-wide custom hooks" en Gitea/Forgejo, que no
+  tienen soporte fiable fuera de por-repo).
+* `FORGEJO__database__DB_TYPE=sqlite3` en `docker-compose.gitserver.yml`
+  es deliberado -- mantiene este overlay autocontenido (un volumen propio,
+  `forgejo_data`) sin tocar el Postgres compartido de la pila principal.

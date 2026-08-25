@@ -14,7 +14,7 @@ from typing import Any
 
 from watchgate.config import load_config
 from watchgate.core.diffparser import parse_diff_from_text
-from watchgate.core.models import Semaforo
+from watchgate.core.models import AggregatedResult, Semaforo
 from watchgate.core.pipeline import run_full_analysis
 
 NULL_SHA = "0000000000000000000000000000000000000000"
@@ -58,7 +58,17 @@ def extract_diff_from_shas(
     if new_sha.replace("0", "") == "":
         return ""
 
-    cmd = ["git", "diff", f"{base_ref}..{new_sha}"]
+    # `git diff <base> <new>` (dos argumentos), NO `git diff <base>..<new>`.
+    # La sintaxis de rango `A..B` la parsea el lector de rangos de revisión,
+    # que EXIGE que ambos extremos sean commits -- y en el push inicial de
+    # una rama/repo (`old_sha` = SHA nulo) `base_ref` es el árbol VACÍO
+    # (4b825dc...), un objeto tree, no un commit: `A..B` falla con "Invalid
+    # revision range" justo en el primer push a un repo nuevo (reproducido
+    # en vivo montando un servidor Git bare). Con los dos endpoints como
+    # argumentos separados, cada uno se resuelve como tree-ish
+    # independiente y el árbol vacío es válido -- equivalente a `A..B` para
+    # commits reales, pero además correcto para el caso de creación.
+    cmd = ["git", "diff", base_ref, new_sha]
     proc = subprocess.run(
         cmd, cwd=repo_path, capture_output=True, text=True, check=True, timeout=timeout
     )
@@ -76,6 +86,43 @@ def parse_pre_receive_input(stdin_text: str) -> list[tuple[str, str, str]]:
         if len(parts) >= 3:
             refs.append((parts[0], parts[1], parts[2]))
     return refs
+
+
+def _report_to_dashboard(result: AggregatedResult, author_login: str | None) -> None:
+    """Envía el resultado al dashboard (POST /api/scores) si están
+    configurados `WATCHGATE_DASHBOARD_URL` y `WATCHGATE_DASHBOARD_INGEST_TOKEN`
+    -- el mismo endpoint y token de ingesta que usa la GitHub Action, para
+    que un push a un servidor Git corporativo aparezca en el dashboard
+    igual que un análisis de PR.
+
+    Best-effort a propósito: la DECISIÓN de bloqueo (exit code) ya está
+    tomada con el análisis local; que el dashboard esté caído o mal
+    configurado no debe cambiar si el push se acepta o se rechaza -- solo
+    se pierde la visibilidad, y se avisa por stderr. Sin las dos variables,
+    no se intenta nada (el hook sigue funcionando de forma autónoma)."""
+    dashboard_url = os.environ.get("WATCHGATE_DASHBOARD_URL")
+    ingest_token = os.environ.get("WATCHGATE_DASHBOARD_INGEST_TOKEN")
+    if not dashboard_url or not ingest_token:
+        return
+
+    import httpx
+
+    endpoint = dashboard_url.rstrip("/") + "/api/scores"
+    payload = {"result": result.model_dump(mode="json"), "author_login": author_login}
+    try:
+        response = httpx.post(
+            endpoint,
+            json=payload,
+            headers={"Authorization": f"Bearer {ingest_token}"},
+            timeout=10.0,
+        )
+        response.raise_for_status()
+    except httpx.HTTPError as exc:
+        sys.stderr.write(
+            f"[WatchGate pre-receive] AVISO: no se pudo reportar el resultado al "
+            f"dashboard ({endpoint}): {exc!r}. El push sigue su curso segun el "
+            f"analisis local; solo se pierde la visibilidad en el dashboard.\n"
+        )
 
 
 def run_pre_receive(
@@ -141,9 +188,16 @@ def run_pre_receive(
             # Eliminación de rama o tag: no requiere análisis de código
             continue
 
+        # Nombre del repo tal cual se mostrará (dashboard incluido): por
+        # defecto la ruta del repo bare en el servidor, poco legible
+        # (`/srv/git/proyecto.git`). `WATCHGATE_REPO_NAME` permite fijar un
+        # nombre limpio tipo `mi-org/proyecto`, coherente con cómo aparecen
+        # los repos de GitHub/GitLab en el resto del dashboard.
+        repo_display_name = os.environ.get("WATCHGATE_REPO_NAME") or repo_path
+
         metadata: dict[str, Any] = {
             "ref_name": ref_name,
-            "repo": repo_path,
+            "repo": repo_display_name,
             "pr_id": ref_name.split("/")[-1],
         }
 
@@ -180,6 +234,10 @@ def run_pre_receive(
             if supports_alarm:
                 signal.setitimer(signal.ITIMER_REAL, 0)
                 signal.signal(signal.SIGALRM, previous_handler)
+
+        # Reporte al dashboard ANTES de decidir el bloqueo: un push rechazado
+        # (rojo) es justo el que más interesa que quede registrado y visible.
+        _report_to_dashboard(result, author_login=None)
 
         if result.semaforo == Semaforo.ROJO and config.block_on_red:
             overall_blocked = True

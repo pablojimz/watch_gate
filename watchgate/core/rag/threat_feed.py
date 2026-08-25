@@ -55,6 +55,45 @@ _MAX_DESCRIPTION_CHARS = 4000
 
 _NON_SAFE_ID_CHARS = re.compile(r"[^A-Za-z0-9_-]+")
 
+# Los avisos importados de OpenSSF empiezan con una línea
+# '## Source: ossf-package-analysis (<sha256>)' y terminan con un pie
+# '---\nCredit: ...' -- ver _clean_description.
+_SOURCE_HEADING = re.compile(r"^#{1,6}\s*Source:.*$", re.MULTILINE)
+_EMBEDDED_HEADING_MARKS = re.compile(r"^#{1,6}\s+", re.MULTILINE)
+
+
+def _clean_description(description: str) -> str:
+    """Adecenta el cuerpo del aviso tal y como llega de la API:
+
+    - fuera la línea '## Source: ossf-package-analysis (<sha256>)': un hash
+      de 64 hex no aporta nada al embedding, y al ser un H2 embebido rompía
+      el resumen que muestra el dashboard (toma el primer párrafo tras el
+      primer H2 del documento);
+    - fuera el pie 'Credit: ...' y sus separadores '---' (el enlace a la
+      fuente ya va en la sección '## Datos del aviso');
+    - cualquier otro encabezado markdown embebido se degrada a texto plano
+      para no competir con la estructura H1/H2 propia del documento.
+    """
+    text = _SOURCE_HEADING.sub("", description)
+    kept_lines = [
+        line
+        for line in text.splitlines()
+        if line.strip() != "---" and not line.strip().lower().startswith("credit:")
+    ]
+    text = _EMBEDDED_HEADING_MARKS.sub("", "\n".join(kept_lines))
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
+def _affected_package_names(advisory: dict[str, Any]) -> list[str]:
+    names: list[str] = []
+    for vuln in advisory.get("vulnerabilities") or []:
+        if not isinstance(vuln, dict):
+            continue
+        name = (vuln.get("package") or {}).get("name")
+        if name and name not in names:
+            names.append(name)
+    return names
+
 
 def _github_token() -> str | None:
     return os.environ.get("GITHUB_TOKEN") or os.environ.get("WATCHGATE_GITHUB_TOKEN")
@@ -158,13 +197,23 @@ def advisory_to_markdown(advisory: dict[str, Any]) -> str | None:
         return None
 
     advisory_type = advisory.get("type") or "unknown"
-    description = (advisory.get("description") or "").strip()
+    description = _clean_description(advisory.get("description") or "")
     if len(description) > _MAX_DESCRIPTION_CHARS:
         description = description[:_MAX_DESCRIPTION_CHARS].rstrip() + " […]"
     if not description:
         description = summary
 
     package_lines = _affected_packages_lines(advisory)
+    package_names = _affected_package_names(advisory)
+    # Nombres reales en el patrón, no un genérico "los paquetes de arriba":
+    # el texto de plantilla compartido por todos los avisos es casi idéntico
+    # entre sí en el espacio de embeddings -- meter el nombre del paquete en
+    # cada sección hace cada documento distintivo, y el nombre es justo lo
+    # que aparecerá en el diff (la consulta del retriever) cuando alguien
+    # añada esa dependencia.
+    names_clause = (
+        ", ".join(f"`{name}`" for name in package_names[:5]) or "los paquetes listados arriba"
+    )
 
     detail_lines = [f"- Tipo de aviso: {advisory_type}"]
     if advisory.get("severity"):
@@ -178,17 +227,16 @@ def advisory_to_markdown(advisory: dict[str, Any]) -> str | None:
 
     if advisory_type == "malware":
         pattern = (
-            "Diff que añade (o fija por primera vez) una dependencia sobre "
-            "cualquiera de los paquetes listados arriba, en cualquier versión "
-            "del rango afectado -- el paquete en sí ES el malware, no hace "
-            "falta ningún otro cambio sospechoso en el diff para que el "
-            "riesgo sea máximo."
+            f"Diff que añade (o fija por primera vez) una dependencia sobre "
+            f"{names_clause}, en cualquier versión del rango afectado -- el "
+            "paquete en sí ES el malware, no hace falta ningún otro cambio "
+            "sospechoso en el diff para que el riesgo sea máximo."
         )
     else:
         pattern = (
-            "Diff que añade o mantiene una dependencia sobre los paquetes "
-            "listados arriba dentro del rango de versiones afectado, sin "
-            "actualizar a la versión corregida."
+            f"Diff que añade o mantiene una dependencia sobre {names_clause} "
+            "dentro del rango de versiones afectado, sin actualizar a la "
+            "versión corregida."
         )
 
     sections = [

@@ -58,6 +58,19 @@ def run_managed_scan(
             from watchgate.dashboard.backend.db import resolve_github_credentials
 
             token, api_url = github_token, github_api_url
+            if not token:
+                # Credencial preferente del modo managed: el token efímero de
+                # la propia instalación de la GitHub App (limitado a los
+                # repos de ESA instalación, renovado solo, sin PATs de por
+                # medio). Solo si la App está configurada en el servidor;
+                # si no, cae a la cascada de PATs de siempre.
+                from watchgate.adapters.github_app import (
+                    get_installation_token,
+                    github_app_configured,
+                )
+
+                if github_app_configured():
+                    token = get_installation_token(installation_id)
             if not token or not api_url:
                 with dashboard_db_session() as dash_conn:
                     res_tok, res_url = resolve_github_credentials(dash_conn, repo_path=repo_path)

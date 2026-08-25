@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+// OJO: nada de iconos de marca (Github, Twitter...) -- lucide-react los
+// eliminó (aquí, v1.33): importar uno inexistente rompe el módulo entero y
+// deja TODA la app en blanco (esta página se importa estáticamente desde
+// App.tsx). Solo iconos genéricos verificados.
 import { Eye, Plus, RefreshCw, FolderGit2, GitBranch, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { api, type MonitoredRepoResponse } from '@/api/client'
@@ -11,7 +15,9 @@ import { TableSkeleton } from '@/components/dashboard/TableSkeleton'
 export default function ExternalReposPage() {
   const { t } = useTranslation()
   const [repos, setRepos] = useState<MonitoredRepoResponse[] | null>(null)
-  
+  const [appInstallUrl, setAppInstallUrl] = useState<string | null>(null)
+  const [showGitServers, setShowGitServers] = useState(false)
+
   // Form state
   const [newRepoPath, setNewRepoPath] = useState('')
   const [newMonitorType, setNewMonitorType] = useState('audited')
@@ -45,10 +51,51 @@ export default function ExternalReposPage() {
 
   useEffect(() => {
     void fetchRepos()
+    // Info de la GitHub App (para pintar el botón "Instalar"). Best-effort:
+    // si el endpoint falla, la página funciona igual sin ese botón.
+    void api
+      .getGithubAppInfo()
+      .then(info => setAppInstallUrl(info.install_url))
+      .catch(() => setAppInstallUrl(null))
     return () => {
       if (refetchTimerRef.current) clearInterval(refetchTimerRef.current)
     }
   }, [fetchRepos])
+
+  // Aterrizaje desde la Setup URL de la GitHub App: tras instalar la App,
+  // GitHub redirige el navegador aquí con ?installation_id=...&setup_action=
+  // install. Se reclama la instalación para la organización del usuario
+  // (crea la VCSConnection y da de alta los repos como "managed") y se
+  // limpian los parámetros de la URL para que un F5 no re-reclame.
+  const claimedRef = useRef(false)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const installationId = params.get('installation_id')
+    if (!installationId || claimedRef.current) return
+    claimedRef.current = true
+    void (async () => {
+      try {
+        const result = await api.claimInstallation(installationId)
+        if (result.app_configured && result.repos.length > 0) {
+          toast.success(t('externalRepos.claimSuccess', { count: result.repos.length }))
+        } else {
+          toast.success(t('externalRepos.claimSuccessNoRepos'))
+        }
+        await fetchRepos()
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Error al conectar la instalación')
+      } finally {
+        params.delete('installation_id')
+        params.delete('setup_action')
+        const query = params.toString()
+        window.history.replaceState(
+          null,
+          '',
+          window.location.pathname + (query ? `?${query}` : ''),
+        )
+      }
+    })()
+  }, [fetchRepos, t])
 
   // Refresca cada 5s durante 1 minuto tras encolar un escaneo -- ventana
   // generosa para escaneos de PRs individuales (típicamente segundos) y
@@ -170,9 +217,37 @@ export default function ExternalReposPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">{t('externalRepos.addRepo')}</CardTitle>
+          <CardTitle className="text-base">{t('externalRepos.connectTitle')}</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-5">
+          {/* Vía 1: instalar la GitHub App (modo gestionado, webhooks automáticos) */}
+          {appInstallUrl && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-secondary/30 p-4">
+              <div className="flex items-start gap-3">
+                <GitBranch className="mt-0.5 size-5 text-primary" strokeWidth={1.75} />
+                <div>
+                  <div className="text-sm font-medium">{t('externalRepos.installAppTitle')}</div>
+                  <p className="text-xs text-muted-foreground">
+                    {t('externalRepos.installAppSubtitle')}
+                  </p>
+                </div>
+              </div>
+              <Button asChild className="gap-2">
+                <a href={appInstallUrl}>
+                  <GitBranch className="size-4" />
+                  {t('externalRepos.installAppButton')}
+                </a>
+              </Button>
+            </div>
+          )}
+
+          {/* Vía 2: añadir un repo de GitHub por nombre (auditoría sin permisos) */}
+          <div className="space-y-1.5">
+            <div className="text-sm font-medium">{t('externalRepos.manualAddTitle')}</div>
+            <p className="text-xs text-muted-foreground">
+              {t('externalRepos.manualAddSubtitle')}
+            </p>
+          </div>
           <form onSubmit={handleAddRepo} className="flex flex-wrap items-end gap-4">
             <div className="flex-1 min-w-[200px] space-y-1.5">
               <label className="text-xs font-medium text-muted-foreground">
@@ -206,6 +281,49 @@ export default function ExternalReposPage() {
               {t('externalRepos.addRepo')}
             </Button>
           </form>
+
+          {/* Vía 3: servidores Git corporativos (GitLab, Gitea, bare SSH...) --
+              la integración real que ya existe para ellos es el hook
+              pre-receive del lado servidor (bloquea el push antes del merge)
+              y los endpoints de webhook de la Engine API. */}
+          <div className="border-t pt-4">
+            <button
+              type="button"
+              className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground"
+              onClick={() => setShowGitServers(v => !v)}
+            >
+              <FolderGit2 className="size-4" strokeWidth={1.75} />
+              {t('externalRepos.gitServersTitle')}
+              <span className="text-xs">{showGitServers ? '▲' : '▼'}</span>
+            </button>
+            {showGitServers && (
+              <div className="mt-3 space-y-2 rounded-lg border bg-secondary/20 p-4 text-sm text-muted-foreground">
+                <p>{t('externalRepos.gitServersIntro')}</p>
+                <ul className="list-disc space-y-1 pl-5 text-xs">
+                  <li>
+                    <span className="font-medium text-foreground">
+                      {t('externalRepos.gitServersHookTitle')}
+                    </span>{' '}
+                    {t('externalRepos.gitServersHookBody')}{' '}
+                    <code className="rounded bg-muted px-1 py-0.5">docs/manual_git_hooks.md</code>
+                  </li>
+                  <li>
+                    <span className="font-medium text-foreground">
+                      {t('externalRepos.gitServersWebhookTitle')}
+                    </span>{' '}
+                    {t('externalRepos.gitServersWebhookBody')}{' '}
+                    <code className="rounded bg-muted px-1 py-0.5">/api/v1/webhooks/gitlab</code>
+                  </li>
+                  <li>
+                    <span className="font-medium text-foreground">
+                      {t('externalRepos.gitServersEnterpriseTitle')}
+                    </span>{' '}
+                    {t('externalRepos.gitServersEnterpriseBody')}
+                  </li>
+                </ul>
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
 

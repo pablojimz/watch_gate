@@ -43,9 +43,17 @@ def test_extract_diff_from_shas_null_sha_initial_push() -> None:
             old_sha=NULL_SHA, new_sha="1111111111111111111111111111111111111111"
         )
         assert "diff --git" in diff_out
-        # Debe comparar contra el árbol vacío de Git
+        # Debe comparar contra el árbol vacío de Git, con los dos endpoints
+        # como ARGUMENTOS SEPARADOS (no `A..B`): la sintaxis de rango falla
+        # con el árbol vacío en el push inicial (ver extract_diff_from_shas).
         cmd_args = mock_run.call_args[0][0]
-        assert EMPTY_TREE_SHA in cmd_args[2]
+        assert cmd_args == [
+            "git",
+            "diff",
+            EMPTY_TREE_SHA,
+            "1111111111111111111111111111111111111111",
+        ]
+        assert not any(".." in str(a) for a in cmd_args)
 
 
 def test_extract_diff_from_shas_propagates_subprocess_failure() -> None:
@@ -191,3 +199,93 @@ def test_run_pre_receive_blocked_push() -> None:
         ):
             exit_code = run_pre_receive(stdin_text=stdin_data)
             assert exit_code == 1
+
+
+def test_run_pre_receive_reports_to_dashboard_when_configured(monkeypatch) -> None:
+    """Con WATCHGATE_DASHBOARD_URL + INGEST_TOKEN, el hook manda el resultado
+    a POST /api/scores (mismo endpoint que la GitHub Action) -- así un push a
+    un servidor Git corporativo aparece en el dashboard. El reporte NO cambia
+    la decisión de bloqueo (se hace igual para verde y rojo)."""
+    monkeypatch.setenv("WATCHGATE_DASHBOARD_URL", "http://dash.internal")
+    monkeypatch.setenv("WATCHGATE_DASHBOARD_INGEST_TOKEN", "tok-123")
+
+    stdin_data = (
+        "1111111111111111111111111111111111111111 "
+        "2222222222222222222222222222222222222222 refs/heads/main\n"
+    )
+    aggregated_blocked = AggregatedResult(
+        score=85,
+        semaforo=Semaforo.ROJO,
+        layer_results={},
+        weights_used={"static": 1.0},
+        pr_id="main",
+        repo="mi-org/proyecto",
+        timestamp="2026-08-07T12:00:00Z",
+    )
+
+    posted: dict = {}
+
+    def _fake_post(url, json, headers, timeout):  # noqa: A002
+        posted["url"] = url
+        posted["json"] = json
+        posted["headers"] = headers
+        return MagicMock(raise_for_status=lambda: None)
+
+    import httpx
+
+    with patch(
+        "watchgate.adapters.git_hook.pre_receive.extract_diff_from_shas",
+        return_value="diff --git a/x b/x\n+eval(x)",
+    ):
+        with patch(
+            "watchgate.adapters.git_hook.pre_receive.run_full_analysis",
+            return_value=aggregated_blocked,
+        ):
+            with patch.object(httpx, "post", _fake_post):
+                exit_code = run_pre_receive(stdin_text=stdin_data)
+
+    assert exit_code == 1  # sigue bloqueando
+    assert posted["url"] == "http://dash.internal/api/scores"
+    assert posted["headers"]["Authorization"] == "Bearer tok-123"
+    assert posted["json"]["result"]["repo"] == "mi-org/proyecto"
+
+
+def test_run_pre_receive_dashboard_failure_does_not_change_block_decision(
+    monkeypatch,
+) -> None:
+    """El dashboard caído no debe alterar el exit code -- la decisión ya está
+    tomada con el análisis local (best-effort)."""
+    monkeypatch.setenv("WATCHGATE_DASHBOARD_URL", "http://dash.internal")
+    monkeypatch.setenv("WATCHGATE_DASHBOARD_INGEST_TOKEN", "tok-123")
+
+    stdin_data = (
+        "1111111111111111111111111111111111111111 "
+        "2222222222222222222222222222222222222222 refs/heads/main\n"
+    )
+    aggregated_approved = AggregatedResult(
+        score=10,
+        semaforo=Semaforo.VERDE,
+        layer_results={},
+        weights_used={"static": 1.0},
+        pr_id="main",
+        repo="mi-org/proyecto",
+        timestamp="2026-08-07T12:00:00Z",
+    )
+
+    import httpx
+
+    def _boom(*a, **k):
+        raise httpx.ConnectError("dashboard caído")
+
+    with patch(
+        "watchgate.adapters.git_hook.pre_receive.extract_diff_from_shas",
+        return_value="diff --git a/x b/x\n+x = 1",
+    ):
+        with patch(
+            "watchgate.adapters.git_hook.pre_receive.run_full_analysis",
+            return_value=aggregated_approved,
+        ):
+            with patch.object(httpx, "post", _boom):
+                exit_code = run_pre_receive(stdin_text=stdin_data)
+
+    assert exit_code == 0  # aprobado pese al fallo del dashboard
