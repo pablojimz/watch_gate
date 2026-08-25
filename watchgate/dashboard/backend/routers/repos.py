@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from datetime import UTC, datetime
 from typing import Annotated, Any
 from uuid import uuid4
@@ -105,6 +106,24 @@ class GithubAppInfoOut(BaseModel):
     )
 
 
+_JOB_ID_UNSAFE_CHARS = re.compile(r"[^A-Za-z0-9_-]+")
+
+
+def _safe_job_id_part(value: str) -> str:
+    """RQ valida el `job_id` contra `[A-Za-z0-9_-]+` (`rq.job.JOB_ID_PATTERN`)
+    -- un `repo_path` real como "owner/repo" (la barra) o
+    "usuario/Curso.Prep.Henry" (el punto) lo revienta con un
+    `ValueError: Job ID must only contain letters, numbers, underscores and
+    dashes` (500 real, reproducido en `add_external_repo`/`scan_main_
+    branch`, las dos únicas llamadas a `_enqueue_main_branch_scan`).
+    Sustituye cualquier carácter no permitido por '_' -- no es una
+    normalización perfecta (dos repo_path distintos podrían, en teoría,
+    colisionar tras sanear), pero el peor caso es que un escaneo se trate
+    como "ya en curso" y no se vuelva a encolar hasta que el existente
+    termine, nunca un crash."""
+    return _JOB_ID_UNSAFE_CHARS.sub("_", value)
+
+
 def _enqueue_main_branch_scan(
     org_id: str, repo: MonitoredRepo, user_login: str | None = None
 ) -> bool:
@@ -137,7 +156,7 @@ def _enqueue_main_branch_scan(
     entorno / anónimo).
     """
     queue = get_queue()
-    job_id = f"main_branch_scan:{org_id}:{repo.repo_path}"
+    job_id = f"main_branch_scan-{_safe_job_id_part(org_id)}-{_safe_job_id_part(repo.repo_path)}"
     existing_job = queue.fetch_job(job_id)
     if existing_job is not None and not existing_job.is_failed:
         return False
@@ -238,9 +257,7 @@ def add_external_repo(
     return new_repo
 
 
-@router.post(
-    "/git-server", response_model=GitServerRepoOut, status_code=status.HTTP_201_CREATED
-)
+@router.post("/git-server", response_model=GitServerRepoOut, status_code=status.HTTP_201_CREATED)
 def connect_git_server_repo(
     data: GitServerRepoIn,
     current_user: CurrentUser,
@@ -294,9 +311,9 @@ def connect_git_server_repo(
         name=f"Hook servidor Git: {repo_path_cleaned}",
     )
 
-    engine_api_url = (os.environ.get("WATCHGATE_ENGINE_API_PUBLIC_URL") or "http://localhost:8080").rstrip(
-        "/"
-    )
+    engine_api_url = (
+        os.environ.get("WATCHGATE_ENGINE_API_PUBLIC_URL") or "http://localhost:8080"
+    ).rstrip("/")
 
     return {
         "repo": new_repo,
