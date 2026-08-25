@@ -53,6 +53,63 @@ def test_insert_aggregated_persists_threat_summary_and_static_threat_nature(
     assert stored.layer_results["deps"]["threat_nature"] is None
 
 
+def test_insert_aggregated_persists_justification_for_every_layer_not_only_semantic(
+    tmp_path: Path,
+) -> None:
+    """Bug real, reproducido: el dashboard mostraba el risk_score de
+    static/reputation con un score alto (70/80) pero SIN ninguna
+    explicación, mientras que semantic sí la mostraba -- `_serialize_
+    findings` solo guardaba `justification` para `semantic` (vía la
+    columna dedicada `semantic_justification`), nunca para el resto de
+    capas, aunque esas capas SÍ generan una frase real (p. ej.
+    reputation_layer.py construye "El autor no tiene contribuciones
+    previas a este repositorio." -- nunca cadena vacía salvo que de
+    verdad no haya señales)."""
+    layers = {
+        "static": LayerResult(
+            layer_name="static",
+            risk_score=70,
+            justification="Se detectó un patrón de ofuscación en 2 ficheros.",
+        ),
+        "reputation": LayerResult(
+            layer_name="reputation",
+            risk_score=80,
+            justification="El autor no tiene contribuciones previas a este repositorio.",
+        ),
+        "semantic": LayerResult(
+            layer_name="semantic",
+            risk_score=85,
+            justification="Secret hardcodeado (AWS key) en variable de entorno del modulo.",
+        ),
+    }
+    result = AggregatedResult(
+        score=59,
+        semaforo=Semaforo.ROJO,
+        layer_results=layers,
+        weights_used={"static": 0.25, "reputation": 0.15, "semantic": 0.40},
+        pr_id="8",
+        repo="acme/payments-api",
+        timestamp="2026-08-12T00:00:00+00:00",
+    )
+    with database.db_session(tmp_path / "dashboard.db") as conn:
+        score_id = database.insert_aggregated(conn, result)
+        stored = database.get_score(conn, score_id)
+
+    assert stored is not None
+    assert (
+        stored.layer_results["static"]["justification"]
+        == "Se detectó un patrón de ofuscación en 2 ficheros."
+    )
+    assert (
+        stored.layer_results["reputation"]["justification"]
+        == "El autor no tiene contribuciones previas a este repositorio."
+    )
+    assert (
+        stored.layer_results["semantic"]["justification"]
+        == "Secret hardcodeado (AWS key) en variable de entorno del modulo."
+    )
+
+
 def test_insert_aggregated_defaults_threat_summary_and_static_threat_nature_to_empty(
     tmp_path: Path,
 ) -> None:
