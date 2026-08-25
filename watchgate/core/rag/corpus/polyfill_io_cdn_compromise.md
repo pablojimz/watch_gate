@@ -30,19 +30,10 @@ migrar sin tener que auditar ni reescribir su propio código.
   públicamente (transferencia de dominio), pero el cambio de intención del
   nuevo propietario no lo fue hasta que empezó a explotarse.
 
-## Por qué es relevante para WatchGate
+## Patrón a vigilar
 
-- Un diff que añade una referencia a un script de terceros por URL
-  (`<script src="https://...">`, `@import url(...)`, o equivalentes en
-  otros lenguajes) sin pinnear versión/hash es una señal de riesgo
-  estructural por sí sola, con independencia de que el dominio referenciado
-  parezca de confianza en el momento del PR — el propio caso XZ Utils y
-  este demuestran que "de confianza hoy" no implica "de confianza mañana".
-- Mismo principio ya aplicado a imágenes base de Docker
-  (`docker_typosquatted_base_images.md`) y a los patrones de dependencias
-  (`dependency_confusion.md`): cualquier referencia externa sin fijar por
-  contenido (hash/checksum), solo por nombre o URL, es una promesa de
-  confianza que puede romperse sin que quede registrado en ningún diff.
+Referencia a un script de terceros por URL (`<script src="https://...">`,
+`@import url(...)`) sin pinnear versión/hash.
 
 Técnica MITRE ATT&CK relacionada: T1195.002 (Compromise Software Supply
 Chain).

@@ -1,21 +1,41 @@
+# Actualizaciones AGRUPADAS: sin `groups`, Dependabot abría un PR por cada
+# dependencia (~10 PRs/semana observados), y cada PR dispara la CI completa
+# -- la mayor fuente de consumo de minutos de Actions de este repo con
+# diferencia. Un solo PR por ecosistema y tirada reduce eso ~10x sin perder
+# ninguna actualización.
 version: 2
 updates:
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      python-dependencies:
+        patterns: ["*"]
 
   - package-ecosystem: "npm"
     directory: "/watchgate/dashboard/frontend"
     schedule:
       interval: "weekly"
+    groups:
+      frontend-dependencies:
+        patterns: ["*"]
 
+  # Imágenes base y versiones de Actions cambian poco y casi nunca urgen:
+  # mensual basta (una alerta de seguridad de Dependabot sigue llegando
+  # aparte y al momento, esto solo regula los bumps rutinarios).
   - package-ecosystem: "docker"
     directory: "/docker"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
+    groups:
+      docker-images:
+        patterns: ["*"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
+    groups:
+      actions-versions:
+        patterns: ["*"]

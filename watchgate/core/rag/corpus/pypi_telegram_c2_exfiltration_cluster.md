@@ -29,17 +29,10 @@ exfiltración: la API de bots de Telegram, en vez de un servidor propio.
   ligeramente a paquetes populares (`requestn` vs. `requests`), sugiriendo
   automatización o un mismo actor probando variantes.
 
-## Por qué es relevante para WatchGate
+## Patrón a vigilar
 
-- La capa semántica debe tratar cualquier llamada de red hacia
-  `api.telegram.org` (o APIs de mensajería/bot similares) desde código que
-  no sea explícitamente una integración de mensajería como una señal de
-  igual peso que una llamada a un dominio desconocido — el destino "parece"
-  legítimo, pero el contexto (un paquete de utilidad genérico enviando
-  datos a un bot de Telegram) no lo es.
-- Refuerza el mismo patrón ya documentado en `pypi_ctx_env_exfiltration.md`
-  (recolección de datos sensibles + exfiltración por red desde código de
-  uso aparentemente normal), con un canal de transporte distinto.
-- Ejemplo de por qué la consulta automática a OSV (`gather_dependency_findings`)
-  importa: estos paquetes están documentados y son detectables por nombre
-  exacto antes de que el LLM tenga que razonar sobre el código en sí.
+Llamada de red hacia `api.telegram.org` (u otra API de mensajería/bot)
+desde código que no es explícitamente una integración de mensajería.
+
+Técnica MITRE ATT&CK relacionada: T1195.002 (Compromise Software Supply
+Chain), T1102 (Web Service, como canal de C2).

@@ -25,6 +25,7 @@ from watchgate.core.rag.indexer import DEFAULT_INDEX_PATH, build_index
 from watchgate.formatters.console import render_console
 from watchgate.formatters.github import render_github_annotations
 from watchgate.formatters.sarif import render_sarif
+from watchgate.logging_config import silence_noisy_third_party_loggers
 
 logger = logging.getLogger("watchgate.cli")
 
@@ -124,6 +125,49 @@ def _build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_INDEX_PATH,
         help=f"Ruta al índice ChromaDB (default: {DEFAULT_INDEX_PATH})",
     )
+    sync_cves_parser = rag_subparsers.add_parser(
+        "sync-cves",
+        help=(
+            "Descarga avisos reales (paquetes maliciosos / CVEs) de la API de "
+            "GitHub Security Advisories al corpus del RAG y reindexa"
+        ),
+    )
+    sync_cves_parser.add_argument(
+        "--ecosystem",
+        action="append",
+        dest="ecosystems",
+        metavar="ECO",
+        help=(
+            "Ecosistema a sincronizar (npm, pip, rubygems, maven, go, rust...). "
+            "Repetible. Default: npm y pip."
+        ),
+    )
+    sync_cves_parser.add_argument(
+        "--type",
+        dest="advisory_type",
+        choices=["malware", "reviewed"],
+        default="malware",
+        help=(
+            "Tipo de aviso: 'malware' (paquetes maliciosos conocidos, default) "
+            "o 'reviewed' (CVEs curados por GitHub)"
+        ),
+    )
+    sync_cves_parser.add_argument(
+        "--limit",
+        type=int,
+        default=30,
+        help="Máximo de avisos por ecosistema (default: 30)",
+    )
+    sync_cves_parser.add_argument(
+        "--no-reindex",
+        action="store_true",
+        help="No reindexar el corpus en ChromaDB tras descargar los avisos",
+    )
+    sync_cves_parser.add_argument(
+        "--index-path",
+        default=DEFAULT_INDEX_PATH,
+        help=f"Ruta al índice ChromaDB (default: {DEFAULT_INDEX_PATH})",
+    )
 
     # Command: mcp
     mcp_parser = subparsers.add_parser("mcp", help="Servidor Model Context Protocol (MCP)")
@@ -143,16 +187,10 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _setup_logging(args: argparse.Namespace) -> None:
-    # Silenciar loggers ruidosos de telemetría de terceros
-    noisy_loggers = (
-        "chromadb",
-        "chromadb.telemetry",
-        "chromadb.telemetry.product.posthog",
-        "httpx",
-    )
-    for noisy_logger in noisy_loggers:
-        logging.getLogger(noisy_logger).setLevel(logging.ERROR)
-
+    # Silenciar loggers ruidosos -- ver silence_noisy_third_party_loggers()
+    # más abajo en main(), que cubre TODOS los subcomandos (este ajuste de
+    # verbosidad por flag es exclusivo de `analyze`, que es el único
+    # subcomando con -q/--debug/-v).
     if args.quiet:
         logging.basicConfig(level=logging.ERROR, stream=sys.stderr, force=True)
     elif args.debug:
@@ -339,6 +377,36 @@ def _cmd_rag_reindex(args: argparse.Namespace) -> int:
         return 3
 
 
+def _cmd_rag_sync_cves(args: argparse.Namespace) -> int:
+    # Import diferido: httpx ya es dependencia, pero no hace falta cargar el
+    # módulo (ni su logging) para el resto de subcomandos.
+    from watchgate.core.rag.indexer import CORPUS_DIR
+    from watchgate.core.rag.threat_feed import DEFAULT_ECOSYSTEMS, sync_advisories_to_corpus
+
+    ecosystems = tuple(args.ecosystems) if args.ecosystems else DEFAULT_ECOSYSTEMS
+    try:
+        written = sync_advisories_to_corpus(
+            corpus_dir=CORPUS_DIR,
+            ecosystems=ecosystems,
+            advisory_type=args.advisory_type,
+            limit_per_ecosystem=args.limit,
+        )
+    except Exception as exc:  # noqa: BLE001
+        print(f"[Error RAG] No se pudieron sincronizar los avisos: {exc}", file=sys.stderr)
+        return 3
+    print(
+        f"[WatchGate] {len(written)} avisos nuevos/actualizados en el corpus "
+        f"(type={args.advisory_type}, ecosistemas: {', '.join(ecosystems)})"
+    )
+    if args.no_reindex:
+        print("[WatchGate] Reindexado omitido (--no-reindex).")
+        return 0
+    if not written:
+        print("[WatchGate] Sin cambios en el corpus -- no hace falta reindexar.")
+        return 0
+    return _cmd_rag_reindex(args)
+
+
 def _cmd_mcp_serve(args: argparse.Namespace) -> int:
     from watchgate.mcp.server import run_stdio_server
 
@@ -349,11 +417,22 @@ def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
 
+    # Incondicional para TODOS los subcomandos (no solo `analyze`, que es
+    # el único con flags -q/--debug/-v -- ver _setup_logging): `rag
+    # reindex` y `mcp serve` también instancian ChromaDB (rag/indexer.py)
+    # y se veían igual de afectados por el bug de telemetría rota de
+    # ChromaDB/posthog (ver silence_noisy_third_party_loggers), pero antes
+    # nunca llegaban a pasar por _setup_logging() -- reproducido en vivo
+    # con `watchgate rag reindex`.
+    silence_noisy_third_party_loggers()
+
     if args.subcommand == "analyze":
         return _cmd_analyze(args)
     if args.subcommand == "rag":
         if args.rag_subcommand == "reindex":
             return _cmd_rag_reindex(args)
+        if args.rag_subcommand == "sync-cves":
+            return _cmd_rag_sync_cves(args)
         parser.parse_args(["rag", "--help"])
         return 2
     if args.subcommand == "mcp":

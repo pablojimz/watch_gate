@@ -29,18 +29,10 @@ credenciales que permitieron modificar el script en su origen.
   `scripts/rag_ablation_cases.py`) y en `prt_scan.md`: los entornos de CI
   concentran secretos de alto valor y son un objetivo recurrente.
 
-## Por qué es relevante para WatchGate
+## Patrón a vigilar
 
-- Ejemplo real, a escala de toda una industria (miles de pipelines
-  afectados), de por qué la capa estática debe tratar cualquier
-  `curl ... | bash` (o equivalente) dentro de un workflow de CI como una
-  señal de riesgo por sí sola, sin necesidad de que el propio proyecto lo
-  haya escrito — basta con que lo *invoque* de un tercero sin pinnear.
-- Refuerza la regla ya aplicada en `docker_typosquatted_base_images.md`:
-  cualquier script descargado y ejecutado en tiempo de build/CI sin
-  fijarlo por versión o hash hereda todo el riesgo de la infraestructura
-  del tercero que lo sirve, indefinidamente, sin que quede reflejado en
-  ningún commit propio.
+`curl ... | bash` (o equivalente) invocando un script de terceros sin
+fijar por versión/hash dentro de un workflow de CI.
 
 Técnica MITRE ATT&CK relacionada: T1195.002 (Compromise Software Supply
 Chain).

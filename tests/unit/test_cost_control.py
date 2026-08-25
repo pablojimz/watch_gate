@@ -95,6 +95,59 @@ def test_cache_roundtrip(controller):
     assert controller.get_cached(h) == output
 
 
+def test_cache_degrades_gracefully_on_stale_schema_missing_a_column():
+    """.watchgate/cost.db es un fichero SQLite por repositorio, creado una
+    vez con create_all() y nunca migrado -- si SemanticCache gana una
+    columna nueva (como org_id, añadida para aislar caché por
+    organización), cualquier fichero preexistente de un desarrollador se
+    queda con el esquema viejo para siempre (create_all() no altera tablas
+    ya creadas). Bug real reproducido en vivo contra un cost.db real de
+    antes de esa columna: la capa semántica ENTERA (peso 0.40 por defecto,
+    la más alta) se marcaba "omitida" con el mensaje crudo de SQLAlchemy
+    como única pista. Para una caché, cuyo único propósito es evitar una
+    llamada repetida al LLM, un fallo de lectura/escritura debe degradar a
+    "sin caché" (fuerza una llamada real), no tirar el análisis semántico
+    entero."""
+    from sqlalchemy import create_engine, text
+
+    tmp_dir = tempfile.mkdtemp()
+    db_path = str(Path(tmp_dir) / "cost.db")
+
+    # Crea `semantic_cache` a mano SIN la columna `org_id` -- simula el
+    # fichero preexistente de un desarrollador, creado antes de que esa
+    # columna se añadiera al modelo.
+    stale_engine = create_engine(f"sqlite:///{db_path}")
+    with stale_engine.begin() as conn:
+        conn.execute(
+            text(
+                "CREATE TABLE semantic_cache ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "diff_hash VARCHAR NOT NULL, "
+                "output_json VARCHAR NOT NULL, "
+                "created_at DATETIME NOT NULL)"
+            )
+        )
+    stale_engine.dispose()
+
+    # `create_all()` en __init__ no toca la tabla ya existente (sin la
+    # columna org_id) -- exactamente el escenario real.
+    ctrl = CostController(db_path=db_path, max_diff_tokens=50, monthly_budget_tokens=1000)
+    try:
+        assert ctrl.get_cached("abc123") is None
+
+        output = SemanticOutput(
+            risk_score=42, category="backdoor", justification="x", confidence="alta"
+        )
+        ctrl.store_cached("abc123", output)  # no debe lanzar
+
+        # El resultado sigue sin estar cacheado (el esquema sigue desfasado),
+        # pero una llamada real al LLM seguiría funcionando -- lo importante
+        # es que ninguna de las dos operaciones abortó el análisis.
+        assert ctrl.get_cached("abc123") is None
+    finally:
+        ctrl.close()
+
+
 def test_cache_roundtrip_survives_concurrent_access_from_multiple_threads(controller):
     """orchestrator.py ejecuta las capas en un ThreadPoolExecutor: la
     conexión sqlite3 de CostController se usa desde un hilo distinto al que

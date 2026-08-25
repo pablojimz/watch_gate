@@ -27,16 +27,10 @@ Copay.
   el atacante quería atacar (Copay), evitando activarse en la inmensa
   mayoría de instalaciones y dificultando su detección.
 
-## Por qué es relevante para WatchGate
+## Patrón a vigilar
 
-- Caso de referencia para por qué `detect_new_python_dependencies` /
-  `gather_dependency_findings` importan tanto como el análisis del propio
-  código: el paquete "conocido y confiado" (`event-stream`) no cambió su
-  comportamiento directamente — el riesgo entró por una dependencia nueva
-  añadida a un paquete ya establecido.
-- La reputación heredada de un paquete popular no protege frente a un
-  cambio de mantenedor: un nuevo mantenedor con buenas intenciones
-  aparentes (resolver un paquete desatendido) es un vector de confianza tan
-  válido como cualquier otro para un atacante paciente.
-- Técnica MITRE ATT&CK relacionada: T1195.001 (Compromise Software
-  Dependencies and Development Tools).
+Dependencia nueva y sin historial añadida como sub-dependencia de un
+paquete popular ya establecido.
+
+Técnica MITRE ATT&CK relacionada: T1195.001 (Compromise Software
+Dependencies and Development Tools).

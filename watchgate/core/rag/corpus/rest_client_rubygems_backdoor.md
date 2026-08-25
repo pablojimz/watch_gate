@@ -25,18 +25,10 @@ entre otras) — varias con nombres relacionados con criptomonedas.
   referencia temprana de que el vector "cuenta de mantenedor comprometida
   en el registro del paquete" no es nuevo ni exclusivo de un ecosistema.
 
-## Por qué es relevante para WatchGate
+## Patrón a vigilar
 
-- Demuestra que este patrón (compromiso de cuenta en el registro, no en
-  git) es transversal a lenguajes/ecosistemas: PyPI (`ctx`, `sympy-dev`),
-  npm (`event-stream`, `coa`, `rc`), RubyGems (`rest-client`) — la
-  arquitectura de WatchGate, agnóstica de lenguaje en el núcleo, debe
-  asumir que este vector puede aparecer en cualquier gestor de paquetes que
-  el proyecto use, no solo en el ecosistema "principal" del repositorio.
-- Recomendación operativa citada en el propio aviso —rotar todos los
-  secretos de cualquier máquina con el paquete instalado, no solo
-  "desinstalar"— es coherente con tratar cualquier detección de este
-  patrón como incidente de compromiso total, no como un hallazgo aislado.
+Compromiso de cuenta en el registro del paquete (no en git) — patrón
+transversal a PyPI, npm y RubyGems, no exclusivo de un ecosistema.
 
 Técnica MITRE ATT&CK relacionada: T1195.001 (Compromise Software
 Dependencies and Development Tools).

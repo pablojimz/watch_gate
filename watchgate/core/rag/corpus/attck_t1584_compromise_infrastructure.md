@@ -1,13 +1,55 @@
 # MITRE ATT&CK T1584 — Compromise Infrastructure
 
+**Táctica:** Resource Development. **Plataformas:** PRE (pre-compromiso).
+**Versión:** 1.6 (última modificación: 24 de octubre de 2025).
+
 ## Descripción
 
-El adversario compromete infraestructura de un tercero (servidores,
-dominios, servicios web/DNS) para usarla durante el ataque, en vez de
-comprar o alquilar la suya propia. MITRE señala que esto permite que la
-actividad del atacante se mezcle con tráfico que parece normal —contacto
-con sitios de buena reputación o de confianza—, en vez de levantar sospecha
-por apuntar a infraestructura nueva y desconocida.
+El adversario compromete infraestructura de terceros — "servidores físicos
+o en la nube, dominios, dispositivos de red y servicios web/DNS de
+terceros" — para usarla durante sus operaciones, en vez de adquirirla
+legítimamente. En lugar de comprar o alquilar infraestructura propia, el
+atacante reutiliza activos comprometidos para preparar y ejecutar
+operaciones mientras mezcla su actividad con patrones de tráfico
+legítimos. Esta técnica habilita actividad maliciosa de seguimiento, y
+puede incluso implicar comprometer infraestructura perteneciente a otros
+actores de amenaza rivales.
+
+## Sub-técnicas
+
+- **T1584.001** — Domains
+- **T1584.002** — DNS Server
+- **T1584.003** — Virtual Private Server
+- **T1584.004** — Server
+- **T1584.005** — Botnet
+- **T1584.006** — Web Services
+- **T1584.007** — Serverless
+- **T1584.008** — Network Devices
+
+## Ejemplos de procedimiento
+
+- **APT28, Campaña "Nearest Neighbor" (C0051)** — "Comprometió
+  infraestructura de terceros en proximidad física a objetivos de interés
+  para actividad de seguimiento", aprovechando redes Wi-Fi cercanas para
+  acceso encubierto.
+- **Intrusiones a infraestructura crítica india (C0043)** — Esta campaña
+  "incluyó el uso de infraestructura comprometida, como dispositivos DVR y
+  cámaras IP, para mando y control" en operaciones ShadowPad.
+
+## Mitigaciones (MITRE)
+
+**M1056 — Pre-compromise**: "Esta técnica no se puede mitigar fácilmente
+con controles preventivos, ya que se basa en comportamientos realizados
+fuera del alcance de las defensas y controles empresariales."
+
+## Estrategia de detección (MITRE)
+
+**DET0885** — Vigilar patrones identificables en la infraestructura
+aprovisionada por el atacante (servicios escuchando, certificados en uso,
+características de negociación SSL/TLS, u otros artefactos de respuesta
+asociados a software de C2). También: seguimiento de cambios anómalos de
+registro de dominio y monitorización de datos de resolución DNS en busca
+de indicadores de compromiso.
 
 ## Casos de este corpus que son ejemplos directos de esta técnica
 
@@ -17,24 +59,16 @@ por apuntar a infraestructura nueva y desconocida.
   sitio afectado cambiara una línea de su propio código.
 - `codecov_bash_uploader_compromise.md` — un script alojado en
   infraestructura de un proveedor de confianza (Codecov) fue modificado en
-  origen; miles de pipelines de CI de terceros lo descargaban y ejecutaban
-  de buena fe, sin ningún cambio en su propio repositorio.
+  origen; miles de pipelines de CI lo descargaban y ejecutaban de buena fe.
 - `pypi_telegram_c2_exfiltration_cluster.md` — uso de la API de bots de
-  Telegram (dominio de reputación muy alta, `api.telegram.org`) como canal
-  de exfiltración precisamente porque no levanta las mismas alarmas que un
-  dominio desconocido.
+  Telegram (dominio de reputación muy alta) como canal de exfiltración.
 
-## Por qué es relevante para WatchGate
+## Nota WatchGate
 
-- Es la técnica que conecta el hilo común de tres casos de ecosistemas
-  distintos (CDN de JavaScript, herramienta de CI, API de mensajería): el
-  atacante no necesita comprometer el proyecto objetivo en absoluto si
-  puede comprometer algo en lo que el proyecto objetivo **ya confía por
-  referencia externa** (una URL, un dominio, un script descargado).
-- Refuerza la regla ya aplicada en `docker_typosquatted_base_images.md` y
-  `polyfill_io_cdn_compromise.md`: cualquier referencia externa por
-  nombre/URL sin fijar por contenido (hash, checksum, versión pinneada)
-  hereda indefinidamente el riesgo de quien controle ese recurso en el
-  futuro, no solo de quien lo controlaba cuando se escribió el diff que lo
-  introdujo — y ese riesgo nunca aparece en un commit posterior, porque
-  nada cambia en el propio repositorio.
+El atacante no necesita comprometer el proyecto objetivo si puede
+comprometer algo en lo que ese proyecto **ya confía por referencia
+externa** (una URL, un dominio, un script descargado). Cualquier
+referencia externa sin fijar por contenido (hash, checksum, versión
+pinneada) hereda indefinidamente el riesgo de quien controle ese recurso
+en el futuro — riesgo que nunca aparece en un commit posterior, porque
+nada cambia en el propio repositorio.
