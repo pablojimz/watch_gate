@@ -1,6 +1,6 @@
 {
-  "version": "v0.1.0",
-  "generated_at": "2026-08-10T08:58:21Z",
+  "version": "v0.1.1",
+  "generated_at": "2026-08-25T09:44:57Z",
   "hashes": {
     "semgrep": {
       "custom": {
@@ -73,65 +73,9 @@
       "webshells": "sha256:b26d530f7abe07d0e8a7d358c554d962de964da86feab6818718d08bc8e9ca9c"
     }
   },
-  "languages_changed": [
-    "bash",
-    "c",
-    "clojure",
-    "csharp",
-    "dockerfile",
-    "html",
-    "java",
-    "javascript",
-    "json",
-    "ocaml",
-    "php",
-    "powershell",
-    "python",
-    "regex",
-    "ruby",
-    "rust",
-    "swift"
-  ],
-  "third_party_changed": [
-    "0xdea/c",
-    "elttam/go",
-    "elttam/yaml",
-    "opengrep/bash",
-    "opengrep/clojure",
-    "opengrep/csharp",
-    "opengrep/generic",
-    "opengrep/go",
-    "opengrep/html",
-    "opengrep/java",
-    "opengrep/javascript",
-    "opengrep/json",
-    "opengrep/kotlin",
-    "opengrep/ocaml",
-    "opengrep/php",
-    "opengrep/problem-based-packs",
-    "opengrep/python",
-    "opengrep/ruby",
-    "opengrep/scala",
-    "opengrep/solidity",
-    "opengrep/swift",
-    "opengrep/terraform",
-    "opengrep/typescript",
-    "opengrep/yaml",
-    "trailofbits/generic",
-    "trailofbits/go",
-    "trailofbits/hcl",
-    "trailofbits/javascript",
-    "trailofbits/jvm",
-    "trailofbits/python",
-    "trailofbits/rs",
-    "trailofbits/ruby",
-    "trailofbits/swift",
-    "trailofbits/yaml"
-  ],
-  "yara_categories_changed": [
-    "antidebug_antivm",
-    "webshells"
-  ],
+  "languages_changed": [],
+  "third_party_changed": [],
+  "yara_categories_changed": [],
   "rule_count": {
     "semgrep": {
       "custom": 64,
@@ -481,5 +425,9 @@
       }
     }
   },
-  "finding_type_notes": "De 1472 regla(s) puntuada(s) y clasificada(s): 696 apuntan a codigo ya malicioso (webshells, backdoors, tecnicas sin uso legitimo razonable -- respuesta esperada: contencion/aislamiento), 776 a vulnerabilidades explotables en codigo legitimo (respuesta esperada: ciclo normal de remediacion); 54 de ellas estan marcadas needs_review para confirmacion humana."
+  "finding_type_notes": "De 1472 regla(s) puntuada(s) y clasificada(s): 696 apuntan a codigo ya malicioso (webshells, backdoors, tecnicas sin uso legitimo razonable -- respuesta esperada: contencion/aislamiento), 776 a vulnerabilidades explotables en codigo legitimo (respuesta esperada: ciclo normal de remediacion); 54 de ellas estan marcadas needs_review para confirmacion humana.",
+  "official_registry_configs": [
+    "p/security-audit",
+    "p/owasp-top-ten"
+  ]
 }
