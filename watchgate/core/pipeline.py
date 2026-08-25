@@ -71,7 +71,10 @@ def run_full_analysis(
         except Exception as exc:  # noqa: BLE001 - un LLM mal configurado no debe tumbar el análisis: se degrada a "capa semántica omitida", no se propaga
             client_init_error = str(exc)
         layer_factories["semantic"] = lambda: SemanticLayer(
-            llm_client, cost_control, client_init_error=client_init_error
+            llm_client,
+            cost_control,
+            max_diff_tokens=config.max_diff_tokens,
+            client_init_error=client_init_error,
         )
 
     try:

@@ -207,10 +207,26 @@ def test_clearly_non_borderline_score_does_not_trigger_resampling(rag_index_path
     assert len(fake_llm.calls) == 1
 
 
+def _force_all_chunks_overflow(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Con `max_diff_tokens` pequeño, un diff que no cabe entra por
+    `_analyze_chunked` (ver `layer.py`): en vez del `UNVERIFIED_CONTENT_
+    MARKER` heurístico de antes en un único prompt, ahora el contenido se
+    trocea y se analiza de verdad. Para forzar el caso "nada se pudo
+    analizar" (equivalente al viejo comportamiento, y el que ejercita el
+    suelo mecánico de `_apply_unverified_content_floor`), se fuerza a
+    `chunking.pack_pieces` a mandar TODO a overflow bajando su tope de
+    chunks a 0 -- con eso, la única llamada real que se hace es la de
+    síntesis final (recibe el aviso de contenido no verificado, sin
+    fragmentos de chunk que resumir), igual que antes había una única
+    llamada con el marcador incrustado."""
+    monkeypatch.setattr("watchgate.core.layers._semantic.chunking.MAX_CHUNKS", 0)
+
+
 def _diff_with_one_huge_unflagged_file() -> NormalizedDiff:
     """Un único fichero, sin patrones sospechosos reconocibles y demasiado
-    grande para caber en el presupuesto -- fuerza la rama de
-    UNVERIFIED_CONTENT_MARKER en build_user_prompt."""
+    grande para caber en el presupuesto -- combinado con
+    `_force_all_chunks_overflow`, fuerza contenido no verificado en la
+    síntesis final del camino por chunks."""
     padding = "\n".join(f"+línea inofensiva de relleno número {i} sin nada raro" for i in range(80))
     return NormalizedDiff(
         base_sha="a" * 40,
@@ -230,11 +246,14 @@ def _diff_with_one_huge_unflagged_file() -> NormalizedDiff:
     )
 
 
-def test_unverified_content_floors_a_low_score_when_the_llm_never_checked(rag_index_path):
+def test_unverified_content_floors_a_low_score_when_the_llm_never_checked(
+    rag_index_path, monkeypatch
+):
     """Petición explícita: para los casos difíciles, que salte la alarma en
-    vez de colarse -- si hay contenido sin verificar (truncado, sin patrón
-    encontrado) y el LLM ni siquiera llamó a fetch_referenced_file para
+    vez de colarse -- si hay contenido sin verificar (aquí, overflow real de
+    chunks) y el LLM ni siquiera llamó a fetch_referenced_file para
     comprobarlo, un veredicto de riesgo bajo no se queda tal cual."""
+    _force_all_chunks_overflow(monkeypatch)
     output = SemanticOutput(
         risk_score=10,
         category=RiskCategory.NINGUNA,
@@ -252,10 +271,13 @@ def test_unverified_content_floors_a_low_score_when_the_llm_never_checked(rag_in
     assert "parece limpio" in result.justification  # no se pierde el razonamiento original
 
 
-def test_unverified_content_floor_does_not_apply_if_the_llm_used_the_fetch_tool(rag_index_path):
+def test_unverified_content_floor_does_not_apply_if_the_llm_used_the_fetch_tool(
+    rag_index_path, monkeypatch
+):
     """Si el LLM sí llamó a fetch_referenced_file (tool_calls_made > 0), ya
     tuvo la oportunidad real de comprobar el contenido -- el suelo mecánico
     no debe pisar un veredicto informado."""
+    _force_all_chunks_overflow(monkeypatch)
 
     class _LLMThatCallsFetchTool(LLMClient):
         def complete_structured(
@@ -281,13 +303,14 @@ def test_unverified_content_floor_does_not_apply_if_the_llm_used_the_fetch_tool(
 
 
 def test_unverified_content_floor_still_applies_if_the_llm_called_an_unrelated_tool(
-    rag_index_path,
+    rag_index_path, monkeypatch
 ):
     """Hallazgo de revisión: el suelo antes se desactivaba con
     `tool_calls_made > 0` -- CUALQUIER tool, no específicamente
     `fetch_referenced_file`. Un LLM que llama a una tool sin relación
     (aquí, `get_commit_history`) sin haber comprobado el fichero truncado
     sospechoso no debe librarse del suelo mecánico."""
+    _force_all_chunks_overflow(monkeypatch)
 
     class _LLMThatCallsUnrelatedTool(LLMClient):
         def complete_structured(
@@ -315,7 +338,10 @@ def test_unverified_content_floor_still_applies_if_the_llm_called_an_unrelated_t
     assert result.tool_calls_made == 1
 
 
-def test_unverified_content_floor_does_not_lower_an_already_higher_score(rag_index_path):
+def test_unverified_content_floor_does_not_lower_an_already_higher_score(
+    rag_index_path, monkeypatch
+):
+    _force_all_chunks_overflow(monkeypatch)
     output = SemanticOutput(
         risk_score=85,
         category=RiskCategory.NINGUNA,
