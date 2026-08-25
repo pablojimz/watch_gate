@@ -47,6 +47,17 @@ Resolución del directorio de reglas (`_get_rules_dir`), en orden:
    debería alcanzarse en el análisis de PRs de este propio repo, y si se
    alcanza, se loggea como warning explícito porque implica ejecutar
    reglas sin pasar por la verificación de integridad.
+
+Aparte de las reglas verificadas por hash (0-4), `_build_semgrep_config_paths`
+añade siempre un `--config=<id>` por cada entrada de `official_registry_configs`
+en `rules/manifest.json` -- IDs del registro oficial de Semgrep (semgrep.dev/r,
+p. ej. "p/security-audit") que ESTA ejecución de `watchgate` pide en caliente,
+directamente al registro oficial, sin que el repo de reglas ni watch_gate
+descarguen/cacheen su contenido en ningún sitio compartido. Ver
+`_get_official_registry_configs` y, en el repo de reglas,
+`.claude/analisisLicenciaSemgrepOficial.md` (por qué esto es compatible con la
+Semgrep Rules License v1.0 y por qué vendorizar `semgrep/semgrep-rules` no lo
+es) y `docs/integracion_repo_reglas.md` §11 en este repo.
 """
 
 from __future__ import annotations
@@ -185,6 +196,7 @@ def _rules_verify_ttl_seconds() -> float:
     except ValueError:
         return _DEFAULT_RULES_VERIFY_TTL_SECONDS
 
+
 # Categoría de reglas custom/ que se aplica SIEMPRE, con independencia del
 # lenguaje detectado (patrones de secretos hardcodeados, cadenas de
 # conexión, etc. -- no son específicos de un lenguaje).
@@ -236,6 +248,19 @@ THIRD_PARTY_LANGUAGE_MAP: dict[str, list[tuple[str, str]]] = {
     "solidity": [("opengrep", "solidity")],
     "terraform": [("opengrep", "terraform"), ("trailofbits", "hcl")],
 }
+
+# Charset seguro para un ID del registro oficial de Semgrep
+# (semgrep.dev/r), p. ej. "p/security-audit" o "r/python.lang.security".
+# Estos IDs vienen del manifest.json publicado por el repo de reglas --
+# contenido controlado en última instancia por ese repo externo -- y se
+# insertan tal cual como argumento `--config=<id>` de un subprocess. Sin
+# esta validación, una entrada maliciosa podría inyectar un flag distinto
+# de Semgrep (p. ej. "--autofix") o una ruta local/URL arbitraria en vez de
+# un ID de verdad del registro. Solo se aceptan los dos prefijos que usa el
+# registro oficial ("p/" packs curados, "r/" reglas individuales) seguidos
+# de letras/números/puntos/guiones -- nunca "/" adicional, nunca empezar
+# por "-" (evita que se confunda con un flag de Semgrep).
+_SAFE_OFFICIAL_REGISTRY_CONFIG = re.compile(r"^[pr]/[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 
 def _infer_threat_nature_from_semgrep(
@@ -405,6 +430,18 @@ class StaticLayer(AnalysisLayer):
         for category, src in rules.yara.items():
             dst = view_root / "rules" / "yara" / category
             self._refresh_rules_view_entry(src, dst)
+        if getattr(rules, "manifest", None):
+            # Copia íntegra de manifest.json (no solo hashes) para que
+            # _get_official_registry_configs pueda leer, más adelante,
+            # campos declarativos que no participan de la verificación por
+            # hash -- mismo fichero/ruta que ya usa sync_rules.py para el
+            # checkout de CI (rules/manifest.json), así un único punto de
+            # lectura sirve para las dos vías de sincronización.
+            manifest_dst = view_root / "rules" / "manifest.json"
+            manifest_dst.parent.mkdir(parents=True, exist_ok=True)
+            manifest_dst.write_text(
+                json.dumps(rules.manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            )
 
     def _get_verified_rules_dir(self) -> Path | None:
         """Paso 0 de `_get_rules_dir`, con caché de PROCESO y TTL.
@@ -783,6 +820,60 @@ class StaticLayer(AnalysisLayer):
         _semgrep_finding_type_cache[cache_key] = finding_types
         return finding_types
 
+    def _get_official_registry_configs(self, rules_dir: Path) -> list[str]:
+        """Lee `official_registry_configs` de `rules/manifest.json` (junto
+        a `rules_dir`), si existe -- IDs del registro oficial de Semgrep
+        (p. ej. "p/security-audit") que ESTA ejecución de `watchgate` debe
+        pedir directamente al registro oficial (semgrep.dev/r), vía
+        `--config=<id>` en la propia invocación de Semgrep.
+
+        Deliberadamente NUNCA se descarga ni cachea el contenido de esas
+        reglas en `rules_dir` ni en ningún sitio compartido: es Semgrep
+        (el binario de cada ejecución, con su propia caché de proceso/
+        usuario) quien contacta al registro, bajo la licencia de quien
+        ejecuta `watchgate` -- no de este repo. Ver
+        `.claude/analisisLicenciaSemgrepOficial.md` en el repo de reglas
+        para el análisis de por qué esto es distinto de vendorizar
+        `semgrep/semgrep-rules`.
+
+        Nunca lanza ni aborta el análisis: manifest ausente, corrupto, con
+        un campo del tipo equivocado, o con entradas que no pasan el
+        charset seguro (`_SAFE_OFFICIAL_REGISTRY_CONFIG`) se registra y se
+        omite -- devuelve como mucho las entradas válidas, o lista vacía.
+        """
+        manifest_path = rules_dir / "rules" / "manifest.json"
+        if not manifest_path.exists():
+            return []
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning(
+                "No se pudo leer official_registry_configs de %s (%r); se omite.",
+                manifest_path,
+                exc,
+            )
+            return []
+
+        configs = manifest.get("official_registry_configs", [])
+        if not isinstance(configs, list):
+            logger.warning(
+                "official_registry_configs en %s no es una lista; se omite.", manifest_path
+            )
+            return []
+
+        valid: list[str] = []
+        for entry in configs:
+            if isinstance(entry, str) and _SAFE_OFFICIAL_REGISTRY_CONFIG.match(entry):
+                valid.append(entry)
+            else:
+                logger.warning(
+                    "Entrada de official_registry_configs ignorada en %s (formato "
+                    "inválido o inesperado): %r",
+                    manifest_path,
+                    entry,
+                )
+        return valid
+
     def _build_semgrep_config_paths(self, language: str, rules_dir: Path) -> list[str]:
         """Construye la lista de `--config=...` de Semgrep para `language`.
 
@@ -805,15 +896,24 @@ class StaticLayer(AnalysisLayer):
         Estrategia 2: rules/semgrep/watchgate.yml
         Estrategia 3: raiz del directorio de reglas (si nada de lo
           anterior existe -- último recurso, escanea todo)
+        Estrategia 4 (siempre, además de las anteriores): un `--config=<id>`
+          por cada entrada de `official_registry_configs` en
+          `rules/manifest.json` -- ver `_get_official_registry_configs`.
+          Es la ÚNICA estrategia que no apunta a una ruta local: Semgrep
+          contacta el registro oficial directamente en esta misma
+          invocación, con independencia del lenguaje.
         """
         semgrep_root = rules_dir / "rules" / "semgrep"
+        official_configs = [
+            f"--config={cfg}" for cfg in self._get_official_registry_configs(rules_dir)
+        ]
 
         if language == _UNRECOGNIZED_LANGUAGE_KEY:
             if semgrep_root.exists():
-                return [f"--config={semgrep_root}"]
+                return [f"--config={semgrep_root}", *official_configs]
             if rules_dir.exists():
-                return [f"--config={rules_dir}"]
-            return []
+                return [f"--config={rules_dir}", *official_configs]
+            return official_configs
 
         config_paths: list[str] = []
 
@@ -849,6 +949,7 @@ class StaticLayer(AnalysisLayer):
             elif rules_dir.exists():
                 config_paths.append(f"--config={rules_dir}")
 
+        config_paths.extend(official_configs)
         return config_paths
 
     def _resolve_semgrep_bin(self) -> str:
@@ -891,7 +992,17 @@ class StaticLayer(AnalysisLayer):
         Trade-off aceptado: un timeout aquí pierde los hallazgos de TODOS
         los ficheros del grupo, no solo de uno (antes, un timeout solo
         afectaba al fichero que se estaba analizando en ese momento) -- ver
-        el WARNING más abajo, que ahora lo dice explícitamente.
+        el WARNING más abajo, que ahora lo dice explícitamente. Mismo
+        trade-off aplica a los `--config=p/...`/`--config=r/...` del
+        registro oficial que `_build_semgrep_config_paths` añade al final
+        de la lista (ver `_get_official_registry_configs`): viajan en la
+        MISMA invocación que las reglas locales, así que un fallo de red
+        contra el registro oficial puede perder también los hallazgos
+        locales de ESE lenguaje -- aceptado por consistencia con el resto
+        de este método (nunca aborta `analyze()`, y otros lenguajes del
+        mismo diff se ejecutan en futuros independientes, ver
+        `_collect_semgrep_findings_by_file`) en vez de duplicar la
+        invocación de Semgrep por lenguaje solo para aislar esa fuente.
         """
         results: dict[str, list[dict[str, Any]]] = {p: [] for p in temp_file_paths}
         if not temp_file_paths:

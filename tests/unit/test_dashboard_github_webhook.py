@@ -131,9 +131,7 @@ def test_missing_secret_fails_closed_with_503(monkeypatch: pytest.MonkeyPatch) -
     no_secret_client = TestClient(app)
 
     body = json.dumps({"action": "opened"}).encode("utf-8")
-    empty_key_signature = (
-        "sha256=" + hmac.new(b"", msg=body, digestmod=hashlib.sha256).hexdigest()
-    )
+    empty_key_signature = "sha256=" + hmac.new(b"", msg=body, digestmod=hashlib.sha256).hexdigest()
     response = no_secret_client.post(
         "/api/webhooks/github",
         content=body,

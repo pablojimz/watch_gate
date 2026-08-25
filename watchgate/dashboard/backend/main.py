@@ -45,9 +45,7 @@ def _rag_sync_interval_hours() -> float:
     try:
         return float(raw)
     except ValueError:
-        logger.warning(
-            "WATCHGATE_RAG_SYNC_INTERVAL_HOURS=%r no es un número; se usa 24.", raw
-        )
+        logger.warning("WATCHGATE_RAG_SYNC_INTERVAL_HOURS=%r no es un número; se usa 24.", raw)
         return 24.0
 
 
@@ -66,9 +64,7 @@ async def _rag_sync_loop(interval_hours: float) -> None:
             await run_in_threadpool(
                 get_queue().enqueue, "watchgate.dashboard.backend.tasks.run_rag_sync"
             )
-            logger.info(
-                "RAG sync encolado; el próximo se encolará en %.1f horas.", interval_hours
-            )
+            logger.info("RAG sync encolado; el próximo se encolará en %.1f horas.", interval_hours)
         except Exception:  # noqa: BLE001 -- Redis caído no debe matar el loop
             logger.exception("No se pudo encolar el RAG sync periódico; se reintentará.")
         await asyncio.sleep(interval_hours * 3600)
