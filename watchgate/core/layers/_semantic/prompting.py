@@ -315,6 +315,13 @@ def _render_file_change(file_change: FileChange) -> str:
     )
 
 
+def render_file_change(file_change: FileChange) -> str:
+    """Wrapper público de `_render_file_change` para otros módulos de
+    `_semantic` (`chunking.py`) que necesitan renderizar un fichero
+    individual fuera del flujo de `build_user_prompt`."""
+    return _render_file_change(file_change)
+
+
 # Ventana de contexto (líneas antes/después) alrededor de cada línea sospechosa
 # al recortar un fichero truncado, y tope de líneas totales del extracto -- no
 # es un análisis completo del fichero, solo evita que un patrón de riesgo real
@@ -414,6 +421,23 @@ def _by_truncation_priority(
     return sorted(files, key=priority)
 
 
+def _build_full_prompt(diff: NormalizedDiff) -> str:
+    commits = "; ".join(diff.commit_messages) or "(sin mensajes)"
+    header = f"Repositorio: {diff.repo_path}\nCommits: {commits}\n"
+    full_body = "\n".join(_render_file_change(fc) for fc in diff.files)
+    return f"{header}\n{full_body}"
+
+
+def diff_fits_budget(
+    diff: NormalizedDiff, count_tokens: Callable[[str], int], max_diff_tokens: int
+) -> bool:
+    """True si el diff completo cabe en `max_diff_tokens` sin truncar --
+    `layer.py::analyze` lo usa para decidir entre el camino de una sola
+    llamada (`build_user_prompt`, sin cambios) y el de chunks
+    (`chunking.py` + `_analyze_chunked`)."""
+    return count_tokens(_build_full_prompt(diff)) < max_diff_tokens
+
+
 def build_user_prompt(
     diff: NormalizedDiff,
     static_findings_paths: set[str],
@@ -434,14 +458,11 @@ def build_user_prompt(
     como tool, §7.2) puede leer cualquiera de estos ficheros entero bajo
     demanda -- el heurístico de texto decide qué *mostrar sin que se pida*,
     no reemplaza el juicio del LLM sobre cuándo merece la pena mirar más."""
-    commits = "; ".join(diff.commit_messages) or "(sin mensajes)"
-    header = f"Repositorio: {diff.repo_path}\nCommits: {commits}\n"
-    full_body = "\n".join(_render_file_change(fc) for fc in diff.files)
-    full_prompt = f"{header}\n{full_body}"
-
+    full_prompt = _build_full_prompt(diff)
     if count_tokens(full_prompt) < max_diff_tokens:
         return full_prompt
 
+    header = f"Repositorio: {diff.repo_path}\nCommits: {'; '.join(diff.commit_messages) or '(sin mensajes)'}\n"
     truncated_parts = [header]
     budget_used = count_tokens(header)
     for file_change in _by_truncation_priority(diff.files, static_findings_paths):
@@ -461,3 +482,104 @@ def build_user_prompt(
         truncated_parts.append(rendered)
         budget_used += count_tokens(rendered)
     return "\n".join(truncated_parts)
+
+
+# --- Prompts del análisis por chunks (diff que no cabe ni truncado, ver
+# `chunking.py`/`layer.py::_analyze_chunked`) ------------------------------
+
+
+def build_chunk_user_prompt(diff: NormalizedDiff, chunk_rendered: str) -> str:
+    """Prompt de usuario para UN chunk (ver `chunking.Chunk.render()`):
+    mismo encabezado que `build_user_prompt`, pero el cuerpo ya viene
+    renderizado (piezas de `chunking.py`, cada una ya cabe por
+    construcción) -- no hay truncado que decidir aquí."""
+    commits = "; ".join(diff.commit_messages) or "(sin mensajes)"
+    header = f"Repositorio: {diff.repo_path}\nCommits: {commits}\n"
+    return f"{header}\n{chunk_rendered}"
+
+
+_REDUCE_ROLE_INSTRUCTIONS = """
+NOTA IMPORTANTE sobre esta llamada concreta: el PR era demasiado grande para
+analizarlo de una vez, así que ya se analizó por partes (uno o varios
+"paquetes" de ficheros, cada uno con su propio risk_score/justificación).
+Aquí abajo tienes esos resultados ya calculados -- NO vuelvas a analizar el
+código desde cero, tu tarea es SINTETIZAR: decide si, viendo el conjunto
+completo del PR, hay algo que ningún análisis por separado pudo ver por sí
+solo -- en particular riesgo que solo aparece en la INTERACCIÓN entre
+ficheros de paquetes distintos (p. ej. una función se modifica en un
+fichero de un paquete, y su único caller, en otro fichero de otro paquete,
+también cambia en este mismo PR de forma que el efecto combinado es
+sospechoso aunque cada cambio por separado pareciera inocuo).
+
+Si ningún paquete por separado encontró nada y tampoco ves ninguna
+interacción sospechosa entre ellos, tu risk_score debe reflejar eso
+honestamente (bajo) -- no subas el score solo porque el PR es grande o se
+tuvo que analizar por partes; el tamaño en sí no es una señal de riesgo.
+
+Si necesitas comprobar algo concreto que un paquete señaló (p. ej. ver el
+código real de un fichero que un paquete mencionó como sospechoso), puedes
+usar fetch_referenced_file igual que en un análisis normal.
+"""
+
+
+def build_reduce_system_prompt(
+    project_type: str,
+    languages: str,
+    recent_activity_summary: str,
+    rag_context: list[RetrievedFragment],
+    dependency_findings: list[dict[str, Any]] | None = None,
+    current_date: str | None = None,
+) -> str:
+    """Mismo prompt de sistema que `build_system_prompt`, con la instrucción
+    de rol de síntesis añadida al final del bloque variable (después de
+    `_CACHE_BREAKPOINT_MARKER`, para no invalidar el cacheo del bloque
+    estático -- sigue siendo idéntico byte a byte al de un análisis
+    normal)."""
+    base = build_system_prompt(
+        project_type,
+        languages,
+        recent_activity_summary,
+        rag_context,
+        dependency_findings=dependency_findings,
+        current_date=current_date,
+    )
+    return base + _REDUCE_ROLE_INSTRUCTIONS
+
+
+def _render_chunk_summary(index: int, paths: list[str], output: Any) -> str:
+    files_str = ", ".join(paths)
+    return (
+        f"Paquete {index} (ficheros: {files_str}):\n"
+        f"  risk_score: {output.risk_score}\n"
+        f"  threat_nature: {output.threat_nature.value}\n"
+        f"  category: {output.category.value if output.category else 'ninguna'}\n"
+        f"  justification: {output.justification}"
+    )
+
+
+def build_reduce_user_prompt(
+    diff: NormalizedDiff,
+    chunk_summaries: list[tuple[list[str], Any]],
+    overflow_paths: list[str],
+) -> str:
+    """Cuerpo de la llamada de síntesis: NO incluye los diffs otra vez --
+    solo los resultados ya calculados de cada chunk (`chunk_summaries`,
+    `(paths_del_chunk, SemanticOutput)`), mucho más compactos. `overflow_paths`
+    son ficheros que ni siquiera se llegaron a analizar por chunk (tope de
+    `chunking.MAX_CHUNKS` alcanzado) -- se listan explícitamente como no
+    verificados, nunca se callan."""
+    commits = "; ".join(diff.commit_messages) or "(sin mensajes)"
+    header = f"Repositorio: {diff.repo_path}\nCommits: {commits}\n"
+    summaries = "\n\n".join(
+        _render_chunk_summary(i, paths, output)
+        for i, (paths, output) in enumerate(chunk_summaries, start=1)
+    )
+    body = f"Resultados de los {len(chunk_summaries)} paquete(s) analizados:\n\n{summaries}"
+    if overflow_paths:
+        body += (
+            f"\n\n{UNVERIFIED_CONTENT_MARKER} {len(overflow_paths)} fichero(s) adicionales "
+            f"no se llegaron a analizar (PR con demasiados ficheros para el presupuesto de "
+            f"este análisis): {', '.join(overflow_paths)}. Trátalos como incertidumbre real, "
+            "no como limpios."
+        )
+    return f"{header}\n{body}"
