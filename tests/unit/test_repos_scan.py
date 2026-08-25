@@ -439,8 +439,10 @@ def test_add_external_repo_audited_enqueues_main_branch_scan(test_db_session):
     assert call.args[2] == creator.org_id  # org_id
     assert call.args[3] is None  # vcs_connection_id (no se pasó ninguno)
     # job_id incluye org_id -- dos orgs distintas pueden auditar el mismo
-    # repo_path sin colisionar entre sí (ver comentario en repos.py).
-    assert call.kwargs["job_id"] == f"main_branch_scan:{creator.org_id}:openclaw/baselinerepo"
+    # repo_path sin colisionar entre sí (ver comentario en repos.py). '-'
+    # como separador (no ':') porque RQ valida el job_id contra
+    # [A-Za-z0-9_-]+ -- ver test_safe_job_id_part_* más abajo.
+    assert call.kwargs["job_id"] == f"main_branch_scan-{creator.org_id}-openclaw_baselinerepo"
 
     app.dependency_overrides.clear()
 
@@ -493,10 +495,38 @@ def test_add_external_repo_deletes_stale_failed_main_branch_scan_job_before_reen
         call for call in mock_queue.enqueue.call_args_list if call.args[0] is run_main_branch_scan
     ]
     assert len(main_branch_calls) == 1
-    expected_job_id = f"main_branch_scan:{creator.org_id}:openclaw/staleretry"
+    expected_job_id = f"main_branch_scan-{creator.org_id}-openclaw_staleretry"
     assert main_branch_calls[0].kwargs["job_id"] == expected_job_id
 
     app.dependency_overrides.clear()
+
+
+def test_safe_job_id_part_produces_ids_that_real_rq_accepts():
+    """Bug real, reproducido en vivo (500 en POST /api/repos/external y en
+    POST /repos/external/{id}/scan-main): RQ valida `job_id` contra
+    `[A-Za-z0-9_-]+` (`rq.job.JOB_ID_PATTERN`, estable entre versiones --
+    no se importa la función interna de validación aquí porque el venv
+    local de desarrollo tiene rq==1.16.2 desincronizado del `rq>=2.11,<3.0`
+    real de pyproject.toml/el contenedor, donde sí se reprodujo el bug en
+    vivo) -- un `repo_path` real como "owner/repo" (barra) o
+    "usuario/Curso.Prep.Henry" (punto) lo revienta con `ValueError: Job ID
+    must only contain letters, numbers, underscores and dashes`. Los tests
+    de arriba mockean `get_queue()` entero, así que nunca ejercitan la
+    validación REAL de RQ -- por eso este bug no se detectó antes."""
+    import re
+
+    from watchgate.dashboard.backend.routers.repos import _safe_job_id_part
+
+    real_world_repo_paths = [
+        "owner/repo",
+        "marjosavi481/Curso.Prep.Henry",
+        "a/b/c",
+        "repo con espacios",
+        "répo-ñ",
+    ]
+    for repo_path in real_world_repo_paths:
+        job_id = f"main_branch_scan-{_safe_job_id_part('org-123')}-{_safe_job_id_part(repo_path)}"
+        assert re.fullmatch(r"[A-Za-z0-9_-]+", job_id), job_id
 
 
 def test_add_external_repo_skips_main_branch_scan_when_job_already_in_flight(test_db_session):
