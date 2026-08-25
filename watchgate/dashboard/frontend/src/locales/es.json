@@ -240,6 +240,7 @@
     "subtitle": "Monitorización y auditoría bajo demanda de repositorios de terceros sin permisos de escritura.",
     "addRepo": "Añadir repositorio",
     "connectTitle": "Conectar repositorios",
+    "githubExplainer": "Instalar la GitHub App es como añadir un colaborador de solo lectura: tú eliges en qué repos entra (puedes revocarlo cuando quieras desde GitHub), y a partir de ahí cada Pull Request nueva se analiza sola, sin compartir tu contraseña ni ningún token tuyo. Si no quieres instalarla, puedes añadir un repo público por nombre más abajo — auditoría puntual, sin conexión automática.",
     "installAppTitle": "GitHub App (recomendado)",
     "installAppSubtitle": "Instala la App de WatchGate en tus repositorios: cada PR se analiza automáticamente vía webhook, sin tokens personales.",
     "installAppButton": "Instalar GitHub App",

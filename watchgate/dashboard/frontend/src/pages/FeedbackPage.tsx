@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import { MessageSquareText } from 'lucide-react'
 import { api, type ScoreOut } from '@/api/client'
 import { RiskBadge } from '@/components/dashboard/RiskBadge'
 import { TableSkeleton } from '@/components/dashboard/TableSkeleton'
@@ -59,9 +60,12 @@ export default function FeedbackPage() {
   return (
     <div className="flex w-full flex-col gap-4 p-4 sm:px-6 lg:px-8 lg:py-6">
       <div className="flex items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">{t('feedback.title')}</h1>
-          <p className="text-sm text-muted-foreground">{repo}</p>
+        <div className="flex items-start gap-3">
+          <MessageSquareText className="mt-0.5 size-6 text-primary" strokeWidth={1.75} />
+          <div>
+            <h1 className="text-xl font-semibold">{t('feedback.title')}</h1>
+            <p className="text-sm text-muted-foreground">{repo}</p>
+          </div>
         </div>
         <Link
           to={`/repos/${encodeURIComponent(repo)}`}
