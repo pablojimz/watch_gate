@@ -114,9 +114,7 @@ def test_fetch_advisories_paginates_when_limit_exceeds_page_size(
     def _fake_get(url: str, params: dict[str, Any], **kwargs: Any) -> _FakeResponse:
         calls.append(dict(params))
         page, per_page = int(params["page"]), int(params["per_page"])
-        batch = [
-            {"ghsa_id": f"GHSA-p{page}-{i}", "summary": "s"} for i in range(per_page)
-        ]
+        batch = [{"ghsa_id": f"GHSA-p{page}-{i}", "summary": "s"} for i in range(per_page)]
         return _FakeResponse(batch)
 
     monkeypatch.setattr(threat_feed.httpx, "get", _fake_get)
