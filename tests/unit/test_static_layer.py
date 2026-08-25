@@ -689,6 +689,87 @@ def test_build_semgrep_config_paths_unrecognized_language_scans_full_catalog(tmp
     assert config_paths == [f"--config={semgrep_root}"]
 
 
+def _write_manifest(tmp_path: Path, official_registry_configs) -> None:
+    manifest_path = tmp_path / "rules" / "manifest.json"
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(
+        json.dumps({"version": "v0.0.1", "official_registry_configs": official_registry_configs}),
+        encoding="utf-8",
+    )
+
+
+def test_get_official_registry_configs_no_manifest_returns_empty(tmp_path) -> None:
+    """Sin rules/manifest.json (p. ej. pasos 1/2/4 de _get_rules_dir, que
+    nunca traen manifest), la ausencia se degrada a lista vacía -- nunca
+    lanza ni aborta el análisis."""
+    layer = StaticLayer()
+    assert layer._get_official_registry_configs(tmp_path) == []
+
+
+def test_get_official_registry_configs_filters_invalid_entries(tmp_path) -> None:
+    """Solo se aceptan IDs con el charset seguro del registro oficial
+    (prefijo p/ o r/); cualquier otra cosa -- flag injection, ruta, tipo
+    equivocado -- se descarta en vez de colarse como argumento de Semgrep."""
+    _write_manifest(
+        tmp_path,
+        [
+            "p/security-audit",
+            "r/python.lang.security.audit",
+            "--dangerously-allow-arbitrary-code-execution",
+            "/etc/passwd",
+            "q/not-a-real-prefix",
+            123,
+        ],
+    )
+    layer = StaticLayer()
+
+    configs = layer._get_official_registry_configs(tmp_path)
+
+    assert configs == ["p/security-audit", "r/python.lang.security.audit"]
+
+
+def test_get_official_registry_configs_missing_field_returns_empty(tmp_path) -> None:
+    """Un manifest.json válido pero sin el campo (p. ej. una versión
+    publicada antes de que existiera) se degrada a lista vacía."""
+    manifest_path = tmp_path / "rules" / "manifest.json"
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text(json.dumps({"version": "v0.0.1"}), encoding="utf-8")
+    layer = StaticLayer()
+
+    assert layer._get_official_registry_configs(tmp_path) == []
+
+
+def test_build_semgrep_config_paths_appends_official_registry_configs(tmp_path) -> None:
+    """_build_semgrep_config_paths añade un --config=<id> por cada entrada
+    válida de official_registry_configs, DESPUÉS de las rutas locales."""
+    semgrep_root = tmp_path / "rules" / "semgrep"
+    (semgrep_root / "custom" / "python").mkdir(parents=True)
+    _write_manifest(tmp_path, ["p/security-audit"])
+    layer = StaticLayer()
+
+    config_paths = layer._build_semgrep_config_paths("python", tmp_path)
+
+    assert config_paths[-1] == "--config=p/security-audit"
+    assert f"--config={semgrep_root / 'custom' / 'python'}" in config_paths
+
+
+def test_build_semgrep_config_paths_unrecognized_language_appends_official_registry_configs(
+    tmp_path,
+) -> None:
+    """La estrategia 0 (catch-all) también pide el registro oficial, no
+    solo el catálogo local completo."""
+    semgrep_root = tmp_path / "rules" / "semgrep"
+    (semgrep_root / "custom" / "python").mkdir(parents=True)
+    _write_manifest(tmp_path, ["p/security-audit"])
+    layer = StaticLayer()
+
+    config_paths = layer._build_semgrep_config_paths(
+        static_layer_module._UNRECOGNIZED_LANGUAGE_KEY, tmp_path
+    )
+
+    assert config_paths == [f"--config={semgrep_root}", "--config=p/security-audit"]
+
+
 def test_prepare_files_for_scanning_groups_unrecognized_extension_as_catch_all(tmp_path) -> None:
     """_prepare_files_for_scanning ya no descarta los ficheros de extensión
     no reconocida antes de llegar a Semgrep -- los mete en
@@ -981,6 +1062,33 @@ def test_get_verified_rules_dir_materializes_expected_layout(monkeypatch, tmp_pa
     assert python_rule.read_text(encoding="utf-8") == "regla-python"
     assert third_party_rule.read_text(encoding="utf-8") == "regla-rust-third-party"
     assert yara_rule.read_text(encoding="utf-8") == "rule w {}"
+
+
+def test_get_verified_rules_dir_materializes_manifest_for_official_registry_configs(
+    monkeypatch, tmp_path
+) -> None:
+    """`_sync_rules_view` también escribe rules/manifest.json en la vista
+    local -- es lo que luego lee `_get_official_registry_configs` (paso 0
+    de _get_rules_dir, igual que el checkout de CI vía sync_rules.py)."""
+    monkeypatch.setenv("RULES_REPO_TOKEN", "fake-token")
+
+    fake_rules = types.SimpleNamespace(
+        version="v0.0.5",
+        custom={},
+        third_party={},
+        yara={},
+        manifest={"version": "v0.0.5", "official_registry_configs": ["p/security-audit"]},
+    )
+    fake_module = _make_fake_local_rules_client(
+        get_verified_rules=lambda **kwargs: fake_rules,
+        repo_cache_dir_path=tmp_path / "cache" / "rules-repo",
+    )
+    monkeypatch.setattr(static_layer_module, "_import_local_rules_client", lambda: fake_module)
+
+    layer = StaticLayer()
+    view_root = layer._get_verified_rules_dir()
+
+    assert layer._get_official_registry_configs(view_root) == ["p/security-audit"]
 
 
 def test_get_verified_rules_dir_view_path_changes_with_active_version(

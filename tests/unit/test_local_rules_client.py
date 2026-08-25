@@ -240,6 +240,31 @@ def test_get_verified_rules_no_keys_requested_skips_git_entirely(monkeypatch, ca
     assert result.custom == {}
     assert result.third_party == {}
     assert result.yara == {}
+    # El manifest completo se propaga aunque no se pidiera ninguna clave --
+    # official_registry_configs no requiere verificación por hash.
+    assert result.manifest == MANIFEST_SAMPLE
+
+
+def test_get_verified_rules_propagates_full_manifest_on_happy_path(monkeypatch, cache_paths):
+    """El manifest COMPLETO (no solo los hashes) llega en `VerifiedRules.manifest`
+    también cuando sí se verifican claves por hash -- lo necesita
+    static_layer._get_official_registry_configs, que lee
+    official_registry_configs del manifest, un campo que nunca participa
+    de la verificación por hash."""
+    manifest_with_registry_configs = {
+        "version": "v0.0.2",
+        "hashes": {"semgrep": {"custom": {}, "third_party": {}}, "yara": {}},
+        "official_registry_configs": ["p/security-audit"],
+    }
+    monkeypatch.setattr(
+        lrc,
+        "fetch_release_manifest",
+        lambda repo, ref, token, asset: ("v0.0.2", b"{}", manifest_with_registry_configs),
+    )
+
+    result = lrc.get_verified_rules(languages=[], third_party=[], include_yara=False)
+
+    assert result.manifest["official_registry_configs"] == ["p/security-audit"]
 
 
 def test_get_verified_rules_happy_path_verifies_and_caches(monkeypatch, cache_paths):
