@@ -123,9 +123,7 @@ def test_retrieve_diversifies_results_by_case(tmp_path):
         index_path=index_path,
     )
     case_names = [f.case_name for f in fragments]
-    assert len(case_names) == len(set(case_names)), (
-        f"fragmentos duplicados por caso: {case_names}"
-    )
+    assert len(case_names) == len(set(case_names)), f"fragmentos duplicados por caso: {case_names}"
     assert len(fragments) == 3
 
 

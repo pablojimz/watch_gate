@@ -106,9 +106,7 @@ def test_claim_conflicts_when_another_org_owns_the_installation(
 ) -> None:
     client, session = dashboard_client
     other_org = create_organization(session, name="Otra Org")
-    session.add(
-        VCSConnection(id="vcs-ajena", org_id=other_org.id, installation_id="424242")
-    )
+    session.add(VCSConnection(id="vcs-ajena", org_id=other_org.id, installation_id="424242"))
     session.commit()
 
     response = _claim(client, "424242")

@@ -96,7 +96,9 @@ def generate_app_jwt() -> str | None:
         "iss": app_id,
     }
     try:
-        return jwt.encode(claims, private_key, algorithm="RS256")
+        # python-jose no tipa `jwt.encode` (devuelve `Any`) -- el `str()`
+        # es solo para satisfacer a mypy, la librería ya devuelve un str.
+        return str(jwt.encode(claims, private_key, algorithm="RS256"))
     except Exception as exc:  # noqa: BLE001 -- clave PEM malformada, etc.
         logger.error("No se pudo firmar el JWT de la GitHub App: %r", exc)
         return None
@@ -126,8 +128,7 @@ def get_installation_token(installation_id: str) -> str | None:
         data: dict[str, Any] = response.json()
     except (httpx.HTTPError, ValueError) as exc:
         logger.warning(
-            "No se pudo obtener token de instalación de GitHub App para "
-            "installation_id=%s: %r",
+            "No se pudo obtener token de instalación de GitHub App para installation_id=%s: %r",
             installation_id,
             exc,
         )
