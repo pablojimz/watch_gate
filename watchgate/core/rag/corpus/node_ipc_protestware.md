@@ -24,18 +24,7 @@ mantenedor.
 - Se conoce como "protestware": código malicioso motivado por una postura
   política o social del propio autor, no por beneficio económico directo.
 
-## Por qué es relevante para WatchGate
+## Patrón a vigilar
 
-- Refuerza, en su forma más extrema, la premisa central del sistema: la
-  reputación del autor —incluida la reputación *legítima y de largo
-  plazo*, no una cuenta comprometida— no es garantía de nada. Un
-  mantenedor real con años de historial puede decidir en cualquier momento
-  introducir código malicioso en su propio proyecto.
-- La activación condicional (geolocalización de IP) es un patrón a
-  reconocer: código que decide su comportamiento según de dónde parece
-  venir la petición, sin relación con la lógica funcional del paquete, es
-  una señal de intención dirigida, no un bug.
-- Compárese con `colors_faker_maintainer_sabotage.md`: mismo patrón de
-  autosabotaje por parte del propio mantenedor, semanas después, con un
-  motivo distinto (económico/reivindicativo en vez de geopolítico) — la
-  variedad de motivos posibles no cambia la señal técnica a vigilar.
+Lógica condicional basada en geolocalización de IP, sin relación con la
+funcionalidad del paquete, introducida por el propio mantenedor habitual.

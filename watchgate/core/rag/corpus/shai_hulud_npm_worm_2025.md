@@ -42,32 +42,15 @@ repositorios públicos maliciosos en GitHub.
   cada nueva víctima se convertía automáticamente en vector para las
   siguientes.
 
-## Por qué es relevante para WatchGate
+## Patrón a vigilar
 
-- Es la referencia más reciente y mejor documentada de un patrón que
-  probablemente seguirá repitiéndose: **abuso de scripts de instalación de
-  gestores de paquetes (`postinstall`, `preinstall`) como vector de
-  ejecución automática**, sin que la víctima haga nada más que instalar
-  una dependencia — igual que en `event-stream`, pero con auto-replicación
-  añadida.
-- El hecho de que use una herramienta de seguridad legítima (TruffleHog)
-  como parte del payload es un recordatorio de que "la herramienta es
-  conocida y confiable" no dice nada sobre si su presencia en un contexto
-  concreto (descargada dinámicamente dentro de un script de instalación)
-  es legítima.
-- Un cambio que añade o modifica un script `postinstall`/`preinstall` en
-  `package.json`, especialmente si descarga binarios externos o inspecciona
-  variables de entorno y tokens, merece el mismo nivel de sospecha que
-  código ejecutable añadido directamente al proyecto — el punto de entrada
-  no es menos peligroso por ser "solo configuración de npm".
-- Modificar un workflow de GitHub Actions (crear uno nuevo o alterar uno
-  existente) como parte de un cambio que no tiene relación aparente con
-  CI/CD es en sí misma una señal fuerte, incluso sin ver el contenido
-  exacto del workflow — es exactamente el mecanismo de propagación de este
-  caso.
-- Técnica MITRE ATT&CK relacionada: T1195.001 (Compromise Software
-  Dependencies and Development Tools), T1552 (Unsecured Credentials),
-  T1567 (Exfiltration Over Web Service).
+Script `postinstall`/`preinstall` nuevo o modificado que descarga binarios
+externos o inspecciona variables de entorno/tokens; workflow de GitHub
+Actions nuevo o alterado sin relación aparente con el resto del cambio.
+
+Técnica MITRE ATT&CK relacionada: T1195.001 (Compromise Software
+Dependencies and Development Tools), T1552 (Unsecured Credentials), T1567
+(Exfiltration Over Web Service).
 
 Fuentes: Wiz, Unit42 (Palo Alto Networks), CISA (alerta del 23/09/2025),
 Microsoft Security Blog (guía sobre Shai-Hulud 2.0, 09/12/2025).

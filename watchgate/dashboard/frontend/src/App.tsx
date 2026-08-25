@@ -11,6 +11,7 @@ import RepoPage from '@/pages/RepoPage'
 import FeedbackPage from '@/pages/FeedbackPage'
 import AdminPage from '@/pages/AdminPage'
 import MetricsPage from '@/pages/MetricsPage'
+import RagPage from '@/pages/RagPage'
 import ApiKeysPage from '@/pages/ApiKeysPage'
 import { UserSettingsPage } from '@/pages/UserSettingsPage'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -81,6 +82,7 @@ export default function App() {
           <Route path="repos/:repo" element={<RepoPage />} />
           <Route path="repos/:repo/feedback" element={<FeedbackPage />} />
           <Route path="metrics" element={<MetricsPage />} />
+          <Route path="rag" element={<RagPage />} />
           <Route path="api-keys" element={<ApiKeysPage />} />
           <Route path="user-settings" element={<UserSettingsPage />} />
           <Route

@@ -13,9 +13,12 @@ name: Reconciliar reglas (red de seguridad diaria)
 
 on:
   schedule:
-    # 03:00 UTC todos los días -- fuera de horario de desarrollo activo,
-    # para no competir por runners con el análisis de PRs.
-    - cron: "0 3 * * *"
+    # Lunes 03:00 UTC -- semanal, no diario: esto es una RED DE SEGURIDAD
+    # por si se pierde un repository_dispatch (el flujo normal es
+    # sync-rules.yml, que reacciona al momento). Las reglas se publican
+    # con poca frecuencia; comprobar a diario multiplicaba x7 los minutos
+    # de runner y, con el secret caducado, mandaba un email de fallo AL DÍA.
+    - cron: "0 3 * * 1"
   # Permite forzar una reconciliación manual desde la pestaña Actions sin
   # esperar al cron, útil para depurar o para el día de la demo/entrega.
   workflow_dispatch: {}

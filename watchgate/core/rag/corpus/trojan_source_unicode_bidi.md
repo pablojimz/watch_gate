@@ -55,20 +55,10 @@ comprueba: ¿el texto "oculto" está en la misma línea física que el
 marcador de comentario (`#`, `//`), o en una línea/token distinto? Solo en
 el segundo caso el payload puede ejecutarse de verdad.
 
-## Por qué es relevante para WatchGate
+## Patrón a vigilar
 
-- Es el ejemplo más claro de por qué **la capa estática no puede confiar
-  solo en lo que "parece" el código**: hace falta detectar la sola
-  *presencia* de caracteres de control bidireccional (rango Unicode
-  `U+202A`-`U+202E`, `U+2066`-`U+2069`) en el código fuente, no interpretar
-  visualmente el diff — cualquier ocurrencia en un fichero que no sea
-  explícitamente de datos/i18n es sospechosa por sí sola.
-- La capa semántica, si recibe el diff como texto plano (no como imagen
-  renderizada), sí "ve" los caracteres de control reales aunque no los
-  renderice visualmente igual que un navegador — pero debe saber
-  reconocerlos como señal de alarma en vez de ignorarlos como ruido de
-  formato.
-- Relacionado con MITRE ATT&CK T1027 (Obfuscated Files or Information): la
-  ofuscación aquí no está en el contenido en sí, sino en el **orden de
-  renderizado** — una categoría distinta de las técnicas de codificación
-  (base64, hex) ya cubiertas en este corpus.
+Presencia de caracteres de control bidireccional Unicode (rango
+`U+202A`-`U+202E`, `U+2066`-`U+2069`) en un fichero que no sea
+explícitamente de datos/i18n.
+
+Técnica MITRE ATT&CK relacionada: T1027 (Obfuscated Files or Information).

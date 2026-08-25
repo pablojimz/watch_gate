@@ -30,19 +30,13 @@ quedaba expuesto.
   petición HTTP con un parámetro base64), no una escritura a disco ni un
   `curl | bash` evidente.
 
-## Por qué es relevante para WatchGate
+## Patrón a vigilar
 
-- Mismo grupo de técnicas MITRE ATT&CK que otros casos de este corpus:
-  T1195.002 (Compromise Software Supply Chain) y T1552 (Unsecured
-  Credentials, vía variables de entorno) — la exfiltración de secretos de
-  entorno es un objetivo recurrente en paquetes maliciosos de PyPI/npm.
-- Para la capa semántica: cualquier código que recolecte `os.environ` (o
-  equivalentes: `process.env`, `ENV` de Ruby) y lo envíe por red — aunque sea
-  en un método aparentemente inocuo de una clase de uso normal, no solo en un
-  script de instalación — es una señal de intención maliciosa por sí sola,
-  con independencia de la reputación aparente del paquete o de su autor.
-- Refuerza que la reputación heredada (un paquete con historial y descargas
-  reales) no es garantía: un paquete legítimo puede ser tomado por secuestro
-  de cuenta/infraestructura sin que cambie su nombre ni su historial visible.
+Código que recolecta `os.environ` (o `process.env`, `ENV` de Ruby) y lo
+envía por red, en un método aparentemente normal de uso, no solo en un
+script de instalación.
+
+Técnica MITRE ATT&CK relacionada: T1195.002 (Compromise Software Supply
+Chain), T1552 (Unsecured Credentials).
 
 Fuente pública: GHSA-4g82-3jcr-q52w (GitHub Advisory Database, revisado).

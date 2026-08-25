@@ -551,14 +551,17 @@ rule test_rule_without_risk_score_meta
 
 @pytest.fixture(autouse=True)
 def _clear_yara_process_cache():
-    """La caché de reglas compiladas vive a nivel de proceso (ver
-    static_layer._yara_rules_cache) -- se limpia antes/después de cada
-    test para que no haya contaminación entre tests con distintos
-    `tmp_path` (que ya son únicos por test, pero esto lo deja explícito
-    y hermético)."""
+    """Las cachés de proceso de static_layer (_yara_rules_cache y
+    _verified_rules_view_cache) se limpian antes/después de cada test para
+    que no haya contaminación entre tests con distintos `tmp_path` (que ya
+    son únicos por test, pero esto lo deja explícito y hermético) -- sin
+    esto, una vista verificada cacheada por un test se serviría tal cual
+    al siguiente mientras su tmp_path siga existiendo."""
     static_layer_module._yara_rules_cache.clear()
+    static_layer_module._verified_rules_view_cache.clear()
     yield
     static_layer_module._yara_rules_cache.clear()
+    static_layer_module._verified_rules_view_cache.clear()
 
 
 def _write_yara_rule(root: Path, relpath: str, content: str) -> None:
@@ -1098,8 +1101,15 @@ def test_get_verified_rules_dir_view_path_changes_with_active_version(
     dashboard backend): si la versión activa cambia entre dos llamadas, la
     ruta devuelta cambia con ella -- así las cachés de proceso existentes
     (_yara_rules_cache, _semgrep_finding_type_cache), indexadas por esa
-    ruta, dejan de servir contenido de la versión anterior."""
+    ruta, dejan de servir contenido de la versión anterior.
+
+    Desde la caché TTL de _get_verified_rules_dir, este contrato es "el
+    cambio de versión se propaga al expirar el TTL" (1h por defecto), no
+    "inmediatamente" -- TTL=0 fuerza el modo verificar-siempre, que es
+    donde el mecanismo de ruta-por-versión que valida este test actúa en
+    cada llamada."""
     monkeypatch.setenv("RULES_REPO_TOKEN", "fake-token")
+    monkeypatch.setenv("WATCHGATE_RULES_VERIFY_TTL_SECONDS", "0")
     current_version = {"value": "v0.0.5"}
 
     def fake_get_verified_rules(**kwargs):
@@ -1155,3 +1165,60 @@ def test_import_local_rules_client_resolves_the_real_module() -> None:
     assert callable(module.get_verified_rules)
     assert callable(module.repo_cache_dir)
     assert issubclass(module.RulesVerificationError, module.RulesClientError)
+
+
+def test_get_verified_rules_dir_caches_successful_resolution_across_instances(
+    monkeypatch, tmp_path
+) -> None:
+    """Regresión de eficiencia: `get_verified_rules()` pide SIEMPRE el
+    manifest.json remoto, y el orquestador crea una StaticLayer nueva por
+    análisis -- sin la caché de módulo, cada PR pagaba una llamada de red
+    + verificación de hashes. Una resolución con éxito debe reutilizarse
+    dentro del TTL, incluso desde una instancia distinta."""
+    monkeypatch.setenv("RULES_REPO_TOKEN", "fake-token")
+    static_layer_module._verified_rules_view_cache.clear()
+    view = tmp_path / "rules-view" / "v9"
+    view.mkdir(parents=True)
+    calls: list[int] = []
+    monkeypatch.setattr(
+        StaticLayer,
+        "_resolve_verified_rules_dir",
+        lambda self: calls.append(1) or view,
+    )
+    try:
+        assert StaticLayer()._get_verified_rules_dir() == view
+        assert StaticLayer()._get_verified_rules_dir() == view
+        assert len(calls) == 1, "la segunda instancia debe servirse de la caché"
+    finally:
+        static_layer_module._verified_rules_view_cache.clear()
+
+
+def test_get_verified_rules_dir_does_not_cache_failures(monkeypatch) -> None:
+    """Un fallo (sin red, verificación fallida) no debe quedarse cacheado:
+    el siguiente análisis reintenta -- una regla nueva no puede quedarse
+    fuera una hora por un error transitorio."""
+    monkeypatch.setenv("RULES_REPO_TOKEN", "fake-token")
+    static_layer_module._verified_rules_view_cache.clear()
+    calls: list[int] = []
+    monkeypatch.setattr(
+        StaticLayer,
+        "_resolve_verified_rules_dir",
+        lambda self: calls.append(1),  # devuelve None
+    )
+    try:
+        layer = StaticLayer()
+        assert layer._get_verified_rules_dir() is None
+        assert layer._get_verified_rules_dir() is None
+        assert len(calls) == 2
+        assert static_layer_module._verified_rules_view_cache == {}
+    finally:
+        static_layer_module._verified_rules_view_cache.clear()
+
+
+def test_rules_verify_ttl_seconds_parsing(monkeypatch) -> None:
+    monkeypatch.delenv("WATCHGATE_RULES_VERIFY_TTL_SECONDS", raising=False)
+    assert static_layer_module._rules_verify_ttl_seconds() == 3600.0
+    monkeypatch.setenv("WATCHGATE_RULES_VERIFY_TTL_SECONDS", "abc")
+    assert static_layer_module._rules_verify_ttl_seconds() == 3600.0
+    monkeypatch.setenv("WATCHGATE_RULES_VERIFY_TTL_SECONDS", "0")
+    assert static_layer_module._rules_verify_ttl_seconds() == 0.0
