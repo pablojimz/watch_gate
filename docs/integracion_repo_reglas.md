@@ -141,8 +141,34 @@ Reutiliza la lógica ya existente en vez de duplicarla: `rules_hash.compute_dir_
 
 **Alcance real hoy:** solo `sync-rules.yml` y `reconcile-rules.yml` reciben el secret `RULES_REPO_TOKEN` en este repo (ver tabla de §2) -- el workflow que analiza PRs no lo tiene configurado. Por construcción, este paso 0 se activa donde quiera que `RULES_REPO_TOKEN` esté presente en el entorno (típicamente, la máquina de un desarrollador que lo exporte para trabajar en local) y es un no-op transparente donde no lo esté (CI de análisis de PRs, tal y como está hoy: sigue leyendo `rules/` del checkout tal cual, sin cambios de comportamiento).
 
-## 10. Pendiente / gaps conocidos
+## 11. Reglas del registro oficial de Semgrep (`official_registry_configs`)
+
+**Fecha:** 2026-08-25.
+
+El registro oficial de Semgrep (`semgrep/semgrep-rules`) nunca se ha incluido como fuente en el repo de reglas: su licencia (Semgrep Rules License v1.0) prohíbe expresamente redistribuir su contenido, y el propio pipeline de release de ese repo (empaquetar + publicar + `repository_dispatch`) es, por diseño, un mecanismo de distribución — ver el análisis completo en `.claude/analisisLicenciaSemgrepOficial.md` del repo de reglas. Existe sin embargo una vía compatible: `watch_gate`, no el repo de reglas, pide esas reglas **en caliente** al registro oficial (`semgrep.dev/r`), en su propia ejecución, bajo la licencia de quien ejecuta `watchgate` — no se descarga, cachea ni distribuye ese contenido en ningún sitio compartido.
+
+**Mecanismo:**
+
+- El repo de reglas declara, en `manifest.json` (`scripts/build_release_manifest.py::OFFICIAL_REGISTRY_CONFIGS`), una lista curada de IDs del registro oficial (p. ej. `"p/security-audit"`) — **solo identificadores, nunca contenido de regla**. Ese campo viaja como el resto del manifest: asset de la Release, payload de `repository_dispatch`.
+- En `watch_gate`, `VerifiedRules.manifest` (`scripts/local_rules_client.py`) propaga el manifest completo devuelto por la Releases API — no solo los hashes verificables, también este campo declarativo que no participa de la verificación por hash (no hay contenido que hashear). `StaticLayer._sync_rules_view` escribe ese manifest tal cual en `rules/manifest.json` dentro de la vista local verificada (`~/.cache/watch_gate/rules-view/<versión>/`); `sync_rules.py` ya hacía lo mismo para el checkout de CI (`_apply_verified_content`), así que ambas vías de sincronización (§9 paso 0, y el checkout de CI de §3) dejan `rules/manifest.json` en el mismo sitio relativo al resto de reglas.
+- `StaticLayer._get_official_registry_configs(rules_dir)` lee `rules_dir/rules/manifest.json` y valida cada entrada contra un charset seguro (`^[pr]/[A-Za-z0-9][A-Za-z0-9._-]*$`) antes de usarla — el manifest viene en última instancia de un repo externo, y estas cadenas se insertan directamente como argumento `--config=<id>` de un subprocess, así que una entrada fuera de ese formato (intento de flag injection, ruta local, tipo equivocado) se descarta y se loggea, nunca se pasa a Semgrep.
+- `StaticLayer._build_semgrep_config_paths` añade un `--config=<id>` por cada entrada válida, **al final** de la lista de `--config` locales ya existente (custom + third-party + `watchgate.yml`), tanto para un lenguaje reconocido como para el catálogo catch-all (`_UNRECOGNIZED_LANGUAGE_KEY`) — es la única estrategia de esa función que no apunta a una ruta local: en esta misma invocación de Semgrep, el binario contacta al registro oficial directamente.
+
+**Condiciones de las que depende que esto siga siendo compatible con la licencia** (detalladas en `.claude/analisisLicenciaSemgrepOficial.md` del repo de reglas):
+
+1. El escaneo lo ejecuta siempre el propio proceso de `watchgate`, nunca infraestructura del repo de reglas actuando de intermediario.
+2. Ni el repo de reglas ni `watch_gate` empaquetan/vendorizan el contenido de esas reglas en ningún sitio (git, release, caché compartida) — solo el ID viaja.
+3. La petición al registro ocurre en la propia ejecución del usuario/CI de `watch_gate` (aquí, en la invocación de Semgrep de `_run_semgrep_on_files`).
+4. Sin caché compartida entre usuarios: la única caché es la que el propio binario de Semgrep mantenga por proceso/usuario, no algo persistido por nosotros.
+5. Solo se escanea código de quien invoca `watchgate`.
+
+**Trade-off aceptado:** los `--config=p/...`/`--config=r/...` viajan en la MISMA invocación de Semgrep que las reglas locales de ese lenguaje (no una invocación aparte) — un fallo de red contra el registro oficial puede perder también los hallazgos locales de ese lenguaje concreto, aceptado por consistencia con el resto de `_run_semgrep_on_files` (nunca aborta `analyze()` entero; otros lenguajes del mismo diff corren en futuros independientes, ver `_collect_semgrep_findings_by_file`).
+
+**Tests:** `tests/unit/test_static_layer.py` (`_get_official_registry_configs`: ausencia de manifest, filtrado de entradas inválidas, campo ausente; `_build_semgrep_config_paths`: se añaden al final tanto en el caso normal como en el catch-all; `_get_verified_rules_dir` materializa `rules/manifest.json` en la vista) y `tests/unit/test_local_rules_client.py` (`VerifiedRules.manifest` se propaga tanto en la llamada "vacía" como en el happy path).
+
+## 12. Pendiente / gaps conocidos
 
 - **`sync-rules.yml` (el disparo real por `repository_dispatch`) todavía no se ha probado de punta a punta** — sí se validó `reconcile-rules.yml`, que comparte toda la lógica de sincronización, pero el disparo por evento en sí queda por confirmar (simulando el evento o publicando una release real desde el repo de reglas).
+- **`official_registry_configs` (§11) tampoco se ha probado de punta a punta contra el registro real de Semgrep** — la lógica está cubierta por tests unitarios con manifests y `subprocess` simulados, pero falta confirmar en vivo que `semgrep --config=p/security-audit` (red real, sin mockear) se combina correctamente con las rutas locales en la misma invocación.
 
-Este es el único punto pendiente de una siguiente iteración; no es un bug de lo entregado aquí.
+Estos son los puntos pendientes de una siguiente iteración; no son bugs de lo entregado aquí.
