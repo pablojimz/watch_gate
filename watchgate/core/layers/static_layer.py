@@ -196,6 +196,7 @@ def _rules_verify_ttl_seconds() -> float:
     except ValueError:
         return _DEFAULT_RULES_VERIFY_TTL_SECONDS
 
+
 # Categoría de reglas custom/ que se aplica SIEMPRE, con independencia del
 # lenguaje detectado (patrones de secretos hardcodeados, cadenas de
 # conexión, etc. -- no son específicos de un lenguaje).
@@ -903,7 +904,9 @@ class StaticLayer(AnalysisLayer):
           invocación, con independencia del lenguaje.
         """
         semgrep_root = rules_dir / "rules" / "semgrep"
-        official_configs = [f"--config={cfg}" for cfg in self._get_official_registry_configs(rules_dir)]
+        official_configs = [
+            f"--config={cfg}" for cfg in self._get_official_registry_configs(rules_dir)
+        ]
 
         if language == _UNRECOGNIZED_LANGUAGE_KEY:
             if semgrep_root.exists():
