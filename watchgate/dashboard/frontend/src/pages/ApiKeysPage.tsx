@@ -89,9 +89,12 @@ export default function ApiKeysPage() {
 
   return (
     <div className="flex w-full flex-col gap-4 p-4 sm:px-6 lg:px-8 lg:py-6">
-      <div>
-        <h1 className="text-xl font-semibold">{t('apiKeys.title')}</h1>
-        <p className="text-sm text-muted-foreground">{t('apiKeys.subtitle')}</p>
+      <div className="flex items-start gap-3">
+        <KeyRound className="mt-0.5 size-6 text-primary" strokeWidth={1.75} />
+        <div>
+          <h1 className="text-xl font-semibold">{t('apiKeys.title')}</h1>
+          <p className="text-sm text-muted-foreground">{t('apiKeys.subtitle')}</p>
+        </div>
       </div>
 
       <Card>

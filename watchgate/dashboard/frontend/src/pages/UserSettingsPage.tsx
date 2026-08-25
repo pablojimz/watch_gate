@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { Save } from 'lucide-react'
+import { Save, UserRound } from 'lucide-react'
 import { api, type UserSettings, type UiSettings } from '@/api/client'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -154,9 +154,12 @@ export function UserSettingsPage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">{t('user.pageTitle')}</h1>
-        <p className="text-sm text-muted-foreground">{t('user.pageHint')}</p>
+      <div className="flex items-start gap-3">
+        <UserRound className="mt-1 size-6 text-primary" strokeWidth={1.75} />
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">{t('user.pageTitle')}</h1>
+          <p className="text-sm text-muted-foreground">{t('user.pageHint')}</p>
+        </div>
       </div>
 
       <form onSubmit={(e) => void handleSave(e)} className="space-y-6">

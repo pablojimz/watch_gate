@@ -167,6 +167,13 @@ export function ConnectRepoDialog({
 
           {mode === 'github' ? (
             <div className="mt-5 space-y-5">
+              {/* Explicación de qué es la GitHub App y cómo se conecta --
+                  petición explícita del usuario: quería esto documentado
+                  aquí mismo, no solo explicado por chat. */}
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {t('externalRepos.githubExplainer')}
+              </p>
+
               {/* Vía 1: instalar la GitHub App (solo si está anunciada) */}
               {appInstallUrl && (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-secondary/30 p-4">

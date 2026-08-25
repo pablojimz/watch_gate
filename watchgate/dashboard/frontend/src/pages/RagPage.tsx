@@ -67,13 +67,16 @@ export default function RagPage() {
   }, [cases, query])
 
   return (
-    <div className="space-y-4">
+    <div className="flex w-full flex-col gap-6 p-4 sm:px-6 lg:px-8 lg:py-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">{t('rag.title')}</h1>
-          <p className="text-sm text-muted-foreground">
-            {cases ? t('rag.subtitle', { count: cases.length }) : t('rag.subtitleLoading')}
-          </p>
+        <div className="flex items-start gap-3">
+          <Library className="mt-0.5 size-6 text-primary" strokeWidth={1.75} />
+          <div>
+            <h1 className="text-xl font-semibold">{t('rag.title')}</h1>
+            <p className="text-sm text-muted-foreground">
+              {cases ? t('rag.subtitle', { count: cases.length }) : t('rag.subtitleLoading')}
+            </p>
+          </div>
         </div>
         <div className="relative w-full max-w-xs">
           <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />

@@ -4,6 +4,7 @@ import {
   KeyRound,
   Palette,
   Scale,
+  Settings,
   Trash2,
   Upload,
   Users,
@@ -1132,9 +1133,12 @@ export default function AdminPage() {
         {tab === 'config' ? (
           <section className="flex flex-col gap-5">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-              <div className="min-w-0">
-                <h1 className="text-xl font-semibold">{t('admin.configTitle')}</h1>
-                <p className="text-sm text-muted-foreground">{t('admin.configHint')}</p>
+              <div className="flex min-w-0 items-start gap-3">
+                <Settings className="mt-0.5 size-6 shrink-0 text-primary" strokeWidth={1.75} />
+                <div>
+                  <h1 className="text-xl font-semibold">{t('admin.configTitle')}</h1>
+                  <p className="text-sm text-muted-foreground">{t('admin.configHint')}</p>
+                </div>
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button
