@@ -66,7 +66,7 @@ analysis = [
   # modelo fijo -- nunca definido por el usuario ni por el diff analizado).
   "sentence-transformers>=6.0,<7",
   "langchain-text-splitters>=0.2,<1",
-  "anthropic>=0.122.0,<1",
+  "anthropic>=0.125.0,<1",
   "google-genai>=2.19.0,<3",
   # Fronteras de función/clase + imports vía AST para trocear ficheros
   # grandes en la capa semántica sin partir código a mitad de una
@@ -108,7 +108,7 @@ optional = true
 
 [tool.poetry.group.static.dependencies]
 GitPython = "3.1.*"
-semgrep = ">=1.78,<2"
+semgrep = ">=1.174.0,<2"
 yara-python = ">=4.5,<5"
 
 [tool.ruff]
