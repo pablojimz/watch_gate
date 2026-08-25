@@ -231,12 +231,21 @@ class VerifiedRules:
     """Resultado de `get_verified_rules()`: rutas locales YA verificadas
     por hash, organizadas exactamente como pide el requisito (6) -- por
     lenguaje custom, por `<vendor>/<carpeta>` third-party y por categoría
-    YARA."""
+    YARA.
+
+    `manifest` es el manifest.json COMPLETO tal cual lo publicó la Release
+    (no solo los hashes) -- se conserva para que el consumidor pueda leer
+    campos declarativos que no forman parte de la verificación por hash,
+    como `official_registry_configs` (IDs del registro oficial de Semgrep
+    que el propio consumidor debe pedir en caliente; nunca contenido de
+    regla, así que no hay nada que verificar por hash aquí -- ver
+    `.claude/analisisLicenciaSemgrepOficial.md` en el repo de reglas)."""
 
     version: str
     custom: dict[str, Path] = field(default_factory=dict)
     third_party: dict[str, Path] = field(default_factory=dict)
     yara: dict[str, Path] = field(default_factory=dict)
+    manifest: dict[str, Any] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -614,7 +623,9 @@ def get_verified_rules(
     if not requested:
         # Nada pedido (llamada "vacía"): ni red de más ni Git ni tocar el
         # estado -- se devuelve la versión activa igualmente, sin rutas.
-        return VerifiedRules(version=version)
+        # `manifest` sí se propaga (no requiere verificación por hash: ver
+        # docstring de VerifiedRules).
+        return VerifiedRules(version=version, manifest=manifest)
 
     expected_hashes = _expected_hashes_by_key(manifest)
     cache_dir = repo_cache_dir()
@@ -685,7 +696,7 @@ def get_verified_rules(
 
     _write_state(state_path, version, verified)
 
-    result = VerifiedRules(version=version)
+    result = VerifiedRules(version=version, manifest=manifest)
     for lang in langs:
         result.custom[lang] = cache_dir / CUSTOM_PREFIX / lang
     for vendor, carpeta in tp_pairs:
