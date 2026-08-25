@@ -88,6 +88,39 @@ def test_advisory_without_id_or_summary_is_skipped() -> None:
     assert advisory_to_markdown({"ghsa_id": "GHSA-x", "summary": "   "}) is None
 
 
+def test_openssf_description_is_cleaned_and_pattern_names_the_package(tmp_path: Path) -> None:
+    """Los avisos importados de OpenSSF llegan con '## Source: ... (<sha256>)'
+    y un pie 'Credit: ...' -- el hash rompía el resumen del dashboard (H2
+    embebido) y no aporta nada al embedding. Y el 'Patrón a vigilar' debe
+    nombrar el paquete real, no un genérico idéntico en los 60 avisos."""
+    advisory = dict(_MALWARE_ADVISORY)
+    advisory["description"] = (
+        "## Source: ossf-package-analysis "
+        "(98e627cea85331a67652aa65927058579efe7046253a9ef22cb70b1d73916885)\n"
+        "The OpenSSF Package Analysis project identified 'fake-package' as malicious.\n\n"
+        "---\n"
+        "Credit: [OpenSSF](https://github.com/ossf/malicious-packages)\n"
+    )
+    markdown = advisory_to_markdown(advisory)
+    assert markdown is not None
+    assert "98e627ce" not in markdown
+    assert "Source:" not in markdown
+    assert "Credit:" not in markdown
+    assert "identified 'fake-package' as malicious" in markdown
+
+    # El resumen del dashboard sale del primer párrafo tras el primer H2 --
+    # limpio, sin el hash.
+    path = tmp_path / "advisory_ghsa-abcd-1234-wxyz.md"
+    path.write_text(markdown, encoding="utf-8")
+    case = _parse_corpus_file(path)
+    assert case is not None
+    assert case.summary.startswith("The OpenSSF Package Analysis project")
+
+    # El patrón nombra el paquete afectado.
+    pattern_section = markdown.split("## Patrón a vigilar")[1]
+    assert "`fake-package`" in pattern_section
+
+
 def test_fetch_advisories_stops_at_last_short_page(monkeypatch: pytest.MonkeyPatch) -> None:
     """Una página con menos resultados que el per_page pedido es la última:
     no se pide una página más de propina."""

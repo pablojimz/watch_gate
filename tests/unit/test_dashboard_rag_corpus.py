@@ -82,7 +82,9 @@ def test_real_corpus_directory_parses_cleanly_end_to_end():
     fichero real rompe el parser (encabezado inesperado, encoding...), este
     test lo detecta antes que un usuario viendo la página vacía."""
     assert _CORPUS_DIR.is_dir()
-    md_files = list(_CORPUS_DIR.glob("*.md"))
+    # README.md es documentación del directorio, no un caso -- se excluye
+    # igual que en el indexado (ver _NON_CASE_FILENAMES).
+    md_files = [p for p in _CORPUS_DIR.glob("*.md") if p.name.lower() != "readme.md"]
     assert len(md_files) > 0
 
     cases = list_rag_corpus(_user=None)  # type: ignore[arg-type]
@@ -95,6 +97,17 @@ def test_real_corpus_directory_parses_cleanly_end_to_end():
         # de la estructura exacta), pero sí un id derivado del nombre real.
         assert case.id
         assert Path(_CORPUS_DIR / f"{case.id}.md").is_file()
+
+
+def test_readme_is_not_listed_or_retrievable_as_a_case():
+    """El README.md del directorio del corpus es documentación, no un caso:
+    ni aparece en la lista ni se puede recuperar por su id."""
+    cases = list_rag_corpus(_user=None)  # type: ignore[arg-type]
+    assert all(c.id.lower() != "readme" for c in cases)
+
+    with pytest.raises(HTTPException) as exc_info:
+        get_rag_corpus_case("README", _user=None)  # type: ignore[arg-type]
+    assert exc_info.value.status_code == 404
 
 
 def test_get_rag_corpus_case_returns_full_markdown_content():

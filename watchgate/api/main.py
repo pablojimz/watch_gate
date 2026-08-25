@@ -11,7 +11,7 @@ from typing import Any
 from fastapi import FastAPI, Request, Response, status
 from fastapi.responses import JSONResponse
 
-from watchgate.api.routers import agent, analyze, webhooks
+from watchgate.api.routers import agent, analyze, hooks, webhooks
 from watchgate.db.connection import init_db
 from watchgate.logging_config import (
     configure_logging,
@@ -121,6 +121,7 @@ async def max_payload_size_middleware(
 app.include_router(agent.router)
 app.include_router(analyze.router)
 app.include_router(webhooks.router)
+app.include_router(hooks.router)
 
 
 @app.get("/health", tags=["Health"])

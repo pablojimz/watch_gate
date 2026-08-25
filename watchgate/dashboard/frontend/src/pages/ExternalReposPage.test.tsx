@@ -18,6 +18,7 @@ vi.mock('@/api/client', async (importOriginal) => {
       ...actual.api,
       listExternalRepos: vi.fn(),
       deleteExternalRepo: vi.fn(),
+      getGithubAppInfo: vi.fn(),
     },
   }
 })
@@ -48,6 +49,7 @@ describe('ExternalReposPage - handleDeleteRepo', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockedApi.listExternalRepos.mockResolvedValue([FIXTURE_REPO])
+    mockedApi.getGithubAppInfo.mockResolvedValue({ configured: false, install_url: null })
   })
 
   it('pide confirmación, borra el repo y muestra un toast de éxito si el usuario confirma', async () => {
@@ -85,5 +87,36 @@ describe('ExternalReposPage - handleDeleteRepo', () => {
     expect(window.confirm).toHaveBeenCalledTimes(1)
     expect(mockedApi.deleteExternalRepo).not.toHaveBeenCalled()
     expect(mockedToast.success).not.toHaveBeenCalled()
+  })
+})
+
+describe('ExternalReposPage - botón de instalar la GitHub App', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockedApi.listExternalRepos.mockResolvedValue([FIXTURE_REPO])
+  })
+
+  it('muestra el botón de instalación cuando el backend anuncia la App', async () => {
+    mockedApi.getGithubAppInfo.mockResolvedValue({
+      configured: true,
+      install_url: 'https://github.com/apps/watchgate/installations/new',
+    })
+
+    render(<ExternalReposPage />)
+
+    const installLink = await screen.findByRole('link', { name: /Instalar GitHub App/ })
+    expect(installLink).toHaveAttribute(
+      'href',
+      'https://github.com/apps/watchgate/installations/new',
+    )
+  })
+
+  it('no muestra el botón cuando la App no está anunciada (install_url null)', async () => {
+    mockedApi.getGithubAppInfo.mockResolvedValue({ configured: false, install_url: null })
+
+    render(<ExternalReposPage />)
+
+    await screen.findByText('acme/payments-api')
+    expect(screen.queryByRole('link', { name: /Instalar GitHub App/ })).toBeNull()
   })
 })

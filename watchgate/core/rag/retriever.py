@@ -49,6 +49,12 @@ class RetrievedFragment(BaseModel):
     verdict: str | None = None
 
 
+# Cuántos fragmentos se piden por cada hueco final del top-k del corpus,
+# para poder deduplicar por caso sin quedarse cortos (ver
+# retrieve_relevant_context). ChromaDB recorta a lo que exista.
+_DIVERSITY_OVERFETCH_FACTOR = 3
+
+
 def _query_collection(
     client: Any,
     collection_name: str,
@@ -118,6 +124,15 @@ def retrieve_relevant_context(
     (`COLLECTION_NAME`) NUNCA se filtra por org_id -- es intencionalmente
     compartido (investigación pública de casos de ataque conocidos).
 
+    Los `k` resultados del corpus se DIVERSIFICAN por caso (máximo un
+    fragmento por `case_name`): un documento largo troceado en varios
+    fragmentos parecidos -- o, desde el sync de avisos, decenas de
+    documentos `advisory_*` que comparten plantilla -- podía llenar el
+    top-k con variaciones de lo mismo y expulsar al segundo/tercer caso
+    DISTINTO que sí aporta contexto nuevo al prompt. Se sobre-consulta
+    (k * _DIVERSITY_OVERFETCH_FACTOR, ChromaDB ya recorta al tamaño real
+    de la colección) y se queda el fragmento más similar de cada caso.
+
     Devuelve lista vacía si no existe ningún índice todavía (no se ha
     ejecutado `watchgate rag reindex` ni hay ningún caso de feedback)."""
     client = get_chroma_client(index_path=index_path)
@@ -128,14 +143,21 @@ def retrieve_relevant_context(
     feedback_docs, feedback_metas = _query_collection(
         client, FEEDBACK_COLLECTION_NAME, query_embedding, feedback_k, where=feedback_where
     )
-    corpus_docs, corpus_metas = _query_collection(client, COLLECTION_NAME, query_embedding, k)
+    corpus_docs, corpus_metas = _query_collection(
+        client, COLLECTION_NAME, query_embedding, k * _DIVERSITY_OVERFETCH_FACTOR
+    )
 
     fragments = [
         _to_fragment(text, meta, default_origin="feedback")
         for text, meta in zip(feedback_docs, feedback_metas, strict=True)
     ]
-    fragments += [
-        _to_fragment(text, meta, default_origin="corpus")
-        for text, meta in zip(corpus_docs, corpus_metas, strict=True)
-    ]
+    seen_cases: set[str] = set()
+    for text, meta in zip(corpus_docs, corpus_metas, strict=True):
+        case_name = str(meta.get("case_name", "desconocido"))
+        if case_name in seen_cases:
+            continue
+        seen_cases.add(case_name)
+        fragments.append(_to_fragment(text, meta, default_origin="corpus"))
+        if len(seen_cases) >= k:
+            break
     return fragments

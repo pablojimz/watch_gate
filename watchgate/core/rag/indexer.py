@@ -75,10 +75,27 @@ def get_chroma_client(index_path: str = DEFAULT_INDEX_PATH) -> Any:
     return chromadb.PersistentClient(path=index_path, settings=settings)
 
 
+# Ficheros .md del directorio que NO son casos del corpus y no deben
+# indexarse ni mostrarse como tales (documentación del propio directorio).
+# En minúsculas -- la comparación se hace sobre `path.name.lower()`.
+_NON_CASE_FILENAMES = frozenset({"readme.md"})
+
+
+def _is_case_file(path: Path) -> bool:
+    return path.name.lower() not in _NON_CASE_FILENAMES
+
+
 def load_corpus_documents(corpus_dir: Path = CORPUS_DIR) -> list[tuple[str, str]]:
-    """Devuelve (case_name, contenido) por cada .md del corpus, uno por caso."""
+    """Devuelve (case_name, contenido) por cada .md del corpus, uno por caso.
+
+    Excluye ficheros de documentación del directorio (`README.md`) que no
+    son casos de ataque -- sin esto, un README se indexaría como un caso
+    más y podría recuperarse como "contexto de ataque" en un análisis.
+    """
     return [
-        (path.stem, path.read_text(encoding="utf-8")) for path in sorted(corpus_dir.glob("*.md"))
+        (path.stem, path.read_text(encoding="utf-8"))
+        for path in sorted(corpus_dir.glob("*.md"))
+        if _is_case_file(path)
     ]
 
 

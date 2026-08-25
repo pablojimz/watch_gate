@@ -24,6 +24,13 @@ router = APIRouter(tags=["rag"])
 
 _SAFE_CASE_ID = re.compile(r"^[A-Za-z0-9_-]+$")
 
+# Ficheros .md del directorio que NO son casos del corpus (documentación del
+# propio directorio) -- se excluyen de la vista igual que del indexado. En
+# minúsculas: la comparación se hace sobre `path.name.lower()`. Réplica
+# deliberada de indexer._NON_CASE_FILENAMES (este router no importa de
+# indexer para no arrastrar chromadb, ver docstring del módulo).
+_NON_CASE_FILENAMES = frozenset({"readme.md"})
+
 # Mismo directorio que CORPUS_DIR en core/rag/indexer.py -- no se importa
 # esa constante para no arrastrar el import de chromadb (ver docstring del
 # módulo).
@@ -87,7 +94,8 @@ def list_rag_corpus(_user: CurrentUser) -> list[RagCorpusCase]:
     cases = [
         case
         for path in sorted(_CORPUS_DIR.glob("*.md"))
-        if (case := _parse_corpus_file(path)) is not None
+        if path.name.lower() not in _NON_CASE_FILENAMES
+        and (case := _parse_corpus_file(path)) is not None
     ]
     return sorted(cases, key=lambda c: c.title)
 
@@ -103,6 +111,10 @@ def get_rag_corpus_case(case_id: str, _user: CurrentUser) -> RagCorpusCaseDetail
         raise HTTPException(status_code=404, detail="Caso no encontrado")
 
     path = _CORPUS_DIR / f"{case_id}.md"
+    # Documentación del directorio (README) no es un caso: 404 aunque el
+    # fichero exista, coherente con que `list_rag_corpus` no lo lista.
+    if path.name.lower() in _NON_CASE_FILENAMES:
+        raise HTTPException(status_code=404, detail="Caso no encontrado")
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Caso no encontrado")
 

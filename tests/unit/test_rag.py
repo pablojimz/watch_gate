@@ -19,6 +19,17 @@ def test_load_corpus_documents_finds_all_case_files():
     assert len(docs) >= 6  # 3 casos documentados + entradas ATT&CK
 
 
+def test_load_corpus_documents_excludes_readme(tmp_path):
+    """El README.md de documentación del directorio NO es un caso: no debe
+    indexarse (si no, se recuperaría como 'contexto de ataque')."""
+    from watchgate.core.rag.indexer import load_corpus_documents as load_from
+
+    (tmp_path / "caso_real.md").write_text("# Caso: real\n\n## Resumen\n\nX", encoding="utf-8")
+    (tmp_path / "README.md").write_text("# Corpus del RAG\n\nDocumentación.", encoding="utf-8")
+    names = {name for name, _ in load_from(corpus_dir=tmp_path)}
+    assert names == {"caso_real"}
+
+
 def test_chunk_document_splits_long_text_into_bounded_pieces():
     long_text = "línea de prueba. " * 500
     chunks = chunk_document(long_text)
@@ -76,6 +87,46 @@ def test_retrieve_relevant_context_returns_empty_list_when_collection_exists_but
 
     fragments = retrieve_relevant_context("cualquier cosa", index_path=index_path)
     assert fragments == []
+
+
+def test_retrieve_diversifies_results_by_case(tmp_path):
+    """Un documento largo troceado en muchos fragmentos casi idénticos (o
+    decenas de avisos advisory_* que comparten plantilla) no debe llenar el
+    top-k con variaciones de lo mismo: máximo un fragmento por case_name,
+    para que el segundo y tercer caso DISTINTO entren en el prompt."""
+    corpus_dir = tmp_path / "corpus"
+    corpus_dir.mkdir()
+    dominant_paragraph = (
+        "Instalación de dependencia maliciosa con script postinstall que "
+        "descarga y ejecuta un binario remoto con curl y bash.\n\n"
+    )
+    (corpus_dir / "caso_dominante.md").write_text(
+        "# Caso: dominante\n\n" + dominant_paragraph * 30, encoding="utf-8"
+    )
+    (corpus_dir / "caso_typosquat.md").write_text(
+        "# Caso: typosquat\n\nDependencia nueva con nombre a un carácter del "
+        "paquete legítimo, añadida al manifiesto.",
+        encoding="utf-8",
+    )
+    (corpus_dir / "caso_unicode.md").write_text(
+        "# Caso: unicode\n\nCaracteres invisibles de Unicode escondidos en el "
+        "código fuente para ocultar lógica al revisor.",
+        encoding="utf-8",
+    )
+
+    index_path = str(tmp_path / "rag_index")
+    build_index(corpus_dir=corpus_dir, index_path=index_path)
+
+    fragments = retrieve_relevant_context(
+        "package.json añade postinstall que descarga binario con curl | bash",
+        k=3,
+        index_path=index_path,
+    )
+    case_names = [f.case_name for f in fragments]
+    assert len(case_names) == len(set(case_names)), (
+        f"fragmentos duplicados por caso: {case_names}"
+    )
+    assert len(fragments) == 3
 
 
 def test_reindexing_a_shrunk_document_does_not_leave_stale_fragments(tmp_path):

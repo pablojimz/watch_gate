@@ -44,6 +44,19 @@ def test_health_check(api_client):
     assert response.json() == {"status": "ok", "service": "WatchGate Engine API"}
 
 
+def test_get_pre_receive_hook_serves_the_real_script(api_client):
+    """GET /api/v1/hooks/pre-receive -- distribuye el hook por HTTP para no
+    exigir el repo watch_gate clonado en un servidor Git real (ver
+    docs/manual_git_hooks.md §6.3). Sin autenticación a propósito: el
+    script no contiene ningún secreto."""
+    client, _ = api_client
+    response = client.get("/api/v1/hooks/pre-receive")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/plain")
+    assert response.text.startswith("#!/usr/bin/env bash")
+    assert "WATCHGATE_ENGINE_API_KEY" in response.text
+
+
 def test_analyze_unauthorized(api_client):
     client, _ = api_client
     response = client.post("/api/v1/analyze", json={"diff_text": "diff --git a/file.py b/file.py"})

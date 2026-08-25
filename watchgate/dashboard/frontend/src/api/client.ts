@@ -372,6 +372,35 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ repo_path, monitor_type, vcs_connection_id }),
     }),
+  getGithubAppInfo: () =>
+    request<{ configured: boolean; install_url: string | null }>(
+      '/repos/external/github-app',
+    ),
+  // Da de alta un repo de servidor Git propio (monitor_type "git_server")
+  // Y una API key ya atada a él, en un solo paso -- pensado para copiar/
+  // pegar directamente en el hook `pre-receive` del servidor
+  // (docs/manual_git_hooks.md §6), sin pasar por la página de API Keys.
+  connectGitServerRepo: (repo_path: string) =>
+    request<{
+      repo: MonitoredRepoResponse
+      api_key: string
+      key_prefix: string
+      engine_api_url: string
+      hook_download_url: string
+    }>('/repos/external/git-server', {
+      method: 'POST',
+      body: JSON.stringify({ repo_path }),
+    }),
+  claimInstallation: (installation_id: string) =>
+    request<{
+      vcs_connection_id: string
+      installation_id: string
+      app_configured: boolean
+      repos: MonitoredRepoResponse[]
+    }>('/repos/external/installations/claim', {
+      method: 'POST',
+      body: JSON.stringify({ installation_id }),
+    }),
   scanExternalRepo: (id: string, pr_number?: number | null) =>
     request<{message: string; repo_path: string; pr_number?: number; prs_enqueued?: number}>(`/repos/external/${id}/scan`, {
       method: 'POST',

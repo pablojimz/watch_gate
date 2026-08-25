@@ -107,7 +107,7 @@ export default function ApiKeysPage() {
               <p className="font-medium">{t('apiKeys.noReposTitle')}</p>
               <p className="mt-1 text-muted-foreground">{t('apiKeys.noReposBody')}</p>
               <Button asChild variant="secondary" size="sm" className="mt-3">
-                <Link to="/audits">{t('apiKeys.goToExternalRepos')}</Link>
+                <Link to="/repos">{t('apiKeys.goToExternalRepos')}</Link>
               </Button>
             </div>
           ) : (

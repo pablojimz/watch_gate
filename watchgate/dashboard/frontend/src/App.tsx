@@ -6,7 +6,6 @@ import { api, type MeResponse } from '@/api/client'
 import { useTheme } from '@/lib/theme'
 import LoginPage from '@/pages/LoginPage'
 import ReposPage from '@/pages/ReposPage'
-import ExternalReposPage from '@/pages/ExternalReposPage'
 import RepoPage from '@/pages/RepoPage'
 import FeedbackPage from '@/pages/FeedbackPage'
 import AdminPage from '@/pages/AdminPage'
@@ -70,7 +69,12 @@ export default function App() {
         >
           <Route index element={<Navigate to="/repos" replace />} />
           <Route path="repos" element={<ReposPage />} />
-          <Route path="audits" element={<ExternalReposPage />} />
+          {/* "Auditoría Externa" se fusionó con /repos: la lista unificada
+              muestra repos propios y externos con un filtro de origen a la
+              izquierda (ReposPage). /audits redirige ahí para no romper
+              enlaces guardados. La gestión (escanear/borrar) vive en la
+              vista de cada repo. */}
+          <Route path="audits" element={<Navigate to="/repos" replace />} />
           {/* Un solo segmento (:repo), codificado con encodeURIComponent al
               construir el link -- no ":owner/:name" en dos segmentos. El
               nombre de un repo es un string libre en metadata.repo/repo_path
