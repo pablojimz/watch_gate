@@ -15,7 +15,7 @@ from sqlalchemy.exc import OperationalError
 from sqlmodel import Session, SQLModel, create_engine
 
 from watchgate.core.layers._semantic.client import SemanticOutput
-from watchgate.core.models import FileChange, LayerResult, NormalizedDiff
+from watchgate.core.models import LayerResult, NormalizedDiff
 from watchgate.db.models import RepoTokenUsage, SemanticCache
 
 # De watchgate.db.token_cache, NO de watchgate.db.repository: ese módulo
@@ -41,7 +41,6 @@ logger = logging.getLogger("watchgate.core.cost_control")
 # `diff_hash` (comportamiento idéntico al de antes de esta migración).
 _LOCAL_ORG_ID = "default-org"
 
-_TRUNCATION_MARKER = "[...truncado, {n} líneas adicionales sin hallazgos previos...]"
 _CHARS_PER_TOKEN_ESTIMATE = 4  # fallback si tiktoken no está disponible (ver estimate_tokens)
 
 # o200k_base es el encoding de los modelos GPT-4o/o200k -- no coincide token a
@@ -170,50 +169,6 @@ class CostController:
         if encoder is not None:
             return max(1, len(encoder.encode(text)))
         return max(1, len(text) // _CHARS_PER_TOKEN_ESTIMATE)
-
-    def _diff_text_size(self, diff: NormalizedDiff) -> int:
-        return sum(self.estimate_tokens(f.diff_hunk) for f in diff.files if not f.is_binary)
-
-    def should_truncate(self, diff: NormalizedDiff) -> bool:
-        return self._diff_text_size(diff) > self.max_diff_tokens
-
-    def truncate_diff(self, diff: NormalizedDiff, static_findings: list[object]) -> NormalizedDiff:
-        """Prioriza los ficheros con hallazgos previos (estática/deps) y
-        recorta el resto hasta caber en `max_diff_tokens`."""
-        flagged_paths = {getattr(f, "path", f) for f in static_findings}
-
-        def _priority(fc: FileChange) -> int:
-            return 0 if fc.path in flagged_paths else 1
-
-        ordered = sorted(diff.files, key=_priority)
-
-        budget = self.max_diff_tokens
-        new_files: list[FileChange] = []
-        for fc in ordered:
-            tokens = self.estimate_tokens(fc.diff_hunk)
-            is_flagged = fc.path in flagged_paths
-
-            if tokens <= budget:
-                new_files.append(fc)
-                budget -= tokens
-                continue
-
-            if is_flagged:
-                # Los ficheros marcados se incluyen íntegros aunque se pase
-                # del presupuesto (prioridad sobre el recorte).
-                new_files.append(fc)
-                budget = max(0, budget - tokens)
-                continue
-
-            # No cabe y no está marcado: se trunca su contenido.
-            max_chars = max(0, budget * _CHARS_PER_TOKEN_ESTIMATE)
-            truncated_text = fc.diff_hunk[:max_chars]
-            remaining_lines = fc.diff_hunk[max_chars:].count("\n")
-            truncated_text += "\n" + _TRUNCATION_MARKER.format(n=remaining_lines)
-            new_files.append(fc.model_copy(update={"diff_hunk": truncated_text}))
-            budget = 0
-
-        return diff.model_copy(update={"files": new_files})
 
     # -- Caché -------------------------------------------------------------
 

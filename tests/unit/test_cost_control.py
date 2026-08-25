@@ -190,15 +190,6 @@ def test_should_skip_true_when_budget_exhausted(controller):
     assert controller.should_skip("org/repo") is True
 
 
-def test_should_truncate_reflects_max_diff_tokens(controller):
-    small = _diff_with_files("+ x = 1")
-    assert controller.should_truncate(small) is False
-
-    big_hunk = "+ " + ("x" * 1000)
-    big = _diff_with_files(big_hunk)
-    assert controller.should_truncate(big) is True
-
-
 def test_semantic_layer_skips_llm_call_when_budget_exhausted(controller):
     """Reproduce el criterio de aceptación exacto de la spec: con presupuesto
     agotado, la capa semántica no debe llamar al LLM (call_count == 0)."""
@@ -229,39 +220,6 @@ def test_semantic_layer_skips_llm_call_when_budget_exhausted(controller):
     assert fake_client.call_count == 0
     assert result.skipped is True
     assert result.skip_reason == "Presupuesto de tokens agotado para este repositorio este mes"
-
-
-def test_truncate_diff_prioritizes_flagged_files_and_marks_truncation(controller):
-    flagged = FileChange(
-        path="suspicious.py",
-        status=FileStatus.MODIFIED,
-        diff_hunk="+ eval(x)" * 5,
-        additions=5,
-        deletions=0,
-    )
-    clean = FileChange(
-        path="clean.py",
-        status=FileStatus.MODIFIED,
-        diff_hunk="+ y = 1\n" * 100,
-        additions=100,
-        deletions=0,
-    )
-    diff = NormalizedDiff(
-        base_sha="a",
-        head_sha="b",
-        repo_path=".",
-        files=[clean, flagged],
-        commit_messages=[],
-        authors=[],
-    )
-
-    truncated = controller.truncate_diff(diff, static_findings=["suspicious.py"])
-
-    result_by_path = {f.path: f for f in truncated.files}
-    # El fichero marcado se conserva íntegro.
-    assert result_by_path["suspicious.py"].diff_hunk == flagged.diff_hunk
-    # El fichero no marcado, al exceder el presupuesto, queda truncado con marcador.
-    assert "truncado" in result_by_path["clean.py"].diff_hunk
 
 
 def test_cost_controller_context_manager_and_idempotent_close():
