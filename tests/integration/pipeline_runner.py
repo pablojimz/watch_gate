@@ -58,6 +58,11 @@ CASES_DIR = Path(__file__).resolve().parents[1] / "cases"
 # la suite en silencio.
 _WEIGHTS: dict[str, float] = dict(DEFAULT_WEIGHTS)
 _THRESHOLDS: dict[str, int] = dict(DEFAULT_THRESHOLDS)
+# Mismo default que `WatchGateConfig.max_diff_tokens` (config.py) -- antes
+# `SemanticLayer(llm_client, cost_control)` aquí no pasaba este argumento y
+# se quedaba con el default local de `SemanticLayer.__init__` (6000, no
+# 8000), desincronizado del resto del pipeline real sin que nada lo avisara.
+_MAX_DIFF_TOKENS = 8000
 
 
 class _RunnerConfig:
@@ -135,7 +140,9 @@ def run_full_pipeline(case_dir: Path) -> AggregatedResult:
     try:
         llm_client = build_llm_client()
         layer_factories: dict[str, LayerFactory] = {
-            "semantic": lambda: SemanticLayer(llm_client, cost_control),
+            "semantic": lambda: SemanticLayer(
+                llm_client, cost_control, max_diff_tokens=_MAX_DIFF_TOKENS
+            ),
         }
         config = _RunnerConfig(weights=_WEIGHTS, thresholds=_THRESHOLDS)
         return run_analysis(diff, metadata, config, layer_factories=layer_factories)
