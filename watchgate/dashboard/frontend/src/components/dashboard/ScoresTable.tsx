@@ -161,7 +161,7 @@ export function ScoresTable({
                         {Object.values(score.layer_results).map((layer) => (
                           <div
                             key={layer.layer_name}
-                            className="rounded-lg border bg-card p-3"
+                            className="min-w-0 rounded-lg border bg-card p-3"
                           >
                             <div className="flex items-center justify-between gap-2">
                               <div className="text-xs text-muted-foreground">
@@ -177,7 +177,7 @@ export function ScoresTable({
                               {layer.skipped ? t('repo.skipped') : layer.risk_score}
                             </div>
                             {layer.justification ? (
-                              <p className="mt-2 text-xs text-muted-foreground">
+                              <p className="mt-2 text-xs break-words whitespace-pre-line text-muted-foreground">
                                 {layer.justification}
                               </p>
                             ) : null}

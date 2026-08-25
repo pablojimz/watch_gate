@@ -89,7 +89,7 @@ export function ReportModal({
 
           <div className="mt-5 flex flex-col gap-3">
             {layers.map((layer) => (
-              <div key={layer.layer_name} className="rounded-lg border p-3">
+              <div key={layer.layer_name} className="min-w-0 rounded-lg border p-3">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-semibold">
@@ -102,11 +102,13 @@ export function ReportModal({
                   </span>
                 </div>
                 {layer.skipped ? (
-                  <p className="mt-1 text-xs text-muted-foreground">{layer.skip_reason}</p>
+                  <p className="mt-1 text-xs break-words whitespace-pre-line text-muted-foreground">
+                    {layer.skip_reason}
+                  </p>
                 ) : (
                   <>
                     {layer.justification ? (
-                      <p className="mt-1.5 text-xs text-muted-foreground">
+                      <p className="mt-1.5 text-xs break-words whitespace-pre-line text-muted-foreground">
                         {layer.justification}
                       </p>
                     ) : null}
