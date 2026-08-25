@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -25,6 +26,28 @@ from watchgate.db.connection import get_session
 from watchgate.db.models import MonitoredRepo, PRScore, VCSConnection
 
 logger = logging.getLogger("watchgate.repo_polling")
+
+_JOB_ID_UNSAFE_CHARS = re.compile(r"[^A-Za-z0-9_-]+")
+
+
+def safe_job_id_part(value: str) -> str:
+    """RQ valida el `job_id` contra `[A-Za-z0-9_-]+` (`rq.job.JOB_ID_PATTERN`,
+    `fullmatch`) -- un `repo_path` real como "owner/repo" (la barra) o
+    "usuario/Curso.Prep.Henry" (el punto) lo revienta con un
+    `ValueError: Job ID must only contain letters, numbers, underscores and
+    dashes`. Sustituye cualquier carácter no permitido por '_' -- no es una
+    normalización perfecta (dos repo_path distintos podrían, en teoría,
+    colisionar tras sanear), pero el peor caso es que un escaneo se trate
+    como "ya en curso" y no se vuelva a encolar hasta que el existente
+    termine, nunca un crash.
+
+    Único fuente -- `routers/repos.py::_enqueue_main_branch_scan` reexporta
+    este mismo símbolo en vez de duplicarlo (ver también
+    `_poll_single_candidate` más abajo, que hasta ahora construía su propio
+    `job_id` con ':' como separador SIN pasar por aquí -- mismo bug de
+    ValueError, reproducido en vivo contra PRs reales de GitHub, solo que
+    en el escaneo de PRs en vez de en el de rama principal)."""
+    return _JOB_ID_UNSAFE_CHARS.sub("_", value)
 
 
 class RepoPollingService:
@@ -200,7 +223,14 @@ class RepoPollingService:
 
         for pr in new_prs:
             pr_num = int(pr["number"])
-            job_id = f"audit_pr:{candidate['repo_path']}:{pr_num}"
+            # Guion, no ':' -- ver `safe_job_id_part`. Antes de este fix,
+            # CUALQUIER repo "audited" con al menos una PR abierta nueva
+            # hacía saltar `ValueError: Job ID must only contain letters,
+            # numbers, underscores and dashes` aquí mismo (reproducido en
+            # vivo contra PRs reales de GitHub) -- ni el escaneo automático
+            # al conectar el repo ni el botón "Escanear" llegaban a encolar
+            # NINGUNA PR, aunque el repo se hubiera creado correctamente.
+            job_id = f"audit_pr-{safe_job_id_part(candidate['repo_path'])}-{pr_num}"
 
             existing_job = queue.fetch_job(job_id)
             if existing_job:

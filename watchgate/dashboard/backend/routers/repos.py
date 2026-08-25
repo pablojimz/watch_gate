@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import re
 from datetime import UTC, datetime
 from typing import Annotated, Any
 from uuid import uuid4
@@ -17,6 +16,12 @@ from watchgate.dashboard.backend.tasks import get_queue, run_audit_scan, run_mai
 from watchgate.db.connection import get_db_session
 from watchgate.db.models import MonitoredRepo, UserAPIKey, VCSConnection
 from watchgate.db.repository import create_api_key
+
+# Reexportado (no duplicado) desde `watchgate.service.repo_polling`, que
+# ahora es la única fuente -- ese módulo tenía SU PROPIO job_id roto
+# (`_poll_single_candidate`, ':' como separador) sin pasar por este
+# saneado; centralizarlo evita que un tercer sitio repita el mismo bug.
+from watchgate.service.repo_polling import safe_job_id_part as _safe_job_id_part
 
 DBSession = Annotated[Session, Depends(get_db_session)]
 
@@ -104,24 +109,6 @@ class GithubAppInfoOut(BaseModel):
         description="URL pública para instalar la App (si WATCHGATE_GITHUB_APP_SLUG "
         "está configurado); None si la App aún no está registrada/anunciada"
     )
-
-
-_JOB_ID_UNSAFE_CHARS = re.compile(r"[^A-Za-z0-9_-]+")
-
-
-def _safe_job_id_part(value: str) -> str:
-    """RQ valida el `job_id` contra `[A-Za-z0-9_-]+` (`rq.job.JOB_ID_PATTERN`)
-    -- un `repo_path` real como "owner/repo" (la barra) o
-    "usuario/Curso.Prep.Henry" (el punto) lo revienta con un
-    `ValueError: Job ID must only contain letters, numbers, underscores and
-    dashes` (500 real, reproducido en `add_external_repo`/`scan_main_
-    branch`, las dos únicas llamadas a `_enqueue_main_branch_scan`).
-    Sustituye cualquier carácter no permitido por '_' -- no es una
-    normalización perfecta (dos repo_path distintos podrían, en teoría,
-    colisionar tras sanear), pero el peor caso es que un escaneo se trate
-    como "ya en curso" y no se vuelva a encolar hasta que el existente
-    termine, nunca un crash."""
-    return _JOB_ID_UNSAFE_CHARS.sub("_", value)
 
 
 def _enqueue_main_branch_scan(

@@ -529,6 +529,30 @@ def test_safe_job_id_part_produces_ids_that_real_rq_accepts():
         assert re.fullmatch(r"[A-Za-z0-9_-]+", job_id), job_id
 
 
+def test_poll_single_candidate_audit_pr_job_id_survives_real_rq_validation():
+    """MISMO bug que el test anterior, pero en `_poll_single_candidate`
+    (`watchgate/service/repo_polling.py`) -- tenía su PROPIO `job_id`
+    (`f"audit_pr:{repo_path}:{pr_num}"`, con ':' como separador) sin pasar
+    por `safe_job_id_part`, así que seguía roto aunque el de
+    `_enqueue_main_branch_scan` ya estuviera arreglado. Reproducido en vivo
+    contra PRs reales abiertas de un repo de GitHub: CUALQUIER repo
+    "audited" con al menos una PR abierta nueva hacía fallar tanto el
+    escaneo automático al conectar el repo como el botón "Escanear", sin
+    encolar ninguna PR -- justo el síntoma reportado ("no analiza las
+    últimas pull request automáticamente"). `test_poll_repo_by_id_enqueues_
+    and_handles_repeated_errors` de arriba mockea `get_queue()` entero, así
+    que nunca ejercitó la validación real de RQ."""
+    import re
+
+    from watchgate.service.repo_polling import safe_job_id_part
+
+    real_world_repo_paths = ["owner/repo", "pablojimz/watch_gate", "usuario/Curso.Prep.Henry"]
+    for repo_path in real_world_repo_paths:
+        for pr_num in (33, 101):
+            job_id = f"audit_pr-{safe_job_id_part(repo_path)}-{pr_num}"
+            assert re.fullmatch(r"[A-Za-z0-9_-]+", job_id), job_id
+
+
 def test_add_external_repo_skips_main_branch_scan_when_job_already_in_flight(test_db_session):
     """Lo contrario del test de arriba: si el job existente NO está failed
     (sigue en cola o corriendo), no hay que tocarlo ni volver a encolar --
