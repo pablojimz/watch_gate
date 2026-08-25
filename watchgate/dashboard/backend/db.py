@@ -235,20 +235,38 @@ def _pr_number_from_pr_id(pr_id: str) -> int:
 def _serialize_findings(layers: dict[str, LayerResult]) -> str | None:
     """Guarda lo que las columnas planas de `pr_scores` no capturan
     (`findings` con fichero/línea/regla, `category`, `confidence`,
-    `threat_nature` por capa) -- sin esto, el histórico del dashboard
-    perdía toda la sustancia de un hallazgo (dónde está, qué regla lo
-    disparó) en cuanto se insertaba, aunque el propio `AggregatedResult` la
-    tuviera en el momento del análisis. `None` si no hay nada que guardar,
-    para no ensuciar filas de capas sin hallazgos con un JSON vacío."""
+    `threat_nature`, `justification` por capa) -- sin esto, el histórico
+    del dashboard perdía toda la sustancia de un hallazgo (dónde está, qué
+    regla lo disparó, POR QUÉ se dio ese risk_score) en cuanto se
+    insertaba, aunque el propio `AggregatedResult` la tuviera en el
+    momento del análisis. `None` si no hay nada que guardar, para no
+    ensuciar filas de capas sin hallazgos con un JSON vacío.
+
+    Bug real, reproducido: antes esta función no incluía `justification` en
+    absoluto (solo se guardaba, en una columna dedicada aparte, la de la
+    capa `semantic`) -- el dashboard mostraba el `risk_score` de
+    static/dependencies/vulnerabilities/reputation sin ninguna explicación
+    de por qué, aunque esas capas SÍ generan una justificación real (p. ej.
+    reputation_layer.py siempre construye una frase con las señales
+    concretas, o "No se han detectado señales de reputación sospechosas").
+    Además, el filtro de qué capas se guardaban ni siquiera consideraba
+    `justification` como motivo para incluir la capa -- `reputation`
+    normalmente no tiene `category`/`confidence`/`threat_nature`, así que
+    se descartaba entera pese a tener texto real que guardar."""
     payload = {
         name: {
             "findings": [f.model_dump(mode="json") for f in layer.findings],
             "category": layer.category.value if layer.category else None,
             "confidence": layer.confidence.value if layer.confidence else None,
             "threat_nature": layer.threat_nature.value if layer.threat_nature else None,
+            "justification": layer.justification or None,
         }
         for name, layer in layers.items()
-        if layer.findings or layer.category or layer.confidence or layer.threat_nature
+        if layer.findings
+        or layer.category
+        or layer.confidence
+        or layer.threat_nature
+        or layer.justification
     }
     return json.dumps(payload) if payload else None
 
@@ -327,11 +345,19 @@ def _record_to_score_out(record: DashboardPRScore) -> ScoreOut:
         skipped_val = getattr(record, skip_col)
         skipped = bool(skipped_val) if skipped_val is not None else True
         raw_score = getattr(record, score_col)
-        justification = ""
-        if name == "semantic":
-            justification = record.semantic_justification or ""
 
         extra = findings_by_layer.get(name, {})
+        # `extra["justification"]` es el camino real desde el fix de este
+        # bug (guardado por `_serialize_findings` para TODAS las capas, no
+        # solo `semantic`). `record.semantic_justification` sigue de
+        # respaldo para filas ya insertadas ANTES de este fix -- esas no
+        # tienen "justification" en su blob (el código viejo nunca lo
+        # guardó), pero sí conservan la columna dedicada de `semantic`.
+        justification = (
+            extra.get("justification")
+            or (record.semantic_justification if name == "semantic" else None)
+            or ""
+        )
         findings = [Finding.model_validate(f) for f in extra.get("findings", [])]
         category = RiskCategory(extra["category"]) if extra.get("category") else None
         confidence = Confidence(extra["confidence"]) if extra.get("confidence") else None
