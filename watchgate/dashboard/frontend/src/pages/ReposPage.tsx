@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ArrowRight, FolderGit2, Layers, Plus, Search, ShieldCheck, Eye, X } from 'lucide-react'
+import { ArrowRight, FolderGit2, Layers, Plus, Search, ShieldCheck, Eye, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { api, type ScoreOut, type Semaforo } from '@/api/client'
 import { RiskBadge } from '@/components/dashboard/RiskBadge'
@@ -30,6 +30,10 @@ interface RepoSummary {
   pending: number
   latestSemaforo: Semaforo | null
   source: RepoSource
+  // `null` si este repo solo tiene scores históricos pero ya no tiene fila
+  // en MonitoredRepo (p. ej. ingestado por CI sin pasar por /external) --
+  // en ese caso no hay id que borrar, se oculta el botón.
+  id: string | null
 }
 
 type RiskFilter = 'all' | Semaforo
@@ -61,10 +65,11 @@ export default function ReposPage() {
         api.listExternalRepos().catch(() => []),
       ])
 
-      // monitor_type por repo_path (audited => origen "auditoría externa").
+      // monitor_type/id por repo_path (audited => origen "auditoría externa").
       const monitorTypeByRepo = new Map(
         externalRepos.map((r) => [r.repo_path, r.monitor_type]),
       )
+      const idByRepo = new Map(externalRepos.map((r) => [r.repo_path, r.id]))
       const allRepoPaths = Array.from(
         new Set([...scoredRepos, ...externalRepos.map((r) => r.repo_path)]),
       )
@@ -94,6 +99,7 @@ export default function ReposPage() {
             pending: scores.filter((s) => s.human_feedback === null).length,
             latestSemaforo: latest?.semaforo ?? null,
             source,
+            id: idByRepo.get(repo) ?? null,
           }
         }),
       )
@@ -175,6 +181,17 @@ export default function ReposPage() {
     sourceFilter !== 'all' ||
     onlyPending ||
     sortKey !== 'name'
+
+  async function handleDelete(repoId: string, repoPath: string) {
+    if (!window.confirm(t('externalRepos.confirmDelete', { repo: repoPath }))) return
+    try {
+      await api.deleteExternalRepo(repoId)
+      toast.success(t('externalRepos.deleteSuccess'))
+      await loadSummaries()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error')
+    }
+  }
 
   function clearFilters() {
     setQuery('')
@@ -348,16 +365,28 @@ export default function ReposPage() {
                         : 'Sin análisis'}
                       {item.red > 0 ? ` · ${t('repos.highCount', { count: item.red })}` : ''}
                     </div>
-                    <Link
-                      to={`/repos/${encodeURIComponent(item.repo)}`}
-                      className={cn(
-                        buttonVariants({ variant: 'outline', size: 'sm' }),
-                        'shrink-0 gap-1.5',
-                      )}
-                    >
-                      {t('repos.open')}
-                      <ArrowRight className="size-3.5" strokeWidth={1.75} />
-                    </Link>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      {item.id ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1.5 text-destructive hover:text-destructive"
+                          onClick={() => void handleDelete(item.id as string, item.repo)}
+                        >
+                          <Trash2 className="size-3.5" strokeWidth={1.75} />
+                        </Button>
+                      ) : null}
+                      <Link
+                        to={`/repos/${encodeURIComponent(item.repo)}`}
+                        className={cn(
+                          buttonVariants({ variant: 'outline', size: 'sm' }),
+                          'shrink-0 gap-1.5',
+                        )}
+                      >
+                        {t('repos.open')}
+                        <ArrowRight className="size-3.5" strokeWidth={1.75} />
+                      </Link>
+                    </div>
                   </CardContent>
                 </Card>
               ))}
