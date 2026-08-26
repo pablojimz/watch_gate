@@ -243,7 +243,33 @@ def add_external_repo(
 
     RepoPollingService.poll_repo_by_id(new_repo.id)
 
+    _enqueue_repo_knowledge_graph(new_repo)
+
     return new_repo
+
+
+_REPO_GRAPH_JOB_ID_PREFIX = "repo-graph"
+
+
+def _enqueue_repo_knowledge_graph(repo: MonitoredRepo) -> bool:
+    """Encola `build_repo_knowledge_graph` (mapa de conocimiento del repo,
+    ver `core/repo_graph.py`) -- mismo patrón de dedup por `job_id` que
+    `_enqueue_main_branch_scan`. Solo para repos GitHub-backed; los de
+    `monitor_type="git_server"` construyen el mapa desde el endpoint de
+    snapshot (`api/routers/hooks.py`), no desde aquí."""
+    if repo.monitor_type == "git_server":
+        return False
+    queue = get_queue()
+    job_id = f"{_REPO_GRAPH_JOB_ID_PREFIX}-{_safe_job_id_part(repo.id)}"
+    existing_job = queue.fetch_job(job_id)
+    if existing_job is not None and not existing_job.is_failed:
+        return False
+    if existing_job is not None:
+        existing_job.delete()
+    from watchgate.dashboard.backend.tasks import build_repo_knowledge_graph
+
+    queue.enqueue(build_repo_knowledge_graph, repo.id, repo.repo_path, job_id=job_id)
+    return True
 
 
 @router.post("/git-server", response_model=GitServerRepoOut, status_code=status.HTTP_201_CREATED)
@@ -428,6 +454,7 @@ def claim_installation(
                 session.add(repo)
                 session.commit()
                 session.refresh(repo)
+                _enqueue_repo_knowledge_graph(repo)
             elif repo.vcs_connection_id is None:
                 # Ya estaba (p. ej. en modo audited): se vincula a la
                 # instalación sin duplicar la fila ni cambiar su modo.

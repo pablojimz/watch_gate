@@ -9,7 +9,12 @@ from __future__ import annotations
 
 import pytest
 
-from watchgate.core.layers._semantic.client import LLMClient, SemanticOutput, SemanticParsingError
+from watchgate.core.layers._semantic.client import (
+    FileSummary,
+    LLMClient,
+    SemanticOutput,
+    SemanticParsingError,
+)
 from watchgate.core.layers._semantic.layer import SemanticLayer, compute_diff_hash
 from watchgate.core.models import (
     Confidence,
@@ -54,6 +59,12 @@ class _FakeLLMClient(LLMClient):
             return self._outputs[idx]
         assert self._output is not None
         return self._output
+
+    def summarize_file(self, file_path, content, symbols):
+        return FileSummary(category="unknown", summary="")
+
+    def synthesize_text(self, system_prompt, user_prompt):
+        return ""
 
 
 class _FakeCostController:
@@ -291,6 +302,12 @@ def test_unverified_content_floor_does_not_apply_if_the_llm_used_the_fetch_tool(
                 confidence=Confidence.ALTA,
             )
 
+        def summarize_file(self, file_path, content, symbols):
+            return FileSummary(category="unknown", summary="")
+
+        def synthesize_text(self, system_prompt, user_prompt):
+            return ""
+
     cost_control = _FakeCostController()
     layer = SemanticLayer(
         _LLMThatCallsFetchTool(), cost_control, rag_index_path=rag_index_path, max_diff_tokens=20
@@ -323,6 +340,12 @@ def test_unverified_content_floor_still_applies_if_the_llm_called_an_unrelated_t
                 justification="parece limpio",
                 confidence=Confidence.MEDIA,
             )
+
+        def summarize_file(self, file_path, content, symbols):
+            return FileSummary(category="unknown", summary="")
+
+        def synthesize_text(self, system_prompt, user_prompt):
+            return ""
 
     cost_control = _FakeCostController()
     layer = SemanticLayer(
@@ -463,6 +486,12 @@ def test_prompt_injection_in_content_fetched_via_tool_floors_score_to_100(tmp_pa
                 justification="lo leí, es solo relleno inofensivo",
                 confidence=Confidence.ALTA,
             )
+
+        def summarize_file(self, file_path, content, symbols):
+            return FileSummary(category="unknown", summary="")
+
+        def synthesize_text(self, system_prompt, user_prompt):
+            return ""
 
     cost_control = _FakeCostController()
     layer = SemanticLayer(
@@ -635,6 +664,12 @@ def test_tool_executor_dispatches_fetch_referenced_file(tmp_path, rag_index_path
                 confidence=Confidence.BAJA,
             )
 
+        def summarize_file(self, file_path, content, symbols):
+            return FileSummary(category="unknown", summary="")
+
+        def synthesize_text(self, system_prompt, user_prompt):
+            return ""
+
     llm = _ToolCallingLLMClient()
     layer = SemanticLayer(llm, _FakeCostController(), rag_index_path=rag_index_path)
     result = layer.analyze(diff, {"repo": "owner/repo"})
@@ -700,6 +735,12 @@ def test_tool_executor_dispatches_check_file_reputation(tmp_path, monkeypatch, r
                 confidence=Confidence.BAJA,
             )
 
+        def summarize_file(self, file_path, content, symbols):
+            return FileSummary(category="unknown", summary="")
+
+        def synthesize_text(self, system_prompt, user_prompt):
+            return ""
+
     llm = _ToolCallingLLMClient()
     layer = SemanticLayer(llm, _FakeCostController(), rag_index_path=rag_index_path)
     result = layer.analyze(diff, {"repo": "owner/repo"})
@@ -726,6 +767,12 @@ class _ToolProbeLLMClient(LLMClient):
             justification="x",
             confidence=Confidence.BAJA,
         )
+
+    def summarize_file(self, file_path, content, symbols):
+        return FileSummary(category="unknown", summary="")
+
+    def synthesize_text(self, system_prompt, user_prompt):
+        return ""
 
 
 def test_tool_executor_dispatches_lookup_package_registry(monkeypatch, rag_index_path):

@@ -223,6 +223,23 @@ def _render_dependency_findings(findings: list[dict[str, Any]]) -> str:
     )
 
 
+def _render_repo_graph_context(nodes: list[dict[str, Any]]) -> str:
+    """Ficheros del mapa de conocimiento del repo (ver
+    `core/repo_graph.py`) relacionados con los ficheros que toca este
+    diff -- da al modelo arquitectura real del repo (p. ej. "esto es el
+    módulo de auth") en vez de ver el diff aislado. Mismo criterio que
+    `_render_dependency_findings`: vacío si no hay mapa construido para
+    este repo (repo recién conectado, o de servidor Git propio sin
+    snapshot subido todavía) -- degrada en silencio, nunca es un error."""
+    if not nodes:
+        return ""
+    lines = "\n".join(f"- {n['file_path']} ({n['category']}): {n['summary']}" for n in nodes)
+    return (
+        "\n\nMapa de conocimiento del repo -- ficheros relacionados con los que toca "
+        f"este diff (arquitectura ya indexada, no una tool pedida por ti):\n{lines}\n"
+    )
+
+
 def build_system_prompt(
     project_type: str,
     languages: str,
@@ -231,6 +248,7 @@ def build_system_prompt(
     few_shot_examples: list[dict[str, Any]] | None = None,
     dependency_findings: list[dict[str, Any]] | None = None,
     current_date: str | None = None,
+    repo_graph_context: list[dict[str, Any]] | None = None,
 ) -> str:
     """`current_date` por defecto es la fecha real de hoy (UTC); se puede
     fijar explícitamente para que los tests sean deterministas (mismo
@@ -268,6 +286,7 @@ def build_system_prompt(
         )
         + _VERIFICATION_REMINDER
         + _render_dependency_findings(dependency_findings or [])
+        + _render_repo_graph_context(repo_graph_context or [])
     )
     return static_block + _CACHE_BREAKPOINT_MARKER + variable_block
 
@@ -529,6 +548,7 @@ def build_reduce_system_prompt(
     rag_context: list[RetrievedFragment],
     dependency_findings: list[dict[str, Any]] | None = None,
     current_date: str | None = None,
+    repo_graph_context: list[dict[str, Any]] | None = None,
 ) -> str:
     """Mismo prompt de sistema que `build_system_prompt`, con la instrucción
     de rol de síntesis añadida al final del bloque variable (después de
@@ -542,6 +562,7 @@ def build_reduce_system_prompt(
         rag_context,
         dependency_findings=dependency_findings,
         current_date=current_date,
+        repo_graph_context=repo_graph_context,
     )
     return base + _REDUCE_ROLE_INSTRUCTIONS
 

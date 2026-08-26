@@ -2,13 +2,44 @@
 
 from __future__ import annotations
 
+import json
+from datetime import datetime
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel
+from sqlmodel import select
 
 from watchgate.dashboard.backend import db as database
 from watchgate.dashboard.backend.auth import CurrentUser, require_ingest_token, require_role
+from watchgate.dashboard.backend.routers.repos import _enqueue_repo_knowledge_graph
 from watchgate.dashboard.backend.schemas import CiConfigOut, IngestScoreIn, RepoSettings, ScoreOut
+from watchgate.db.models import MonitoredRepo, RepoArchitectureSummary, RepoGraphNode
 
 router = APIRouter(tags=["scores"])
+
+
+class RepoGraphNodeOut(BaseModel):
+    file_path: str
+    language: str | None
+    category: str
+    summary: str
+    symbols: list[str]
+    imports: list[str]
+    loc: int
+
+
+class RepoKnowledgeGraphOut(BaseModel):
+    status: str  # "pending" | "building" | "ready" | "error"
+    error_message: str | None
+    overview: str
+    project_type: str | None
+    languages: str | None
+    module_breakdown: list[dict[str, Any]]
+    node_count: int
+    edge_count: int
+    built_at: datetime | None
+    nodes: list[RepoGraphNodeOut]
 
 
 @router.get("/repos")
@@ -108,3 +139,117 @@ def ingest_score(body: IngestScoreIn) -> ScoreOut:
     if out is None:
         raise HTTPException(status_code=500, detail="No se pudo leer el score insertado")
     return out
+
+
+def _monitored_repo_by_path(repo: str) -> MonitoredRepo | None:
+    """La página de detalle de un repo (`RepoPage.tsx`) solo conoce su
+    `repo_path` (viene de la URL, igual que `list_scores`/`my_role` de
+    arriba) -- a diferencia de `routers/repos.py`, que gestiona repos por
+    `id` de la organización que los administra. Sin acotar por org_id a
+    propósito, mismo criterio que `pipeline.py::_load_repo_graph_context`:
+    esto es solo para mostrar el mapa ya construido, no una decisión de
+    control de acceso (esa la aplica `require_role` en cada endpoint de
+    abajo)."""
+    from watchgate.db.connection import get_session
+
+    with next(get_session()) as session:
+        return session.exec(select(MonitoredRepo).where(MonitoredRepo.repo_path == repo)).first()
+
+
+@router.get("/repos/{repo:path}/knowledge-graph", response_model=RepoKnowledgeGraphOut)
+def get_repo_knowledge_graph_by_path(repo: str, request: Request, user: CurrentUser) -> Any:
+    """Mismo contrato que `routers/repos.py::get_repo_knowledge_graph`, pero
+    localizado por `repo_path` (esta página no conoce el id de
+    `MonitoredRepo`) -- ver ese endpoint para la respuesta `status="pending"`
+    cuando el repo aún no tiene mapa construido."""
+    require_role(user, repo, min_role="revisor", request=request)
+
+    from watchgate.db.connection import get_session
+
+    monitored_repo = _monitored_repo_by_path(repo)
+    if monitored_repo is None:
+        return RepoKnowledgeGraphOut(
+            status="pending",
+            error_message=None,
+            overview="",
+            project_type=None,
+            languages=None,
+            module_breakdown=[],
+            node_count=0,
+            edge_count=0,
+            built_at=None,
+            nodes=[],
+        )
+
+    with next(get_session()) as session:
+        arch_summary = session.exec(
+            select(RepoArchitectureSummary).where(
+                RepoArchitectureSummary.monitored_repo_id == monitored_repo.id
+            )
+        ).first()
+        if arch_summary is None:
+            return RepoKnowledgeGraphOut(
+                status="pending",
+                error_message=None,
+                overview="",
+                project_type=None,
+                languages=None,
+                module_breakdown=[],
+                node_count=0,
+                edge_count=0,
+                built_at=None,
+                nodes=[],
+            )
+
+        nodes = session.exec(
+            select(RepoGraphNode)
+            .where(RepoGraphNode.monitored_repo_id == monitored_repo.id)
+            .order_by(RepoGraphNode.file_path)
+        ).all()
+
+        return RepoKnowledgeGraphOut(
+            status=arch_summary.status,
+            error_message=arch_summary.error_message,
+            overview=arch_summary.overview,
+            project_type=arch_summary.project_type,
+            languages=arch_summary.languages,
+            module_breakdown=json.loads(arch_summary.module_breakdown_json or "[]"),
+            node_count=arch_summary.node_count,
+            edge_count=arch_summary.edge_count,
+            built_at=arch_summary.built_at,
+            nodes=[
+                RepoGraphNodeOut(
+                    file_path=n.file_path,
+                    language=n.language,
+                    category=n.category,
+                    summary=n.summary,
+                    symbols=json.loads(n.symbols or "[]"),
+                    imports=json.loads(n.imports or "[]"),
+                    loc=n.loc,
+                )
+                for n in nodes
+            ],
+        )
+
+
+@router.post("/repos/{repo:path}/knowledge-graph/rebuild", status_code=status.HTTP_202_ACCEPTED)
+def rebuild_repo_knowledge_graph_by_path(repo: str, request: Request, user: CurrentUser) -> Any:
+    """Botón "Reconstruir mapa" desde la página de detalle del repo."""
+    require_role(user, repo, min_role="mantenedor", request=request)
+
+    monitored_repo = _monitored_repo_by_path(repo)
+    if monitored_repo is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Este repo todavía no está registrado en WatchGate.",
+        )
+    if monitored_repo.monitor_type == "git_server":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Los repos de servidor Git propio reconstruyen su mapa subiendo un "
+                "snapshot nuevo (docker/git-server-hooks/upload_snapshot.sh)."
+            ),
+        )
+    enqueued = _enqueue_repo_knowledge_graph(monitored_repo)
+    return {"enqueued": enqueued, "repo_path": monitored_repo.repo_path}

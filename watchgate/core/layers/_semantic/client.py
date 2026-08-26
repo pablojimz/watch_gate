@@ -67,6 +67,64 @@ class SemanticParsingError(Exception):
     """El LLM no devolvió JSON válido tras los dos intentos permitidos."""
 
 
+# Categorías del mapa de conocimiento por repo (ver
+# `tasks.py::build_repo_knowledge_graph`) -- deliberadamente pocas y
+# genéricas para que el LLM las acierte de forma consistente entre
+# lenguajes/frameworks distintos, en vez de inventar una taxonomía nueva
+# por repo.
+_FILE_SUMMARY_CATEGORIES = (
+    "entrypoint",
+    "api",
+    "model",
+    "test",
+    "config",
+    "infra",
+    "ui",
+    "util",
+    "docs",
+    "unknown",
+)
+
+# Tope de contenido enviado al LLM por fichero -- un fichero de datos/
+# fixture de varios MB no aporta nada más al resumen a partir de cierto
+# punto, y sin este tope un solo fichero gigante podría dominar el tiempo
+# de indexado de todo el repo.
+_FILE_SUMMARY_MAX_CHARS = 8000
+
+
+class FileSummary(BaseModel):
+    """Salida estructurada de `LLMClient.summarize_file` -- una entrada del
+    mapa de conocimiento del repo, no del análisis de riesgo (eso sigue
+    siendo `SemanticOutput`)."""
+
+    category: str = "unknown"
+    summary: str
+
+    @field_validator("category", mode="before")
+    @classmethod
+    def normalize_category(cls, v: Any) -> str:
+        s = str(v).lower().strip()
+        return s if s in _FILE_SUMMARY_CATEGORIES else "unknown"
+
+
+def build_file_summary_prompts(file_path: str, content: str, symbols: list[str]) -> tuple[str, str]:
+    """`(system_prompt, user_prompt)` para pedirle al LLM un resumen de
+    UN fichero -- deliberadamente separado de `prompting.py` (esa
+    construye el prompt del análisis de riesgo de un diff; esto es un uso
+    del LLM totalmente distinto, indexado de arquitectura, no seguridad)."""
+    system_prompt = (
+        "Eres un analista de arquitectura de software. Te doy UN fichero de un "
+        "repositorio y debes describir en 1-2 frases qué hace y para qué sirve "
+        "dentro del proyecto, más una categoría de una lista cerrada. "
+        f"Categorías válidas: {', '.join(_FILE_SUMMARY_CATEGORIES)}. "
+        'Responde SOLO con JSON: {"category": "...", "summary": "..."}'
+    )
+    truncated = content[:_FILE_SUMMARY_MAX_CHARS]
+    symbols_line = f"Símbolos de primer nivel: {', '.join(symbols)}\n" if symbols else ""
+    user_prompt = f"Ruta: {file_path}\n{symbols_line}\n```\n{truncated}\n```"
+    return system_prompt, user_prompt
+
+
 class LLMClient(ABC):
     @abstractmethod
     def complete_structured(
@@ -80,6 +138,24 @@ class LLMClient(ABC):
         """Debe devolver un SemanticOutput válido, o lanzar
         SemanticParsingError si el modelo no devuelve JSON válido tras 2
         intentos."""
+
+    @abstractmethod
+    def summarize_file(self, file_path: str, content: str, symbols: list[str]) -> FileSummary:
+        """Resumen de un fichero completo para el mapa de conocimiento del
+        repo -- llamada simple de un solo turno, sin tools ni bucle de
+        conversación (a diferencia de `complete_structured`). Nunca debe
+        lanzar por un fallo de parseo -- ver cada implementación: se
+        degrada a `FileSummary(category="unknown", summary=...)` en vez de
+        tumbar el indexado completo de un repo por un fichero raro."""
+
+    @abstractmethod
+    def synthesize_text(self, system_prompt: str, user_prompt: str) -> str:
+        """Texto libre de un solo turno -- usado para la síntesis narrativa
+        de arquitectura del mapa de conocimiento del repo (el `overview`
+        markdown de `RepoArchitectureSummary`). A diferencia de
+        `summarize_file`/`complete_structured`, aquí no hay JSON que
+        parsear: la respuesta del modelo ES el resultado. Nunca lanza --
+        cadena vacía si el modelo falla, el llamador decide qué hacer."""
 
 
 def _extract_json_object(text: str) -> dict[str, Any]:
@@ -220,3 +296,31 @@ class AnthropicClient(LLMClient):
             return SemanticOutput.model_validate(_extract_json_object(retry_text))
         except (ValueError, json.JSONDecodeError) as exc:
             raise SemanticParsingError("LLM no devolvió JSON válido tras 2 intentos") from exc
+
+    def summarize_file(self, file_path: str, content: str, symbols: list[str]) -> FileSummary:
+        system_prompt, user_prompt = build_file_summary_prompts(file_path, content, symbols)
+        try:
+            response = self._client.messages.create(
+                model=self._model,
+                max_tokens=256,
+                temperature=self._temperature,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_prompt}],
+            )
+            text = "".join(block.text for block in response.content if block.type == "text")
+            return FileSummary.model_validate(_extract_json_object(text))
+        except Exception:  # noqa: BLE001 -- un fichero raro no debe tumbar el indexado del repo entero
+            return FileSummary(category="unknown", summary=f"Sin resumen disponible ({file_path}).")
+
+    def synthesize_text(self, system_prompt: str, user_prompt: str) -> str:
+        try:
+            response = self._client.messages.create(
+                model=self._model,
+                max_tokens=2048,
+                temperature=self._temperature,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_prompt}],
+            )
+            return "".join(block.text for block in response.content if block.type == "text")
+        except Exception:  # noqa: BLE001 -- ver docstring de la interfaz
+            return ""
