@@ -597,9 +597,12 @@ def test_add_external_repo_skips_main_branch_scan_when_job_already_in_flight(tes
     app.dependency_overrides.clear()
 
 
-def test_add_external_repo_managed_does_not_enqueue_main_branch_scan(test_db_session):
-    """El escaneo de línea base es solo para "audited" -- un repo "managed"
-    (GitHub App con permisos, vía webhook) no lo dispara al darse de alta."""
+def test_add_external_repo_managed_also_enqueues_main_branch_scan(test_db_session):
+    """El escaneo de línea base se dispara para CUALQUIER tipo de repo al
+    conectarse -- antes solo pasaba para "audited"; un repo "managed"
+    (GitHub App con permisos reales, vía webhook) se quedaba sin foto de
+    riesgo inicial pese a tener permisos de sobra para escanearlo. Mismo
+    criterio que "audited": evento único de onboarding, no repolling."""
 
     def get_test_db():
         yield test_db_session
@@ -609,7 +612,7 @@ def test_add_external_repo_managed_does_not_enqueue_main_branch_scan(test_db_ses
     from watchgate.dashboard.backend.routers.keys import _get_or_create_db_user
     from watchgate.dashboard.backend.tasks import run_main_branch_scan
 
-    _get_or_create_db_user(test_db_session, "creator3@corp.com")
+    creator = _get_or_create_db_user(test_db_session, "creator3@corp.com")
 
     client = TestClient(app)
     from watchgate.dashboard.backend.auth import create_session_token
@@ -620,17 +623,27 @@ def test_add_external_repo_managed_does_not_enqueue_main_branch_scan(test_db_ses
     target_poll = "watchgate.service.repo_polling.RepoPollingService.poll_repo_by_id"
     target_queue = "watchgate.dashboard.backend.routers.repos.get_queue"
     mock_queue = MagicMock()
-    with patch(target_poll), patch(target_queue, return_value=mock_queue):
+    mock_queue.fetch_job.return_value = None
+    with patch(target_poll) as mock_poll, patch(target_queue, return_value=mock_queue):
         response = client.post(
             "/api/repos/external",
             json={"repo_path": "openclaw/managedrepo", "monitor_type": "managed"},
         )
         assert response.status_code == 201
 
+    # Las PRs abiertas ya existentes también se escanean, igual que en
+    # "audited" -- poll_repo_by_id no distingue por monitor_type.
+    assert mock_poll.called
+
     main_branch_calls = [
         call for call in mock_queue.enqueue.call_args_list if call.args[0] is run_main_branch_scan
     ]
-    assert main_branch_calls == []
+    assert len(main_branch_calls) == 1
+    assert main_branch_calls[0].args[1] == "openclaw/managedrepo"
+    assert (
+        main_branch_calls[0].kwargs["job_id"]
+        == f"main_branch_scan-{creator.org_id}-openclaw_managedrepo"
+    )
 
     app.dependency_overrides.clear()
 
