@@ -220,19 +220,21 @@ def add_external_repo(
     session.commit()
     session.refresh(new_repo)
 
-    # Escaneo de línea base: al dar de alta un repo en auditoría externa
-    # ("audited", sin permisos de escritura -- distinto de "managed", que
-    # llega vía GitHub App/webhook), se encola un análisis del contenido
-    # COMPLETO de su rama por defecto, no solo de sus PRs futuras -- ver
-    # tasks.py:run_main_branch_scan. Sin esto, un repo con historial ya
-    # existente se queda sin ninguna foto de riesgo hasta que alguien pulse
-    # "Escanear" o abra la primera PR nueva. Evento ÚNICO al conectar el
-    # repo, no periódico -- el repolling automático se eliminó (ver
-    # watchgate/service/repo_polling.py); todo escaneo POSTERIOR de un
-    # repo ya conectado requiere pulsar un botón "Escanear..." en el
-    # Dashboard (ver `scan_main_branch`/`scan_audited_repo` más abajo).
-    if new_repo.monitor_type == "audited":
-        _enqueue_main_branch_scan(org_id, new_repo, user_login=user_login)
+    # Escaneo de línea base: al dar de alta CUALQUIER repo (tanto "audited"
+    # -- auditoría externa, sin permisos de escritura -- como "managed" --
+    # GitHub App/webhook, con permisos reales), se encola un análisis del
+    # contenido COMPLETO de su rama por defecto, no solo de sus PRs futuras
+    # -- ver tasks.py:run_main_branch_scan. Sin esto, un repo con historial
+    # ya existente se queda sin ninguna foto de riesgo hasta que alguien
+    # pulse "Escanear" o abra la primera PR nueva -- antes esto solo pasaba
+    # para "audited"; un repo "managed" recién conectado se quedaba con el
+    # mismo hueco pese a tener permisos de sobra para escanearlo. Evento
+    # ÚNICO al conectar el repo, no periódico -- el repolling automático se
+    # eliminó (ver watchgate/service/repo_polling.py); todo escaneo
+    # POSTERIOR de un repo ya conectado requiere pulsar un botón
+    # "Escanear..." en el Dashboard (ver `scan_main_branch`/
+    # `scan_audited_repo` más abajo).
+    _enqueue_main_branch_scan(org_id, new_repo, user_login=user_login)
 
     # Escaneo inmediato (único, al conectar) de todas las PRs abiertas ya
     # existentes -- igual que el escaneo de línea base de arriba, evento de
