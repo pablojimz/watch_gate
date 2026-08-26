@@ -8,21 +8,31 @@ name: CI
 # cierra ese hueco: espejo exacto de `make lint`/`make test` (ver
 # Makefile), para que un fallo local siempre se reproduzca aquí y
 # viceversa.
+#
+# DESACTIVADO temporalmente en push/PR automáticos (2026-08-26): en fase de
+# desarrollo activo cada push/PR disparaba el build de la imagen Docker
+# (torch dentro, 15-20 min de runner) desde cero, y con varios pushes de
+# arreglo seguidos eso se come el presupuesto de minutos de Actions rápido
+# -- lint/tests/build ya se corren en local antes de pushear. Queda solo en
+# workflow_dispatch (manual) hasta que el ritmo de commits baje o esto pase
+# a producción; para reactivarlo automático, volver a añadir el bloque
+# `push`/`pull_request` de abajo (comentado, no borrado).
 
 on:
-  push:
-    branches: [main]
-    # Cambios solo de documentación no pueden romper lint/tests/build --
-    # no gastan runners. OJO: los .md del corpus RAG viven bajo watchgate/
-    # (los parsea un test real), así que NO caen en este filtro y siguen
-    # disparando la CI, como debe ser.
-    paths-ignore:
-      - "docs/**"
-      - "*.md"
-  pull_request:
-    paths-ignore:
-      - "docs/**"
-      - "*.md"
+  workflow_dispatch: {}
+  # push:
+  #   branches: [main]
+  #   # Cambios solo de documentación no pueden romper lint/tests/build --
+  #   # no gastan runners. OJO: los .md del corpus RAG viven bajo watchgate/
+  #   # (los parsea un test real), así que NO caen en este filtro y siguen
+  #   # disparando la CI, como debe ser.
+  #   paths-ignore:
+  #     - "docs/**"
+  #     - "*.md"
+  # pull_request:
+  #   paths-ignore:
+  #     - "docs/**"
+  #     - "*.md"
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
