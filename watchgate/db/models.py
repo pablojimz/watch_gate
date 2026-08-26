@@ -153,6 +153,63 @@ class SemanticCache(SQLModel, table=True):
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
+class RepoGraphNode(SQLModel, table=True):
+    """Un fichero indexado del mapa de conocimiento de un repo -- ver
+    `watchgate/dashboard/backend/tasks.py::build_repo_knowledge_graph`."""
+
+    __tablename__ = "repo_graph_nodes"
+
+    id: str = Field(primary_key=True)
+    monitored_repo_id: str = Field(foreign_key="monitored_repos.id", index=True)
+    file_path: str = Field(index=True)
+    language: str | None = None
+    # entrypoint|api|model|test|config|infra|ui|util|docs|unknown
+    category: str = Field(default="unknown")
+    summary: str
+    symbols: str | None = Field(default=None)  # JSON: nombres de función/clase top-level
+    imports: str | None = Field(default=None)  # JSON: módulos importados
+    loc: int = Field(default=0)
+    content_hash: str = Field(index=True)  # sha256 del contenido -- reindexado incremental futuro
+    embedding_id: str | None = Field(default=None)  # id del doc en la colección Chroma del repo
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class RepoGraphEdge(SQLModel, table=True):
+    """Relación entre dos ficheros del mapa de conocimiento (import o
+    referencia compartida) -- ver `chunking.py::build_reference_graph`/
+    `build_symbol_reference_graph`, reutilizadas aquí sobre el repo
+    completo en vez de sobre un solo diff."""
+
+    __tablename__ = "repo_graph_edges"
+
+    id: str = Field(primary_key=True)
+    monitored_repo_id: str = Field(foreign_key="monitored_repos.id", index=True)
+    source_node_id: str = Field(foreign_key="repo_graph_nodes.id", index=True)
+    target_node_id: str = Field(foreign_key="repo_graph_nodes.id", index=True)
+    edge_type: str = Field(default="import")  # "import" | "symbol_reference"
+    weight: float = Field(default=1.0)
+
+
+class RepoArchitectureSummary(SQLModel, table=True):
+    """Síntesis a nivel de repo del mapa de conocimiento -- una fila por
+    `MonitoredRepo`, se reemplaza entera en cada reconstrucción."""
+
+    __tablename__ = "repo_architecture_summaries"
+
+    id: str = Field(primary_key=True)
+    monitored_repo_id: str = Field(foreign_key="monitored_repos.id", index=True, unique=True)
+    overview: str = Field(default="")  # markdown, salida de la síntesis LLM
+    project_type: str | None = Field(default=None)
+    languages: str | None = Field(default=None)  # lista separada por comas
+    module_breakdown_json: str | None = Field(default=None)
+    node_count: int = Field(default=0)
+    edge_count: int = Field(default=0)
+    status: str = Field(default="pending")  # "pending" | "building" | "ready" | "error"
+    error_message: str | None = Field(default=None)
+    built_at: datetime | None = Field(default=None)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
 class PRScore(SQLModel, table=True):
     """Histórico de puntuaciones de análisis de Pull Requests."""
 

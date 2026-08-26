@@ -221,6 +221,50 @@ def test_gemini_raises_instead_of_looping_forever_if_model_keeps_requesting_tool
     assert len(fake.models.calls) == 6
 
 
+def test_gemini_summarize_file_parses_valid_json_response():
+    fake = _FakeGenaiClient(
+        [_gemini_text_response('{"category": "api", "summary": "Endpoint REST."}')]
+    )
+    client = GeminiClient(client=fake)
+
+    result = client.summarize_file("api/handler.py", "def handler(): pass", ["def handler():"])
+
+    assert result.category == "api"
+    assert result.summary == "Endpoint REST."
+
+
+def test_gemini_summarize_file_degrades_to_unknown_when_no_candidates():
+    from google.genai import types
+
+    fake = _FakeGenaiClient([types.GenerateContentResponse(candidates=[])])
+    client = GeminiClient(client=fake)
+
+    result = client.summarize_file("x.py", "content", [])
+
+    assert result.category == "unknown"
+    assert "x.py" in result.summary
+
+
+def test_gemini_synthesize_text_returns_raw_text():
+    fake = _FakeGenaiClient([_gemini_text_response("## Arquitectura\nResumen.")])
+    client = GeminiClient(client=fake)
+
+    assert client.synthesize_text("sys", "user") == "## Arquitectura\nResumen."
+
+
+def test_gemini_synthesize_text_returns_empty_on_failure():
+    class _RaisingModels:
+        def generate_content(self, **kwargs: object) -> None:
+            raise RuntimeError("red caída")
+
+    class _RaisingClient:
+        models = _RaisingModels()
+
+    client = GeminiClient(client=_RaisingClient())
+
+    assert client.synthesize_text("sys", "user") == ""
+
+
 # ---------------------------------------------------------------------------
 # OpenAICompatibleClient — protocolo de chat completions de OpenAI, el mismo
 # que hablan Ollama/llama.cpp server/LM Studio/vLLM en local.
@@ -496,3 +540,61 @@ def test_local_strips_the_cache_breakpoint_marker_before_sending():
     sent_system_message = sent_payload["messages"][0]["content"]
     assert _CACHE_BREAKPOINT_MARKER not in sent_system_message
     assert "Eres un analista de seguridad" in sent_system_message
+
+
+def test_local_summarize_file_parses_valid_json_response():
+    client, _transport = _local_client(
+        [_chat_response({"role": "assistant", "content": '{"category": "config", "summary": "Config de despliegue."}'})]
+    )
+
+    result = client.summarize_file("k8s/deploy.yaml", "apiVersion: v1", [])
+
+    assert result.category == "config"
+    assert result.summary == "Config de despliegue."
+
+
+def test_local_summarize_file_degrades_to_unknown_on_malformed_response():
+    client, _transport = _local_client(
+        [_chat_response({"role": "assistant", "content": "no es JSON"})]
+    )
+
+    result = client.summarize_file("weird.txt", "???", [])
+
+    assert result.category == "unknown"
+    assert "weird.txt" in result.summary
+
+
+def test_local_summarize_file_degrades_to_unknown_when_request_fails():
+    class _RaisingTransport(httpx.BaseTransport):
+        def handle_request(self, request: httpx.Request) -> httpx.Response:
+            raise httpx.ConnectError("Ollama no está levantado")
+
+    httpx_client = httpx.Client(transport=_RaisingTransport())
+    client = OpenAICompatibleClient(
+        base_url="http://localhost:11434/v1", model="llama3.1", client=httpx_client
+    )
+
+    result = client.summarize_file("x.py", "content", [])
+
+    assert result.category == "unknown"
+
+
+def test_local_synthesize_text_returns_raw_text():
+    client, _transport = _local_client(
+        [_chat_response({"role": "assistant", "content": "## Arquitectura\nResumen local."})]
+    )
+
+    assert client.synthesize_text("sys", "user") == "## Arquitectura\nResumen local."
+
+
+def test_local_synthesize_text_returns_empty_on_failure():
+    class _RaisingTransport(httpx.BaseTransport):
+        def handle_request(self, request: httpx.Request) -> httpx.Response:
+            raise httpx.ConnectError("Ollama no está levantado")
+
+    httpx_client = httpx.Client(transport=_RaisingTransport())
+    client = OpenAICompatibleClient(
+        base_url="http://localhost:11434/v1", model="llama3.1", client=httpx_client
+    )
+
+    assert client.synthesize_text("sys", "user") == ""

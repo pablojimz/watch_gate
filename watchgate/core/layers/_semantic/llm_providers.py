@@ -30,11 +30,13 @@ import httpx
 
 from watchgate.core.layers._semantic.client import (
     _INVALID_JSON_RETRY_MESSAGE,
+    FileSummary,
     LLMClient,
     SemanticOutput,
     SemanticParsingError,
     ToolExecutor,
     _extract_json_object,
+    build_file_summary_prompts,
 )
 from watchgate.core.layers._semantic.prompting import strip_cache_breakpoint_marker
 from watchgate.core.layers._semantic.tools import FORCE_FINAL_ANSWER_MESSAGE, ToolCallBudget
@@ -182,6 +184,44 @@ class GeminiClient(LLMClient):
         except (ValueError, json.JSONDecodeError) as exc:
             raise SemanticParsingError("LLM no devolvió JSON válido tras 2 intentos") from exc
 
+    def summarize_file(self, file_path: str, content: str, symbols: list[str]) -> FileSummary:
+        from google.genai import types
+
+        system_prompt, user_prompt = build_file_summary_prompts(file_path, content, symbols)
+        try:
+            response = self._client.models.generate_content(
+                model=self._model,
+                contents=[types.Content(role="user", parts=[types.Part(text=user_prompt)])],
+                config=types.GenerateContentConfig(
+                    system_instruction=system_prompt, temperature=self._temperature
+                ),
+            )
+            if not response.candidates:
+                raise SemanticParsingError("Gemini no devolvió ningún candidate.")
+            parts = response.candidates[0].content.parts
+            text = "".join(p.text for p in parts if getattr(p, "text", None))
+            return FileSummary.model_validate(_extract_json_object(text))
+        except Exception:  # noqa: BLE001 -- un fichero raro no debe tumbar el indexado del repo entero
+            return FileSummary(category="unknown", summary=f"Sin resumen disponible ({file_path}).")
+
+    def synthesize_text(self, system_prompt: str, user_prompt: str) -> str:
+        from google.genai import types
+
+        try:
+            response = self._client.models.generate_content(
+                model=self._model,
+                contents=[types.Content(role="user", parts=[types.Part(text=user_prompt)])],
+                config=types.GenerateContentConfig(
+                    system_instruction=system_prompt, temperature=self._temperature
+                ),
+            )
+            if not response.candidates:
+                return ""
+            parts = response.candidates[0].content.parts
+            return "".join(p.text for p in parts if getattr(p, "text", None))
+        except Exception:  # noqa: BLE001 -- ver docstring de la interfaz
+            return ""
+
 
 def _function_response_part(types: Any, name: str, result: Any) -> Any:
     payload = result if isinstance(result, dict) else {"result": result}
@@ -325,3 +365,30 @@ class OpenAICompatibleClient(LLMClient):
             return SemanticOutput.model_validate(_extract_json_object(retry_text))
         except (ValueError, json.JSONDecodeError) as exc:
             raise SemanticParsingError("LLM no devolvió JSON válido tras 2 intentos") from exc
+
+    def summarize_file(self, file_path: str, content: str, symbols: list[str]) -> FileSummary:
+        system_prompt, user_prompt = build_file_summary_prompts(file_path, content, symbols)
+        try:
+            message = self._chat(
+                [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                [],
+            )
+            return FileSummary.model_validate(_extract_json_object(message.get("content") or ""))
+        except Exception:  # noqa: BLE001 -- un fichero raro no debe tumbar el indexado del repo entero
+            return FileSummary(category="unknown", summary=f"Sin resumen disponible ({file_path}).")
+
+    def synthesize_text(self, system_prompt: str, user_prompt: str) -> str:
+        try:
+            message = self._chat(
+                [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                [],
+            )
+            return message.get("content") or ""
+        except Exception:  # noqa: BLE001 -- ver docstring de la interfaz
+            return ""
