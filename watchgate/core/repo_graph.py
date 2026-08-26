@@ -18,6 +18,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
@@ -39,10 +40,22 @@ logger = logging.getLogger("watchgate.repo_graph")
 
 # Llamadas de resumen por fichero independientes entre sí, sin paso de
 # reduce compartido (a diferencia del map-reduce de diffs de `layer.py`,
-# `_CHUNK_WORKERS=6`) -- se puede paralelizar mucho más para que un repo de
-# cientos de ficheros termine en minutos, no horas, incluso con un LLM
-# local lento.
+# `_CHUNK_WORKERS=6`) -- se puede paralelizar mucho para que un repo de
+# cientos de ficheros termine en minutos, no horas, contra un proveedor
+# cloud (Anthropic/Gemini) con concurrencia real.
 _SUMMARY_WORKERS = 20
+
+# Un servidor Ollama local sirve las peticiones prácticamente en serie (un
+# único slot de GPU/modelo) -- lanzar 20 a la vez contra él no las hace ir
+# más rápido, solo las pone en cola hasta que superan el timeout y se
+# degradan en silencio a "unknown" (reproducido: con 6-8 ficheros en
+# paralelo, varios daban ReadTimeout aunque una llamada suelta funcionaba
+# bien; incluso con 3 en paralelo la mitad seguía fallando en este mismo
+# entorno). 1 -- totalmente en serie -- es lo único que de verdad
+# garantiza que ningún fichero se degrade por timeout de cola; más lento
+# por repo, pero un mapa completo de verdad vale más que uno rápido y
+# medio vacío.
+_SUMMARY_WORKERS_LOCAL = 1
 
 # Excluidos del mapa de conocimiento -- ni aportan arquitectura ni merecen
 # gastar una llamada de LLM por fichero: dependencias vendorizadas,
@@ -301,9 +314,12 @@ def _run_indexing(
         fs = llm_client.summarize_file(path, files[path], symbols_by_path[path])
         return path, fs.category, fs.summary
 
+    is_local_provider = os.environ.get("WATCHGATE_LLM_PROVIDER", "anthropic") == "local"
+    summary_workers = _SUMMARY_WORKERS_LOCAL if is_local_provider else _SUMMARY_WORKERS
+
     categories: dict[str, str] = {}
     summaries_text: dict[str, str] = {}
-    with ThreadPoolExecutor(max_workers=_SUMMARY_WORKERS) as pool:
+    with ThreadPoolExecutor(max_workers=summary_workers) as pool:
         for path, category, summary in pool.map(_summarize, selected_paths):
             categories[path] = category
             summaries_text[path] = summary

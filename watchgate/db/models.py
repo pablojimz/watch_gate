@@ -210,6 +210,26 @@ class RepoArchitectureSummary(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
+class BlockedAuthor(SQLModel, table=True):
+    """Autores bloqueados por organización tras intentos repetidos (o un
+    hallazgo grave) de colar código malicioso. Comprobado al principio de
+    `core/pipeline.py::run_full_analysis`, antes de gastar presupuesto de
+    LLM: un autor bloqueado se rechaza siempre en rojo, sin ejecutar
+    ninguna capa. Gestión manual desde el Dashboard (routers/blocklist.py),
+    no hay auto-bloqueo automático todavía -- un falso positivo aquí
+    bloquearía a un colaborador legítimo, así que la decisión la toma
+    siempre una persona."""
+
+    __tablename__ = "blocked_authors"
+
+    id: str = Field(primary_key=True)
+    org_id: str = Field(foreign_key="organizations.id", index=True)
+    author_login: str = Field(index=True)
+    reason: str = Field(default="")
+    blocked_by: str = Field(default="")  # login del usuario del Dashboard que bloqueó
+    blocked_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
 class PRScore(SQLModel, table=True):
     """Histórico de puntuaciones de análisis de Pull Requests."""
 

@@ -23,6 +23,7 @@ usarlo en producción.
 from __future__ import annotations
 
 import json
+import logging
 import os
 from typing import Any
 
@@ -40,6 +41,8 @@ from watchgate.core.layers._semantic.client import (
 )
 from watchgate.core.layers._semantic.prompting import strip_cache_breakpoint_marker
 from watchgate.core.layers._semantic.tools import FORCE_FINAL_ANSWER_MESSAGE, ToolCallBudget
+
+logger = logging.getLogger(__name__)
 
 
 class GeminiClient(LLMClient):
@@ -202,6 +205,7 @@ class GeminiClient(LLMClient):
             text = "".join(p.text for p in parts if getattr(p, "text", None))
             return FileSummary.model_validate(_extract_json_object(text))
         except Exception:  # noqa: BLE001 -- un fichero raro no debe tumbar el indexado del repo entero
+            logger.warning("summarize_file degradado a 'unknown' para %s", file_path, exc_info=True)
             return FileSummary(category="unknown", summary=f"Sin resumen disponible ({file_path}).")
 
     def synthesize_text(self, system_prompt: str, user_prompt: str) -> str:
@@ -220,6 +224,7 @@ class GeminiClient(LLMClient):
             parts = response.candidates[0].content.parts
             return "".join(p.text for p in parts if getattr(p, "text", None))
         except Exception:  # noqa: BLE001 -- ver docstring de la interfaz
+            logger.warning("synthesize_text degradado a cadena vacía", exc_info=True)
             return ""
 
 
@@ -378,6 +383,7 @@ class OpenAICompatibleClient(LLMClient):
             )
             return FileSummary.model_validate(_extract_json_object(message.get("content") or ""))
         except Exception:  # noqa: BLE001 -- un fichero raro no debe tumbar el indexado del repo entero
+            logger.warning("summarize_file degradado a 'unknown' para %s", file_path, exc_info=True)
             return FileSummary(category="unknown", summary=f"Sin resumen disponible ({file_path}).")
 
     def synthesize_text(self, system_prompt: str, user_prompt: str) -> str:
@@ -391,4 +397,5 @@ class OpenAICompatibleClient(LLMClient):
             )
             return message.get("content") or ""
         except Exception:  # noqa: BLE001 -- ver docstring de la interfaz
+            logger.warning("synthesize_text degradado a cadena vacía", exc_info=True)
             return ""

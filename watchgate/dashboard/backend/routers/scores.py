@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -14,7 +15,7 @@ from watchgate.dashboard.backend import db as database
 from watchgate.dashboard.backend.auth import CurrentUser, require_ingest_token, require_role
 from watchgate.dashboard.backend.routers.repos import _enqueue_repo_knowledge_graph
 from watchgate.dashboard.backend.schemas import CiConfigOut, IngestScoreIn, RepoSettings, ScoreOut
-from watchgate.db.models import MonitoredRepo, RepoArchitectureSummary, RepoGraphNode
+from watchgate.db.models import BlockedAuthor, MonitoredRepo, RepoArchitectureSummary, RepoGraphNode
 
 router = APIRouter(tags=["scores"])
 
@@ -253,3 +254,128 @@ def rebuild_repo_knowledge_graph_by_path(repo: str, request: Request, user: Curr
         )
     enqueued = _enqueue_repo_knowledge_graph(monitored_repo)
     return {"enqueued": enqueued, "repo_path": monitored_repo.repo_path}
+
+
+class BlockedAuthorOut(BaseModel):
+    author_login: str
+    reason: str
+    blocked_by: str
+    blocked_at: datetime
+
+
+class BlockAuthorIn(BaseModel):
+    author_login: str
+    reason: str = ""
+
+
+@router.get("/repos/{repo:path}/blocked-authors", response_model=list[BlockedAuthorOut])
+def list_blocked_authors(repo: str, request: Request, user: CurrentUser) -> Any:
+    """Autores bloqueados de la organización que administra este repo --
+    ver `core/pipeline.py::_check_blocked_author` para la comprobación real
+    en cada análisis. El bloqueo es a nivel de organización, no de repo
+    individual (un autor problemático en un repo probablemente lo es en
+    todos), pero se gestiona desde la página de un repo concreto porque es
+    donde normalmente se detecta el problema."""
+    require_role(user, repo, min_role="revisor", request=request)
+
+    monitored_repo = _monitored_repo_by_path(repo)
+    if monitored_repo is None:
+        return []
+
+    from watchgate.db.connection import get_session
+
+    with next(get_session()) as session:
+        blocked = session.exec(
+            select(BlockedAuthor)
+            .where(BlockedAuthor.org_id == monitored_repo.org_id)
+            .order_by(BlockedAuthor.blocked_at.desc())  # type: ignore[attr-defined]
+        ).all()
+        return [
+            BlockedAuthorOut(
+                author_login=b.author_login,
+                reason=b.reason,
+                blocked_by=b.blocked_by,
+                blocked_at=b.blocked_at,
+            )
+            for b in blocked
+        ]
+
+
+@router.post(
+    "/repos/{repo:path}/blocked-authors",
+    response_model=BlockedAuthorOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def block_author(repo: str, body: BlockAuthorIn, request: Request, user: CurrentUser) -> Any:
+    require_role(user, repo, min_role="mantenedor", request=request)
+
+    monitored_repo = _monitored_repo_by_path(repo)
+    if monitored_repo is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Este repo todavía no está registrado en WatchGate.",
+        )
+    author_login = body.author_login.strip()
+    if not author_login:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="author_login vacío")
+
+    from watchgate.db.connection import get_session
+
+    with next(get_session()) as session:
+        existing = session.exec(
+            select(BlockedAuthor).where(
+                BlockedAuthor.org_id == monitored_repo.org_id,
+                BlockedAuthor.author_login == author_login,
+            )
+        ).first()
+        if existing is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"'{author_login}' ya está bloqueado en esta organización.",
+            )
+        blocked = BlockedAuthor(
+            id=str(uuid.uuid4()),
+            org_id=monitored_repo.org_id,
+            author_login=author_login,
+            reason=body.reason.strip(),
+            blocked_by=user.login,
+            blocked_at=datetime.now(UTC),
+        )
+        session.add(blocked)
+        session.commit()
+        session.refresh(blocked)
+        return BlockedAuthorOut(
+            author_login=blocked.author_login,
+            reason=blocked.reason,
+            blocked_by=blocked.blocked_by,
+            blocked_at=blocked.blocked_at,
+        )
+
+
+@router.delete("/repos/{repo:path}/blocked-authors/{author_login}", status_code=status.HTTP_200_OK)
+def unblock_author(repo: str, author_login: str, request: Request, user: CurrentUser) -> Any:
+    require_role(user, repo, min_role="mantenedor", request=request)
+
+    monitored_repo = _monitored_repo_by_path(repo)
+    if monitored_repo is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Este repo todavía no está registrado en WatchGate.",
+        )
+
+    from watchgate.db.connection import get_session
+
+    with next(get_session()) as session:
+        existing = session.exec(
+            select(BlockedAuthor).where(
+                BlockedAuthor.org_id == monitored_repo.org_id,
+                BlockedAuthor.author_login == author_login,
+            )
+        ).first()
+        if existing is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="No estaba bloqueado."
+            )
+        session.delete(existing)
+        session.commit()
+    return {"unblocked": author_login}
