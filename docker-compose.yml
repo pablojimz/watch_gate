@@ -68,8 +68,20 @@ services:
       # dashboard-backend más abajo, a propósito: ambos servicios deben
       # apuntar siempre a la misma base de datos del dashboard.
       WATCHGATE_DASHBOARD_DATABASE_URL: postgresql://watchgate:watchgate@postgres:5432/watchgate_dashboard
+      # Necesaria para encolar `index_uploaded_repo_snapshot` (mapa de
+      # conocimiento de un repo de servidor Git propio, ver
+      # api/routers/hooks.py::upload_repo_snapshot) en el mismo
+      # `dashboard-worker` que procesa el resto de tareas -- sin esto, ese
+      # trabajo (llamadas de LLM por cada fichero del repo) se ejecutaría
+      # DENTRO del propio proceso de Engine API vía BackgroundTasks,
+      # bloqueando su capacidad de servir /analyze y su propio healthcheck
+      # mientras dura el indexado (reproducido en vivo: el contenedor pasó
+      # a "unhealthy" indexando un repo de 232 ficheros).
+      WATCHGATE_REDIS_URL: redis://redis:6379/0
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     ports:
       - "8080:8080"

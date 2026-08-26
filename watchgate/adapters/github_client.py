@@ -251,6 +251,41 @@ class GitHubClient:
         """Metadatos del repositorio (incluye `default_branch`)."""
         return dict(self._get(f"/repos/{owner}/{repo}").json())
 
+    def list_repo_tree(self, owner: str, repo: str, ref: str) -> list[dict[str, Any]]:
+        """Árbol COMPLETO del repo en `ref` (todas las rutas, recursivo) --
+        usado para construir el mapa de conocimiento del repo (ver
+        `tasks.py::build_repo_knowledge_graph`), a diferencia del resto de
+        este adaptador, que solo trabaja con diffs. Cada entrada trae al
+        menos `path`, `type` ("blob"|"tree") y, para blobs, `size`.
+
+        La Git Trees API trunca (`truncated: true`) árboles gigantes en vez
+        de fallar -- se propaga tal cual el resultado truncado, el llamador
+        decide qué hacer (aquí, se acepta el subconjunto que llega)."""
+        response = self._get(f"/repos/{owner}/{repo}/git/trees/{ref}", params={"recursive": "1"})
+        data = response.json()
+        tree = data.get("tree", [])
+        return [entry for entry in tree if isinstance(entry, dict)]
+
+    def get_file_content(self, owner: str, repo: str, path: str, ref: str) -> str | None:
+        """Contenido de texto de un fichero en `ref`, o `None` si no es
+        decodificable como UTF-8 (binario) o la API no devuelve contenido
+        inline (ficheros >1MB caen a `content: None` con `encoding: "none"`
+        en la Contents API -- se omiten en vez de hacer una segunda
+        petición al blob SHA, no merece la pena para el mapa de
+        conocimiento)."""
+        import base64
+
+        response = self._get(f"/repos/{owner}/{repo}/contents/{path}", params={"ref": ref})
+        data = response.json()
+        if not isinstance(data, dict) or data.get("encoding") != "base64":
+            return None
+        if not data.get("content"):
+            return None
+        try:
+            return base64.b64decode(data["content"]).decode("utf-8")
+        except (ValueError, UnicodeDecodeError):
+            return None
+
     def get_branch_head_commit(self, owner: str, repo: str, branch: str) -> dict[str, Any]:
         """Metadatos JSON del commit HEAD de `branch` (sha, autor, etc.)."""
         return dict(self._get(f"/repos/{owner}/{repo}/commits/{branch}").json())

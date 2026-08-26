@@ -322,6 +322,7 @@ class SemanticLayer(AnalysisLayer):
         recent_activity_summary: str = "sin datos",
         rag_index_path: str = DEFAULT_INDEX_PATH,
         client_init_error: str | None = None,
+        repo_graph_context: list[dict[str, Any]] | None = None,
     ) -> None:
         self._llm_client = llm_client
         # Motivo real por el que quien llama no pudo construir `llm_client`
@@ -337,6 +338,7 @@ class SemanticLayer(AnalysisLayer):
         self._project_type = project_type
         self._languages = languages
         self._recent_activity_summary = recent_activity_summary
+        self._repo_graph_context = repo_graph_context
         self._rag_index_path = rag_index_path
 
     def analyze(self, diff: NormalizedDiff, metadata: dict[str, Any]) -> LayerResult:
@@ -454,6 +456,7 @@ class SemanticLayer(AnalysisLayer):
             self._recent_activity_summary,
             rag_context,
             dependency_findings=dependency_findings,
+            repo_graph_context=self._repo_graph_context,
         )
         user_prompt = prompting.build_user_prompt(
             diff, static_findings_paths, self._cost_control.estimate_tokens, self._max_diff_tokens
@@ -519,6 +522,7 @@ class SemanticLayer(AnalysisLayer):
             self._recent_activity_summary,
             rag_context,
             dependency_findings=dependency_findings,
+            repo_graph_context=self._repo_graph_context,
         )
         user_prompt = prompting.build_chunk_user_prompt(diff, chunk.render())
         try:
@@ -647,6 +651,7 @@ class SemanticLayer(AnalysisLayer):
             self._recent_activity_summary,
             reduce_rag,
             dependency_findings=dependency_findings,
+            repo_graph_context=self._repo_graph_context,
         )
         reduce_user_prompt = prompting.build_reduce_user_prompt(
             diff, chunk_summaries, overflow_paths

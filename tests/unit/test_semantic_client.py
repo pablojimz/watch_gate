@@ -10,6 +10,7 @@ import pytest
 from watchgate.core.layers._semantic.client import (
     _INVALID_JSON_RETRY_MESSAGE,
     AnthropicClient,
+    FileSummary,
     SemanticParsingError,
 )
 from watchgate.core.layers._semantic.prompting import (
@@ -282,3 +283,75 @@ def test_cache_control_block_reused_on_the_invalid_json_retry_call():
     )
 
     assert fake.messages.calls[0]["system"] == fake.messages.calls[1]["system"]
+
+
+# ---------------------------------------------------------------------------
+# FileSummary / summarize_file / synthesize_text -- mapa de conocimiento del
+# repo (watchgate/core/repo_graph.py), no el análisis de riesgo de un diff.
+# ---------------------------------------------------------------------------
+
+
+def test_file_summary_normalizes_unknown_category():
+    assert FileSummary(category="not-a-real-category", summary="x").category == "unknown"
+    assert FileSummary(category="API", summary="x").category == "api"
+
+
+def test_summarize_file_parses_valid_json_response():
+    fake = _FakeAnthropic(
+        [_response(_text_block('{"category": "test", "summary": "Fichero de tests."}'))]
+    )
+    client = AnthropicClient(client=fake)
+
+    result = client.summarize_file("tests/test_x.py", "def test_x(): pass", ["def test_x():"])
+
+    assert result.category == "test"
+    assert result.summary == "Fichero de tests."
+
+
+def test_summarize_file_degrades_to_unknown_on_malformed_response_without_raising():
+    """Un fichero raro no debe tumbar el indexado del repo entero -- ver
+    docstring de LLMClient.summarize_file."""
+    fake = _FakeAnthropic([_response(_text_block("esto no es JSON"))])
+    client = AnthropicClient(client=fake)
+
+    result = client.summarize_file("weird.bin", "???", [])
+
+    assert result.category == "unknown"
+    assert "weird.bin" in result.summary
+
+
+def test_summarize_file_degrades_to_unknown_when_the_api_call_itself_fails():
+    class _RaisingMessages:
+        def create(self, **kwargs: object) -> None:
+            raise RuntimeError("red caída")
+
+    class _RaisingAnthropic:
+        messages = _RaisingMessages()
+
+    client = AnthropicClient(client=_RaisingAnthropic())
+
+    result = client.summarize_file("x.py", "content", [])
+
+    assert result.category == "unknown"
+
+
+def test_synthesize_text_returns_the_raw_model_text():
+    fake = _FakeAnthropic([_response(_text_block("## Arquitectura\nTexto libre."))])
+    client = AnthropicClient(client=fake)
+
+    text = client.synthesize_text("sys", "user")
+
+    assert text == "## Arquitectura\nTexto libre."
+
+
+def test_synthesize_text_returns_empty_string_on_failure_without_raising():
+    class _RaisingMessages:
+        def create(self, **kwargs: object) -> None:
+            raise RuntimeError("red caída")
+
+    class _RaisingAnthropic:
+        messages = _RaisingMessages()
+
+    client = AnthropicClient(client=_RaisingAnthropic())
+
+    assert client.synthesize_text("sys", "user") == ""
