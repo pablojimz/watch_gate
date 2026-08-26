@@ -116,7 +116,7 @@ def test_semantic_layer_runs_end_to_end_via_layer_factories(tmp_path):
     import watchgate.core.layers._semantic.layer  # noqa: F401 - registra "semantic"
     import watchgate.core.layers.reputation_layer  # noqa: F401 - registra "reputation"
     from watchgate.core.cost_control import CostController
-    from watchgate.core.layers._semantic.client import LLMClient, SemanticOutput
+    from watchgate.core.layers._semantic.client import FileSummary, LLMClient, SemanticOutput
     from watchgate.core.layers._semantic.layer import SemanticLayer
     from watchgate.core.models import Confidence, RiskCategory
 
@@ -130,6 +130,12 @@ def test_semantic_layer_runs_end_to_end_via_layer_factories(tmp_path):
                 justification="fake",
                 confidence=Confidence.ALTA,
             )
+
+        def summarize_file(self, file_path, content, symbols):
+            return FileSummary(category="unknown", summary="")
+
+        def synthesize_text(self, system_prompt, user_prompt):
+            return ""
 
     cost_control = CostController(
         db_path=str(tmp_path / "cost.db"), max_diff_tokens=6000, monthly_budget_tokens=100_000
@@ -160,7 +166,7 @@ def test_real_layers_registered_and_executable_with_factories(tmp_path):
     import watchgate.core.layers._semantic.layer  # noqa: F401 - registra "semantic"
     import watchgate.core.layers.reputation_layer  # noqa: F401 - registra "reputation"
     from watchgate.core.cost_control import CostController
-    from watchgate.core.layers._semantic.client import LLMClient, SemanticOutput
+    from watchgate.core.layers._semantic.client import FileSummary, LLMClient, SemanticOutput
     from watchgate.core.layers._semantic.layer import SemanticLayer
     from watchgate.core.models import Confidence, RiskCategory
 
@@ -177,6 +183,12 @@ def test_real_layers_registered_and_executable_with_factories(tmp_path):
                 justification="Cambio benigno",
                 confidence=Confidence.ALTA,
             )
+
+        def summarize_file(self, file_path, content, symbols):
+            return FileSummary(category="unknown", summary="")
+
+        def synthesize_text(self, system_prompt, user_prompt):
+            return ""
 
     cost_control = CostController(
         db_path=str(tmp_path / "cost.db"), max_diff_tokens=6000, monthly_budget_tokens=100_000

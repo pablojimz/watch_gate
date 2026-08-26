@@ -262,6 +262,38 @@ export interface MonitoredRepoResponse {
   created_at: string
 }
 
+// category: "entrypoint"|"api"|"model"|"test"|"config"|"infra"|"ui"|"util"|"docs"|"unknown"
+// -- ver _FILE_SUMMARY_CATEGORIES en watchgate/core/layers/_semantic/client.py
+export interface RepoGraphNode {
+  file_path: string
+  language: string | null
+  category: string
+  summary: string
+  symbols: string[]
+  imports: string[]
+  loc: number
+}
+
+export interface RepoKnowledgeGraphModule {
+  name: string
+  file_count: number
+  dominant_category: string
+  sample_summaries: string[]
+}
+
+export interface RepoKnowledgeGraph {
+  status: 'pending' | 'building' | 'ready' | 'error'
+  error_message: string | null
+  overview: string
+  project_type: string | null
+  languages: string | null
+  module_breakdown: RepoKnowledgeGraphModule[]
+  node_count: number
+  edge_count: number
+  built_at: string | null
+  nodes: RepoGraphNode[]
+}
+
 export const api = {
   me: () => request<MeResponse>('/auth/me'),
   logout: () => request<{ status: string }>('/auth/logout', { method: 'POST' }),
@@ -272,6 +304,13 @@ export const api = {
     }),
   listRepos: () => request<string[]>('/repos'),
   listScores: (repo: string) => request<ScoreOut[]>(`/repos/${repo}/scores`),
+  getKnowledgeGraph: (repo: string) =>
+    request<RepoKnowledgeGraph>(`/repos/${repo}/knowledge-graph`),
+  rebuildKnowledgeGraph: (repo: string) =>
+    request<{ enqueued: boolean; repo_path: string }>(
+      `/repos/${repo}/knowledge-graph/rebuild`,
+      { method: 'POST' },
+    ),
   myRole: (repo: string) =>
     request<{ repo: string; role: RoleName }>(`/repos/${repo}/role`),
   getSettings: (repo: string) => request<RepoSettings>(`/repos/${repo}/settings`),

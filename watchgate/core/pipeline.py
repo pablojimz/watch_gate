@@ -31,6 +31,70 @@ class _ConfigWithoutSemantic:
         self.thresholds = full_config.thresholds
 
 
+_REPO_GRAPH_QUERY_RESULTS = 8
+
+
+def _load_repo_graph_context(
+    repo_path: str, diff: NormalizedDiff
+) -> tuple[list[dict[str, object]], str | None, str | None] | None:
+    """Ficheros del mapa de conocimiento del repo (`core/repo_graph.py`)
+    relevantes para ESTE diff -- `None` si el repo no tiene mapa construido
+    todavía (recién conectado, o de servidor Git propio sin snapshot
+    subido) o si algo falla resolviéndolo; nunca lanza, es contexto
+    opcional, no un requisito del análisis.
+
+    Búsqueda por `repo_path` sin acotar por organización a propósito: es
+    contexto para el prompt del LLM, no una decisión de control de acceso
+    (esa la aplica `ensure_api_key_repo_binding` antes de llegar aquí) --
+    en el caso raro de que dos organizaciones auditen el mismo repo_path,
+    el peor caso es un contexto ligeramente ajeno en el prompt, no una
+    fuga de datos entre organizaciones."""
+    from sqlmodel import select
+
+    from watchgate.db.connection import get_session
+    from watchgate.db.models import MonitoredRepo, RepoArchitectureSummary
+
+    try:
+        with next(get_session()) as session:
+            repo = session.exec(
+                select(MonitoredRepo).where(MonitoredRepo.repo_path == repo_path)
+            ).first()
+            if repo is None:
+                return None
+            summary = session.exec(
+                select(RepoArchitectureSummary).where(
+                    RepoArchitectureSummary.monitored_repo_id == repo.id,
+                    RepoArchitectureSummary.status == "ready",
+                )
+            ).first()
+            if summary is None:
+                return None
+            repo_id = repo.id
+            project_type = summary.project_type
+            languages = summary.languages
+
+        from watchgate.core.rag.indexer import DEFAULT_INDEX_PATH, get_chroma_client
+        from watchgate.core.rag.retriever import _get_embedding_model
+
+        collection = get_chroma_client(DEFAULT_INDEX_PATH).get_collection(f"repo_graph_{repo_id}")
+        query_text = " ".join(fc.path for fc in diff.files)[:2000] or repo_path
+        embedding = _get_embedding_model().encode([query_text]).tolist()
+        result = collection.query(query_embeddings=embedding, n_results=_REPO_GRAPH_QUERY_RESULTS)
+        metadatas = (result.get("metadatas") or [[]])[0]
+        documents = (result.get("documents") or [[]])[0]
+        nodes = [
+            {
+                "file_path": meta.get("file_path", "?") if meta else "?",
+                "category": meta.get("category", "unknown") if meta else "unknown",
+                "summary": doc,
+            }
+            for meta, doc in zip(metadatas, documents, strict=False)
+        ]
+        return nodes, project_type, languages
+    except Exception:  # noqa: BLE001 -- contexto opcional, nunca debe tumbar el análisis
+        return None
+
+
 def run_full_analysis(
     diff: NormalizedDiff,
     metadata: dict[str, object],
@@ -70,11 +134,21 @@ def run_full_analysis(
             llm_client = build_llm_client()
         except Exception as exc:  # noqa: BLE001 - un LLM mal configurado no debe tumbar el análisis: se degrada a "capa semántica omitida", no se propaga
             client_init_error = str(exc)
+        repo_path_for_graph = str(metadata.get("repo") or diff.repo_path or "")
+        repo_graph_result = (
+            _load_repo_graph_context(repo_path_for_graph, diff) if repo_path_for_graph else None
+        )
+        repo_graph_context, repo_project_type, repo_languages = (
+            repo_graph_result if repo_graph_result is not None else (None, None, None)
+        )
         layer_factories["semantic"] = lambda: SemanticLayer(
             llm_client,
             cost_control,
             max_diff_tokens=config.max_diff_tokens,
             client_init_error=client_init_error,
+            repo_graph_context=repo_graph_context,
+            project_type=repo_project_type or "desconocido",
+            languages=repo_languages or "desconocido",
         )
 
     try:

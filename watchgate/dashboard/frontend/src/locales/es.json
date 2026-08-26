@@ -67,7 +67,20 @@
     "authorsEmpty": "No hay autores en este repositorio.",
     "commitsVsThreats": "Commits analizados vs. amenazas por día",
     "prClosed": "Cerrada",
-    "showClosedPrs": "Mostrar PRs cerradas"
+    "showClosedPrs": "Mostrar PRs cerradas",
+    "tabKnowledgeGraph": "Mapa de conocimiento",
+    "knowledgeGraph": {
+      "hint": "Arquitectura del repo indexada automáticamente: qué hace cada fichero y cómo se relacionan, usado como contexto en cada análisis.",
+      "pending": "Este repo todavía no tiene mapa de conocimiento construido.",
+      "building": "Construyendo el mapa de conocimiento — puede tardar varios minutos en repos grandes.",
+      "errorState": "No se pudo construir el mapa: {{error}}",
+      "rebuildButton": "Reconstruir mapa",
+      "rebuildQueued": "Reconstrucción del mapa encolada.",
+      "summaryLine": "{{projectType}} · {{languages}} · {{nodeCount}} ficheros indexados · {{edgeCount}} relaciones",
+      "unknown": "desconocido",
+      "fileCount": "{{count}} fichero",
+      "fileCount_other": "{{count}} ficheros"
+    }
   },
   "report": {
     "title": "Informe del PR #{{pr}}",

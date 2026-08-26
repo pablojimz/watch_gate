@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+from concurrent.futures import ThreadPoolExecutor
 
 import redis
 from rq import Queue
@@ -474,3 +475,91 @@ def run_audit_scan(
 
                 RepoPollingService.record_scan_outcome(repo_id, success=False)
             raise
+
+
+def build_repo_knowledge_graph(
+    monitored_repo_id: str,
+    repo_path: str,
+    github_token: str | None = None,
+    github_api_url: str | None = None,
+) -> None:
+    """Construye el mapa de conocimiento (ficheros + resúmenes + grafo de
+    imports + síntesis de arquitectura) de un repo de GitHub -- disparado
+    al conectar un repo "audited"/"managed" (ver
+    `routers/repos.py::add_external_repo`/`claim_installation`) o desde el
+    botón manual "Reconstruir mapa". Solo aplica a repos GitHub-backed:
+    para `monitor_type="git_server"` el mapa se construye desde
+    `api/routers/hooks.py` a partir de un snapshot subido, no desde aquí
+    (el Engine API no tiene credenciales de clon de un servidor Git ajeno,
+    y esta tarea corre en el contenedor `dashboard-worker`, que tampoco).
+
+    Descarga el árbol completo del repo vía la API de GitHub (`Contents`/
+    `Git Trees`) y delega TODO el resto del pipeline (filtrado, resúmenes
+    LLM, embeddings, grafo, persistencia) a
+    `core/repo_graph.py::index_repo_files`, que es agnóstico de dónde
+    salieron los ficheros -- por eso ese módulo vive en `core/` y no aquí:
+    el import-linter prohíbe que `core` importe `adapters`/`dashboard`,
+    así que la parte específica de GitHub (`GitHubClient`) tiene que
+    quedarse en esta capa."""
+    from watchgate.core.repo_graph import index_repo_files
+
+    with next(get_session()) as session:
+        repo = session.get(MonitoredRepo, monitored_repo_id)
+    if repo is None or repo.monitor_type == "git_server":
+        return
+
+    token, api_url = github_token, github_api_url
+    if not token or not api_url:
+        from watchgate.dashboard.backend.db import db_session as dashboard_db_session
+        from watchgate.dashboard.backend.db import resolve_github_credentials
+
+        with dashboard_db_session() as dash_conn:
+            res_tok, res_url = resolve_github_credentials(dash_conn, repo_path=repo_path)
+            token = token or res_tok
+            api_url = api_url or res_url
+
+    client = GitHubClient(token, api_url=api_url)
+    owner, repo_name = repo_path.split("/", 1)
+    metadata = client.get_repo_metadata(owner, repo_name)
+    default_branch = metadata.get("default_branch", "main")
+
+    tree = client.list_repo_tree(owner, repo_name, default_branch)
+    blob_entries = [
+        (entry["path"], entry.get("size", 0))
+        for entry in tree
+        if entry.get("type") == "blob" and "path" in entry
+    ]
+
+    from watchgate.core.repo_graph import select_files_to_index
+
+    selected_paths = select_files_to_index(blob_entries)
+
+    def _fetch(path: str) -> tuple[str, str | None]:
+        return path, client.get_file_content(owner, repo_name, path, default_branch)
+
+    files: dict[str, str] = {}
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        for path, content in pool.map(_fetch, selected_paths):
+            if content is not None:
+                files[path] = content
+
+    index_repo_files(monitored_repo_id, repo_path, files)
+
+
+def index_uploaded_repo_snapshot(
+    monitored_repo_id: str, repo_path: str, files: dict[str, str]
+) -> None:
+    """Contraparte de `build_repo_knowledge_graph` para repos de servidor
+    Git propio -- `files` ya viene extraído del tarball subido por
+    `docker/git-server-hooks/upload_snapshot.sh`
+    (`api/routers/hooks.py::upload_repo_snapshot`), así que aquí no hay
+    nada que descargar: se delega directo a `index_repo_files`.
+
+    Corre en `dashboard-worker` (proceso separado), no en el Engine API --
+    ese proceso enqueuea este job en vez de llamar a `index_repo_files`
+    directamente, para no bloquear su propia capacidad de servir
+    `/api/v1/analyze` (ni su healthcheck) mientras dura el indexado de un
+    repo grande."""
+    from watchgate.core.repo_graph import index_repo_files
+
+    index_repo_files(monitored_repo_id, repo_path, files)
