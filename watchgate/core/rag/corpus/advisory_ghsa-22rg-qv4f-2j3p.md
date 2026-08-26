@@ -2,41 +2,25 @@
 
 ## Resumen
 
-## Source: kam193 (454fa32963f58275e35167d59dd581240725e099682e76e44b6fca7b22332cb0)
 The package provides Telegram-based remote access to the machine it runs on. It was deliberately created and used to hack other machines, exfiltrate files and credentials.
-
-
----
 
 Category: MALICIOUS - The campaign has clearly malicious intent, like infostealers.
 
-
 Campaign: 2026-08-httpz-requests
-
 
 Reasons (based on the campaign):
 
-
  - files-exfiltration
-
 
  - rat
 
-
  - persistence
-
 
  - uses-telegram-bot
 
-
  - obfuscation
 
-
  - native-extension
-
----
-
-Credit: [OpenSSF](https://github.com/ossf/malicious-packages) ([source](https://github.com/ossf/malicious-packages/blob/60dfd99c8d9d6c66d1c4b8763867f28895e6264c/osv/malicious/pypi/infogram-bot/MAL-2026-14131.json))
 
 ## Paquetes afectados
 
@@ -61,4 +45,4 @@ Credit: [OpenSSF](https://github.com/ossf/malicious-packages) ([source](https://
 
 ## Patrón a vigilar
 
-Diff que añade (o fija por primera vez) una dependencia sobre cualquiera de los paquetes listados arriba, en cualquier versión del rango afectado -- el paquete en sí ES el malware, no hace falta ningún otro cambio sospechoso en el diff para que el riesgo sea máximo.
+Diff que añade (o fija por primera vez) una dependencia sobre `infogram-bot`, en cualquier versión del rango afectado -- el paquete en sí ES el malware, no hace falta ningún otro cambio sospechoso en el diff para que el riesgo sea máximo.

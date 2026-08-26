@@ -2,29 +2,17 @@
 
 ## Resumen
 
-## Source: kam193 (cb58dff63faa08e128ddd0d8d38b82c0711bb60d09d19755a8e8f398fa7d511d)
 Installing the package or importing the module exfiltrates basic information about the host, and the package has no other purpose.
-
-
----
 
 Category: PROBABLY_PENTEST - Packages looking like typical pentest packages, but also anything that looks like testing, exploring pre-prepared kits, research & co, with clearly low-harm possibilities.
 
-
 Campaign: GENERIC-standard-pypi-install-pentest
-
 
 Reasons (based on the campaign):
 
-
  - The package contains code to exfiltrate basic data from the system, like IP or username. It has a limited risk.
 
-
  - The package overrides the install command in setup.py to execute malicious code during installation.
-
----
-
-Credit: [OpenSSF](https://github.com/ossf/malicious-packages) ([source](https://github.com/ossf/malicious-packages/blob/ba888e5d4125c556b874c9e65dabff62cb3855b0/osv/malicious/pypi/morpho-sdk/MAL-2026-13731.json))
 
 ## Paquetes afectados
 
@@ -39,4 +27,4 @@ Credit: [OpenSSF](https://github.com/ossf/malicious-packages) ([source](https://
 
 ## Patrón a vigilar
 
-Diff que añade (o fija por primera vez) una dependencia sobre cualquiera de los paquetes listados arriba, en cualquier versión del rango afectado -- el paquete en sí ES el malware, no hace falta ningún otro cambio sospechoso en el diff para que el riesgo sea máximo.
+Diff que añade (o fija por primera vez) una dependencia sobre `morpho-sdk`, en cualquier versión del rango afectado -- el paquete en sí ES el malware, no hace falta ningún otro cambio sospechoso en el diff para que el riesgo sea máximo.
