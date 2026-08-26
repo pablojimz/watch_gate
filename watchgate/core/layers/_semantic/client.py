@@ -15,6 +15,7 @@ las despacha, y lo construye `layer.py` con acceso a los callables reales.
 from __future__ import annotations
 
 import json
+import logging
 import os
 from abc import ABC, abstractmethod
 from collections.abc import Callable
@@ -25,6 +26,8 @@ from pydantic import BaseModel, Field, field_validator
 from watchgate.core.layers._semantic.prompting import split_cache_breakpoint
 from watchgate.core.layers._semantic.tools import FORCE_FINAL_ANSWER_MESSAGE, ToolCallBudget
 from watchgate.core.models import Confidence, RiskCategory, ThreatNature
+
+logger = logging.getLogger(__name__)
 
 ToolExecutor = Callable[[str, dict[str, Any]], Any]
 
@@ -310,6 +313,7 @@ class AnthropicClient(LLMClient):
             text = "".join(block.text for block in response.content if block.type == "text")
             return FileSummary.model_validate(_extract_json_object(text))
         except Exception:  # noqa: BLE001 -- un fichero raro no debe tumbar el indexado del repo entero
+            logger.warning("summarize_file degradado a 'unknown' para %s", file_path, exc_info=True)
             return FileSummary(category="unknown", summary=f"Sin resumen disponible ({file_path}).")
 
     def synthesize_text(self, system_prompt: str, user_prompt: str) -> str:
@@ -323,4 +327,5 @@ class AnthropicClient(LLMClient):
             )
             return "".join(block.text for block in response.content if block.type == "text")
         except Exception:  # noqa: BLE001 -- ver docstring de la interfaz
+            logger.warning("synthesize_text degradado a cadena vacía", exc_info=True)
             return ""

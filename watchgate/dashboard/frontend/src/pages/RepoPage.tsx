@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { ClipboardList, History, MessageSquareWarning, Network, Users } from 'lucide-react'
+import { ClipboardList, History, MessageSquareWarning, Network, ShieldOff, Users } from 'lucide-react'
 import { api, type RoleName, type ScoreOut } from '@/api/client'
 import { AuthorsBreakdown } from '@/components/dashboard/AuthorsBreakdown'
+import { BlockedAuthorsView } from '@/components/dashboard/BlockedAuthorsView'
 import { ChartSkeleton } from '@/components/dashboard/ChartSkeleton'
 import { CommitsVsThreatsChart } from '@/components/dashboard/CommitsVsThreatsChart'
 import { DashboardTabs } from '@/components/dashboard/DashboardTabs'
@@ -17,7 +18,7 @@ import { TableSkeleton } from '@/components/dashboard/TableSkeleton'
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
-type Tab = 'history' | 'authors' | 'knowledge-graph'
+type Tab = 'history' | 'authors' | 'knowledge-graph' | 'blocked-authors'
 
 export default function RepoPage() {
   // Un solo segmento de URL codificado (ver App.tsx) -- no ":owner/:name",
@@ -61,6 +62,7 @@ export default function RepoPage() {
     { id: 'history', label: t('repo.tabHistory'), icon: History },
     { id: 'authors', label: t('repo.tabAuthors'), icon: Users },
     { id: 'knowledge-graph', label: t('repo.tabKnowledgeGraph'), icon: Network },
+    { id: 'blocked-authors', label: t('repo.tabBlockedAuthors'), icon: ShieldOff },
   ]
 
   return (
@@ -133,13 +135,21 @@ export default function RepoPage() {
                   </p>
                   <AuthorsBreakdown scores={scores} />
                 </div>
-              ) : (
+              ) : tab === 'knowledge-graph' ? (
                 <div>
                   <h2 className="mb-3 text-lg font-semibold">{t('repo.tabKnowledgeGraph')}</h2>
                   <p className="mb-4 text-sm text-muted-foreground">
                     {t('repo.knowledgeGraph.hint')}
                   </p>
                   <RepoKnowledgeGraphView repo={repo} />
+                </div>
+              ) : (
+                <div>
+                  <h2 className="mb-3 text-lg font-semibold">{t('repo.tabBlockedAuthors')}</h2>
+                  <p className="mb-4 text-sm text-muted-foreground">
+                    {t('repo.blockedAuthors.hint')}
+                  </p>
+                  <BlockedAuthorsView repo={repo} role={role} />
                 </div>
               )}
             </div>

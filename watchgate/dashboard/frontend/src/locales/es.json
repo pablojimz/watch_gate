@@ -80,6 +80,19 @@
       "unknown": "desconocido",
       "fileCount": "{{count}} fichero",
       "fileCount_other": "{{count}} ficheros"
+    },
+    "tabBlockedAuthors": "Autores bloqueados",
+    "blockedAuthors": {
+      "hint": "Autores bloqueados para esta organización -- un push o PR suyo se rechaza automáticamente en rojo, sin gastar análisis de LLM.",
+      "empty": "No hay ningún autor bloqueado en esta organización.",
+      "loginPlaceholder": "login del autor (ej: usuario-github)",
+      "reasonPlaceholder": "motivo (opcional)",
+      "blockButton": "Bloquear",
+      "unblockButton": "Desbloquear",
+      "blockedBadge": "Bloqueado",
+      "blockedByLine": "Bloqueado por {{login}} el {{date}}",
+      "blockedToast": "'{{login}}' bloqueado.",
+      "unblockedToast": "'{{login}}' desbloqueado."
     }
   },
   "report": {

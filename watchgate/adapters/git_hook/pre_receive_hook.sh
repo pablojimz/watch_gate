@@ -92,6 +92,17 @@ while read -r old_sha new_sha ref_name; do
         continue
     fi
 
+    # Identidad del autor del commit que se está empujando -- este hook
+    # NO recibe variables de entorno de Forgejo con el pusher autenticado
+    # (a diferencia del hook interno de Gitea, ver comentario de
+    # `repo_full_name` más arriba), así que se usa `git log` sobre el
+    # nuevo SHA. Es la misma confianza que ya asume el resto del sistema
+    # para servidor Git propio (nadie valida SSO aquí) -- pero sin esto,
+    # `metadata.author_login` llegaba vacío SIEMPRE, y la blacklist de
+    # autores (`core/pipeline.py::_check_blocked_author`) nunca tenía
+    # nada que comparar.
+    author_login="$(git log -1 --format='%an' "$new_sha" 2>/dev/null)"
+
     workdir="$(mktemp -d)"
     payload_file="$workdir/payload.json"
     response_file="$workdir/response.json"
@@ -102,12 +113,13 @@ while read -r old_sha new_sha ref_name; do
         --arg head_sha "$new_sha" \
         --arg repo "$repo_full_name" \
         --arg ref_name "$ref_name" \
+        --arg author_login "$author_login" \
         '{
             diff_text: $diff_text,
             base_sha: $base_sha,
             head_sha: $head_sha,
             repo_path: $repo,
-            metadata: { repo: $repo, ref_name: $ref_name, pr_id: $ref_name }
+            metadata: { repo: $repo, ref_name: $ref_name, pr_id: $ref_name, author_login: $author_login }
         }' > "$payload_file"
 
     echo "[WatchGate] Analizando ${ref_name} (${repo_full_name}) contra ${engine_api_url} ..."

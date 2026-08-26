@@ -294,6 +294,13 @@ export interface RepoKnowledgeGraph {
   nodes: RepoGraphNode[]
 }
 
+export interface BlockedAuthor {
+  author_login: string
+  reason: string
+  blocked_by: string
+  blocked_at: string
+}
+
 export const api = {
   me: () => request<MeResponse>('/auth/me'),
   logout: () => request<{ status: string }>('/auth/logout', { method: 'POST' }),
@@ -313,6 +320,18 @@ export const api = {
     ),
   myRole: (repo: string) =>
     request<{ repo: string; role: RoleName }>(`/repos/${repo}/role`),
+  listBlockedAuthors: (repo: string) =>
+    request<BlockedAuthor[]>(`/repos/${repo}/blocked-authors`),
+  blockAuthor: (repo: string, authorLogin: string, reason: string) =>
+    request<BlockedAuthor>(`/repos/${repo}/blocked-authors`, {
+      method: 'POST',
+      body: JSON.stringify({ author_login: authorLogin, reason }),
+    }),
+  unblockAuthor: (repo: string, authorLogin: string) =>
+    request<{ unblocked: string }>(
+      `/repos/${repo}/blocked-authors/${encodeURIComponent(authorLogin)}`,
+      { method: 'DELETE' },
+    ),
   getSettings: (repo: string) => request<RepoSettings>(`/repos/${repo}/settings`),
   putSettings: (repo: string, body: RepoSettings) =>
     request<RepoSettings>(`/repos/${repo}/settings`, {

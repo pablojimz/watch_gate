@@ -34,6 +34,78 @@ class _ConfigWithoutSemantic:
 _REPO_GRAPH_QUERY_RESULTS = 8
 
 
+def _check_blocked_author(repo_path: str, author_login: str, pr_id: str) -> AggregatedResult | None:
+    """`None` si el autor no está bloqueado (o no se puede resolver nada
+    -- nunca bloquea por error propio, un fallo aquí no debe tumbar un
+    análisis normal); si lo está, un `AggregatedResult` ya cerrado en rojo
+    para devolver de inmediato SIN instanciar ninguna capa (ni gastar
+    presupuesto de LLM en absoluto).
+
+    Resuelve la organización por `repo_path` (mismo criterio y misma
+    tolerancia documentada en `_load_repo_graph_context`: en el caso raro
+    de dos organizaciones con el mismo `repo_path`, el peor caso es
+    comprobar el bloqueo de la organización equivocada, no una fuga de
+    datos -- `ensure_api_key_repo_binding` ya validó el acceso real antes
+    de llegar aquí)."""
+    if not author_login:
+        return None
+
+    from datetime import UTC, datetime
+
+    from sqlmodel import select
+
+    from watchgate.core.models import Confidence, Semaforo, ThreatNature
+    from watchgate.db.connection import get_session
+    from watchgate.db.models import BlockedAuthor, MonitoredRepo
+
+    try:
+        with next(get_session()) as session:
+            repo = session.exec(
+                select(MonitoredRepo).where(MonitoredRepo.repo_path == repo_path)
+            ).first()
+            if repo is None:
+                return None
+            blocked = session.exec(
+                select(BlockedAuthor).where(
+                    BlockedAuthor.org_id == repo.org_id,
+                    BlockedAuthor.author_login == author_login,
+                )
+            ).first()
+            if blocked is None:
+                return None
+            reason = blocked.reason or "sin motivo registrado"
+    except Exception:  # noqa: BLE001 -- comprobación opcional, nunca debe tumbar el análisis
+        return None
+
+    justification = (
+        f"Autor '{author_login}' bloqueado en esta organización -- {reason}. "
+        "Rechazado automáticamente sin ejecutar ningún análisis."
+    )
+    skipped_result = LayerResult(
+        layer_name="blocklist",
+        risk_score=100,
+        justification=justification,
+        confidence=Confidence.ALTA,
+        threat_nature=ThreatNature.MALICIOUS,
+        skipped=False,
+    )
+    return AggregatedResult(
+        score=100,
+        semaforo=Semaforo.ROJO,
+        layer_results={"blocklist": skipped_result},
+        weights_used={"blocklist": 1.0},
+        effective_weights={"blocklist": 1.0},
+        pr_id=pr_id,
+        repo=repo_path,
+        timestamp=datetime.now(UTC).isoformat(),
+        threat_summary={
+            ThreatNature.MALICIOUS.value: 1,
+            ThreatNature.VULNERABILITY.value: 0,
+            ThreatNature.UNCERTAIN.value: 0,
+        },
+    )
+
+
 def _load_repo_graph_context(
     repo_path: str, diff: NormalizedDiff
 ) -> tuple[list[dict[str, object]], str | None, str | None] | None:
@@ -109,6 +181,15 @@ def run_full_analysis(
     función por sí sola -- en particular `metadata["reputation"]` como un
     `ReputationMetadata` real (si falta, `ReputationLayer` se omite sola,
     no es un error aquí)."""
+    repo_for_block_check = str(metadata.get("repo") or diff.repo_path or "")
+    author_for_block_check = str(metadata.get("author_login") or "")
+    if repo_for_block_check and author_for_block_check:
+        blocked_result = _check_blocked_author(
+            repo_for_block_check, author_for_block_check, str(metadata.get("pr_id", ""))
+        )
+        if blocked_result is not None:
+            return blocked_result
+
     cost_control = None
     layer_factories: dict[str, LayerFactory] = {}
 
