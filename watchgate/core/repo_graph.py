@@ -47,15 +47,16 @@ _SUMMARY_WORKERS = 20
 
 # Un servidor Ollama local sirve las peticiones prácticamente en serie (un
 # único slot de GPU/modelo) -- lanzar 20 a la vez contra él no las hace ir
-# más rápido, solo las pone en cola hasta que superan el timeout y se
-# degradan en silencio a "unknown" (reproducido: con 6-8 ficheros en
-# paralelo, varios daban ReadTimeout aunque una llamada suelta funcionaba
-# bien; incluso con 3 en paralelo la mitad seguía fallando en este mismo
-# entorno). 1 -- totalmente en serie -- es lo único que de verdad
-# garantiza que ningún fichero se degrade por timeout de cola; más lento
-# por repo, pero un mapa completo de verdad vale más que uno rápido y
-# medio vacío.
-_SUMMARY_WORKERS_LOCAL = 1
+# más rápido, solo las pone en cola hasta que superan el timeout y varias
+# degradan a "unknown" (reproducido: con 6-8 en paralelo, varios daban
+# ReadTimeout). Inicialmente esto se bajó a 1 (totalmente en serie), pero
+# contra un repo de verdad de 232 ficheros eso significa horas -- lento a
+# propósito no es la respuesta correcta. En su lugar: concurrencia
+# moderada aquí + un reintento en serie después (ver `_run_indexing`) solo
+# para los que degradaron, que es donde la fiabilidad de verdad hace
+# falta -- la mayoría termina rápido en paralelo, y los pocos que fallan
+# por la cola se recuperan solos sin pagar el coste serie del repo entero.
+_SUMMARY_WORKERS_LOCAL = 4
 
 # Excluidos del mapa de conocimiento -- ni aportan arquitectura ni merecen
 # gastar una llamada de LLM por fichero: dependencias vendorizadas,
@@ -321,6 +322,27 @@ def _run_indexing(
     summaries_text: dict[str, str] = {}
     with ThreadPoolExecutor(max_workers=summary_workers) as pool:
         for path, category, summary in pool.map(_summarize, selected_paths):
+            categories[path] = category
+            summaries_text[path] = summary
+
+    # Reintento en serie SOLO para los que degradaron a "unknown" por
+    # timeout de cola en el primer pase -- un servidor local sobrecargado
+    # un instante puede estar libre un segundo después. Sin concurrencia
+    # de por medio (max_workers=1), así que no vuelve a sufrir el mismo
+    # problema; como son pocos (normalmente un puñado, no el repo entero),
+    # el coste en tiempo es bajo comparado con lo que se gana en cobertura
+    # real de resúmenes.
+    degraded_paths = [
+        p for p in selected_paths if summaries_text[p].startswith("Sin resumen disponible")
+    ]
+    if degraded_paths:
+        logger.info(
+            "Reintentando en serie %d/%d ficheros que degradaron a 'unknown' en el primer pase.",
+            len(degraded_paths),
+            len(selected_paths),
+        )
+        for path in degraded_paths:
+            _, category, summary = _summarize(path)
             categories[path] = category
             summaries_text[path] = summary
 
