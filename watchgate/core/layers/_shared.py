@@ -25,6 +25,19 @@ DEPENDENCY_MANIFEST_FILENAMES: frozenset[str] = frozenset(
         "Cargo.toml",
         "go.mod",
         "composer.json",
+        # Lockfiles -- un `npm update`/`poetry update`/`cargo update`/
+        # `go mod tidy` que solo toca el lockfile (sin tocar el manifiesto,
+        # que normalmente declara un rango suelto, no la versión exacta)
+        # se colaba totalmente desapercibido: 0 manifiestos tocados,
+        # "nada que revisar", aunque SÍ cambió la versión exacta que se
+        # instala -- justo donde se cuela una versión vulnerable sin que
+        # nadie lo note. Hallazgo real (usuario), ver los parsers
+        # correspondientes más abajo en este mismo fichero.
+        "package-lock.json",
+        "yarn.lock",
+        "poetry.lock",
+        "Cargo.lock",
+        "go.sum",
     }
 )
 
@@ -405,8 +418,174 @@ def parse_composer_json(diff_hunk: str) -> list[DependencyChange]:
     return changes
 
 
+# --- Parseo de LOCKFILES (versión exacta resuelta, no rango declarado) ------
+#
+# Un `npm update`/`poetry update`/`cargo update`/`go mod tidy` cambia la
+# versión resuelta de una dependencia SIN tocar el manifiesto (que suele
+# declarar un rango suelto tipo "^1.0.0", no la versión exacta) -- antes de
+# esto, ese cambio pasaba totalmente desapercibido: 0 manifiestos tocados,
+# "nada que revisar" en deps_layer.py/vulnerabilities_layer.py, aunque SÍ
+# cambió de verdad la versión que se instala -- justo donde se cuela una
+# versión vulnerable sin que nadie lo note (hallazgo real, reportado por el
+# usuario). Estos parsers extraen (nombre, versión nueva) de las líneas
+# AÑADIDAS del hunk -- no intentan reconstruir `old_version` (necesitaría
+# el fichero completo, no solo el hunk): para lo que consumen estas dos
+# capas (typosquatting sobre el nombre, CVEs sobre la versión resuelta),
+# la versión nueva es lo único que hace falta.
+
+_GO_SUM_LINE_REGEX = re.compile(
+    r"^\+([A-Za-z0-9._\-/]+)\s+(v[0-9][A-Za-z0-9._\-+]*)(?:/go\.mod)?\s+h1:"
+)
+
+
+def parse_go_sum(diff_hunk: str) -> list[DependencyChange]:
+    """go.sum: cada módulo aparece dos veces (hash del zip y de su go.mod) --
+    se dedupe por (nombre, versión), una `DependencyChange` por par único."""
+    seen: set[tuple[str, str]] = set()
+    changes: list[DependencyChange] = []
+    for line in diff_hunk.splitlines():
+        if not line.startswith("+") or line.startswith("++"):
+            continue
+        match = _GO_SUM_LINE_REGEX.search(line)
+        if not match:
+            continue
+        name, version = match.group(1), match.group(2)
+        if (name, version) in seen:
+            continue
+        seen.add((name, version))
+        changes.append(
+            DependencyChange(ecosystem="Go", name=name, new_version=version, is_new=True)
+        )
+    return changes
+
+
+_NPM_LOCK_NAME_REGEX = re.compile(r'^\+\s*"node_modules/([^"]+)":\s*\{')
+_NPM_LOCK_VERSION_REGEX = re.compile(r'^\+\s*"version":\s*"([^"]+)"')
+
+
+def parse_package_lock_json(diff_hunk: str) -> list[DependencyChange]:
+    """package-lock.json (lockfileVersion 2/3, npm 7+): las entradas usan
+    claves `"node_modules/<pkg>"` (posiblemente anidadas para paquetes
+    transitivos duplicados -- se toma el último segmento tras el `node_modules/`
+    final como nombre resuelto) seguidas de su `"version"` en una línea
+    aparte, por eso el parseo es de dos líneas en vez de un solo regex."""
+    changes: list[DependencyChange] = []
+    pending_name: str | None = None
+    for line in diff_hunk.splitlines():
+        if not line.startswith("+") or line.startswith("++"):
+            continue
+        name_match = _NPM_LOCK_NAME_REGEX.search(line)
+        if name_match:
+            pending_name = name_match.group(1).rsplit("node_modules/", 1)[-1]
+            continue
+        if pending_name is not None:
+            version_match = _NPM_LOCK_VERSION_REGEX.search(line)
+            if version_match:
+                changes.append(
+                    DependencyChange(
+                        ecosystem="npm",
+                        name=pending_name,
+                        new_version=version_match.group(1),
+                        is_new=True,
+                    )
+                )
+                pending_name = None
+    return changes
+
+
+_YARN_LOCK_NAME_LINE_REGEX = re.compile(r"^\+(\S.*):$")
+_YARN_LOCK_VERSION_REGEX = re.compile(r'^\+\s+version\s+"([^"]+)"')
+
+
+def _yarn_package_name_from_specifier(specifier: str) -> str:
+    """`foo@^1.0.0` -> `foo`; `@scope/foo@^1.0.0` -> `@scope/foo` -- para un
+    paquete con scope, el `@` del scope no es el separador de versión, es
+    el segundo `@` de la cadena."""
+    first = specifier.split(",", 1)[0].strip().strip('"')
+    if first.startswith("@"):
+        at_idx = first.find("@", 1)
+    else:
+        at_idx = first.find("@")
+    return first[:at_idx] if at_idx > 0 else first
+
+
+def parse_yarn_lock(diff_hunk: str) -> list[DependencyChange]:
+    """yarn.lock: bloque `pkg@range, pkg@otherRange:` (línea sin indentar)
+    seguido de `  version "x.y.z"` (indentada) -- mismo parseo de dos
+    líneas que package-lock.json, formato de fichero distinto."""
+    changes: list[DependencyChange] = []
+    pending_name: str | None = None
+    for line in diff_hunk.splitlines():
+        if not line.startswith("+") or line.startswith("++"):
+            continue
+        version_match = _YARN_LOCK_VERSION_REGEX.search(line)
+        if version_match and pending_name is not None:
+            changes.append(
+                DependencyChange(
+                    ecosystem="npm",
+                    name=pending_name,
+                    new_version=version_match.group(1),
+                    is_new=True,
+                )
+            )
+            pending_name = None
+            continue
+        name_match = _YARN_LOCK_NAME_LINE_REGEX.search(line)
+        if name_match and not line.startswith("+ ") and not line.startswith("+\t"):
+            pending_name = _yarn_package_name_from_specifier(name_match.group(1))
+    return changes
+
+
+_TOML_PACKAGE_BLOCK_REGEX = re.compile(r"^\+\[\[package\]\]")
+_TOML_NAME_REGEX = re.compile(r'^\+name\s*=\s*"([^"]+)"')
+_TOML_VERSION_REGEX = re.compile(r'^\+version\s*=\s*"([^"]+)"')
+
+
+def _parse_toml_package_blocks(diff_hunk: str, ecosystem: str) -> list[DependencyChange]:
+    """poetry.lock y Cargo.lock comparten la misma estructura TOML
+    (`[[package]]` con `name`/`version` como claves sueltas dentro del
+    bloque) -- un único parser reutilizado por los dos, solo cambia el
+    ecosistema que se le pasa. Un `[[package]]` nuevo resetea el nombre
+    pendiente para no emparejar un `name` con el `version` de OTRO
+    paquete si el hunk solo trae un bloque a medias."""
+    changes: list[DependencyChange] = []
+    pending_name: str | None = None
+    for line in diff_hunk.splitlines():
+        if not line.startswith("+") or line.startswith("++"):
+            continue
+        if _TOML_PACKAGE_BLOCK_REGEX.search(line):
+            pending_name = None
+            continue
+        name_match = _TOML_NAME_REGEX.search(line)
+        if name_match:
+            pending_name = name_match.group(1)
+            continue
+        if pending_name is not None:
+            version_match = _TOML_VERSION_REGEX.search(line)
+            if version_match:
+                changes.append(
+                    DependencyChange(
+                        ecosystem=ecosystem,
+                        name=pending_name,
+                        new_version=version_match.group(1),
+                        is_new=True,
+                    )
+                )
+                pending_name = None
+    return changes
+
+
+def parse_poetry_lock(diff_hunk: str) -> list[DependencyChange]:
+    return _parse_toml_package_blocks(diff_hunk, "PyPI")
+
+
+def parse_cargo_lock(diff_hunk: str) -> list[DependencyChange]:
+    return _parse_toml_package_blocks(diff_hunk, "crates.io")
+
+
 def parse_manifest_file_change(file_change: FileChange) -> list[DependencyChange]:
-    """Parsea un cambio de fichero si es un manifiesto de dependencias conocido."""
+    """Parsea un cambio de fichero si es un manifiesto de dependencias
+    conocido -- o su lockfile (ver bloque de parsers arriba)."""
     fname = Path(file_change.path).name
     hunk = file_change.diff_hunk
     parsed: list[DependencyChange] = []
@@ -422,6 +601,16 @@ def parse_manifest_file_change(file_change: FileChange) -> list[DependencyChange
         parsed = parse_go_mod(hunk)
     elif fname == "composer.json":
         parsed = parse_composer_json(hunk)
+    elif fname == "package-lock.json":
+        parsed = parse_package_lock_json(hunk)
+    elif fname == "yarn.lock":
+        parsed = parse_yarn_lock(hunk)
+    elif fname == "poetry.lock":
+        parsed = parse_poetry_lock(hunk)
+    elif fname == "Cargo.lock":
+        parsed = parse_cargo_lock(hunk)
+    elif fname == "go.sum":
+        parsed = parse_go_sum(hunk)
     for ch in parsed:
         ch.manifest_path = file_change.path
     return parsed
