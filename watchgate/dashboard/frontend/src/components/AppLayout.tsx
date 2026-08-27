@@ -62,7 +62,7 @@ export function AppLayout({ isAdmin }: { isAdmin: boolean }) {
       <header className="flex items-center gap-3 border-b px-4 py-3 sm:gap-4 sm:px-6">
         <div className="flex items-center gap-2">
           {logoUrl ? (
-            <img src={logoUrl} alt={t('brand')} className="size-8 object-contain" />
+            <img src={logoUrl} alt={t('brand')} className="size-12 object-contain" />
           ) : (
             <Shield className="size-5 text-primary" strokeWidth={1.75} />
           )}
