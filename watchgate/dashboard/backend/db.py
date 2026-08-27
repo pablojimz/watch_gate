@@ -1654,21 +1654,51 @@ def compute_agent_metrics(engine_session: Session) -> AgentUsageMetrics:
     if not all_agent_ids:
         all_agent_ids = {"default-agent"}
 
+    # Los ids que solo vienen de `token_usage` (no de `agent_agg`, es decir,
+    # sin ningún `PRScore.agent_id` real detrás) son `UserTokenUsage.user_id`
+    # -- un UUID interno de `users`, no un nombre de agente elegido por
+    # nadie. Antes se mostraba el UUID en crudo en la columna "Agente /
+    # Identificador" del Dashboard, indistinguible visualmente de un agente
+    # de verdad (hallazgo real: se confundió con "el proveedor de LLM").
+    # Se resuelve a su email cuando existe -- "system" (consumo interno, no
+    # ligado a ningún usuario) no es un id de `users` real y se deja tal
+    # cual a propósito.
+    user_only_ids = (set(token_usage.keys()) - set(agent_agg.keys())) - {"system"}
+    email_by_user_id: dict[str, str] = {}
+    if user_only_ids:
+        from watchgate.db.models import User as EngineUser
+
+        user_stmt = select(EngineUser.id, EngineUser.email).where(  # type: ignore[call-overload]
+            EngineUser.id.in_(user_only_ids)  # type: ignore[attr-defined]
+        )
+        email_by_user_id = {row.id: row.email for row in engine_session.execute(user_stmt)}
+
     agent_rows: list[AgentMetricRow] = []
     for aid in sorted(all_agent_ids):
         cnt, avg_raw = agent_agg.get(aid, (0, None))
         avg_s = round(avg_raw, 1) if avg_raw is not None else 0.0
         agent_rows.append(
             AgentMetricRow(
-                agent_id=aid,
+                agent_id=email_by_user_id.get(aid, aid),
                 tokens_used=token_usage.get(aid, 0),
                 analyses_count=cnt,
                 avg_score=avg_s,
             )
         )
 
+    from watchgate.core.layers._semantic.llm_factory import resolve_provider_and_model
+
+    try:
+        llm_provider, llm_model = resolve_provider_and_model()
+    except ValueError:
+        # WATCHGATE_LLM_PROVIDER con un valor desconocido -- no debe tumbar
+        # todo el panel de métricas por esto, solo dejar el dato en blanco.
+        llm_provider, llm_model = "?", "?"
+
     return AgentUsageMetrics(
         total_tokens_used=total_tokens,
         agents_count=len(agent_rows),
         by_agent=agent_rows,
+        llm_provider=llm_provider,
+        llm_model=llm_model,
     )

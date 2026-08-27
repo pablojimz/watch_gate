@@ -72,6 +72,23 @@ def _check_key_matches_provider(resolved_provider: str, api_key: str | None) -> 
         )
 
 
+def resolve_provider_and_model(provider: str | None = None) -> tuple[str, str]:
+    """Solo la resolución de qué proveedor/modelo tocaría usar, sin
+    construir ningún cliente (sin validar claves, sin poder lanzar por un
+    proveedor mal configurado) -- extraído de `build_llm_client()` para
+    que algo tan simple como mostrar "qué LLM está analizando ahora mismo"
+    (ver routers/metrics.py, panel de Agentes de IA) no tenga que pagar el
+    riesgo/coste de instanciar un cliente real solo para leer dos strings."""
+    resolved_provider = provider or os.environ.get("WATCHGATE_LLM_PROVIDER", "anthropic")
+    if resolved_provider not in _DEFAULT_MODELS:
+        raise ValueError(
+            f"Proveedor LLM desconocido: {resolved_provider!r}. Valores válidos: "
+            f"{', '.join(_DEFAULT_MODELS)}."
+        )
+    model = os.environ.get("WATCHGATE_LLM_MODEL") or _DEFAULT_MODELS[resolved_provider]
+    return resolved_provider, model
+
+
 def build_llm_client(provider: str | None = None) -> LLMClient:
     """Construye el `LLMClient` configurado.
 
@@ -82,13 +99,7 @@ def build_llm_client(provider: str | None = None) -> LLMClient:
     el servidor (por defecto, el de Ollama en localhost). `WATCHGATE_LLM_TEMPERATURE`
     fuerza la temperatura de muestreo (por defecto 0.0 -- ver _DEFAULT_TEMPERATURE).
     """
-    resolved_provider = provider or os.environ.get("WATCHGATE_LLM_PROVIDER", "anthropic")
-    if resolved_provider not in _DEFAULT_MODELS:
-        raise ValueError(
-            f"Proveedor LLM desconocido: {resolved_provider!r}. Valores válidos: "
-            f"{', '.join(_DEFAULT_MODELS)}."
-        )
-    model = os.environ.get("WATCHGATE_LLM_MODEL") or _DEFAULT_MODELS[resolved_provider]
+    resolved_provider, model = resolve_provider_and_model(provider)
     temperature = float(os.environ.get("WATCHGATE_LLM_TEMPERATURE", _DEFAULT_TEMPERATURE))
 
     if resolved_provider == "anthropic":

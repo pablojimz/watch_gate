@@ -52,7 +52,13 @@ export default function MetricsPage() {
       .getAgentUsageMetrics()
       .then(setAgentMetrics)
       .catch(() => {
-        setAgentMetrics({ total_tokens_used: 0, agents_count: 0, by_agent: [] })
+        setAgentMetrics({
+          total_tokens_used: 0,
+          agents_count: 0,
+          by_agent: [],
+          llm_provider: '',
+          llm_model: '',
+        })
       })
   }, [])
 
@@ -226,11 +232,18 @@ export default function MetricsPage() {
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-3">
-          <CardHeader className="flex flex-row items-center gap-2">
-            <Bot className="size-4 text-muted-foreground" strokeWidth={1.75} />
-            <CardTitle className="text-sm text-muted-foreground">
-              Métricas de Agentes de IA y Consumo SaaS
-            </CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Bot className="size-4 text-muted-foreground" strokeWidth={1.75} />
+              <CardTitle className="text-sm text-muted-foreground">
+                Métricas de Agentes de IA y Consumo SaaS
+              </CardTitle>
+            </div>
+            {agentMetrics?.llm_provider ? (
+              <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                Analizando con {agentMetrics.llm_provider} · {agentMetrics.llm_model}
+              </span>
+            ) : null}
           </CardHeader>
           <CardContent className="overflow-x-auto p-0">
             {!agentMetrics || agentMetrics.by_agent.length === 0 ? (
