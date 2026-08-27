@@ -284,6 +284,15 @@ class AgentUsageMetrics(BaseModel):
     total_tokens_used: int
     agents_count: int
     by_agent: list[AgentMetricRow]
+    # Proveedor/modelo que analiza de verdad -- config de todo el
+    # despliegue (WATCHGATE_LLM_PROVIDER/_MODEL), no por agente: WatchGate
+    # usa siempre el mismo LLM para su propio análisis semántico,
+    # independientemente de qué agente externo llamó a la API. Se muestra
+    # aquí porque "qué modelo estamos usando" es justo lo que alguien
+    # mirando esta tabla espera encontrar (confundido antes con la
+    # columna "Agente / Identificador", que es otra cosa).
+    llm_provider: str
+    llm_model: str
 
 
 def validate_github_api_url(value: str | None) -> str:

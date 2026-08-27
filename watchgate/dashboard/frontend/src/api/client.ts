@@ -259,6 +259,8 @@ export interface AgentUsageMetrics {
   total_tokens_used: number
   agents_count: number
   by_agent: AgentMetricRow[]
+  llm_provider: string
+  llm_model: string
 }
 
 export interface MonitoredRepoResponse {

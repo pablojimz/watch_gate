@@ -6,6 +6,7 @@ import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
 
+import httpx
 import redis
 from rq import Queue
 from sqlmodel import select
@@ -599,11 +600,26 @@ def build_repo_knowledge_graph(
             "Fallo obteniendo los ficheros de GitHub para el mapa de conocimiento de %s",
             repo_path,
         )
+        message = str(exc)[:200]
+        # GitHub responde 404 (no 403) a un repo PRIVADO sin token con
+        # acceso -- por diseño, para no confirmar ni siquiera que existe.
+        # Sin este mensaje, el error crudo ("Client error '404 Not Found'
+        # for url ...") no deja nada claro por qué -- indistinguible de un
+        # repo_path mal escrito. Verificado en vivo: sin
+        # WATCHGATE_GITHUB_TOKEN/token personal/token de la VCSConnection,
+        # esto es EXACTAMENTE lo que pasa con cualquier repo privado.
+        if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 404 and not token:
+            message = (
+                f"{message} -- Si '{repo_path}' es un repo privado, esto es esperado: "
+                "sin token no hay forma de verlo (GitHub devuelve 404, no 403, para no "
+                "confirmar ni que existe). Añade un token con acceso en Mi Cuenta -> "
+                "Token personal de GitHub, o conéctalo vía GitHub App."
+            )
         with next(get_session()) as session:
             row = session.get(RepoArchitectureSummary, summary_row_id)
             if row is not None:
                 row.status = "error"
-                row.error_message = str(exc)[:500]
+                row.error_message = message
                 session.commit()
         return
 
