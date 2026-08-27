@@ -418,7 +418,7 @@ def test_static_layer_clean_diff() -> None:
             res = layer.analyze(diff, {})
 
     assert res.risk_score == 0
-    assert "No se encontraron hallazgos estáticos" in res.justification
+    assert "No suspicious static findings were found" in res.justification
     assert res.skipped is False
 
 
@@ -459,7 +459,7 @@ def test_static_layer_with_findings_takes_max_score() -> None:
     # Debe tomar el MAX (60), NUNCA SUMAR (90)
     assert res.risk_score == 60
     assert "eval-exec-dynamic" in res.justification
-    assert "2 hallazgos estáticos" in res.justification
+    assert "2 static findings" in res.justification
 
 
 def test_static_layer_skips_when_rules_unavailable() -> None:
