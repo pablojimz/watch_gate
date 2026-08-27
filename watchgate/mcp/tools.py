@@ -333,12 +333,22 @@ def _handle_precheck(args: dict[str, Any]) -> McpToolCallResult:
     cfg_dict = base_config.model_dump()
     weights = dict(cfg_dict.get("weights", {}))
     weights["semantic"] = 0.0
+    # Auditoría: la descripción de esta tool promete "<100ms", "únicamente
+    # capas deterministas (estático, dependencias, reputación)" y "cero
+    # consumo de tokens LLM" -- pero solo ponía a 0 el peso de `semantic`.
+    # `vulnerabilities` (ni siquiera nombrada en esa lista) se quedaba con
+    # su peso normal y SÍ hace una llamada de red real a OSV.dev: probado
+    # en vivo con un diff que solo toca requirements.txt, 26.8s de verdad
+    # en vez de <100ms -- justo lo contrario de para lo que existe esta
+    # tool (ya está `watchgate_analyze_diff` para el análisis completo).
+    weights["vulnerabilities"] = 0.0
     cfg_dict["weights"] = weights
     fast_config = WatchGateConfig(**cfg_dict)
 
     analysis_res = run_full_analysis(diff=diff, metadata={"precheck": True}, config=fast_config)
 
-    # Indicar explícitamente que la capa semántica fue omitida por precheck
+    # Indicar explícitamente qué capas fueron omitidas por precheck (no
+    # deterministas o no instantáneas -- ver comentario arriba).
     updated_layer_results = dict(analysis_res.layer_results)
     updated_layer_results["semantic"] = LayerResult(
         layer_name="semantic",
@@ -346,6 +356,13 @@ def _handle_precheck(args: dict[str, Any]) -> McpToolCallResult:
         justification="",
         skipped=True,
         skip_reason="Deshabilitada para precheck ultrarrápido",
+    )
+    updated_layer_results["vulnerabilities"] = LayerResult(
+        layer_name="vulnerabilities",
+        risk_score=0,
+        justification="",
+        skipped=True,
+        skip_reason="Deshabilitada para precheck ultrarrápido (requiere red, no es determinista)",
     )
     analysis_res = analysis_res.model_copy(update={"layer_results": updated_layer_results})
 

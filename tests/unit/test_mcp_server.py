@@ -109,6 +109,32 @@ def test_mcp_tool_precheck() -> None:
     assert data["analysis"]["layer_results"]["semantic"]["skipped"] is True
 
 
+def test_mcp_tool_precheck_does_not_hit_osv_network_for_manifest_diffs() -> None:
+    """Auditoría: la descripción de esta tool promete "<100ms" y "únicamente
+    capas deterministas (estático, dependencias, reputación)" -- pero solo
+    ponía a 0 el peso de `semantic`. `vulnerabilities` (ni nombrada en esa
+    lista) se ejecutaba igual y hacía una llamada de red real a OSV.dev:
+    probado en vivo con un diff que solo toca requirements.txt, 26.8s reales
+    en vez de <100ms. Aquí se comprueba que ya NO llama a la red -- si el fix
+    se revirtiera, este test colgaría/fallaría contra la API real de OSV en
+    vez de limitarse a comprobar el campo `skipped`."""
+    diff_text = """--- a/requirements.txt
++++ b/requirements.txt
+@@ -1,1 +1,2 @@
+ flask==2.0.0
++requests==2.5.0
+"""
+    with patch("httpx.post") as mock_post:
+        result = execute_mcp_tool("watchgate_precheck", {"diff_text": diff_text})
+        mock_post.assert_not_called()
+
+    assert not result.isError
+    data = json.loads(result.content[0].text)
+    vuln_layer = data["analysis"]["layer_results"]["vulnerabilities"]
+    assert vuln_layer["skipped"] is True
+    assert data["analysis"]["weights_used"]["vulnerabilities"] == 0.0
+
+
 def test_mcp_tool_analyze_diff() -> None:
     diff_text = """--- a/main.py
 +++ b/main.py
