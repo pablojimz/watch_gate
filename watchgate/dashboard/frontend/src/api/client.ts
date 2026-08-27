@@ -55,6 +55,17 @@ export interface ScoreOut {
   pr_state: 'open' | 'closed'
 }
 
+// Respuesta de POST /scores/{id}/accept -- además de aceptar, intenta
+// mergear el PR real en GitHub (solo si el repo tiene una conexión real
+// guardada y el PR es real, ver accept_score en el backend).
+// merge_attempted=false: no había nada que mergear (score de ingesta
+// genérica o análisis local, sin PR real) -- se comporta como antes.
+export interface AcceptScoreOut extends ScoreOut {
+  merge_attempted: boolean
+  merged: boolean | null
+  merge_message: string | null
+}
+
 export interface MeResponse {
   login: string
   is_admin: boolean
@@ -382,9 +393,7 @@ export const api = {
       body: JSON.stringify({ feedback }),
     }),
   acceptScore: (scoreId: number) =>
-    request<ScoreOut>(`/scores/${scoreId}/accept`, { method: 'POST' }),
-  unacceptScore: (scoreId: number) =>
-    request<ScoreOut>(`/scores/${scoreId}/accept`, { method: 'DELETE' }),
+    request<AcceptScoreOut>(`/scores/${scoreId}/accept`, { method: 'POST' }),
   listRoles: () => request<RepoRole[]>('/admin/roles'),
   // Sin `monitor_type`: es informativo, solo de lectura (se resuelve en
   // el servidor a partir de MonitoredRepo, no algo que se pueda asignar

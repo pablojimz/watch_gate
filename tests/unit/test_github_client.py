@@ -203,6 +203,35 @@ def test_post_comment_propagates_failures_instead_of_swallowing_them():
             client.post_comment("org", "repo", 1, "x")
 
 
+def test_merge_pull_request_sends_merge_method_to_the_right_pr():
+    client = GitHubClient(token="fake-token")
+    fake_resp = Mock()
+    fake_resp.raise_for_status = Mock()
+    fake_resp.json.return_value = {"merged": True, "message": "Pull Request successfully merged"}
+    with patch("httpx.put", return_value=fake_resp) as mock_put:
+        result = client.merge_pull_request("org", "repo", 42)
+
+    args, kwargs = mock_put.call_args
+    assert args[0] == "https://api.github.com/repos/org/repo/pulls/42/merge"
+    assert kwargs["json"] == {"merge_method": "squash"}
+    assert kwargs["headers"]["Authorization"] == "Bearer fake-token"
+    assert result["merged"] is True
+
+
+def test_merge_pull_request_propagates_failures_instead_of_swallowing_them():
+    """Un merge rechazado por GitHub (rama protegida, checks pendientes,
+    conflictos...) debe propagarse -- quien llama (accept_score) decide
+    cómo comunicarlo, no este cliente."""
+    client = GitHubClient(token="fake-token")
+    fake_resp = Mock()
+    fake_resp.raise_for_status = Mock(
+        side_effect=httpx.HTTPStatusError("405", request=Mock(), response=Mock())
+    )
+    with patch("httpx.put", return_value=fake_resp):
+        with pytest.raises(httpx.HTTPStatusError):
+            client.merge_pull_request("org", "repo", 42)
+
+
 def test_get_repo_metadata_fetches_repo_json():
     client = GitHubClient(token="fake-token")
     with patch.object(

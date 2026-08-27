@@ -94,6 +94,21 @@ class ScoreOut(BaseModel):
         )
 
 
+class AcceptScoreOut(ScoreOut):
+    """`ScoreOut` + resultado del intento de merge en GitHub que dispara
+    `POST /scores/{id}/accept` (ver routers/feedback.py::accept_score).
+
+    `merge_attempted=False` cuando el repo no tiene una conexión de
+    GitHub real guardada (score ingerido solo vía POST /scores desde CI
+    genérico, o análisis de un hook local sin PR real) -- en ese caso el
+    endpoint se comporta exactamente igual que antes de añadir el merge
+    automático: solo queda registrada la aceptación humana."""
+
+    merge_attempted: bool = False
+    merged: bool | None = None
+    merge_message: str | None = None
+
+
 class FeedbackIn(BaseModel):
     feedback: FeedbackValue
 
