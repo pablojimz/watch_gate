@@ -88,6 +88,11 @@ export function ReportModal({
                     {layer.skipped ? t('repo.skipped') : `${layer.risk_score}/100`}
                   </span>
                 </div>
+                {t(`layerExplanations.${layer.layer_name}`, { defaultValue: '' }) ? (
+                  <p className="mt-1 text-xs break-words whitespace-pre-line text-muted-foreground italic">
+                    {t(`layerExplanations.${layer.layer_name}`)}
+                  </p>
+                ) : null}
                 {layer.skipped ? (
                   <p className="mt-1 text-xs break-words whitespace-pre-line text-muted-foreground">
                     {layer.skip_reason}
