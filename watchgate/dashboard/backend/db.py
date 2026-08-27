@@ -446,6 +446,21 @@ def delete_scores_for_repo(session: Session, repo: str) -> int:
     return result.rowcount or 0  # type: ignore[attr-defined]
 
 
+def delete_scores_older_than(session: Session, retention_days: int) -> int:
+    """Borra `pr_scores` con `timestamp` anterior a `retention_days` días
+    -- usado por la purga periódica (`tasks.py::purge_old_scores`).
+    `timestamp` se guarda como ISO 8601 en texto (no una columna de
+    fecha real, ver `_record_to_score_out`), pero el formato ISO ordena
+    lexicográficamente igual que cronológicamente, así que comparar como
+    string contra el corte calculado en Python es correcto y evita
+    depender de funciones de fecha específicas del dialecto (SQLite vs
+    Postgres)."""
+    cutoff = (datetime.now(UTC) - timedelta(days=retention_days)).isoformat()
+    result = session.execute(delete(DashboardPRScore).where(DashboardPRScore.timestamp < cutoff))
+    session.commit()
+    return result.rowcount or 0  # type: ignore[attr-defined]
+
+
 def set_feedback(session: Session, score_id: int, feedback: FeedbackValue) -> ScoreOut | None:
     record = session.get(DashboardPRScore, score_id)
     if record is None:
