@@ -15,7 +15,7 @@ from watchgate.config import load_config
 from watchgate.core.diffparser import parse_diff_from_text
 from watchgate.core.models import CommitAuthor
 from watchgate.db.connection import get_session
-from watchgate.db.models import MonitoredRepo, VCSConnection
+from watchgate.db.models import MonitoredRepo, RepoArchitectureSummary, VCSConnection
 from watchgate.service.quota import QuotaService
 
 logger = logging.getLogger("watchgate.tasks")
@@ -527,40 +527,85 @@ def build_repo_knowledge_graph(
     if repo is None or repo.monitor_type == "git_server":
         return
 
-    token, api_url = github_token, github_api_url
-    if not token or not api_url:
-        from watchgate.dashboard.backend.db import db_session as dashboard_db_session
-        from watchgate.dashboard.backend.db import resolve_github_credentials
+    # Fila "building" desde YA, antes de tocar la API de GitHub -- si algo
+    # de lo de abajo falla (token inválido, repo movido/renombrado, rate
+    # limit, red...), `index_repo_files` nunca llega a ejecutarse y antes
+    # eso dejaba la tabla sin ninguna fila: el Dashboard seguía mostrando
+    # "pendiente de construir" como si el botón "Reconstruir mapa" nunca
+    # se hubiera pulsado, sin ningún error visible (reproducido en vivo
+    # contra un repo real). Igual que el guard de `index_repo_files`, esto
+    # nunca debe propagar -- un fallo de indexado no debe tumbar el
+    # worker ni dejar el job en un estado sin explicación.
+    with next(get_session()) as session:
+        summary_row = session.exec(
+            select(RepoArchitectureSummary).where(
+                RepoArchitectureSummary.monitored_repo_id == monitored_repo_id
+            )
+        ).first()
+        if summary_row is None:
+            from uuid import uuid4
 
-        with dashboard_db_session() as dash_conn:
-            res_tok, res_url = resolve_github_credentials(dash_conn, repo_path=repo_path)
-            token = token or res_tok
-            api_url = api_url or res_url
+            summary_row = RepoArchitectureSummary(
+                id=str(uuid4()), monitored_repo_id=monitored_repo_id
+            )
+            session.add(summary_row)
+        summary_row.status = "building"
+        summary_row.error_message = None
+        session.commit()
+        summary_row_id = summary_row.id  # capturado antes de que la sesión se cierre
 
-    client = GitHubClient(token, api_url=api_url)
-    owner, repo_name = repo_path.split("/", 1)
-    metadata = client.get_repo_metadata(owner, repo_name)
-    default_branch = metadata.get("default_branch", "main")
+    try:
+        token, api_url = github_token, github_api_url
+        if not token or not api_url:
+            from watchgate.dashboard.backend.db import db_session as dashboard_db_session
+            from watchgate.dashboard.backend.db import resolve_github_credentials
 
-    tree = client.list_repo_tree(owner, repo_name, default_branch)
-    blob_entries = [
-        (entry["path"], entry.get("size", 0))
-        for entry in tree
-        if entry.get("type") == "blob" and "path" in entry
-    ]
+            with dashboard_db_session() as dash_conn:
+                res_tok, res_url = resolve_github_credentials(dash_conn, repo_path=repo_path)
+                token = token or res_tok
+                api_url = api_url or res_url
 
-    from watchgate.core.repo_graph import select_files_to_index
+        client = GitHubClient(token, api_url=api_url)
+        owner, repo_name = repo_path.split("/", 1)
+        metadata = client.get_repo_metadata(owner, repo_name)
+        default_branch = metadata.get("default_branch", "main")
 
-    selected_paths = select_files_to_index(blob_entries)
+        tree = client.list_repo_tree(owner, repo_name, default_branch)
+        blob_entries = [
+            (entry["path"], entry.get("size", 0))
+            for entry in tree
+            if entry.get("type") == "blob" and "path" in entry
+        ]
 
-    def _fetch(path: str) -> tuple[str, str | None]:
-        return path, client.get_file_content(owner, repo_name, path, default_branch)
+        from watchgate.core.repo_graph import select_files_to_index
 
-    files: dict[str, str] = {}
-    with ThreadPoolExecutor(max_workers=16) as pool:
-        for path, content in pool.map(_fetch, selected_paths):
-            if content is not None:
-                files[path] = content
+        selected_paths = select_files_to_index(blob_entries)
+
+        def _fetch(path: str) -> tuple[str, str | None]:
+            return path, client.get_file_content(owner, repo_name, path, default_branch)
+
+        files: dict[str, str] = {}
+        # 16 en paralelo contra la Contents API agotaba el rate limit
+        # incluso con token real (visto en vivo contra un repo real sin
+        # token configurado: se comió el límite sin autenticar -- 60/h --
+        # en unas pocas decenas de ficheros). 6 es más conservador sin
+        # alargar mucho un repo de cientos de ficheros.
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            for path, content in pool.map(_fetch, selected_paths):
+                if content is not None:
+                    files[path] = content
+    except Exception as exc:  # noqa: BLE001 -- ver comentario de arriba: nunca debe propagar
+        logger.exception(
+            "Fallo obteniendo los ficheros de GitHub para el mapa de conocimiento de %s",
+            repo_path,
+        )
+        with next(get_session()) as session:
+            row = session.get(RepoArchitectureSummary, summary_row_id)
+            if row is not None:
+                row.status = "error"
+                row.error_message = str(exc)[:500]
+                session.commit()
+        return
 
     index_repo_files(monitored_repo_id, repo_path, files)
 

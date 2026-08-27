@@ -59,10 +59,10 @@ export function AppLayout({ isAdmin }: { isAdmin: boolean }) {
 
   return (
     <div className="flex h-screen flex-col bg-background">
-      <header className="flex items-center gap-3 border-b px-4 py-3 sm:gap-4 sm:px-6">
-        <div className="flex items-center gap-2">
+      <header className="flex flex-wrap items-center gap-3 border-b px-4 py-3 sm:gap-4 sm:px-6">
+        <div className="flex shrink-0 items-center gap-2">
           {logoUrl ? (
-            <img src={logoUrl} alt={t('brand')} className="size-12 object-contain" />
+            <img src={logoUrl} alt={t('brand')} className="size-8 object-contain sm:size-12" />
           ) : (
             <Shield className="size-5 text-primary" strokeWidth={1.75} />
           )}
@@ -96,7 +96,7 @@ export function AppLayout({ isAdmin }: { isAdmin: boolean }) {
             </NavLink>
           ) : null}
         </nav>
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ml-auto flex shrink-0 items-center gap-1">
           <ThemeToggle />
           <Button
             variant="ghost"

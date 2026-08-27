@@ -63,6 +63,14 @@ class GitHubClient:
         """Wrapper interno para peticiones con manejo de rate limits."""
         kwargs.setdefault("timeout", _TIMEOUT)
         kwargs.setdefault("headers", self._headers)
+        # httpx no sigue redirects por defecto (a diferencia de `requests`).
+        # GitHub responde 301 en cualquier endpoint por `owner/repo` cuando
+        # el repo se renombra o cambia de owner -- apunta a la URL estable
+        # por id (`/repositories/{id}`). Sin esto, cualquier repo renombrado
+        # rompía TODA llamada a la API con un HTTPStatusError sin sentido
+        # para quien lo ve (reproducido en vivo reconstruyendo el mapa de
+        # conocimiento de un repo real que se había renombrado).
+        kwargs.setdefault("follow_redirects", True)
 
         max_retries = 3
         for attempt in range(max_retries):
