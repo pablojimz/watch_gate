@@ -117,7 +117,14 @@ services:
     build:
       context: .
       dockerfile: docker/dashboard-backend.Dockerfile
-    command: rq worker --url redis://redis:6379/0
+    # --worker-ttl 3600 (default RQ: 420s/7min) -- un repo grande con LLM
+    # local puede tardar bastante más de 7 minutos en indexar su mapa de
+    # conocimiento (core/repo_graph.py); con el default, el registro del
+    # worker en Redis expiraba a mitad de un job real y el barrido de
+    # mantenimiento lo marcaba "abandonado" (AbandonedJobError, reproducido
+    # en vivo contra un repo de 232 ficheros) aunque el contenedor seguía
+    # vivo y trabajando de verdad.
+    command: rq worker --url redis://redis:6379/0 --worker-ttl 3600
     env_file:
       - .env
     environment:
