@@ -1337,7 +1337,20 @@ def _insert_sample(
 
 
 def seed_demo(session: Session) -> None:
-    """Usuarios locales + histórico falso para probar el dashboard sin CI."""
+    """Usuarios locales + histórico falso para probar el dashboard sin CI.
+
+    Semilla de UNA sola vez -- decisión explícita (2026-08-27): antes esto
+    corría entero en CADA arranque del backend, así que si alguien
+    limpiaba a mano los repos `acme/*` de ejemplo (para que el dashboard
+    no pareciera un demo, con datos reales de verdad), un
+    `docker compose restart` los volvía a crear sin avisar
+    (`upsert_role` no es condicional). Se detecta con la cuenta "admin":
+    si ya existe, se asume que el seed ya corrió alguna vez y no se toca
+    nada más -- ni cuentas, ni roles, ni scores -- aunque se hayan borrado
+    después a mano."""
+    if get_user(session, "admin") is not None:
+        return
+
     # Cuentas locales (usuario / contraseña) — independientes de GitHub/GitLab.
     upsert_user(session, "admin", "Admin123", "Admin demo")
     upsert_user(session, "maintainer", "maint123", "Mantenedor demo")
