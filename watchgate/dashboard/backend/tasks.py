@@ -204,6 +204,25 @@ def run_rag_sync() -> None:
     )
 
 
+def purge_old_scores(retention_days: int) -> None:
+    """Borra el histórico de `pr_scores` más antiguo que `retention_days`
+    -- petición explícita: no acumular para siempre, mantener el
+    Dashboard "serio" (sin PRs de hace meses/años engordando la lista y
+    las métricas). La encola periódicamente el lifespan del
+    dashboard-backend (ver main.py::_score_retention_loop), mismo patrón
+    que run_rag_sync."""
+    from watchgate.dashboard.backend import db as database
+
+    with database.db_session() as conn:
+        deleted = database.delete_scores_older_than(conn, retention_days)
+    if deleted:
+        logger.info(
+            "Purga de retención: %d filas de pr_scores más antiguas de %d días borradas.",
+            deleted,
+            retention_days,
+        )
+
+
 def run_feedback_indexing(case_id: str, title: str, narrative: str, verdict: str) -> None:
     """Indexa en la colección de feedback del RAG un caso confirmado por
     revisión humana -- la mitad "aprendizaje propio" del RAG dinámico.

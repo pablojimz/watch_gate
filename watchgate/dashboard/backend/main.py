@@ -70,6 +70,39 @@ async def _rag_sync_loop(interval_hours: float) -> None:
         await asyncio.sleep(interval_hours * 3600)
 
 
+def _score_retention_days() -> int:
+    """Cuántos días se conserva el histórico de `pr_scores` antes de
+    purgarse -- petición explícita: no acumular para siempre. 30 por
+    defecto; `WATCHGATE_SCORE_RETENTION_DAYS=0` (o negativo) lo
+    desactiva; un valor no numérico cae al default en vez de tumbar el
+    arranque."""
+    raw = os.environ.get("WATCHGATE_SCORE_RETENTION_DAYS", "30")
+    try:
+        return int(raw)
+    except ValueError:
+        logger.warning("WATCHGATE_SCORE_RETENTION_DAYS=%r no es un número; se usa 30.", raw)
+        return 30
+
+
+async def _score_retention_loop(retention_days: int) -> None:
+    """Encola la purga de retención al arrancar y luego una vez al día --
+    mismo patrón que `_rag_sync_loop` (solo encola, el borrado real corre
+    en dashboard-worker vía `tasks.py::purge_old_scores`)."""
+    from watchgate.dashboard.backend.tasks import get_queue
+
+    while True:
+        try:
+            await run_in_threadpool(
+                get_queue().enqueue,
+                "watchgate.dashboard.backend.tasks.purge_old_scores",
+                retention_days,
+            )
+            logger.info("Purga de retención (%d días) encolada; la próxima en 24h.", retention_days)
+        except Exception:  # noqa: BLE001 -- Redis caído no debe matar el loop
+            logger.exception("No se pudo encolar la purga de retención periódica; se reintentará.")
+        await asyncio.sleep(24 * 3600)
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     with database.db_session() as conn:
@@ -88,11 +121,19 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     rag_sync_task: asyncio.Task[None] | None = None
     if interval_hours > 0:
         rag_sync_task = asyncio.create_task(_rag_sync_loop(interval_hours))
+    retention_days = _score_retention_days()
+    retention_task: asyncio.Task[None] | None = None
+    if retention_days > 0:
+        retention_task = asyncio.create_task(_score_retention_loop(retention_days))
     yield
     if rag_sync_task is not None:
         rag_sync_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await rag_sync_task
+    if retention_task is not None:
+        retention_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await retention_task
 
 
 def create_app() -> FastAPI:
