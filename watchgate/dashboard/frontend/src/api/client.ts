@@ -476,4 +476,9 @@ export const api = {
     }),
   deleteExternalRepo: (id: string) =>
     request<void>(`/repos/external/${id}`, { method: 'DELETE' }),
+  deleteRepo: (repo: string) =>
+    request<{ repo: string; scores_deleted: number; monitored_repo_deleted: boolean }>(
+      `/repos/${repo}`,
+      { method: 'DELETE' },
+    ),
 }

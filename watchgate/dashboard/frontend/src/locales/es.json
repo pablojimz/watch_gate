@@ -48,7 +48,9 @@
     "sortRecent": "Más reciente",
     "clearFilters": "Limpiar",
     "noMatches": "Ningún repositorio coincide con la búsqueda o los filtros.",
-    "showing": "{{shown}} de {{total}}"
+    "showing": "{{shown}} de {{total}}",
+    "confirmDelete": "¿Eliminar \"{{repo}}\" del Dashboard? Se borra todo su histórico de análisis -- esta acción no se puede deshacer.",
+    "deleteSuccess": "Repositorio eliminado."
   },
   "repo": {
     "title": "Historial de riesgo",
