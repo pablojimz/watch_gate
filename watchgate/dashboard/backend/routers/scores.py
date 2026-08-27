@@ -14,7 +14,7 @@ from sqlmodel import select
 from watchgate.dashboard.backend import db as database
 from watchgate.dashboard.backend.auth import CurrentUser, require_ingest_token, require_role
 from watchgate.dashboard.backend.routers.keys import _get_or_create_db_user
-from watchgate.dashboard.backend.routers.repos import _enqueue_repo_knowledge_graph
+from watchgate.dashboard.backend.routers.repos import DBSession, _enqueue_repo_knowledge_graph
 from watchgate.dashboard.backend.schemas import (
     CiConfigOut,
     IngestScoreIn,
@@ -395,7 +395,9 @@ def unblock_author(repo: str, author_login: str, request: Request, user: Current
 
 
 @router.delete("/repos/{repo:path}")
-def delete_repo_by_path(repo: str, request: Request, user: CurrentUser) -> dict[str, Any]:
+def delete_repo_by_path(
+    repo: str, request: Request, user: CurrentUser, session: DBSession
+) -> dict[str, Any]:
     """Elimina un repo de la vista del Dashboard. A diferencia de
     `routers/repos.py::delete_external_repo` (borra solo la fila
     `MonitoredRepo`, preserva el histórico a propósito), esto SÍ borra el
@@ -407,39 +409,43 @@ def delete_repo_by_path(repo: str, request: Request, user: CurrentUser) -> dict[
     Si además existe una fila `MonitoredRepo` para este `repo_path` en la
     organización del usuario actual, se borra también (mismo guardado que
     `delete_external_repo`: bloquea si hay API keys de agente atadas, en
-    vez de dejarlas huérfanas en silencio)."""
+    vez de dejarlas huérfanas en silencio).
+
+    `session` llega inyectado vía `Depends(get_db_session)` (mismo
+    `DBSession` que usa `delete_external_repo`) en vez de abrir uno propio
+    con `get_session()` a mano -- así comparte la sesión/engine de la
+    petición y respeta `app.dependency_overrides` en tests (antes, al
+    llamar a `get_session()` directamente, el override de sesión de test
+    no tenía efecto y la consulta caía siempre sobre `default_engine`)."""
     require_role(user, repo, min_role="mantenedor", request=request)
 
     with database.db_session() as conn:
         deleted_scores = database.delete_scores_for_repo(conn, repo)
 
-    from watchgate.db.connection import get_session
-
     monitored_repo_deleted = False
-    with next(get_session()) as session:
-        db_user = _get_or_create_db_user(session, normalize_login(user.login))
-        org_id = db_user.org_id
-        repo_row = session.exec(
-            select(MonitoredRepo).where(
-                MonitoredRepo.repo_path == repo, MonitoredRepo.org_id == org_id
+    db_user = _get_or_create_db_user(session, normalize_login(user.login))
+    org_id = db_user.org_id
+    repo_row = session.exec(
+        select(MonitoredRepo).where(
+            MonitoredRepo.repo_path == repo, MonitoredRepo.org_id == org_id
+        )
+    ).first()
+    if repo_row is not None:
+        bound_keys = session.exec(
+            select(UserAPIKey).where(UserAPIKey.monitored_repo_id == repo_row.id)
+        ).all()
+        if bound_keys:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Histórico de scores borrado, pero no se pudo desconectar el "
+                    f"repo: hay {len(bound_keys)} API key(s) de agente atadas. "
+                    "Revócalas primero."
+                ),
             )
-        ).first()
-        if repo_row is not None:
-            bound_keys = session.exec(
-                select(UserAPIKey).where(UserAPIKey.monitored_repo_id == repo_row.id)
-            ).all()
-            if bound_keys:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail=(
-                        f"Histórico de scores borrado, pero no se pudo desconectar el "
-                        f"repo: hay {len(bound_keys)} API key(s) de agente atadas. "
-                        "Revócalas primero."
-                    ),
-                )
-            session.delete(repo_row)
-            session.commit()
-            monitored_repo_deleted = True
+        session.delete(repo_row)
+        session.commit()
+        monitored_repo_deleted = True
 
     return {
         "repo": repo,

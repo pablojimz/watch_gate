@@ -184,6 +184,16 @@ def create_app() -> FastAPI:
     app.include_router(auth_router, prefix="/api")
     app.include_router(oidc_router, prefix="/api")
     app.include_router(agent_access_router, prefix="/api")
+    # repos_router (prefix "/repos/external") va ANTES que scores_router:
+    # scores.py define un catch-all `DELETE /repos/{repo:path}` (borra por
+    # nombre de repo) que, al matchear cualquier ruta bajo "/repos/", se
+    # comía también las peticiones a `DELETE /repos/external/{repo_id}` de
+    # repos.py (borrado por id de MonitoredRepo) si este último se
+    # registraba después -- FastAPI/Starlette resuelve rutas en el orden
+    # de registro, primer match gana. Reproducido en vivo: el endpoint
+    # específico nunca llegaba a ejecutarse, siempre respondía 200 el
+    # catch-all sin borrar nada real.
+    app.include_router(repos_router, prefix="/api")
     app.include_router(scores_router, prefix="/api")
     app.include_router(keys_router, prefix="/api")
     app.include_router(feedback_router, prefix="/api")
@@ -191,7 +201,6 @@ def create_app() -> FastAPI:
     app.include_router(llm_router, prefix="/api")
     app.include_router(ui_router, prefix="/api")
     app.include_router(user_settings_router, prefix="/api")
-    app.include_router(repos_router, prefix="/api")
     app.include_router(webhooks_router, prefix="/api")
     app.include_router(rag_router, prefix="/api")
 
