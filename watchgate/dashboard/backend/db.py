@@ -252,9 +252,24 @@ def _serialize_findings(layers: dict[str, LayerResult]) -> str | None:
     Además, el filtro de qué capas se guardaban ni siquiera consideraba
     `justification` como motivo para incluir la capa -- `reputation`
     normalmente no tiene `category`/`confidence`/`threat_nature`, así que
-    se descartaba entera pese a tener texto real que guardar."""
+    se descartaba entera pese a tener texto real que guardar.
+
+    Segundo bug real, reproducido en vivo tras el de arriba: esta función
+    guardaba cada capa bajo `layer.layer_name` tal cual -- para la capa de
+    dependencias eso es `"dependencies"` (ver `DepsLayer.name` en
+    `core/layers/deps_layer.py`), pero `_record_to_score_out` (abajo) lee
+    ese blob buscando las claves de `_LAYER_COLS`, donde esa misma capa se
+    llama `"deps"`. Resultado: `findings_by_layer.get("deps")` no
+    encontraba nunca nada y la capa de dependencias quedaba con
+    `justification`/`findings` vacíos en el dashboard SIEMPRE, aunque el
+    blob sí tuviera el contenido real guardado bajo `"dependencies"` --
+    la única capa con este problema, porque es la única cuyo
+    `layer_name` no coincide con el nombre canónico de `_LAYER_COLS`
+    (todas las demás: "static"/"vulnerabilities"/"reputation"/"semantic"
+    coinciden exactos). Se normaliza aquí al nombre canónico "deps" para
+    que la clave de escritura y la de lectura sean la misma."""
     payload = {
-        name: {
+        ("deps" if name == "dependencies" else name): {
             "findings": [f.model_dump(mode="json") for f in layer.findings],
             "category": layer.category.value if layer.category else None,
             "confidence": layer.confidence.value if layer.confidence else None,

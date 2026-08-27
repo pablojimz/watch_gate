@@ -259,9 +259,13 @@
   "layers": {
     "static": "Estática",
     "deps": "Dependencias",
+    "dependencies": "Dependencias",
     "vulnerabilities": "Vulnerabilidades",
     "reputation": "Reputación",
     "semantic": "Semántica"
+  },
+  "layerExplanations": {
+    "dependencies": "Analiza los manifiestos de dependencias modificados (package.json, requirements.txt, Pipfile, Cargo.toml, go.mod, PKGBUILD, composer.json...) en busca de señales de ataques a la cadena de suministro: paquetes que imitan a otros populares (typosquatting/combosquatting), scripts de instalación (pre/postinstall) con comportamiento sospechoso, e instalación directa por URL/Git en vez del registro oficial del ecosistema. No evalúa CVEs conocidas de las dependencias: eso lo cubre la capa de Vulnerabilidades."
   },
   "externalRepos": {
     "title": "Auditoría Externa",

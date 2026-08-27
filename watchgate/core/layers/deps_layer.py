@@ -225,7 +225,11 @@ class DepsLayer(AnalysisLayer):
             )
             if is_typosquat:
                 pkg_score = max(pkg_score, 75)
-                pkg_notes.append(f"Posible typosquatting: '{change.name}' imita a '{ref_pkg}'")
+                pkg_notes.append(
+                    f"Posible typosquatting: '{change.name}' imita al paquete popular "
+                    f"'{ref_pkg}' de {change.ecosystem} (nombre casi idéntico, técnica "
+                    "habitual para hacer pasar un paquete malicioso por uno legítimo)"
+                )
                 pkg_nature = ThreatNature.MALICIOUS
 
             # B. Script de instalación
@@ -233,14 +237,20 @@ class DepsLayer(AnalysisLayer):
                 findings = analyze_install_script_text(change.install_script)
                 if findings:
                     pkg_score = max(pkg_score, 80)
-                    pkg_notes.append(f"Script de instalación sospechoso ({', '.join(findings)})")
+                    pkg_notes.append(
+                        f"Script de instalación sospechoso ({', '.join(findings)}): se "
+                        "ejecutaría automáticamente al instalar la dependencia, sin "
+                        "intervención de quien la instala"
+                    )
                     pkg_nature = ThreatNature.MALICIOUS
 
             # C. Instalación directa por URL/Git
             if change.is_direct_url:
                 pkg_score = max(pkg_score, 75)
                 pkg_notes.append(
-                    f"Instalación directa desde URL/Git ({change.new_version or change.name})"
+                    f"Instalación directa desde URL/Git ({change.new_version or change.name}) "
+                    "en vez del registro oficial del ecosistema, evitando así sus "
+                    "controles de publicación"
                 )
                 pkg_nature = ThreatNature.MALICIOUS
 
@@ -249,12 +259,13 @@ class DepsLayer(AnalysisLayer):
                 pkg_score = 10
                 pkg_notes.append(
                     "Nueva dependencia sin señales de typosquatting, scripts "
-                    "sospechosos ni instalación directa"
+                    "sospechosos ni instalación directa; puntuación base baja solo "
+                    "por tratarse de una dependencia añadida por primera vez"
                 )
 
             scores.append(pkg_score)
             version_str = f"@{change.new_version}" if change.new_version else ""
-            notes_str = "; ".join(pkg_notes) if pkg_notes else "OK"
+            notes_str = "; ".join(pkg_notes) if pkg_notes else "sin señales de riesgo detectadas"
             justifications.append(f"{change.name}{version_str} ({change.ecosystem}): {notes_str}")
 
             if pkg_score > 0:
@@ -270,8 +281,26 @@ class DepsLayer(AnalysisLayer):
                 )
 
         final_score = max(scores, default=0)
-        final_justification = " | ".join(justifications)
         dominant_threat = compute_dominant_threat_nature(structured_findings)
+
+        # Resumen inicial: explica de dónde sale la puntuación antes del
+        # detalle por paquete, para que el reporte del dashboard no obligue
+        # a inferir el motivo a partir de una lista de notas sueltas.
+        if final_score == 0:
+            summary = (
+                "Ninguna de las dependencias modificadas presenta señales de "
+                "ataque a la cadena de suministro."
+            )
+        elif len(all_changes) > 1:
+            summary = (
+                f"Puntuación {final_score}/100: al menos una de las {len(all_changes)} "
+                "dependencias analizadas presenta señales de riesgo (la puntuación "
+                "final es el máximo entre todas, nunca la suma)."
+            )
+        else:
+            summary = f"Puntuación {final_score}/100 por lo encontrado en esta dependencia."
+
+        final_justification = summary + " " + " | ".join(justifications)
 
         confidence = None
         if final_score >= 70:
