@@ -76,6 +76,18 @@ ENV PATH="/app/.venv/bin:$PATH" \
 # recreación del contenedor.
 RUN mkdir -p /app/.watchgate && chown watchgate:watchgate /app/.watchgate
 
+# watchgate/core/rag/corpus/ llega de la COPY de arriba propiedad de root
+# (sin --chown) -- dashboard-worker escribe ahí avisos nuevos en cada
+# sincronización periódica (tasks.py::run_rag_sync -> threat_feed.py) y,
+# sin este chown, esa escritura siempre falla con PermissionError contra
+# el usuario `watchgate` no-root de abajo (reproducido en vivo: cada ciclo
+# de sync fallaba, sin excepción). Mismo motivo que el chown de
+# .watchgate/ arriba: sin volumen aparte, los avisos sincronizados se
+# pierden en cada recreación del contenedor -- aceptable por ahora
+# (run_rag_sync los vuelve a traer), documentado por si en el futuro
+# interesa un volumen para no perder el historial de reindexados.
+RUN chown -R watchgate:watchgate /app/watchgate/core/rag/corpus
+
 USER watchgate
 EXPOSE 8000
 

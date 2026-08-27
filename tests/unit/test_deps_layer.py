@@ -12,9 +12,17 @@ from watchgate.core.layers._shared import (
     parse_pkgbuild,
     parse_requirements_txt,
 )
+from watchgate.core.layers._shared import parse_manifest_file_change
 from watchgate.core.layers.base import LAYER_REGISTRY
 from watchgate.core.layers.deps_layer import DepsLayer, TyposquatChecker
-from watchgate.core.models import CommitAuthor, FileChange, FileStatus, NormalizedDiff
+from watchgate.core.models import (
+    CommitAuthor,
+    Confidence,
+    FileChange,
+    FileStatus,
+    NormalizedDiff,
+    ThreatNature,
+)
 
 
 def _make_diff(files: list[FileChange]) -> NormalizedDiff:
@@ -317,3 +325,184 @@ def test_deps_layer_analyze_go_mod_and_composer() -> None:
     res_composer = layer.analyze(diff_composer, {})
     assert res_composer.risk_score >= 80
     assert "Script de instalación sospechoso" in res_composer.justification
+
+
+def test_manifest_touched_but_no_dependency_lines_changed() -> None:
+    """Rama sin cubrir hasta ahora: el manifiesto SÍ es uno reconocido y SÍ
+    tiene diff, pero ninguna línea añadida es una dependencia de verdad
+    (aquí, solo el campo "version" de package.json, una clave excluida a
+    propósito -- ver _PKG_JSON_NON_DEP_KEYS). Debe distinguirse del caso
+    "no se tocó ningún manifiesto" con su propio mensaje."""
+    layer = DepsLayer()
+    diff = _make_diff(
+        [
+            FileChange(
+                path="package.json",
+                status=FileStatus.MODIFIED,
+                diff_hunk='@@ -2,1 +2,1 @@\n-  "version": "1.0.0"\n+  "version": "1.0.1"',
+                additions=1,
+                deletions=1,
+            )
+        ]
+    )
+    res = layer.analyze(diff, {})
+    assert res.risk_score == 0
+    assert res.justification == (
+        "Se modificaron manifiestos pero no se añadieron ni cambiaron dependencias."
+    )
+    assert res.findings == []
+    assert res.threat_nature is None
+
+
+def test_pipfile_dispatches_to_requirements_parser() -> None:
+    """`Pipfile` comparte parser con requirements.txt (mismo formato
+    `nombre==version` en las líneas añadidas) -- se prueba vía
+    `parse_manifest_file_change`, que es quien decide el dispatch por
+    nombre de fichero, no llamando al parser directamente."""
+    fc = FileChange(
+        path="Pipfile",
+        status=FileStatus.MODIFIED,
+        diff_hunk="@@ -1,0 +1,1 @@\n+django==4.2.0",
+        additions=1,
+        deletions=0,
+    )
+    changes = parse_manifest_file_change(fc)
+    assert len(changes) == 1
+    assert changes[0].name == "django"
+    assert changes[0].new_version == "4.2.0"
+    assert changes[0].manifest_path == "Pipfile"
+
+
+def test_multiple_dependencies_take_the_max_never_the_sum() -> None:
+    """Regla explícita de la capa (igual que la estática): el score final
+    de un PR con varias dependencias es el MÁXIMO entre ellas, nunca la
+    suma -- aquí una típica inofensiva (10) junto a un typosquat real
+    (75) debe dar 75, no 85."""
+    layer = DepsLayer()
+    diff = _make_diff(
+        [
+            FileChange(
+                path="requirements.txt",
+                status=FileStatus.MODIFIED,
+                diff_hunk=(
+                    "@@ -1,0 +1,2 @@\n+some-new-pkg==1.0.0\n+1odash==4.17.21"
+                ),
+                additions=2,
+                deletions=0,
+            )
+        ]
+    )
+    res = layer.analyze(diff, {})
+    assert res.risk_score == 75
+    assert "some-new-pkg" in res.justification
+    assert "1odash" in res.justification
+    # Ambos paquetes generan su propio Finding -- no se descarta el que no
+    # disparó nada.
+    assert len(res.findings) == 2
+
+
+def test_finding_structure_for_malicious_signal() -> None:
+    """Comprueba los campos del `Finding` estructurado que consume el
+    ReportModal del dashboard, no solo el texto de la justificación."""
+    layer = DepsLayer()
+    diff = _make_diff(
+        [
+            FileChange(
+                path="src/deps/package.json",
+                status=FileStatus.MODIFIED,
+                diff_hunk='@@ -5,1 +5,2 @@\n "dependencies": {\n+  "1odash": "^4.17.21"\n }',
+                additions=1,
+                deletions=0,
+            )
+        ]
+    )
+    res = layer.analyze(diff, {})
+    assert len(res.findings) == 1
+    finding = res.findings[0]
+    assert finding.file_path == "src/deps/package.json"
+    assert finding.rule_id == "dependency-npm"
+    assert finding.severity == "error"  # score >= 60
+    assert finding.threat_nature == ThreatNature.MALICIOUS
+    assert res.threat_nature == ThreatNature.MALICIOUS
+
+
+def test_threat_nature_is_vulnerability_not_malicious_for_baseline_new_dependency() -> None:
+    """Una dependencia nueva sin ninguna señal de ataque sigue sin ser
+    'maliciosa' -- threat_nature debe quedar en VULNERABILITY (el valor
+    por defecto de Finding), no MALICIOUS."""
+    layer = DepsLayer()
+    diff = _make_diff(
+        [
+            FileChange(
+                path="requirements.txt",
+                status=FileStatus.MODIFIED,
+                diff_hunk="@@ -1,0 +1,1 @@\n+some-new-pkg==1.0.0",
+                additions=1,
+                deletions=0,
+            )
+        ]
+    )
+    res = layer.analyze(diff, {})
+    assert res.threat_nature == ThreatNature.VULNERABILITY
+    assert res.findings[0].severity == "warning"  # score < 60
+
+
+def test_confidence_levels_reachable_with_current_signal_scores() -> None:
+    """Los únicos scores por paquete que el código puede producir hoy son
+    0, 10, 75 y 80 (ver ramas A-D de analyze()) -- ALTA (>=70) y BAJA (>0,
+    <40) son alcanzables; la banda MEDIA (40-69) no lo es con las señales
+    actuales, así que no se prueba (documentado aquí para que quien añada
+    una señal nueva con score en ese rango sepa que antes era hueco
+    muerto)."""
+    layer = DepsLayer()
+
+    alta = layer.analyze(
+        _make_diff(
+            [
+                FileChange(
+                    path="package.json",
+                    status=FileStatus.MODIFIED,
+                    diff_hunk='@@ -5,1 +5,2 @@\n "dependencies": {\n+  "1odash": "^4.17.21"\n }',
+                    additions=1,
+                    deletions=0,
+                )
+            ]
+        ),
+        {},
+    )
+    assert alta.risk_score == 75
+    assert alta.confidence == Confidence.ALTA
+
+    baja = layer.analyze(
+        _make_diff(
+            [
+                FileChange(
+                    path="requirements.txt",
+                    status=FileStatus.MODIFIED,
+                    diff_hunk="@@ -1,0 +1,1 @@\n+some-new-pkg==1.0.0",
+                    additions=1,
+                    deletions=0,
+                )
+            ]
+        ),
+        {},
+    )
+    assert baja.risk_score == 10
+    assert baja.confidence == Confidence.BAJA
+
+    ninguna = layer.analyze(
+        _make_diff(
+            [
+                FileChange(
+                    path="src/main.py",
+                    status=FileStatus.MODIFIED,
+                    diff_hunk="@@ -1 +1 @@\n-print('hello')\n+print('world')",
+                    additions=1,
+                    deletions=1,
+                )
+            ]
+        ),
+        {},
+    )
+    assert ninguna.risk_score == 0
+    assert ninguna.confidence is None
