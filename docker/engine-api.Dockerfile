@@ -118,6 +118,18 @@ COPY --from=builder /app/README.md /app/README.md
 COPY --from=builder /app/pyproject.toml /app/pyproject.toml
 COPY --from=builder /app/alembic.ini /app/alembic.ini
 COPY --from=builder /app/alembic /app/alembic
+# datasets/ (referencia de typosquatting + ejemplos few-shot de la capa
+# semántica) -- bug real, reproducido en vivo: sin esto, DepsLayer.
+# TyposquatChecker (core/layers/deps_layer.py) resuelve su dataset_dir a
+# /app/datasets/typosquat_reference, que en este contenedor no existía --
+# TyposquatChecker._load_ecosystem() comprueba `filepath.exists()` antes de
+# leer, así que trata el directorio ausente como "sin listado de
+# referencia para este ecosistema" y sigue en silencio (sin excepción, sin
+# log): la detección de typosquatting/combosquatting queda desactivada sin
+# ningún aviso. Mismo problema para prompting.py::FEW_SHOT_DIR de la capa
+# semántica. Datos estáticos, no generados en el build -- se copian del
+# contexto directamente, no hace falta pasar por la etapa builder.
+COPY datasets ./datasets
 
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1
