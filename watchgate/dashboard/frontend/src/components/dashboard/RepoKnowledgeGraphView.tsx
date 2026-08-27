@@ -61,7 +61,14 @@ export function RepoKnowledgeGraphView({ repo }: { repo: string }) {
   function load() {
     void api
       .getKnowledgeGraph(repo)
-      .then(setGraph)
+      .then((g) => {
+        setGraph(g)
+        // Alguien puede llegar a esta vista con una reconstrucción ya en
+        // marcha (otra persona la lanzó, o esta misma sigue tras
+        // recargar la página) -- también hay que vigilarla hasta que
+        // termine, no solo cuando el botón se pulsa en esta sesión.
+        if (g.status === 'building') setWatching(true)
+      })
       .catch((err: unknown) => {
         toast.error(err instanceof Error ? err.message : 'Error')
       })
@@ -73,8 +80,30 @@ export function RepoKnowledgeGraphView({ repo }: { repo: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [repo])
 
+  // El resultado de la reconstrucción (éxito o el mensaje de error) no
+  // llega solo -- antes `load()` se llamaba una única vez justo al
+  // encolar, cuando el job de fondo casi nunca ha terminado todavía, y la
+  // vista se quedaba congelada ahí para siempre hasta que el usuario
+  // recargaba la página a mano (reproducido en vivo: el botón "encolaba"
+  // pero parecía no hacer nada). `watching` solo se activa tras pulsar
+  // "Reconstruir" -- sondear sin más en un repo que nunca se ha
+  // construido (status "pending" de toda la vida) gastaría peticiones
+  // para siempre sin motivo.
+  const [watching, setWatching] = useState(false)
+  useEffect(() => {
+    if (!watching) return
+    if (graph !== null && (graph.status === 'ready' || graph.status === 'error')) {
+      setWatching(false)
+      return
+    }
+    const timer = window.setInterval(load, 3000)
+    return () => window.clearInterval(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watching, graph?.status])
+
   async function handleRebuild() {
     setRebuilding(true)
+    setWatching(true)
     try {
       await api.rebuildKnowledgeGraph(repo)
       toast.success(t('repo.knowledgeGraph.rebuildQueued'))
