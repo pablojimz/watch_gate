@@ -394,8 +394,6 @@ export const api = {
     }),
   acceptScore: (scoreId: number) =>
     request<AcceptScoreOut>(`/scores/${scoreId}/accept`, { method: 'POST' }),
-  unacceptScore: (scoreId: number) =>
-    request<ScoreOut>(`/scores/${scoreId}/accept`, { method: 'DELETE' }),
   listRoles: () => request<RepoRole[]>('/admin/roles'),
   // Sin `monitor_type`: es informativo, solo de lectura (se resuelve en
   // el servidor a partir de MonitoredRepo, no algo que se pueda asignar
