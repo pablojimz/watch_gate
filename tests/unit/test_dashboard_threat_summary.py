@@ -110,6 +110,46 @@ def test_insert_aggregated_persists_justification_for_every_layer_not_only_seman
     )
 
 
+def test_insert_aggregated_persists_justification_for_dependencies_layer(
+    tmp_path: Path,
+) -> None:
+    """Bug real, reproducido en vivo: `DepsLayer.name` (core/layers/deps_
+    layer.py) es literalmente `"dependencies"`, así que esa es la clave
+    real en `AggregatedResult.layer_results` -- pero `_LAYER_COLS` (arriba
+    en db.py) usa `"deps"` como nombre canónico de esa misma capa para sus
+    columnas dedicadas (`deps_score`/`deps_skipped`). Antes del fix,
+    `_serialize_findings` guardaba el blob JSON bajo `"dependencies"` tal
+    cual, pero `_record_to_score_out` lo releía buscando `"deps"` -- un
+    fallo silencioso: nunca una excepción, solo `justification`/`findings`
+    vacíos SIEMPRE para esta capa en concreto (la única de las cinco cuyo
+    `layer_name` no coincide con su nombre canónico en `_LAYER_COLS`)."""
+    layers = {
+        "dependencies": LayerResult(
+            layer_name="dependencies",
+            risk_score=75,
+            justification="1odash@4.17.21 (npm): Posible typosquatting: imita a 'lodash'.",
+        ),
+    }
+    result = AggregatedResult(
+        score=75,
+        semaforo=Semaforo.ROJO,
+        layer_results=layers,
+        weights_used={"deps": 0.15},
+        pr_id="9",
+        repo="acme/payments-api",
+        timestamp="2026-08-13T00:00:00+00:00",
+    )
+    with database.db_session(tmp_path / "dashboard.db") as conn:
+        score_id = database.insert_aggregated(conn, result)
+        stored = database.get_score(conn, score_id)
+
+    assert stored is not None
+    assert stored.layer_results["deps"]["risk_score"] == 75
+    assert stored.layer_results["deps"]["justification"] == (
+        "1odash@4.17.21 (npm): Posible typosquatting: imita a 'lodash'."
+    )
+
+
 def test_insert_aggregated_defaults_threat_summary_and_static_threat_nature_to_empty(
     tmp_path: Path,
 ) -> None:
