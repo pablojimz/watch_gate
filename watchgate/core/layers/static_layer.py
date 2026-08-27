@@ -1065,7 +1065,7 @@ class StaticLayer(AnalysisLayer):
                     {
                         "tool": "semgrep",
                         "rule_id": rule_id,
-                        "message": extra.get("message", "Hallazgo estático detectado"),
+                        "message": extra.get("message", "Static finding detected"),
                         "line": finding.get("start", {}).get("line", 1),
                         "risk_score": risk_score,
                         "threat_nature": threat_nature,
@@ -1175,7 +1175,7 @@ class StaticLayer(AnalysisLayer):
             if not isinstance(risk_score, int):
                 risk_score = _YARA_DEFAULT_RISK_SCORE
             message = meta.get("risk_justification") or (
-                f"Coincidencia con la regla YARA '{match.rule}' (posible malware/webshell)."
+                f"Match for YARA rule '{match.rule}' (possible malware/webshell)."
             )
             results.append(
                 {
@@ -1348,7 +1348,7 @@ class StaticLayer(AnalysisLayer):
                         {
                             "tool": "heuristic_regex",
                             "rule_id": f"static.suspicious.{label}",
-                            "message": f"Patrón sospechoso detectado ({label}): {text[:80]}",
+                            "message": f"Suspicious pattern detected ({label}): {text[:80]}",
                             "line": line_idx,
                             "risk_score": 90,
                             "threat_nature": ThreatNature.MALICIOUS,
@@ -1396,14 +1396,14 @@ class StaticLayer(AnalysisLayer):
                 return LayerResult(
                     layer_name=self.name,
                     risk_score=0,
-                    justification="No se pudieron cargar las reglas de análisis estático.",
+                    justification="Could not load static analysis rules.",
                     skipped=True,
-                    skip_reason="Reglas Semgrep/YARA no disponibles",
+                    skip_reason="Semgrep/YARA rules unavailable",
                 )
             return LayerResult(
                 layer_name=self.name,
                 risk_score=0,
-                justification="No se encontraron hallazgos estáticos sospechosos.",
+                justification="No suspicious static findings were found.",
             )
 
         # Regla explícita de la spec §4: tomar el MÁXIMO, NUNCA SUMAR
@@ -1412,8 +1412,8 @@ class StaticLayer(AnalysisLayer):
         rules_str = ", ".join(rule_ids[:3])
 
         justification = (
-            f"Se encontraron {len(all_findings)} hallazgos estáticos con puntuación "
-            f"máxima de {max_risk_score} (reglas: {rules_str})."
+            f"Found {len(all_findings)} static findings with maximum score "
+            f"of {max_risk_score} (rules: {rules_str})."
         )
 
         category = RiskCategory.OFUSCACION if max_risk_score >= 50 else RiskCategory.NINGUNA
@@ -1426,10 +1426,10 @@ class StaticLayer(AnalysisLayer):
 
         structured_findings = [
             Finding(
-                file_path=f.get("file_path", "desconocido"),
+                file_path=f.get("file_path", "unknown"),
                 line=f.get("line"),
                 rule_id=f.get("rule_id", "static-finding"),
-                message=f.get("message", "Hallazgo estático"),
+                message=f.get("message", "Static finding"),
                 severity="error" if f.get("risk_score", 0) >= 50 else "warning",
                 threat_nature=f.get("threat_nature", ThreatNature.VULNERABILITY),
             )
