@@ -4,6 +4,7 @@ import { X } from 'lucide-react'
 import type { Finding, ScoreOut } from '@/api/client'
 import { RiskBadge } from '@/components/dashboard/RiskBadge'
 import { ThreatNatureTag, ThreatSummaryBadges } from '@/components/dashboard/ThreatBadges'
+import { layerRiskColor } from '@/lib/utils'
 
 function FindingRow({ finding }: { finding: Finding }) {
   const { t } = useTranslation()
@@ -84,8 +85,19 @@ export function ReportModal({
                     </span>
                     {layer.threat_nature ? <ThreatNatureTag nature={layer.threat_nature} /> : null}
                   </div>
-                  <span className="text-sm font-mono text-muted-foreground">
-                    {layer.skipped ? t('repo.skipped') : `${layer.risk_score}/100`}
+                  <span className="flex items-center gap-1.5 text-sm font-mono text-muted-foreground">
+                    {layer.skipped ? (
+                      t('repo.skipped')
+                    ) : (
+                      <>
+                        <span
+                          className="size-2 shrink-0 rounded-full"
+                          style={{ background: layerRiskColor(layer.risk_score) }}
+                          aria-hidden="true"
+                        />
+                        {layer.risk_score}/100
+                      </>
+                    )}
                   </span>
                 </div>
                 {t(`layerExplanations.${layer.layer_name}`, { defaultValue: '' }) ? (
