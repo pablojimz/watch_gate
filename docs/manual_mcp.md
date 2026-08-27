@@ -27,7 +27,7 @@ El servidor implementa el estándar **Model Context Protocol (MCP) v1.0** median
 +-------------------------------------------------------------------------------+
 |  Herramientas Expuestas:                                                      |
 |   1. watchgate_analyze_diff  -> Análisis completo multi-capa                  |
-|   2. watchgate_precheck      -> Evaluación determinista rápida (<100ms)       |
+|   2. watchgate_precheck      -> Evaluación determinista, sin LLM (segundos)   |
 |   3. watchgate_explain_risk  -> Desglose explicativo de hallazgos             |
 |   4. watchgate_verify_fix    -> Verificación comparativa de parches           |
 |   5. watchgate_query_threat_kb -> Búsqueda vectorial en corpus RAG            |
@@ -49,11 +49,11 @@ Realiza un análisis completo de riesgo sobre un parche unificado o diff de Git.
 * **Retorno**: JSON con `analysis` (`AggregatedResult`) y `guidance` (`AgentGuidance`).
 
 ### 2. `watchgate_precheck`
-Evaluación determinista ultrarrápida (<100ms) ejecutando únicamente las capas estática, dependencias y reputación. Cero consumo de tokens LLM.
+Evaluación determinista ejecutando únicamente las capas estática, dependencias y reputación -- sin LLM, cero consumo de tokens. No es instantánea: el análisis estático (Semgrep) recompila su catálogo de reglas en cada invocación, así que puede tardar varios segundos (no milisegundos), sobre todo con diffs que tocan varios lenguajes distintos. Sigue siendo bastante más rápida que `watchgate_analyze_diff` (que además evalúa con LLM/RAG) y evita su coste de tokens, pero no está pensada para bloquear la edición en tiempo real esperando una respuesta bajo 100ms.
 * **Parámetros**:
   * `diff_text` (*string*, requerido): Texto del parche unificado.
   * `repo_path` (*string*, default `"."`): Ruta al repositorio local.
-* **Retorno**: Resultado determinista rápido con respuesta para iteraciones en caliente durante edición de código.
+* **Retorno**: Resultado determinista, más barato en tiempo/coste que el análisis completo, para iteraciones sin depender de un LLM.
 
 ### 3. `watchgate_explain_risk`
 Genera un desglose detallado en prosa técnica estructurada para que el agente entienda las razones del semáforo asignado.

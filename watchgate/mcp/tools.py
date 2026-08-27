@@ -64,16 +64,21 @@ TOOLS: list[McpToolDefinition] = [
     McpToolDefinition(
         name="watchgate_precheck",
         description=(
-            "Evaluación ultrarrápida (<100ms) de riesgo utilizando únicamente capas deterministas "
-            "(análisis estático, dependencias, reputación). Cero consumo de tokens LLM. "
-            "Ideal para verificaciones instantáneas durante la edición de código."
+            "Evaluación de riesgo utilizando únicamente capas deterministas (análisis estático, "
+            "dependencias, reputación) -- sin LLM, cero consumo de tokens. No es instantánea: "
+            "el análisis estático (Semgrep) recompila su catálogo de reglas en cada invocación, "
+            "así que puede tardar varios segundos (no milisegundos), sobre todo si el diff toca "
+            "varios lenguajes distintos. Sigue siendo bastante más rápida que "
+            "watchgate_analyze_diff (que además incluye evaluación semántica con LLM/RAG) y evita "
+            "su coste de tokens, pero no es adecuada para bloquear la edición en tiempo real "
+            "esperando una respuesta bajo 100ms."
         ),
         inputSchema=McpToolParameterSchema(
             type="object",
             properties={
                 "diff_text": {
                     "type": "string",
-                    "description": "Texto del parche unificado a evaluar rápidamente.",
+                    "description": "Texto del parche unificado a evaluar.",
                 },
                 "repo_path": {
                     "type": "string",
@@ -333,14 +338,20 @@ def _handle_precheck(args: dict[str, Any]) -> McpToolCallResult:
     cfg_dict = base_config.model_dump()
     weights = dict(cfg_dict.get("weights", {}))
     weights["semantic"] = 0.0
-    # Auditoría: la descripción de esta tool promete "<100ms", "únicamente
-    # capas deterministas (estático, dependencias, reputación)" y "cero
-    # consumo de tokens LLM" -- pero solo ponía a 0 el peso de `semantic`.
-    # `vulnerabilities` (ni siquiera nombrada en esa lista) se quedaba con
-    # su peso normal y SÍ hace una llamada de red real a OSV.dev: probado
-    # en vivo con un diff que solo toca requirements.txt, 26.8s de verdad
-    # en vez de <100ms -- justo lo contrario de para lo que existe esta
-    # tool (ya está `watchgate_analyze_diff` para el análisis completo).
+    # Auditoría: la descripción original de esta tool prometía "<100ms" y
+    # "únicamente capas deterministas (estático, dependencias, reputación)"
+    # -- pero solo ponía a 0 el peso de `semantic`. `vulnerabilities` (ni
+    # siquiera nombrada en esa lista) se quedaba con su peso normal y SÍ
+    # hace una llamada de red real a OSV.dev: probado en vivo con un diff
+    # que solo toca requirements.txt, 26.8s de verdad. Arreglado aquí. La
+    # descripción se revisó después para dejar de prometer "<100ms" del
+    # todo -- ver más abajo, el análisis estático (Semgrep) tampoco es
+    # instantáneo (recompila reglas en cada invocación, investigado a
+    # fondo un proceso persistente para arreglar eso, descartado por
+    # riesgo real de falsos negativos silenciosos, ver historial). Esto
+    # deja `vulnerabilities` fuera igualmente: sigue sin ser determinista
+    # ni gratis en tiempo (llamada de red), y sigue sin estar en la lista
+    # de capas que la tool promete usar.
     weights["vulnerabilities"] = 0.0
     cfg_dict["weights"] = weights
     fast_config = WatchGateConfig(**cfg_dict)
@@ -355,14 +366,14 @@ def _handle_precheck(args: dict[str, Any]) -> McpToolCallResult:
         risk_score=0,
         justification="",
         skipped=True,
-        skip_reason="Deshabilitada para precheck ultrarrápido",
+        skip_reason="Deshabilitada en precheck (no determinista/no gratis en tiempo)",
     )
     updated_layer_results["vulnerabilities"] = LayerResult(
         layer_name="vulnerabilities",
         risk_score=0,
         justification="",
         skipped=True,
-        skip_reason="Deshabilitada para precheck ultrarrápido (requiere red, no es determinista)",
+        skip_reason="Deshabilitada en precheck (requiere red, no es determinista)",
     )
     analysis_res = analysis_res.model_copy(update={"layer_results": updated_layer_results})
 
