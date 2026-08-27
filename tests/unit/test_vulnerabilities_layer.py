@@ -14,6 +14,7 @@ from watchgate.core.layers.base import LAYER_REGISTRY
 from watchgate.core.layers.vulnerabilities_layer import (
     OSVCache,
     VulnerabilitiesLayer,
+    _cvss3_base_score,
     _is_high_or_critical_vuln,
 )
 from watchgate.core.models import CommitAuthor, FileChange, FileStatus, NormalizedDiff
@@ -228,3 +229,121 @@ def test_dependency_change_without_name_is_skipped() -> None:
     res = layer.analyze(diff, {})
     assert res.risk_score == 0
     assert "no hay dependencias nuevas" in res.justification.lower()
+
+
+# --- Auditoría: _is_high_or_critical_vuln leía severity[].score como si
+# fuera un número o "HIGH"/"CRITICAL" en texto -- en la API real de OSV ese
+# campo es SIEMPRE un vector CVSS ("CVSS:3.1/AV:N/..."), así que ese código
+# nunca acertaba fuera de `database_specific`/`ecosystem_specific`
+# (ausentes, p. ej., en avisos PyPI/PySec sin origen GitHub). Vectores y
+# scores esperados a continuación confirmados contra la API real de OSV.dev
+# (lodash 4.17.15, GHSA-35jh-r3h4-6jhm / GHSA-p6mc-m468-83gw).
+
+
+def test_cvss3_base_score_matches_published_nvd_scores() -> None:
+    assert _cvss3_base_score("CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:U/C:H/I:H/A:H") == 7.2
+    assert _cvss3_base_score("CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:H/A:H") == 7.4
+    assert _cvss3_base_score("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L") == 5.3
+
+
+def test_cvss3_base_score_none_for_non_v3_or_incomplete_vectors() -> None:
+    assert _cvss3_base_score("AV:N/AC:L/Au:N/C:C/I:C/A:C") is None  # CVSS v2, sin prefijo v3
+    assert _cvss3_base_score("CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H") is None
+    assert _cvss3_base_score("CVSS:3.1/AV:N/AC:L") is None  # métricas obligatorias ausentes
+    assert _cvss3_base_score("") is None
+
+
+def test_is_high_or_critical_vuln_detects_high_from_cvss_vector_alone() -> None:
+    """Sin database_specific/ecosystem_specific (avisos no-GitHub), el
+    vector CVSS del campo estándar debe ser suficiente por sí solo."""
+    vuln = {
+        "id": "GHSA-35jh-r3h4-6jhm",
+        "severity": [{"type": "CVSS_V3", "score": "CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:U/C:H/I:H/A:H"}],
+    }
+    assert _is_high_or_critical_vuln(vuln) is True
+
+
+def test_is_high_or_critical_vuln_false_for_advisory_with_no_severity_data_anywhere() -> None:
+    """Caso real encontrado en auditoría: PYSEC-2021-142 (RCE conocido en
+    PyYAML) no trae `severity`, `database_specific` ni `ecosystem_specific`
+    -- debe degradar a False sin lanzar excepción, no asumir el peor caso
+    (eso lo cubre igualmente el umbral de acumulación >= 5 vulns en analyze())."""
+    assert _is_high_or_critical_vuln({"id": "PYSEC-2021-142"}) is False
+
+
+def test_batch_truncation_marks_excess_dependencies_unverified_not_clean() -> None:
+    """Auditoría: los paquetes que exceden max_osv_queries puntuaban 0,
+    indistinguible de "revisado, sin vulnerabilidades" en el score
+    agregado. Ahora deben aparecer como finding de "no verificado", no
+    desaparecer silenciosamente."""
+    layer = VulnerabilitiesLayer(cache_db_path=":memory:", max_osv_queries=1)
+    c1 = DependencyChange(ecosystem="PyPI", name="pkg1", new_version="1.0")
+    c2 = DependencyChange(ecosystem="PyPI", name="pkg2", new_version="2.0")
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {"results": [{"vulns": []}]}
+
+    with patch("httpx.post", return_value=mock_resp):
+        batch = layer._query_osv_batch([c1, c2])
+
+    assert batch[0] == ({"vulns": []}, None)
+    assert batch[1][0] is None
+    assert batch[1][1] is not None and "límite" in batch[1][1]
+
+    diff = _make_diff(
+        [
+            FileChange(
+                path="requirements.txt",
+                status=FileStatus.MODIFIED,
+                diff_hunk="@@ -1,0 +1,2 @@\n+pkg1==1.0\n+pkg2==2.0",
+                additions=2,
+                deletions=0,
+            )
+        ]
+    )
+    with patch.object(layer, "_query_osv_batch", return_value=batch):
+        res = layer.analyze(diff, {})
+
+    unverified = [f for f in res.findings if f.rule_id == "vulnerability-unverified-pypi"]
+    assert len(unverified) == 1
+    assert "pkg2" in unverified[0].message
+
+
+def test_incomplete_batch_response_marks_missing_indices_unverified() -> None:
+    """Auditoría: si OSV responde 200 OK pero con menos resultados de los
+    pedidos (sin lanzar excepción), el índice sobrante caía en
+    `.get(idx, (None, None))` -> se leía como "sin vulnerabilidades"
+    en vez de "no verificable"."""
+    layer = VulnerabilitiesLayer(cache_db_path=":memory:")
+    c1 = DependencyChange(ecosystem="PyPI", name="pkg1", new_version="1.0")
+    c2 = DependencyChange(ecosystem="PyPI", name="pkg2", new_version="2.0")
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    # Solo 1 resultado para 2 queries enviadas.
+    mock_resp.json.return_value = {"results": [{"vulns": []}]}
+
+    with patch("httpx.post", return_value=mock_resp):
+        batch = layer._query_osv_batch([c1, c2])
+
+    assert batch[0] == ({"vulns": []}, None)
+    assert 1 not in batch  # el índice sin respuesta no debe fingir estar limpio
+
+    diff = _make_diff(
+        [
+            FileChange(
+                path="requirements.txt",
+                status=FileStatus.MODIFIED,
+                diff_hunk="@@ -1,0 +1,2 @@\n+pkg1==1.0\n+pkg2==2.0",
+                additions=2,
+                deletions=0,
+            )
+        ]
+    )
+    with patch.object(layer, "_query_osv_batch", return_value=batch):
+        res = layer.analyze(diff, {})
+
+    unverified = [f for f in res.findings if f.rule_id == "vulnerability-unverified-pypi"]
+    assert len(unverified) == 1
+    assert "pkg2" in unverified[0].message

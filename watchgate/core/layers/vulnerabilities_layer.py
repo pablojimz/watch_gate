@@ -53,7 +53,14 @@ logger = logging.getLogger("watchgate.vulnerabilities")
 _OSV_API_URL = "https://api.osv.dev/v1/query"
 _OSV_QUERYBATCH_URL = "https://api.osv.dev/v1/querybatch"
 _CACHE_TTL_HOURS = 24
-_HARD_MAX_BATCH_SIZE = 20
+# OSV no documenta un tope de tamaño de lote en /v1/querybatch (probado en
+# vivo con 60 consultas en una sola llamada, sin problema); 20 era un límite
+# autoimpuesto sin motivo real que además se aplicaba SIEMPRE, ignorando
+# cualquier valor mayor que un admin configurase vía policy
+# (max_dependency_checks) -- ver auditoría. 200 sigue acotado (payload/
+# timeout razonables) pero dejar de recortar en silencio configuraciones
+# explícitas.
+_HARD_MAX_BATCH_SIZE = 200
 
 
 class _OSVCacheBase(DeclarativeBase):
@@ -215,6 +222,69 @@ class OSVCache:
             self._engine = None
 
 
+_CVSS3_WEIGHTS_CIA = {"N": 0.0, "L": 0.22, "H": 0.56}
+_CVSS3_WEIGHTS_AV = {"N": 0.85, "A": 0.62, "L": 0.55, "P": 0.2}
+_CVSS3_WEIGHTS_AC = {"L": 0.77, "H": 0.44}
+_CVSS3_WEIGHTS_PR_UNCHANGED = {"N": 0.85, "L": 0.62, "H": 0.27}
+_CVSS3_WEIGHTS_PR_CHANGED = {"N": 0.85, "L": 0.68, "H": 0.5}
+_CVSS3_WEIGHTS_UI = {"N": 0.85, "R": 0.62}
+
+
+def _cvss_roundup(value: float) -> float:
+    """Redondeo "hacia arriba" de la spec CVSS -- un `round()` normal usa
+    redondeo bancario y da resultados distintos de los publicados (p.ej.
+    4.02 debe dar 4.1, no 4.0); el truco de enteros es el que usa la
+    calculadora oficial de FIRST.org para evitar el error de coma
+    flotante."""
+    int_value = int(round(value * 100000))
+    if int_value % 10000 == 0:
+        return int_value / 100000
+    return (int_value // 10000 + 1) / 10
+
+
+def _cvss3_base_score(vector: str) -> float | None:
+    """Calcula el Base Score de un vector CVSS v3.0/3.1 con la fórmula
+    oficial (FIRST.org). OSV solo expone el vector en `severity[].score`
+    (p.ej. "CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:U/C:H/I:H/A:H"), nunca un número
+    ni la palabra "HIGH"/"CRITICAL" -- sin parsearlo de verdad, esta es la
+    única fuente de severidad para avisos que no traen
+    `database_specific`/`ecosystem_specific` (frecuente fuera de GitHub
+    Security Advisories, p.ej. PyPI/PySec). Devuelve None si el vector no
+    es CVSS v3 o le falta alguna métrica obligatoria."""
+    if not vector.startswith("CVSS:3."):
+        return None
+    metrics: dict[str, str] = {}
+    for part in vector.split("/"):
+        if ":" not in part:
+            continue
+        key, _, value = part.partition(":")
+        metrics[key] = value
+
+    try:
+        av = _CVSS3_WEIGHTS_AV[metrics["AV"]]
+        ac = _CVSS3_WEIGHTS_AC[metrics["AC"]]
+        ui = _CVSS3_WEIGHTS_UI[metrics["UI"]]
+        scope_changed = metrics["S"] == "C"
+        pr_table = _CVSS3_WEIGHTS_PR_CHANGED if scope_changed else _CVSS3_WEIGHTS_PR_UNCHANGED
+        pr = pr_table[metrics["PR"]]
+        c = _CVSS3_WEIGHTS_CIA[metrics["C"]]
+        i = _CVSS3_WEIGHTS_CIA[metrics["I"]]
+        a = _CVSS3_WEIGHTS_CIA[metrics["A"]]
+    except KeyError:
+        return None
+
+    iss = 1 - ((1 - c) * (1 - i) * (1 - a))
+    if iss <= 0:
+        return 0.0
+    impact = 7.52 * (iss - 0.029) - 3.25 * (iss - 0.02) ** 15 if scope_changed else 6.42 * iss
+    if impact <= 0:
+        return 0.0
+
+    exploitability = 8.22 * av * ac * pr * ui
+    raw = (impact + exploitability) * (1.08 if scope_changed else 1.0)
+    return _cvss_roundup(min(raw, 10.0))
+
+
 def _is_high_or_critical_vuln(vuln: dict[str, Any]) -> bool:
     """Evalúa si una vulnerabilidad de OSV es de severidad ALTA o CRÍTICA.
 
@@ -246,14 +316,17 @@ def _is_high_or_critical_vuln(vuln: dict[str, Any]) -> bool:
     for s_entry in vuln.get("severity", []):
         if not isinstance(s_entry, dict):
             continue
-        score_val = str(s_entry.get("score", "")).upper()
-        if "CRITICAL" in score_val or "HIGH" in score_val:
+        vector = s_entry.get("score")
+        # Campo estándar de OSV (`severity[].score`): SIEMPRE un vector CVSS
+        # ("CVSS:3.1/AV:N/..."), nunca un número ni "HIGH"/"CRITICAL" en
+        # texto -- confirmado en vivo contra la API real de OSV. Un
+        # `float()`/substring sobre esto nunca acierta; hay que calcular el
+        # base score de verdad.
+        if not isinstance(vector, str):
+            continue
+        base_score = _cvss3_base_score(vector)
+        if base_score is not None and base_score >= 7.0:
             return True
-        try:
-            if float(score_val) >= 7.0:
-                return True
-        except ValueError:
-            pass
 
     return False
 
@@ -388,10 +461,20 @@ class VulnerabilitiesLayer(AnalysisLayer):
         for idx, change in enumerate(named_changes):
             pkg_score = 0
             note = "Sin vulnerabilidades conocidas en OSV."
+            unverified = False
 
-            osv_res, osv_err = osv_batch_results.get(idx, (None, None))
+            # Default explícito distinto de "sin vulnerabilidades": un
+            # índice que falte aquí (p.ej. OSV devolvió menos resultados de
+            # los pedidos en el batch, sin lanzar excepción) antes se leía
+            # como "no verificable" indistinguible de "revisado y limpio"
+            # -- ver auditoría. Ahora ese hueco también cuenta como no
+            # verificado en vez de asumir que está limpio.
+            osv_res, osv_err = osv_batch_results.get(
+                idx, (None, "Respuesta de OSV incompleta para esta dependencia")
+            )
             if osv_err:
                 note = osv_err
+                unverified = True
             elif osv_res and osv_res.get("vulns"):
                 vulns = osv_res["vulns"]
                 has_high_crit = any(_is_high_or_critical_vuln(v) for v in vulns)
@@ -414,6 +497,20 @@ class VulnerabilitiesLayer(AnalysisLayer):
                         rule_id=f"vulnerability-{change.ecosystem.lower()}",
                         message=f"{change.name}{version_str}: {note}",
                         severity="error" if pkg_score >= 60 else "warning",
+                    )
+                )
+            elif unverified:
+                # No es "sin vulnerabilidades", es "no lo sabemos" -- visible
+                # como finding propio (antes solo vivía enterrado en la
+                # justificación conjunta, sin afectar el score ni aparecer
+                # como algo a revisar aparte).
+                m_path = change.manifest_path if change.manifest_path else change.name
+                structured_findings.append(
+                    Finding(
+                        file_path=m_path,
+                        rule_id=f"vulnerability-unverified-{change.ecosystem.lower()}",
+                        message=f"{change.name}{version_str}: {note}",
+                        severity="warning",
                     )
                 )
 
