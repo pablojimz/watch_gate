@@ -36,8 +36,13 @@ export default defineConfig({
       interval: process.env.VITE_USE_POLLING === '1' ? 1000 : undefined,
     },
     proxy: {
-      // Prefijo /api para no chocar con rutas SPA (/repos, /admin, /login).
-      '/api': {
+      // Prefijo /api/ (CON la barra) para no chocar con rutas SPA que
+      // empiezan por las mismas letras -- '/api' a secas hacía match por
+      // simple prefijo (Vite: `url.startsWith(key)`), así que /api-keys
+      // (ruta real de la SPA, ver App.tsx) también caía aquí: navegar
+      // directo a esa URL (o recargar estando en ella) devolvía el 404
+      // JSON del backend en vez de la página. Reproducido en vivo.
+      '/api/': {
         // Configurable para poder apuntar al servicio de Docker
         // (`dashboard-backend`) en vez de `127.0.0.1` cuando Vite corre
         // DENTRO de un contenedor -- ahí `127.0.0.1` es el propio
