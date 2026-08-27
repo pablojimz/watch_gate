@@ -4,28 +4,15 @@ import { X } from 'lucide-react'
 import type { Finding, ScoreOut } from '@/api/client'
 import { RiskBadge } from '@/components/dashboard/RiskBadge'
 import { ThreatNatureTag, ThreatSummaryBadges } from '@/components/dashboard/ThreatBadges'
-import { cn } from '@/lib/utils'
 
 function FindingRow({ finding }: { finding: Finding }) {
   const { t } = useTranslation()
   return (
     <div className="rounded-md border bg-background p-2.5 text-xs">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center gap-2">
         <span className="truncate font-mono text-muted-foreground">
           {finding.file_path}
           {finding.line ? `:${finding.line}` : ''}
-        </span>
-        <span
-          className={cn(
-            'shrink-0 rounded px-1.5 py-0.5 font-medium',
-            finding.severity === 'error'
-              ? 'bg-destructive/15 text-destructive'
-              : finding.severity === 'warning'
-                ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
-                : 'bg-muted text-muted-foreground',
-          )}
-        >
-          {finding.rule_id}
         </span>
       </div>
       <p className="mt-1.5 text-foreground">{finding.message}</p>
