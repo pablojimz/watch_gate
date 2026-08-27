@@ -180,12 +180,142 @@ def test_mantenedor_can_accept_and_unaccept_score(client: TestClient) -> None:
     body = accepted.json()
     assert body["accepted_by"] == "maint"
     assert body["accepted_at"] is not None
+    # "acme/payments-api" no tiene MonitoredRepo/VCSConnection en la
+    # Engine DB de este test -- nada que mergear, mismo comportamiento
+    # que antes de añadir el merge automático al aceptar.
+    assert body["merge_attempted"] is False
+    assert body["merged"] is None
 
     cleared = client.delete("/api/scores/1/accept")
     assert cleared.status_code == 200, cleared.text
     body = cleared.json()
     assert body["accepted_by"] is None
     assert body["accepted_at"] is None
+
+
+def _add_monitored_repo_with_connection(repo_path: str, access_token: str) -> None:
+    """Crea MonitoredRepo + VCSConnection reales en la Engine DB (motor
+    aislado de este test, ver `_isolate_db_connection_engine`) -- crea las
+    tablas primero porque el fixture `client` no las migra (solo usa la
+    Engine DB para roles/settings, nunca para MonitoredRepo en los tests
+    de este fichero antes de esto)."""
+    import watchgate.db.crypto
+    from cryptography.fernet import Fernet
+    from sqlmodel import Session
+
+    from watchgate.db.connection import SQLModel
+    from watchgate.db.models import MonitoredRepo, Organization, VCSConnection
+
+    # VCSConnection.access_token es EncryptedString -- necesita una clave
+    # Fernet configurada, igual que en test_repos_scan.py.
+    watchgate.db.crypto._fernet = Fernet("1Vn6eB6nE7xO4yH0JkL4A-9tN1X5mK3bH2P8gV0zM8I=")
+
+    engine = db_connection.default_engine
+    SQLModel.metadata.create_all(engine)
+    with Session(engine) as session:
+        org = Organization(id="org-merge-test", name="Org Merge Test")
+        session.add(org)
+        vcs = VCSConnection(id="vcs-merge-test", org_id=org.id, access_token=access_token)
+        session.add(vcs)
+        session.add(
+            MonitoredRepo(
+                id="repo-merge-test",
+                org_id=org.id,
+                vcs_connection_id=vcs.id,
+                repo_path=repo_path,
+                monitor_type="managed",
+            )
+        )
+        session.commit()
+
+
+def test_accept_score_merges_real_pr_when_repo_has_github_connection(
+    client: TestClient,
+) -> None:
+    """Repo con VCSConnection real + PR numérico -- accept_score debe
+    intentar el merge de verdad (mockeando solo la llamada HTTP a GitHub,
+    no la resolución de credenciales)."""
+    from unittest.mock import patch
+
+    from watchgate.core.models import AggregatedResult, Semaforo
+    from watchgate.dashboard.backend import db as database
+
+    _add_monitored_repo_with_connection("acme/merge-repo", access_token="tok_merge_test")
+
+    with database.db_session() as conn:
+        score_id = database.insert_aggregated(
+            conn,
+            AggregatedResult(
+                score=80,
+                semaforo=Semaforo.ROJO,
+                layer_results={},
+                weights_used={},
+                pr_id="7",
+                repo="acme/merge-repo",
+                timestamp="2026-08-27T12:00:00+00:00",
+            ),
+        )
+        database.upsert_role(conn, "maint", "acme/merge-repo", "mantenedor")
+
+    _login(client, "maint", "mantenedor")
+
+    with patch(
+        "watchgate.dashboard.backend.routers.feedback.GitHubClient.merge_pull_request",
+        return_value={"merged": True},
+    ) as mock_merge:
+        response = client.post(f"/api/scores/{score_id}/accept")
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["accepted_by"] == "maint"
+    assert body["merge_attempted"] is True
+    assert body["merged"] is True
+    assert body["merge_message"] is None
+    mock_merge.assert_called_once_with("acme", "merge-repo", 7)
+
+
+def test_accept_score_reports_merge_failure_without_losing_acceptance(
+    client: TestClient,
+) -> None:
+    """Si GitHub rechaza el merge (rama protegida, conflictos...), el
+    accept en sí sigue quedando registrado -- solo se reporta el fallo."""
+    from unittest.mock import patch
+
+    from watchgate.core.models import AggregatedResult, Semaforo
+    from watchgate.dashboard.backend import db as database
+
+    _add_monitored_repo_with_connection("acme/merge-fail-repo", access_token="tok_merge_test")
+
+    with database.db_session() as conn:
+        score_id = database.insert_aggregated(
+            conn,
+            AggregatedResult(
+                score=80,
+                semaforo=Semaforo.ROJO,
+                layer_results={},
+                weights_used={},
+                pr_id="9",
+                repo="acme/merge-fail-repo",
+                timestamp="2026-08-27T12:00:00+00:00",
+            ),
+        )
+        database.upsert_role(conn, "maint", "acme/merge-fail-repo", "mantenedor")
+
+    _login(client, "maint", "mantenedor")
+
+    with patch(
+        "watchgate.dashboard.backend.routers.feedback.GitHubClient.merge_pull_request",
+        side_effect=RuntimeError("405 Method Not Allowed"),
+    ):
+        response = client.post(f"/api/scores/{score_id}/accept")
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    # La aceptación humana queda registrada aunque el merge fallase.
+    assert body["accepted_by"] == "maint"
+    assert body["merge_attempted"] is True
+    assert body["merged"] is False
+    assert body["merge_message"]
 
 
 def test_admin_can_manage_roles_and_settings(client: TestClient) -> None:

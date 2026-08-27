@@ -8,9 +8,11 @@ from typing import Annotated, cast
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlmodel import Session, select
 
+from watchgate.adapters.github_client import GitHubClient
 from watchgate.dashboard.backend import db as database
 from watchgate.dashboard.backend.auth import CurrentUser, require_role
 from watchgate.dashboard.backend.schemas import (
+    AcceptScoreOut,
     DashboardUserCreate,
     DashboardUserOut,
     FeedbackIn,
@@ -21,7 +23,7 @@ from watchgate.dashboard.backend.schemas import (
     normalize_login,
 )
 from watchgate.db.connection import get_db_session
-from watchgate.db.models import MonitoredRepo
+from watchgate.db.models import MonitoredRepo, VCSConnection
 
 router = APIRouter(tags=["feedback"])
 
@@ -87,10 +89,106 @@ def submit_feedback(
     return updated
 
 
-@router.post("/scores/{score_id}/accept", response_model=ScoreOut)
-def accept_score(score_id: int, request: Request, user: CurrentUser) -> ScoreOut:
+def _resolve_merge_client(
+    engine_session: Session, repo_path: str
+) -> tuple[GitHubClient, str] | None:
+    """`None` si `repo_path` no tiene una `VCSConnection` real guardada
+    (score ingerido solo vía `POST /scores` desde CI genérico, sin App/PAT
+    conectado) o si esa conexión no tiene ningún token utilizable -- en
+    ambos casos no hay nada que mergear de forma segura. Deliberadamente
+    NO cae a `WATCHGATE_GITHUB_TOKEN`/`GITHUB_TOKEN` de entorno (a
+    diferencia de `resolve_github_credentials`, pensado para lecturas):
+    mergear un PR es una acción mutante y de alto impacto, así que solo se
+    dispara con una credencial explícitamente atada a ESTE repo, nunca con
+    un token ambiental que puede no tener nada que ver con la conexión que
+    el usuario configuró en WatchGate.
+
+    Envuelto en un `try` propio (no solo el de `_try_merge_pull_request`,
+    que cubre la llamada HTTP a GitHub): un despliegue del dashboard sin
+    la Engine DB migrada (solo ingesta vía `POST /scores`, sin
+    `monitored_repos`/`vcs_connections` creadas) debe tratarse igual que
+    "no hay conexión guardada", no reventar la aceptación con un
+    `OperationalError`."""
+    try:
+        repo = engine_session.exec(
+            select(MonitoredRepo).where(MonitoredRepo.repo_path == repo_path)
+        ).first()
+        if not repo or not repo.vcs_connection_id:
+            return None
+        vcs = engine_session.get(VCSConnection, repo.vcs_connection_id)
+    except Exception:  # noqa: BLE001 -- ver docstring
+        logger.warning(
+            "No se pudo consultar la Engine DB para resolver credenciales de merge de %s",
+            repo_path,
+            exc_info=True,
+        )
+        return None
+    if not vcs:
+        return None
+
+    token: str | None = None
+    if vcs.installation_id:
+        from watchgate.adapters.github_app import get_installation_token, github_app_configured
+
+        if github_app_configured():
+            token = get_installation_token(vcs.installation_id)
+    if not token:
+        token = vcs.access_token
+    if not token:
+        return None
+    return GitHubClient(token), "https://api.github.com"
+
+
+def _try_merge_pull_request(
+    engine_session: Session, repo_path: str, pr_id: str
+) -> dict[str, object]:
+    """Intenta mergear el PR real en GitHub tras aceptarlo -- ver
+    `accept_score`. Devuelve los campos extra de `AcceptScoreOut`
+    (`merge_attempted`/`merged`/`merge_message`); nunca lanza -- un fallo
+    de merge (rama protegida, checks pendientes, conflictos, PR ya
+    cerrado) no debe impedir que la aceptación humana quede registrada,
+    solo se reporta para que el frontend lo muestre."""
+    if not pr_id.isdigit():
+        # pr_id="main" (escaneo de rama principal), "local-push" (hook
+        # pre-push local) o cualquier otro identificador que no sea un
+        # número de PR real de GitHub -- no hay nada que mergear.
+        return {"merge_attempted": False, "merged": None, "merge_message": None}
+
+    resolved = _resolve_merge_client(engine_session, repo_path)
+    if resolved is None:
+        return {"merge_attempted": False, "merged": None, "merge_message": None}
+    client, _api_url = resolved
+
+    try:
+        owner, repo_name = repo_path.split("/", 1)
+        client.merge_pull_request(owner, repo_name, int(pr_id))
+    except Exception as exc:  # noqa: BLE001 -- best-effort, ver docstring
+        logger.warning(
+            "No se pudo mergear %s#%s tras aceptarlo en el dashboard: %r", repo_path, pr_id, exc
+        )
+        return {
+            "merge_attempted": True,
+            "merged": False,
+            "merge_message": (
+                "No se pudo mergear en GitHub (rama protegida, checks pendientes, "
+                "conflictos, o el PR ya no está abierto). El PR sigue quedando "
+                "marcado como aceptado."
+            ),
+        }
+    return {"merge_attempted": True, "merged": True, "merge_message": None}
+
+
+@router.post("/scores/{score_id}/accept", response_model=AcceptScoreOut)
+def accept_score(
+    score_id: int, request: Request, user: CurrentUser, engine_session: EngineDBSession
+) -> AcceptScoreOut:
     """Gate de aprobación manual: registra que `user` revisó este PR
-    amarillo/rojo y decide seguir adelante a sabiendas del riesgo."""
+    amarillo/rojo y decide seguir adelante a sabiendas del riesgo -- y, si
+    el repo tiene una conexión real de GitHub guardada y el PR es real
+    (no un escaneo de rama principal ni un análisis de hook local), lo
+    mergea de verdad en GitHub. Antes "Aceptar" solo dejaba constancia en
+    la BD del dashboard sin tocar GitHub para nada -- confuso para quien
+    esperaba que aceptar un PR de riesgo lo mergeara de una vez."""
     with database.db_session() as conn:
         existing = database.get_score(conn, score_id)
         if existing is None:
@@ -99,7 +197,9 @@ def accept_score(score_id: int, request: Request, user: CurrentUser) -> ScoreOut
         updated = database.set_accepted(conn, score_id, user.login)
     if updated is None:
         raise HTTPException(status_code=404, detail="Score no encontrado")
-    return updated
+
+    merge_result = _try_merge_pull_request(engine_session, updated.repo, updated.pr_id)
+    return AcceptScoreOut(**updated.model_dump(), **merge_result)
 
 
 @router.delete("/scores/{score_id}/accept", response_model=ScoreOut)

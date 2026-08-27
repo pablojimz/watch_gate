@@ -514,3 +514,24 @@ class GitHubClient:
             timeout=_TIMEOUT,
         )
         response.raise_for_status()
+
+    def merge_pull_request(
+        self, owner: str, repo: str, pr_number: int, merge_method: str = "squash"
+    ) -> dict[str, Any]:
+        """Mergea un PR ya revisado -- usado por `accept_score`
+        (dashboard/backend/routers/feedback.py) cuando un mantenedor pulsa
+        "Aceptar" sobre un PR con una conexión real de GitHub guardada.
+
+        Propaga el `HTTPStatusError` tal cual si GitHub rechaza el merge
+        (rama protegida, checks pendientes, conflictos, PR ya cerrado,
+        etc.) -- quien llama decide cómo comunicarlo; aquí no hay
+        suficiente contexto para distinguir "no se pudo" de "error de
+        infraestructura"."""
+        response = httpx.put(
+            f"{self._api_base}/repos/{owner}/{repo}/pulls/{pr_number}/merge",
+            headers=self._headers,
+            json={"merge_method": merge_method},
+            timeout=_TIMEOUT,
+        )
+        response.raise_for_status()
+        return dict(response.json())

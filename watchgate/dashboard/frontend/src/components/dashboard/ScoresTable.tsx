@@ -26,11 +26,27 @@ export function ScoresTable({
   async function toggleAccept(score: ScoreOut) {
     setPendingId(score.id)
     try {
-      const updated = score.accepted_by
-        ? await api.unacceptScore(score.id)
-        : await api.acceptScore(score.id)
+      if (score.accepted_by) {
+        const updated = await api.unacceptScore(score.id)
+        onScoreUpdated?.(updated)
+        toast.success(t('accept.revoked'))
+        return
+      }
+
+      const updated = await api.acceptScore(score.id)
       onScoreUpdated?.(updated)
-      toast.success(updated.accepted_by ? t('accept.accepted') : t('accept.revoked'))
+      if (!updated.merge_attempted) {
+        // Sin PR real que mergear (ingesta genérica de CI, análisis de
+        // rama principal, hook local...) -- mismo comportamiento que
+        // antes de añadir el merge automático.
+        toast.success(t('accept.accepted'))
+      } else if (updated.merged) {
+        toast.success(t('accept.mergedOnGithub'))
+      } else {
+        // El merge falló (rama protegida, checks pendientes, conflictos,
+        // PR ya cerrado...) -- la aceptación en sí SÍ quedó registrada.
+        toast.error(updated.merge_message ?? t('accept.mergeFailed'))
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error')
     } finally {
