@@ -30,6 +30,7 @@ import json
 import logging
 import os
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -52,7 +53,19 @@ logger = logging.getLogger("watchgate.vulnerabilities")
 
 _OSV_API_URL = "https://api.osv.dev/v1/query"
 _OSV_QUERYBATCH_URL = "https://api.osv.dev/v1/querybatch"
+_OSV_VULN_DETAIL_URL = "https://api.osv.dev/v1/vulns"
 _CACHE_TTL_HOURS = 24
+# Tope de avisos por paquete que se "enriquecen" con una llamada extra a
+# GET /v1/vulns/{id} (ver _enrich_batch_vulns). Probado en vivo con
+# requests==2.5.0 (12 avisos conocidos): con un tope de 5 el único aviso
+# HIGH real (GHSA-x84v-xcm2-53pg) caía en la posición 6, fuera del corte
+# -- el titular mostrado era uno MODERATE en su lugar. Como las llamadas
+# van en paralelo (ver _MAX_ENRICHMENT_WORKERS), subir el tope no es un
+# coste lineal en tiempo, solo en nº de peticiones -- 20 cubre la
+# práctica totalidad de paquetes reales sin dejar de acotar el caso
+# patológico (un paquete con cientos de avisos).
+_MAX_ENRICHED_VULNS_PER_PACKAGE = 20
+_MAX_ENRICHMENT_WORKERS = 20
 # OSV no documenta un tope de tamaño de lote en /v1/querybatch (probado en
 # vivo con 60 consultas en una sola llamada, sin problema); 20 era un límite
 # autoimpuesto sin motivo real que además se aplicaba SIEMPRE, ignorando
@@ -61,6 +74,67 @@ _CACHE_TTL_HOURS = 24
 # timeout razonables) pero dejar de recortar en silencio configuraciones
 # explícitas.
 _HARD_MAX_BATCH_SIZE = 200
+
+
+def _fetch_vuln_details(vuln_id: str) -> dict[str, Any] | None:
+    """GET /v1/vulns/{id} -- el detalle completo de UN aviso (summary,
+    database_specific.severity, vector CVSS...), a diferencia de
+    /v1/querybatch (ver `_enrich_batch_vulns`). ~100ms medido en vivo."""
+    try:
+        response = httpx.get(f"{_OSV_VULN_DETAIL_URL}/{vuln_id}", timeout=5.0)
+        response.raise_for_status()
+        data: dict[str, Any] = response.json()
+        return data
+    except (httpx.HTTPError, json.JSONDecodeError):
+        return None
+
+
+def _enrich_batch_vulns(items: list[dict[str, Any]]) -> None:
+    """Completa IN SITU los `vulns` de cada `item` (una entrada de la
+    respuesta de /v1/querybatch por paquete consultado) con detalles
+    reales de OSV.
+
+    Hallazgo real de auditoría (usuario: "el reporte... no se entiende"):
+    /v1/querybatch devuelve SOLO `{"id": ..., "modified": ...}` por
+    vulnerabilidad -- comportamiento DOCUMENTADO de esa API, confirmado en
+    vivo, no un bug de parseo. Sin resumen ni severidad en la respuesta,
+    tanto `_is_high_or_critical_vuln` (decide el score) como
+    `_describe_vulns` (el mensaje que ve el usuario) se quedaban sin datos
+    reales que leer aunque el código para leerlos ya existiera -- de ahí
+    que el mensaje final acabara siendo la propia REGLA interna de
+    puntuación ("Vulnerabilidad crítica/alta o acumulada... (N vulns)") en
+    vez de una descripción real.
+
+    Solo enriquece paquetes con vulnerabilidades (la mayoría de paquetes
+    analizados están limpios, 0 llamadas extra) y, dentro de esos, como
+    mucho `_MAX_ENRICHED_VULNS_PER_PACKAGE` avisos -- en paralelo, para
+    que un paquete con muchos avisos conocidos no dispare el tiempo total
+    de forma lineal."""
+    jobs: list[tuple[list[Any], int, str]] = []
+    for item in items:
+        vulns = item.get("vulns")
+        if not isinstance(vulns, list):
+            continue
+        for i, stub in enumerate(vulns[:_MAX_ENRICHED_VULNS_PER_PACKAGE]):
+            vuln_id = stub.get("id") if isinstance(stub, dict) else None
+            if vuln_id:
+                jobs.append((vulns, i, str(vuln_id)))
+
+    if not jobs:
+        return
+
+    with ThreadPoolExecutor(max_workers=min(len(jobs), _MAX_ENRICHMENT_WORKERS)) as executor:
+        futures = {
+            executor.submit(_fetch_vuln_details, vuln_id): (vulns, i) for vulns, i, vuln_id in jobs
+        }
+        for future in futures:
+            vulns, i = futures[future]
+            try:
+                details = future.result()
+            except Exception:  # noqa: BLE001 -- defensivo, _fetch_vuln_details ya no debería propagar
+                continue
+            if details is not None:
+                vulns[i] = details
 
 
 class _OSVCacheBase(DeclarativeBase):
@@ -285,6 +359,74 @@ def _cvss3_base_score(vector: str) -> float | None:
     return _cvss_roundup(min(raw, 10.0))
 
 
+_MAX_HEADLINE_SUMMARY_CHARS = 140
+_SEVERITY_LABELS_ES = {
+    "CRITICAL": "CRÍTICA",
+    "HIGH": "ALTA",
+    "MODERATE": "MEDIA",
+    "MEDIUM": "MEDIA",
+    "LOW": "BAJA",
+}
+
+
+def _vuln_severity_label(vuln: dict[str, Any]) -> str | None:
+    """Etiqueta de severidad en español para un aviso de OSV, si la trae
+    alguna fuente reconocible (`database_specific`/`ecosystem_specific`) --
+    `None` si no hay ninguna (p. ej. solo trae el vector CVSS crudo, ver
+    `_is_high_or_critical_vuln`, o el aviso no declara severidad en
+    absoluto, como PYSEC-2021-142 -- caso real encontrado en auditoría)."""
+    database_specific = vuln.get("database_specific") or {}
+    ecosystem_specific = vuln.get("ecosystem_specific") or {}
+    for raw in (
+        database_specific.get("severity"),
+        database_specific.get("github_reviewed_severity"),
+        ecosystem_specific.get("severity"),
+    ):
+        label = _SEVERITY_LABELS_ES.get(str(raw or "").upper())
+        if label:
+            return label
+    return None
+
+
+def _describe_vulns(vulns: list[dict[str, Any]]) -> str:
+    """Construye una descripción legible por humanos de una lista de
+    vulnerabilidades de OSV -- antes el mensaje era literalmente
+    "Vulnerabilidad crítica/alta o acumulada en OSV (N vulns)", que
+    describe la REGLA INTERNA de puntuación (severidad alta O 5+ avisos),
+    no una vulnerabilidad real; nunca menciona qué CVE/GHSA es ni de qué
+    trata, aunque esos datos ya vienen en la respuesta de OSV y se estaban
+    descartando. Hallazgo real del usuario: "el reporte... no se entiende".
+
+    Elige como "titular" la vulnerabilidad de mayor severidad (o la
+    primera si ninguna es alta/crítica) y muestra su id (CVE/GHSA, el que
+    de verdad se puede buscar) + un resumen corto; el resto solo se cuenta."""
+    if not vulns:
+        return "vulnerabilidades conocidas en OSV"
+
+    critical = [v for v in vulns if _is_high_or_critical_vuln(v)]
+    headline = (critical or vulns)[0]
+    headline_id = str(headline.get("id") or "").strip()
+    summary = str(headline.get("summary") or "").strip()
+    if len(summary) > _MAX_HEADLINE_SUMMARY_CHARS:
+        summary = summary[: _MAX_HEADLINE_SUMMARY_CHARS - 1].rstrip() + "…"
+
+    severity_label = _vuln_severity_label(headline)
+    if severity_label is None:
+        severity_label = "CRÍTICA/ALTA" if critical else "severidad no confirmada por OSV"
+
+    if headline_id:
+        text = f"{headline_id} ({severity_label})"
+        if summary:
+            text += f": {summary}"
+    else:
+        text = f"vulnerabilidad conocida ({severity_label})"
+
+    extra = len(vulns) - 1
+    if extra > 0:
+        text += f" -- y {extra} más conocida{'s' if extra != 1 else ''} en OSV"
+    return text
+
+
 def _is_high_or_critical_vuln(vuln: dict[str, Any]) -> bool:
     """Evalúa si una vulnerabilidad de OSV es de severidad ALTA o CRÍTICA.
 
@@ -387,12 +529,21 @@ class VulnerabilitiesLayer(AnalysisLayer):
             batch_results = res_data.get("results", [])
 
             to_cache: list[tuple[str, str, str | None, dict[str, Any]]] = []
+            items: list[dict[str, Any]] = []
 
             for idx, res_item in zip(to_fetch_indices, batch_results, strict=False):
                 change = changes[idx]
                 item_data = res_item if isinstance(res_item, dict) else {}
                 results[idx] = (item_data, None)
+                items.append(item_data)
                 to_cache.append((change.name, change.ecosystem, change.new_version, item_data))
+
+            # querybatch da solo {id, modified} por vulnerabilidad -- sin
+            # esto ni el score (has_high_crit) ni el mensaje al usuario
+            # tenían datos reales que leer, aunque el código para leerlos
+            # ya existiera. Completa in situ, ANTES de cachear (para que un
+            # hit de caché futuro no repita las llamadas).
+            _enrich_batch_vulns(items)
 
             if to_cache:
                 self.cache.set_many(to_cache)
@@ -478,12 +629,8 @@ class VulnerabilitiesLayer(AnalysisLayer):
             elif osv_res and osv_res.get("vulns"):
                 vulns = osv_res["vulns"]
                 has_high_crit = any(_is_high_or_critical_vuln(v) for v in vulns)
-                if has_high_crit or len(vulns) >= 5:
-                    pkg_score = 90
-                    note = f"Vulnerabilidad crítica/alta o acumulada en OSV ({len(vulns)} vulns)"
-                else:
-                    pkg_score = 60
-                    note = f"Vulnerabilidades encontradas en OSV ({len(vulns)} vulnerabilidades)"
+                pkg_score = 90 if (has_high_crit or len(vulns) >= 5) else 60
+                note = _describe_vulns(vulns)
 
             scores.append(pkg_score)
             version_str = f"@{change.new_version}" if change.new_version else ""

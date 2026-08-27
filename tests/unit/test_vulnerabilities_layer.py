@@ -15,7 +15,9 @@ from watchgate.core.layers.vulnerabilities_layer import (
     OSVCache,
     VulnerabilitiesLayer,
     _cvss3_base_score,
+    _describe_vulns,
     _is_high_or_critical_vuln,
+    _vuln_severity_label,
 )
 from watchgate.core.models import CommitAuthor, FileChange, FileStatus, NormalizedDiff
 
@@ -80,7 +82,12 @@ def test_osv_vulnerability_high() -> None:
         res = layer.analyze(diff, {})
 
     assert res.risk_score == 90
-    assert "Vulnerabilidad crítica/alta" in res.justification
+    # Auditoría: el mensaje antes era "Vulnerabilidad crítica/alta o
+    # acumulada en OSV (N vulns)" -- la REGLA interna de puntuación, no una
+    # descripción real ("el usuario no lo entendía"). Ahora debe nombrar el
+    # aviso real (buscable) y su severidad de verdad.
+    assert "GHSA-1234-5678" in res.justification
+    assert "ALTA" in res.justification
 
 
 def test_no_known_vulnerabilities_gives_zero_not_a_baseline() -> None:
@@ -347,3 +354,101 @@ def test_incomplete_batch_response_marks_missing_indices_unverified() -> None:
     unverified = [f for f in res.findings if f.rule_id == "vulnerability-unverified-pypi"]
     assert len(unverified) == 1
     assert "pkg2" in unverified[0].message
+
+
+# --- Auditoría: "el reporte de la capa de vulnerabilidades no se entiende"
+# -- el mensaje decía literalmente la REGLA interna de puntuación
+# ("Vulnerabilidad crítica/alta o acumulada en OSV (N vulns)") en vez de
+# describir la vulnerabilidad real. _describe_vulns/_vuln_severity_label
+# nombran el aviso real (id buscable) + resumen + severidad de verdad.
+
+
+def test_vuln_severity_label_reads_database_specific_severity() -> None:
+    assert _vuln_severity_label({"database_specific": {"severity": "CRITICAL"}}) == "CRÍTICA"
+    assert _vuln_severity_label({"database_specific": {"severity": "moderate"}}) == "MEDIA"
+    assert _vuln_severity_label({"database_specific": {"severity": "LOW"}}) == "BAJA"
+
+
+def test_vuln_severity_label_falls_back_through_sources_in_order() -> None:
+    assert (
+        _vuln_severity_label({"database_specific": {"github_reviewed_severity": "HIGH"}}) == "ALTA"
+    )
+    assert _vuln_severity_label({"ecosystem_specific": {"severity": "high"}}) == "ALTA"
+
+
+def test_vuln_severity_label_none_when_nothing_usable() -> None:
+    """Caso real de auditoría: PYSEC-2021-142 (RCE conocido en PyYAML) no
+    trae severidad en ningún campo reconocible."""
+    assert _vuln_severity_label({"id": "PYSEC-2021-142"}) is None
+    assert _vuln_severity_label({"severity": [{"type": "CVSS_V3", "score": "CVSS:3.1/x"}]}) is None
+
+
+def test_describe_vulns_names_the_real_advisory_with_severity_and_summary() -> None:
+    vulns = [
+        {
+            "id": "GHSA-35jh-r3h4-6jhm",
+            "summary": "Command Injection in lodash",
+            "database_specific": {"severity": "HIGH"},
+        }
+    ]
+    result = _describe_vulns(vulns)
+    assert result == "GHSA-35jh-r3h4-6jhm (ALTA): Command Injection in lodash"
+
+
+def test_describe_vulns_prefers_the_highest_severity_advisory_as_headline() -> None:
+    vulns = [
+        {"id": "GHSA-low", "summary": "minor issue", "database_specific": {"severity": "LOW"}},
+        {"id": "GHSA-crit", "summary": "RCE", "database_specific": {"severity": "CRITICAL"}},
+    ]
+    result = _describe_vulns(vulns)
+    assert result.startswith("GHSA-crit (CRÍTICA): RCE")
+    assert "1 más conocida en OSV" in result
+
+
+def test_describe_vulns_truncates_long_summaries() -> None:
+    long_summary = "x" * 300
+    vulns = [{"id": "GHSA-x", "summary": long_summary, "database_specific": {"severity": "HIGH"}}]
+    result = _describe_vulns(vulns)
+    assert len(result) < len(long_summary)
+    assert result.endswith("…")
+
+
+def test_describe_vulns_degrades_gracefully_with_no_severity_or_summary_data() -> None:
+    """Caso real: un aviso sin severidad reconocible en ningún campo (ver
+    PYSEC-2021-142) no debe fingir severidad alta ni reventar."""
+    result = _describe_vulns([{"id": "PYSEC-2021-142"}])
+    assert result == "PYSEC-2021-142 (severidad no confirmada por OSV)"
+
+
+def test_full_analyze_justification_names_the_real_advisory() -> None:
+    """Prueba de extremo a extremo (analyze() completo, no solo el
+    helper): el mensaje que de verdad ve el usuario en el Dashboard debe
+    nombrar el CVE/GHSA real, no la regla interna de puntuación."""
+    layer = VulnerabilitiesLayer(cache_db_path=":memory:")
+    diff = _make_diff(
+        [
+            FileChange(
+                path="requirements.txt",
+                status=FileStatus.MODIFIED,
+                diff_hunk="@@ -1,0 +1,1 @@\n+flask==0.12.2",
+                additions=1,
+                deletions=0,
+            )
+        ]
+    )
+    osv_response = {
+        "vulns": [
+            {
+                "id": "GHSA-35jh-r3h4-6jhm",
+                "summary": "Command Injection in lodash",
+                "database_specific": {"severity": "HIGH"},
+            }
+        ]
+    }
+    with patch.object(layer, "_query_osv_batch", return_value={0: (osv_response, None)}):
+        res = layer.analyze(diff, {})
+
+    assert "GHSA-35jh-r3h4-6jhm" in res.justification
+    assert "crítica/alta o acumulada" not in res.justification.lower()
+    assert len(res.findings) == 1
+    assert "GHSA-35jh-r3h4-6jhm" in res.findings[0].message
