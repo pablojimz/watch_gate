@@ -13,9 +13,22 @@ from sqlmodel import select
 
 from watchgate.dashboard.backend import db as database
 from watchgate.dashboard.backend.auth import CurrentUser, require_ingest_token, require_role
+from watchgate.dashboard.backend.routers.keys import _get_or_create_db_user
 from watchgate.dashboard.backend.routers.repos import _enqueue_repo_knowledge_graph
-from watchgate.dashboard.backend.schemas import CiConfigOut, IngestScoreIn, RepoSettings, ScoreOut
-from watchgate.db.models import BlockedAuthor, MonitoredRepo, RepoArchitectureSummary, RepoGraphNode
+from watchgate.dashboard.backend.schemas import (
+    CiConfigOut,
+    IngestScoreIn,
+    RepoSettings,
+    ScoreOut,
+    normalize_login,
+)
+from watchgate.db.models import (
+    BlockedAuthor,
+    MonitoredRepo,
+    RepoArchitectureSummary,
+    RepoGraphNode,
+    UserAPIKey,
+)
 
 router = APIRouter(tags=["scores"])
 
@@ -379,3 +392,57 @@ def unblock_author(repo: str, author_login: str, request: Request, user: Current
         session.delete(existing)
         session.commit()
     return {"unblocked": author_login}
+
+
+@router.delete("/repos/{repo:path}")
+def delete_repo_by_path(repo: str, request: Request, user: CurrentUser) -> dict[str, Any]:
+    """Elimina un repo de la vista del Dashboard. A diferencia de
+    `routers/repos.py::delete_external_repo` (borra solo la fila
+    `MonitoredRepo`, preserva el histórico a propósito), esto SÍ borra el
+    histórico de scores -- muchos repos reales llegan aquí solo vía
+    ingesta de CI (`POST /scores`), sin `MonitoredRepo` de por medio: para
+    esos, el histórico ES la única representación del repo en el
+    Dashboard, y sin esto nunca hay forma de quitarlos de la lista.
+
+    Si además existe una fila `MonitoredRepo` para este `repo_path` en la
+    organización del usuario actual, se borra también (mismo guardado que
+    `delete_external_repo`: bloquea si hay API keys de agente atadas, en
+    vez de dejarlas huérfanas en silencio)."""
+    require_role(user, repo, min_role="mantenedor", request=request)
+
+    with database.db_session() as conn:
+        deleted_scores = database.delete_scores_for_repo(conn, repo)
+
+    from watchgate.db.connection import get_session
+
+    monitored_repo_deleted = False
+    with next(get_session()) as session:
+        db_user = _get_or_create_db_user(session, normalize_login(user.login))
+        org_id = db_user.org_id
+        repo_row = session.exec(
+            select(MonitoredRepo).where(
+                MonitoredRepo.repo_path == repo, MonitoredRepo.org_id == org_id
+            )
+        ).first()
+        if repo_row is not None:
+            bound_keys = session.exec(
+                select(UserAPIKey).where(UserAPIKey.monitored_repo_id == repo_row.id)
+            ).all()
+            if bound_keys:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        f"Histórico de scores borrado, pero no se pudo desconectar el "
+                        f"repo: hay {len(bound_keys)} API key(s) de agente atadas. "
+                        "Revócalas primero."
+                    ),
+                )
+            session.delete(repo_row)
+            session.commit()
+            monitored_repo_deleted = True
+
+    return {
+        "repo": repo,
+        "scores_deleted": deleted_scores,
+        "monitored_repo_deleted": monitored_repo_deleted,
+    }

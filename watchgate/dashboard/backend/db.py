@@ -28,7 +28,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal, cast
 
-from sqlalchemy import Engine, case, func, select
+from sqlalchemy import Engine, case, delete, func, select
 from sqlalchemy.orm import Session
 
 from watchgate.core.models import (
@@ -428,6 +428,22 @@ def list_scores(session: Session, repo: str, limit: int | None = None) -> list[S
 def get_score(session: Session, score_id: int) -> ScoreOut | None:
     record = session.get(DashboardPRScore, score_id)
     return None if record is None else _record_to_score_out(record)
+
+
+def delete_scores_for_repo(session: Session, repo: str) -> int:
+    """Borra TODO el histórico de `pr_scores` de un repo -- usado por
+    `routers/scores.py::delete_repo_by_path` cuando el usuario elimina un
+    repo desde `/repos`. A diferencia de `routers/repos.py::
+    delete_external_repo` (que solo borra la fila `MonitoredRepo` y
+    preserva el histórico a propósito), esto SÍ es destructivo: muchos
+    repos reales llegan aquí solo vía ingesta de CI (`POST /scores`), sin
+    fila `MonitoredRepo` de por medio -- para esos, el histórico de scores
+    es la ÚNICA representación del repo en el Dashboard, así que "eliminar
+    el repo" solo puede significar borrar ese histórico. Devuelve cuántas
+    filas se borraron."""
+    result = session.execute(delete(DashboardPRScore).where(DashboardPRScore.repo == repo))
+    session.commit()
+    return result.rowcount or 0  # type: ignore[attr-defined]
 
 
 def set_feedback(session: Session, score_id: int, feedback: FeedbackValue) -> ScoreOut | None:
