@@ -43,10 +43,27 @@ class ReputationLayer(AnalysisLayer):
             reputation.author_account_age_days is not None
             and reputation.author_account_age_days < 30
         ):
-            score += 30
+            score += 10
             signals.append(
                 f"La cuenta autora tiene {reputation.author_account_age_days} días de "
                 "antigüedad (menos de 30)."
+            )
+
+        # 20 de los 30 puntos originales de "cuenta nueva" se han movido
+        # aquí: una cuenta nueva es sospechosa por sí sola, pero un autor
+        # con un PR anterior ya detectado como altamente malicioso (score
+        # > 70, en cualquier repo que audite este Dashboard) es una señal
+        # de reputación bastante más fuerte y concreta que la mera edad de
+        # la cuenta -- se le da más peso a propósito. Lo resuelve
+        # dashboard/backend/tasks.py antes de llamar a esta capa (ver
+        # comentario de `author_has_prior_high_risk_pr` en
+        # ReputationMetadata); si nunca se resolvió, el default es False y
+        # esta señal simplemente no dispara.
+        if reputation.author_has_prior_high_risk_pr:
+            score += 20
+            signals.append(
+                "El autor tiene un PR anterior detectado con puntuación de riesgo alta "
+                "(>70), posible indicio de actividad maliciosa recurrente."
             )
 
         if (
