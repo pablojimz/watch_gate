@@ -82,7 +82,7 @@ def test_get_reputation_metadata_builds_real_signals_from_github_api():
     client = GitHubClient(token="fake-token")
     created_at = (datetime.now(UTC) - timedelta(days=400)).isoformat().replace("+00:00", "Z")
 
-    def fake_request(method, url, headers=None, params=None, timeout=None):
+    def fake_request(method, url, headers=None, params=None, timeout=None, follow_redirects=None):
         if url.endswith("/users/octocat"):
             return _mock_response({"login": "octocat", "created_at": created_at})
         if url.endswith("/repos/org/repo/commits") and params.get("author") == "octocat":
@@ -115,7 +115,7 @@ def test_get_reputation_metadata_with_pr_number_and_profile_activity():
     client = GitHubClient(token="fake-token")
     created_at = (datetime.now(UTC) - timedelta(days=10)).isoformat().replace("+00:00", "Z")
 
-    def fake_request(method, url, headers=None, params=None, timeout=None):
+    def fake_request(method, url, headers=None, params=None, timeout=None, follow_redirects=None):
         if url.endswith("/users/newuser"):
             return _mock_response(
                 {"login": "newuser", "created_at": created_at, "public_repos": 0, "followers": 0}
