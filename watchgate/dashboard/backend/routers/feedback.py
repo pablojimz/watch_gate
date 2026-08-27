@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Annotated, cast
+from typing import Annotated, TypedDict, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlmodel import Session, select
@@ -139,15 +139,24 @@ def _resolve_merge_client(
     return GitHubClient(token), "https://api.github.com"
 
 
-def _try_merge_pull_request(
-    engine_session: Session, repo_path: str, pr_id: str
-) -> dict[str, object]:
+class _MergeResult(TypedDict):
+    merge_attempted: bool
+    merged: bool | None
+    merge_message: str | None
+
+
+def _try_merge_pull_request(engine_session: Session, repo_path: str, pr_id: str) -> _MergeResult:
     """Intenta mergear el PR real en GitHub tras aceptarlo -- ver
     `accept_score`. Devuelve los campos extra de `AcceptScoreOut`
     (`merge_attempted`/`merged`/`merge_message`); nunca lanza -- un fallo
     de merge (rama protegida, checks pendientes, conflictos, PR ya
     cerrado) no debe impedir que la aceptación humana quede registrada,
-    solo se reporta para que el frontend lo muestre."""
+    solo se reporta para que el frontend lo muestre.
+
+    `dict[str, object]` (el tipo anterior) hacía que mypy tratase
+    `**merge_result` en `accept_score` como kwargs sin tipo alguno --
+    con un TypedDict de los 3 campos exactos, `AcceptScoreOut(**merge_result)`
+    sí type-checkea contra los campos reales del modelo."""
     if not pr_id.isdigit():
         # pr_id="main" (escaneo de rama principal), "local-push" (hook
         # pre-push local) o cualquier otro identificador que no sea un
