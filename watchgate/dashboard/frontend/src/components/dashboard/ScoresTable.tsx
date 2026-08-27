@@ -1,7 +1,7 @@
 import { Fragment, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { CheckCircle2, ChevronDown, FileText, Undo2 } from 'lucide-react'
+import { CheckCircle2, ChevronDown, FileText } from 'lucide-react'
 import { api, type ScoreOut } from '@/api/client'
 import { ReportModal } from '@/components/dashboard/ReportModal'
 import { RiskBadge } from '@/components/dashboard/RiskBadge'
@@ -23,14 +23,27 @@ export function ScoresTable({
   const [reportScore, setReportScore] = useState<ScoreOut | null>(null)
   const [pendingId, setPendingId] = useState<number | null>(null)
 
-  async function toggleAccept(score: ScoreOut) {
+  // Sin botón de revocar (petición explícita): "Aceptar" queda como
+  // registro de auditoría de un solo sentido -- si además mergeó el PR
+  // de verdad en GitHub, "revocar" no lo desmergearía, así que ofrecer
+  // ese botón invitaba a pensar que sí lo hacía.
+  async function handleAccept(score: ScoreOut) {
     setPendingId(score.id)
     try {
-      const updated = score.accepted_by
-        ? await api.unacceptScore(score.id)
-        : await api.acceptScore(score.id)
+      const updated = await api.acceptScore(score.id)
       onScoreUpdated?.(updated)
-      toast.success(updated.accepted_by ? t('accept.accepted') : t('accept.revoked'))
+      if (!updated.merge_attempted) {
+        // Sin PR real que mergear (ingesta genérica de CI, análisis de
+        // rama principal, hook local...) -- mismo comportamiento que
+        // antes de añadir el merge automático.
+        toast.success(t('accept.accepted'))
+      } else if (updated.merged) {
+        toast.success(t('accept.mergedOnGithub'))
+      } else {
+        // El merge falló (rama protegida, checks pendientes, conflictos,
+        // PR ya cerrado...) -- la aceptación en sí SÍ quedó registrada.
+        toast.error(updated.merge_message ?? t('accept.mergeFailed'))
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error')
     } finally {
@@ -116,23 +129,19 @@ export function ScoresTable({
                       >
                         <FileText className="size-4" />
                       </button>
-                      {canAccept ? (
+                      {canAccept && !score.accepted_by ? (
                         <Button
                           type="button"
                           size="sm"
-                          variant={score.accepted_by ? 'outline' : 'secondary'}
+                          variant="secondary"
                           disabled={pendingId === score.id}
                           onClick={(e) => {
                             e.stopPropagation()
-                            void toggleAccept(score)
+                            void handleAccept(score)
                           }}
                         >
-                          {score.accepted_by ? (
-                            <Undo2 className="size-3.5" />
-                          ) : (
-                            <CheckCircle2 className="size-3.5" />
-                          )}
-                          {score.accepted_by ? t('accept.revoke') : t('accept.accept')}
+                          <CheckCircle2 className="size-3.5" />
+                          {t('accept.accept')}
                         </Button>
                       ) : null}
                       <button

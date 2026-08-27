@@ -106,10 +106,10 @@
   "accept": {
     "column": "Aceptado",
     "accept": "Aceptar",
-    "revoke": "Revocar",
     "notAccepted": "Sin revisar",
     "accepted": "PR aceptado",
-    "revoked": "Aceptación revocada"
+    "mergedOnGithub": "PR aceptado y mergeado en GitHub",
+    "mergeFailed": "PR aceptado, pero no se pudo mergear en GitHub"
   },
   "feedback": {
     "title": "Feedback humano",
