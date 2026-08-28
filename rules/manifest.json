@@ -1,6 +1,6 @@
 {
-  "version": "v0.2.0",
-  "generated_at": "2026-08-28T10:16:18Z",
+  "version": "v0.3.0",
+  "generated_at": "2026-08-28T10:32:29Z",
   "hashes": {
     "semgrep": {
       "custom": {
@@ -69,9 +69,10 @@
       }
     },
     "yara": {
-      "antidebug_antivm": "sha256:241dc4093450433bc71440cb40f38c4f3e0fb6991ff4eec3cbac5874181c4f65",
-      "exploit_kits": "sha256:a0f758f2225330fac3f0144907e7229677619a3c161c849edf7a9ef91214f04c",
-      "webshells": "sha256:ede21541d0e17a1c8e2b8a251bf644ebc5658c9a1ca279ffde572c55e2d172c6"
+      "antidebug_antivm": "sha256:89563d27f43746d9341a77c7589e28c8b423e015e04fc2808b02f203508901ec",
+      "exploit_kits": "sha256:709373c1ef864d77dddc460f3e511bbd02e9e0dc68c4c475a7bd07341339c353",
+      "utils": "sha256:2d2c14734d06de522b0ba2bb109f052920aecb90558e082e3d806e02f8fd61f3",
+      "webshells": "sha256:f967bce2c8b158d157e5943f5cfba3267edf8ba6b626dab5d9223fa694905c6e"
     }
   },
   "languages_changed": [],
@@ -79,6 +80,7 @@
   "yara_categories_changed": [
     "antidebug_antivm",
     "exploit_kits",
+    "utils",
     "webshells"
   ],
   "rule_count": {
@@ -86,7 +88,7 @@
       "custom": 64,
       "third_party": 717
     },
-    "yara": 769
+    "yara": 793
   },
   "finding_type_summary": {
     "semgrep": {
@@ -428,6 +430,12 @@
         "needs_review": 1,
         "unclassified": 0
       },
+      "utils": {
+        "malicious": 24,
+        "vulnerability": 0,
+        "needs_review": 22,
+        "unclassified": 0
+      },
       "webshells": {
         "malicious": 640,
         "vulnerability": 0,
@@ -436,7 +444,7 @@
       }
     }
   },
-  "finding_type_notes": "De 1546 regla(s) puntuada(s) y clasificada(s): 770 apuntan a codigo ya malicioso (webshells, backdoors, tecnicas sin uso legitimo razonable -- respuesta esperada: contencion/aislamiento), 776 a vulnerabilidades explotables en codigo legitimo (respuesta esperada: ciclo normal de remediacion); 55 de ellas estan marcadas needs_review para confirmacion humana.",
+  "finding_type_notes": "De 1570 regla(s) puntuada(s) y clasificada(s): 794 apuntan a codigo ya malicioso (webshells, backdoors, tecnicas sin uso legitimo razonable -- respuesta esperada: contencion/aislamiento), 776 a vulnerabilidades explotables en codigo legitimo (respuesta esperada: ciclo normal de remediacion); 77 de ellas estan marcadas needs_review para confirmacion humana.",
   "official_registry_configs": [
     "p/security-audit",
     "p/owasp-top-ten"
