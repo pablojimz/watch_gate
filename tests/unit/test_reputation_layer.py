@@ -88,15 +88,16 @@ def test_new_account_alone_adds_10():
     assert "5 días" in result.justification
 
 
-def test_prior_high_risk_pr_adds_20():
+def test_prior_high_risk_pr_saturates_to_100():
     """Señal nueva: un autor con un PR anterior ya detectado con score > 70
-    (en cualquier repo) suma 20 puntos, independientemente de la señal de
-    cuenta nueva -- se resuelve fuera de esta capa (dashboard/backend/
-    tasks.py, vía db.py::author_has_prior_high_risk_pr) y llega ya resuelta
-    en el campo homónimo de ReputationMetadata."""
+    (en cualquier repo, no solo el actual) satura la capa entera a 100 --
+    ya no suma puntos como el resto de señales, se considera suficiente por
+    sí sola. Se resuelve fuera de esta capa (dashboard/backend/tasks.py, vía
+    db.py::author_has_prior_high_risk_pr) y llega ya resuelta en el campo
+    homónimo de ReputationMetadata."""
     reputation = _clean_reputation(author_has_prior_high_risk_pr=True)
     result = ReputationLayer().analyze(_empty_diff(), {"reputation": reputation})
-    assert result.risk_score == 20
+    assert result.risk_score == 100
     assert "PR anterior detectado" in result.justification
 
 
@@ -129,17 +130,30 @@ def test_signed_with_key_never_seen_before_adds_40():
 def test_score_is_capped_at_100():
     reputation = _clean_reputation(
         author_account_age_days=1,
+        author_public_repos=0,
+        author_followers=0,
         author_prior_contributions_to_repo=0,
         commit_email_matches_verified_email=False,
-        commit_is_signed=False,
-        signing_key_seen_before_for_login=None,
-        repo_has_history_of_signed_commits=True,
+        commit_is_signed=True,
+        signing_key_seen_before_for_login=False,
+    )
+    # 10 (edad) + 15 (sin actividad pública) + 20 (sin contribuciones) +
+    # 25 (email) + 40 (clave de firma nunca vista) = 110 -> tope 100.
+    # Deliberadamente sin author_has_prior_high_risk_pr, que ya no suma
+    # puntos sino que satura la capa por su cuenta (ver test
+    # test_prior_high_risk_pr_saturates_to_100).
+    result = ReputationLayer().analyze(_empty_diff(), {"reputation": reputation})
+    assert result.risk_score == 100
+
+
+def test_prior_high_risk_pr_saturates_even_with_no_other_signals():
+    """La saturación a 100 no depende de que se acumulen otras señales --
+    dispara sola, sin necesidad de sumar nada más."""
+    reputation = _clean_reputation(
+        author_account_age_days=400,
+        author_prior_contributions_to_repo=12,
+        commit_email_matches_verified_email=True,
         author_has_prior_high_risk_pr=True,
     )
-    # 10 (edad) + 20 (PR previo de alto riesgo) + 20 (sin contribuciones) +
-    # 25 (email) + 30 (no firmado) = 105 -> tope 100. Antes de mover 20
-    # puntos de "cuenta nueva" a la señal nueva, las 4 señales originales ya
-    # llegaban a 105 solas; ahora hace falta incluir la señal nueva para
-    # seguir probando el tope de verdad.
     result = ReputationLayer().analyze(_empty_diff(), {"reputation": reputation})
     assert result.risk_score == 100
