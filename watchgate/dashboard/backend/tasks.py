@@ -207,11 +207,13 @@ def run_managed_scan(
             # 5. Insertar en la BD del Dashboard para que se pueda visualizar
             from watchgate.dashboard.backend.db import db_session as dashboard_db_session
             from watchgate.dashboard.backend.db import insert_aggregated, upsert_role
+            from watchgate.dashboard.backend.live_events import publish_pr_update
 
             with dashboard_db_session() as dash_conn:
                 result.pr_id = str(pr_number)
                 result.repo = repo_path
                 insert_aggregated(dash_conn, result, author_login=author_login)
+                publish_pr_update(repo_path)
 
                 # Buscamos el usuario de la DB SQLModel asociado para darle
                 # permisos en el esquema del Dashboard
@@ -460,11 +462,13 @@ def run_main_branch_scan(
 
             from watchgate.dashboard.backend.db import db_session as dashboard_db_session
             from watchgate.dashboard.backend.db import insert_aggregated, upsert_role
+            from watchgate.dashboard.backend.live_events import publish_pr_update
 
             with dashboard_db_session() as dash_conn:
                 result.pr_id = MAIN_BRANCH_SCAN_PR_ID
                 result.repo = repo_path
                 insert_aggregated(dash_conn, result, author_login=author_login)
+                publish_pr_update(repo_path)
 
                 from watchgate.db.models import User
 
@@ -586,11 +590,13 @@ def run_audit_scan(
             # 5. Insertar en la BD del Dashboard para que se pueda visualizar
             from watchgate.dashboard.backend.db import db_session as dashboard_db_session
             from watchgate.dashboard.backend.db import insert_aggregated, upsert_role
+            from watchgate.dashboard.backend.live_events import publish_pr_update
 
             with dashboard_db_session() as dash_conn:
                 result.pr_id = str(pr_number)
                 result.repo = repo_path
                 insert_aggregated(dash_conn, result, author_login=author_login)
+                publish_pr_update(repo_path)
 
                 # Buscamos el usuario de la DB SQLModel asociado para darle
                 # permisos en el esquema del Dashboard
