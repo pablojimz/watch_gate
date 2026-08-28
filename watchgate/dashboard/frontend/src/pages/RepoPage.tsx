@@ -41,19 +41,38 @@ export default function RepoPage() {
     // título/URL de un repo con los scores/rol de OTRO, si la petición del
     // repo anterior resuelve después de la del actual.
     let cancelled = false
-    void Promise.all([api.listScores(repo), api.myRole(repo)])
-      .then(([s, r]) => {
+
+    async function load(isInitial: boolean) {
+      // Sin trigger del usuario que avise de que hay algo nuevo que
+      // esperar (a diferencia de ExternalReposPage tras encolar un
+      // escaneo): un PR puede llegar por webhook en cualquier momento, así
+      // que aquí el sondeo es indefinido mientras la pestaña siga montada
+      // -- pero no mientras esté en segundo plano, para no gastar
+      // peticiones sin que nadie esté mirando.
+      if (!isInitial && document.hidden) return
+      try {
+        const [s, r] = await Promise.all([api.listScores(repo), api.myRole(repo)])
         if (cancelled) return
         setScores(s)
         setRole(r.role)
-      })
-      .catch((err: unknown) => {
+      } catch (err) {
         if (cancelled) return
-        toast.error(err instanceof Error ? err.message : 'Error')
-        setScores([])
-      })
+        if (isInitial) {
+          toast.error(err instanceof Error ? err.message : 'Error')
+          setScores([])
+        }
+        // Un sondeo de fondo que falla (caída puntual de red, un 502
+        // pasajero...) no debe vaciar la tabla ni machacar con un toast
+        // cada 15s -- se reintenta sin más en el siguiente tick.
+      }
+    }
+
+    void load(true)
+    const intervalId = window.setInterval(() => void load(false), 15_000)
+
     return () => {
       cancelled = true
+      window.clearInterval(intervalId)
     }
   }, [repo])
 
