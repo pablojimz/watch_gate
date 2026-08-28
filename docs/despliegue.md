@@ -88,6 +88,21 @@ cualquier otra cosa al frontend del Dashboard (que a su vez ya sabe
 reenviar su propio `/api/*` a `dashboard-backend`) -- ver
 `docker/reverse-proxy/Caddyfile`.
 
+> **Editar el `Caddyfile` no basta con `restart`/`caddy reload`.** El
+> bind mount de `reverse-proxy` hacia `docker/reverse-proxy/Caddyfile`
+> queda fijado al fichero que había en ese path cuando el contenedor se
+> creó -- reproducido en vivo: tras editar el `Caddyfile` en disco (el fix
+> de `encode gzip` para el endpoint SSE de refresco en vivo del Dashboard,
+> ver `live_events.py`), ni un `docker exec ... caddy reload` ni un
+> `docker compose restart reverse-proxy` lo recogían; `cat` dentro del
+> contenedor seguía devolviendo el contenido antiguo. Hace falta recrear
+> el contenedor para que Docker rehaga el mount contra el fichero actual:
+> ```bash
+> docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+>   up -d --force-recreate reverse-proxy
+> ```
+> Los datos (certificados TLS en el volumen `caddy_data`) no se tocan.
+
 Antes se documentaba una configuración manual de nginx/Caddy sobre el host
 (`docs/manual_despliegue_prod.md`) -- sigue siendo válida como referencia
 si prefieres el reverse proxy fuera de Docker, pero ya no es el único
