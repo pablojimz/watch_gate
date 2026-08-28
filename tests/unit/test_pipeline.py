@@ -78,9 +78,9 @@ def test_shortcircuit_enabled_does_not_rerun_non_semantic_layers_when_it_does_no
 
     monkeypatch.setattr(SemanticLayer, "analyze", _fake_semantic_analyze)
 
-    # Cuenta de 5 días + sin contribuciones previas = risk_score 50 (spec §6:
-    # +30 cuenta<30 días, +20 sin contribuciones) -- ni tan bajo que dispare
-    # el atajo a VERDE (partial_score < umbral_amarillo*0.5) ni tan alto que
+    # Cuenta de 5 días + sin contribuciones previas = risk_score 30 (+10
+    # cuenta<30 días, +20 sin contribuciones) -- ni tan bajo que dispare el
+    # atajo a VERDE (partial_score < umbral_amarillo*0.5) ni tan alto que
     # dispare el atajo a ROJO (con semantic=0 la media ponderada mínima
     # posible sigue por debajo del umbral rojo), así que `evaluate_
     # shortcircuit` cae al `return None` final -- el caso real más común,
@@ -108,5 +108,5 @@ def test_shortcircuit_enabled_does_not_rerun_non_semantic_layers_when_it_does_no
         f"reputation.analyze() se llamó {len(reputation_calls)} veces, se esperaba 1"
     )
     assert len(semantic_calls) == 1
-    assert result.layer_results["reputation"].risk_score == 50
+    assert result.layer_results["reputation"].risk_score == 30
     assert result.layer_results["semantic"].risk_score == 10
