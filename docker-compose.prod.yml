@@ -34,6 +34,21 @@ services:
   dashboard-backend:
     environment:
       WATCHGATE_LOG_FORMAT: json
+      # Auditoría (hallazgo real): docker-compose.yml deja
+      # WATCHGATE_DASHBOARD_FRONTEND_ORIGIN/CORS_ORIGINS fijos a
+      # localhost:5173 bajo `environment:` (con prioridad sobre
+      # cualquier valor de .env), y este overlay no los corregía --
+      # con un WATCHGATE_DOMAIN real, el login por GitHub/GitLab
+      # redirigía al navegador a su propio localhost en vez de al
+      # dominio real (ver auth.py::_frontend_origin, usado para la
+      # URL de redirect tras el OAuth callback), y cualquier petición
+      # directa a un puerto expuesto (8000) sin pasar por el proxy de
+      # nginx quedaba rechazada por CORS. Mismo default "localhost"
+      # que ya usa el Caddyfile ({$WATCHGATE_DOMAIN:localhost});
+      # Caddy sirve HTTPS incluso sin dominio real (CA propia), de ahí
+      # el esquema https:// fijo aquí también.
+      WATCHGATE_DASHBOARD_FRONTEND_ORIGIN: https://${WATCHGATE_DOMAIN:-localhost}
+      WATCHGATE_DASHBOARD_CORS_ORIGINS: https://${WATCHGATE_DOMAIN:-localhost}
 
   reverse-proxy:
     image: caddy:2.8-alpine

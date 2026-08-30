@@ -18,6 +18,7 @@ de `.watchgate.yml` y los valores por defecto de `thresholds`/`weights`.
 from __future__ import annotations
 
 import logging
+import math
 from pathlib import Path
 from typing import Any
 
@@ -66,6 +67,30 @@ class WatchGateConfig(BaseSettings):
         if isinstance(v, dict):
             if "deps" in v and "dependencies" not in v:
                 v["dependencies"] = v.pop("deps")
+        return v
+
+    @field_validator("weights")
+    @classmethod
+    def _validate_weights(cls, v: dict[str, float]) -> dict[str, float]:
+        """Auditoría: `load_config` no validaba los VALORES de `weights` en
+        absoluto -- solo `apply_cli_overrides` (overrides de línea de
+        comandos) comprobaba que sumaran > 0. Un `.watchgate.yml` con un
+        peso mal escrito (PyYAML parsea `.inf` como `float("inf")`) hacía
+        que `weighted_average()` calculara `inf * risk_score_0 = nan`, y
+        `round(nan)` en `aggregator.aggregate()` revienta con `ValueError`
+        sin capturar -- ni siquiera hace falta un YAML "malicioso", un
+        typo humano (`.inf` en vez de `1`) ya lo dispara. Un peso negativo
+        rompería igualmente el contrato "el score final está entre 0 y
+        100" en el que confía el resto del pipeline. Alcance: solo afecta
+        al camino de CLI local contra un checkout propio (el Engine API
+        de producción carga su propia config, no la de un PR ajeno), pero
+        fallar rápido aquí es más barato que un traceback a mitad de
+        análisis."""
+        for name, weight in v.items():
+            if not math.isfinite(weight):
+                raise ValueError(f"weights['{name}']={weight!r} no es un número finito")
+            if weight < 0:
+                raise ValueError(f"weights['{name}']={weight!r} no puede ser negativo")
         return v
 
     # Usados por cost_control.py (§8).

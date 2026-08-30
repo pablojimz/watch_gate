@@ -98,3 +98,48 @@ def test_github_token_and_api_url_config(monkeypatch):
     config = load_config(yaml_path="/nonexistent/.watchgate.yml")
     assert config.github_token == "gh_secret_123"
     assert config.github_api_url == "https://github.enterprise.local/api/v3"
+
+
+# --- Auditoría: load_config() no validaba los VALORES de `weights` en
+# absoluto. PyYAML parsea ".inf" como float("inf"); combinado con un
+# risk_score=0 en weighted_average(), inf*0 = nan, y round(nan) en
+# aggregator.aggregate() revienta con ValueError sin capturar a mitad de
+# análisis en vez de fallar rápido al cargar la config.
+
+
+def test_infinite_weight_from_yaml_is_rejected_at_load_time():
+    """Reproduce el fallo real: `.watchgate.yml` con un peso `.inf` (typo
+    humano plausible, PyYAML lo parsea como float("inf") sin protestar)
+    -- antes esto no fallaba aquí, sino más tarde con un ValueError
+    de round(nan) dentro del propio análisis."""
+    tmp_dir = tempfile.mkdtemp()
+    yaml_path = Path(tmp_dir) / ".watchgate.yml"
+    yaml_path.write_text("weights:\n  static: .inf\n")
+
+    with pytest.raises(Exception, match="no es un número finito"):
+        load_config(yaml_path=str(yaml_path))
+
+
+def test_negative_weight_from_yaml_is_rejected_at_load_time():
+    tmp_dir = tempfile.mkdtemp()
+    yaml_path = Path(tmp_dir) / ".watchgate.yml"
+    yaml_path.write_text("weights:\n  static: -1\n")
+
+    with pytest.raises(Exception, match="no puede ser negativo"):
+        load_config(yaml_path=str(yaml_path))
+
+
+def test_nan_weight_from_yaml_is_rejected_at_load_time():
+    tmp_dir = tempfile.mkdtemp()
+    yaml_path = Path(tmp_dir) / ".watchgate.yml"
+    yaml_path.write_text("weights:\n  static: .nan\n")
+
+    with pytest.raises(Exception, match="no es un número finito"):
+        load_config(yaml_path=str(yaml_path))
+
+
+def test_normal_weights_still_load_fine():
+    """Red de seguridad del test anterior: confirma que la validación
+    nueva no rechaza configuraciones normales."""
+    config = WatchGateConfig(weights={"static": 0.25, "dependencies": 0.1, "semantic": 0.65})
+    assert config.weights["static"] == 0.25
