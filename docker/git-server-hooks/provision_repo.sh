@@ -24,15 +24,27 @@ fi
 repo_path="$1"
 org_id="${2:-local-git-server}"
 
-docker compose exec -T engine-api python3 -c "
+# Auditoría: `repo_path`/`org_id` se interpolaban antes directamente
+# dentro de un LITERAL de Python (`repo_path = '${repo_path}'`) -- una
+# comilla simple en cualquiera de los dos rompía el literal e inyectaba
+# código Python arbitrario, ejecutado dentro del contenedor engine-api
+# con acceso real a la base de datos. Ahora viajan por variables de
+# entorno (`docker compose exec -e ...`) y se leen con `os.environ` en
+# vez de interpolarse en el código fuente -- un valor de entorno nunca se
+# re-interpreta como sintaxis Python, se pase lo que se pase.
+docker compose exec -T \
+    -e WATCHGATE_PROVISION_REPO_PATH="$repo_path" \
+    -e WATCHGATE_PROVISION_ORG_ID="$org_id" \
+    engine-api python3 -c "
+import os
 from watchgate.db.connection import get_session
 from watchgate.db.repository import create_organization, create_user, create_api_key
 from watchgate.db.models import MonitoredRepo
 from sqlmodel import select
 import uuid
 
-repo_path = '${repo_path}'
-org_id = '${org_id}'
+repo_path = os.environ['WATCHGATE_PROVISION_REPO_PATH']
+org_id = os.environ['WATCHGATE_PROVISION_ORG_ID']
 
 with next(get_session()) as session:
     org = create_organization(session, name=org_id, org_id=org_id)

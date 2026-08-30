@@ -37,11 +37,21 @@ compose=(docker compose -f docker-compose.yml -f docker-compose.gitserver.yml)
 # como `git` sobre un fichero que ahora es de `root` falla con "Operation
 # not permitted" (verificado en vivo), de ahí que este bloque corra como
 # root (sin `-u git`) y sea el que hace el `chown` explícito.
-"${compose[@]}" exec -T forgejo sh -c "
-    chown git:git '${repo_git_dir}/hooks/pre-receive.d/watchgate' &&
-    chmod +x '${repo_git_dir}/hooks/pre-receive.d/watchgate' &&
-    printf 'WATCHGATE_ENGINE_API_KEY=%s\n' '${api_key}' > '${repo_git_dir}/hooks/watchgate.env' &&
-    chown git:git '${repo_git_dir}/hooks/watchgate.env'
-"
+#
+# Auditoría: antes `repo_git_dir`/`api_key` se interpolaban directamente
+# dentro de la cadena de `sh -c "..."` -- un `full_name` con una comilla
+# simple (p. ej. si Forgejo permitiera nombres de repo autoservicio con
+# caracteres arbitrarios) rompía el quoting e inyectaba shell arbitrario,
+# ejecutado como root dentro del contenedor de Forgejo. El script en sí
+# va entre comillas SIMPLES (sin expansión de bash), y los valores viajan
+# como argumentos posicionales reales ($1/$2) en vez de texto interpolado
+# -- ningún carácter de `full_name`/`api_key` se interpreta como sintaxis
+# de shell, se pase lo que se pase.
+"${compose[@]}" exec -T forgejo sh -c '
+    chown git:git "$1/hooks/pre-receive.d/watchgate" &&
+    chmod +x "$1/hooks/pre-receive.d/watchgate" &&
+    printf "WATCHGATE_ENGINE_API_KEY=%s\n" "$2" > "$1/hooks/watchgate.env" &&
+    chown git:git "$1/hooks/watchgate.env"
+' _ "$repo_git_dir" "$api_key"
 
 echo "Hook instalado en ${repo_git_dir}/hooks/pre-receive.d/watchgate"
