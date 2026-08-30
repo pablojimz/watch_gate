@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -382,6 +383,27 @@ def _fetch_tool_hint(file_change: FileChange, head_sha: str) -> str:
 # *decida* seguir la instrucción de tratar la incertidumbre como riesgo,
 # lo fuerza. Ver `_MIN_SCORE_WHEN_UNVERIFIED` en layer.py.
 UNVERIFIED_CONTENT_MARKER = "[CONTENIDO-NO-VERIFICADO]"
+
+# Ambos puntos de este módulo que emiten UNVERIFIED_CONTENT_MARKER
+# (_render_truncated_file_change, y la rama de presupuesto agotado dentro
+# de build_user_prompt) lo hacen dentro de un bloque que arranca siempre
+# con el literal "--- {file_change.path}: " en el mismo string -- de ahí
+# que este regex pueda recuperar la ruta exacta sin tener que cambiar la
+# forma de build_user_prompt (que hoy devuelve solo texto, y así lo
+# esperan sus llamadores/tests).
+_UNVERIFIED_PATH_RE = re.compile(r"--- (.+?): [^\n]*?" + re.escape(UNVERIFIED_CONTENT_MARKER))
+
+
+def extract_unverified_paths(user_prompt: str) -> set[str]:
+    """Recupera qué rutas concretas quedaron marcadas con
+    `UNVERIFIED_CONTENT_MARKER` en un prompt ya construido por
+    `build_user_prompt` -- para que `layer.py::_apply_unverified_content_
+    floor` pueda comprobar si el LLM verificó DE VERDAD el fichero que se
+    quedó sin revisar (vía `fetch_referenced_file`), no cualquier fichero
+    al azar del mismo diff. Hallazgo real de auditoría: antes solo se
+    contaba el NÚMERO de llamadas a esa tool, sin mirar sobre qué fichero,
+    así que leer uno irrelevante también desactivaba el suelo."""
+    return {m.group(1) for m in _UNVERIFIED_PATH_RE.finditer(user_prompt)}
 
 
 def _render_truncated_file_change(file_change: FileChange, head_sha: str) -> str:

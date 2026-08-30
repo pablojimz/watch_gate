@@ -82,11 +82,20 @@ _MIN_SCORE_WHEN_UNVERIFIED = 60
 
 
 def _apply_unverified_content_floor(
-    output: SemanticOutput, has_unverified_marker: bool, fetch_referenced_file_calls: int
+    output: SemanticOutput, unverified_paths: set[str], fetched_paths: set[str]
 ) -> SemanticOutput:
+    """Auditoría (hallazgo confirmado en vivo): antes bastaba con CUALQUIER
+    llamada a `fetch_referenced_file` (`fetch_referenced_file_calls > 0`)
+    para desactivar este suelo, sin comprobar QUÉ fichero se leyó. Un diff
+    con un fichero enorme sin verificar y otro fichero cualquiera del mismo
+    diff podía "verificarse" leyendo el fichero equivocado -- el LLM llama
+    a la tool sobre un fichero irrelevante, el suelo se desactiva igual, y
+    el contenido realmente sin revisar nunca se comprueba. Ahora exige que
+    al menos UNO de los ficheros efectivamente marcados como no verificados
+    esté entre los que sí se llegaron a leer de verdad."""
     if (
-        not has_unverified_marker
-        or fetch_referenced_file_calls > 0
+        not unverified_paths
+        or (unverified_paths & fetched_paths)
         or output.risk_score >= _MIN_SCORE_WHEN_UNVERIFIED
     ):
         return output
@@ -191,6 +200,10 @@ class _ToolCallCounter:
         # para una dependencia legítima, dejando el fichero truncado sospechoso
         # sin leer). Hallazgo de revisión: antes se usaba `count > 0` genérico.
         self.fetch_referenced_file_calls = 0
+        # Rutas concretas pedidas por fetch_referenced_file -- ver
+        # _apply_unverified_content_floor: contar llamadas no basta,
+        # importa QUÉ fichero se leyó de verdad.
+        self.fetched_paths: set[str] = set()
         # Contenido real devuelto por `fetch_referenced_file` durante la
         # conversación -- hay que escanearlo por intentos de inyección de
         # prompt igual que el `user_prompt` inicial (ver comentario de
@@ -238,6 +251,9 @@ def _build_tool_executor(
             # existía (git show fallando), sigue siendo una comprobación real
             # hecha por su cuenta, no "nunca lo comprobó".
             counter.fetch_referenced_file_calls += 1
+            path = tool_input.get("path")
+            if isinstance(path, str):
+                counter.fetched_paths.add(path)
         try:
             if name == "fetch_referenced_file":
                 raw_content, wrapped_content = _dispatch_tool(name, tool_input, diff, metadata)
@@ -301,9 +317,13 @@ class _Outcome:
 
     output: SemanticOutput
     tool_calls_made: int
-    fetch_referenced_file_calls: int
     scanned_text: str
-    has_unverified_marker: bool
+    # Ver _apply_unverified_content_floor: rutas marcadas como no
+    # verificadas en el prompt vs. rutas que sí se llegaron a leer de
+    # verdad con fetch_referenced_file -- el suelo solo se desactiva si
+    # hay solape real entre ambos conjuntos.
+    unverified_paths: set[str]
+    fetched_paths: set[str]
     n_llm_calls: int
     prompt_tokens_total: int
 
@@ -421,7 +441,7 @@ class SemanticLayer(AnalysisLayer):
 
         output = _apply_prompt_injection_floor(outcome.output, outcome.scanned_text)
         output = _apply_unverified_content_floor(
-            output, outcome.has_unverified_marker, outcome.fetch_referenced_file_calls
+            output, outcome.unverified_paths, outcome.fetched_paths
         )
         self._cost_control.store_cached(diff_hash, output)
         # Nota: esto estima el coste de todas las llamadas hechas (1 en el
@@ -491,9 +511,9 @@ class SemanticLayer(AnalysisLayer):
         return _Outcome(
             output=output,
             tool_calls_made=counter.count,
-            fetch_referenced_file_calls=counter.fetch_referenced_file_calls,
             scanned_text=scanned_text,
-            has_unverified_marker=prompting.UNVERIFIED_CONTENT_MARKER in user_prompt,
+            unverified_paths=prompting.extract_unverified_paths(user_prompt),
+            fetched_paths=counter.fetched_paths,
             n_llm_calls=n_calls,
             prompt_tokens_total=prompt_tokens,
         )
@@ -698,14 +718,16 @@ class SemanticLayer(AnalysisLayer):
         for c in candidates:
             scanned_texts.extend(c.counter.fetched_contents)
 
+        fetched_paths: set[str] = set()
+        for c in candidates:
+            fetched_paths |= c.counter.fetched_paths
+
         return _Outcome(
             output=combined_output,
             tool_calls_made=sum(c.counter.count for c in candidates),
-            fetch_referenced_file_calls=sum(
-                c.counter.fetch_referenced_file_calls for c in candidates
-            ),
             scanned_text="\n".join(scanned_texts),
-            has_unverified_marker=bool(overflow_paths),
+            unverified_paths=set(overflow_paths),
+            fetched_paths=fetched_paths,
             n_llm_calls=n_llm_calls,
             prompt_tokens_total=prompt_tokens_total,
         )

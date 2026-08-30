@@ -319,6 +319,52 @@ def test_unverified_content_floor_does_not_apply_if_the_llm_used_the_fetch_tool(
     assert result.tool_calls_made == 1
 
 
+def test_unverified_content_floor_still_applies_if_the_llm_fetches_a_different_file(
+    rag_index_path, monkeypatch
+):
+    """Auditoría (hallazgo severo, confirmado en vivo): el suelo antes solo
+    miraba si `fetch_referenced_file` se había llamado ALGUNA vez, sin
+    comprobar sobre QUÉ fichero. Un LLM podía leer un fichero cualquiera
+    del mismo diff -- aquí, `README.md`, que ni siquiera forma parte del
+    diff real -- y eso bastaba para apagar el suelo, dejando el fichero
+    realmente sin verificar (`vendor/big_dump.py`, el que desbordó por
+    tamaño) sin comprobar de verdad. Mismo escenario exacto que
+    `test_unverified_content_floor_does_not_apply_if_the_llm_used_the_
+    fetch_tool` de arriba, salvo por la ruta que se lee."""
+    _force_all_chunks_overflow(monkeypatch)
+
+    class _LLMThatFetchesTheWrongFile(LLMClient):
+        def complete_structured(
+            self, system_prompt, user_prompt, tools, tool_executor, max_tool_calls
+        ):
+            tool_executor("fetch_referenced_file", {"path": "README.md", "ref": "b" * 40})
+            return SemanticOutput(
+                risk_score=10,
+                category=RiskCategory.NINGUNA,
+                justification="revisé el README, parece limpio",
+                confidence=Confidence.MEDIA,
+            )
+
+        def summarize_file(self, file_path, content, symbols):
+            return FileSummary(category="unknown", summary="")
+
+        def synthesize_text(self, system_prompt, user_prompt):
+            return ""
+
+    cost_control = _FakeCostController()
+    layer = SemanticLayer(
+        _LLMThatFetchesTheWrongFile(),
+        cost_control,
+        rag_index_path=rag_index_path,
+        max_diff_tokens=20,
+    )
+
+    result = layer.analyze(_diff_with_one_huge_unflagged_file(), {"repo": "owner/repo"})
+
+    assert result.risk_score == 60
+    assert "Ajustado a 60" in result.justification
+
+
 def test_unverified_content_floor_still_applies_if_the_llm_called_an_unrelated_tool(
     rag_index_path, monkeypatch
 ):
