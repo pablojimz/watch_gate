@@ -449,9 +449,7 @@ def delete_repo_by_path(
     db_user = _get_or_create_db_user(session, normalize_login(user.login))
     org_id = db_user.org_id
     repo_row = session.exec(
-        select(MonitoredRepo).where(
-            MonitoredRepo.repo_path == repo, MonitoredRepo.org_id == org_id
-        )
+        select(MonitoredRepo).where(MonitoredRepo.repo_path == repo, MonitoredRepo.org_id == org_id)
     ).first()
     if repo_row is not None:
         bound_keys = session.exec(

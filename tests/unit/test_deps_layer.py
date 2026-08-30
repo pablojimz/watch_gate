@@ -8,11 +8,11 @@ from watchgate.core.layers._shared import (
     parse_cargo_toml,
     parse_composer_json,
     parse_go_mod,
+    parse_manifest_file_change,
     parse_package_json,
     parse_pkgbuild,
     parse_requirements_txt,
 )
-from watchgate.core.layers._shared import parse_manifest_file_change
 from watchgate.core.layers.base import LAYER_REGISTRY
 from watchgate.core.layers.deps_layer import DepsLayer, TyposquatChecker
 from watchgate.core.models import (
@@ -384,9 +384,7 @@ def test_multiple_dependencies_take_the_max_never_the_sum() -> None:
             FileChange(
                 path="requirements.txt",
                 status=FileStatus.MODIFIED,
-                diff_hunk=(
-                    "@@ -1,0 +1,2 @@\n+some-new-pkg==1.0.0\n+1odash==4.17.21"
-                ),
+                diff_hunk=("@@ -1,0 +1,2 @@\n+some-new-pkg==1.0.0\n+1odash==4.17.21"),
                 additions=2,
                 deletions=0,
             )

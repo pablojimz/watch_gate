@@ -544,7 +544,14 @@ def test_local_strips_the_cache_breakpoint_marker_before_sending():
 
 def test_local_summarize_file_parses_valid_json_response():
     client, _transport = _local_client(
-        [_chat_response({"role": "assistant", "content": '{"category": "config", "summary": "Config de despliegue."}'})]
+        [
+            _chat_response(
+                {
+                    "role": "assistant",
+                    "content": '{"category": "config", "summary": "Config de despliegue."}',
+                }
+            )
+        ]
     )
 
     result = client.summarize_file("k8s/deploy.yaml", "apiVersion: v1", [])
