@@ -110,3 +110,48 @@ def test_shortcircuit_enabled_does_not_rerun_non_semantic_layers_when_it_does_no
     assert len(semantic_calls) == 1
     assert result.layer_results["reputation"].risk_score == 30
     assert result.layer_results["semantic"].risk_score == 10
+
+
+def test_repo_graph_context_is_not_loaded_when_shortcircuit_skips_semantic(monkeypatch, tmp_path):
+    """Optimización (regresión): `_load_repo_graph_context` (consulta a
+    Chroma + encoding del embedding) se calculaba de forma SÍNCRONA en
+    cuanto `weights["semantic"] > 0`, ANTES de saber si el cortocircuito
+    iba a evitar la capa semántica por completo -- se tiraba sin usarse en
+    cada PR que el cortocircuito resolvía en VERDE/ROJO sin LLM, justo el
+    caso que el cortocircuito existe para abaratar. Ahora se calcula
+    dentro de la propia fábrica de la capa semántica, así que solo se paga
+    su coste cuando la capa semántica se construye de verdad."""
+    monkeypatch.chdir(tmp_path)
+
+    calls: list[None] = []
+    monkeypatch.setattr(
+        "watchgate.core.pipeline._load_repo_graph_context",
+        lambda *a, **k: calls.append(None),
+    )
+
+    # Cuenta antigua + muchas contribuciones previas = risk_score muy bajo,
+    # dispara el atajo a VERDE (partial_score < umbral_amarillo*0.5) sin
+    # necesidad de tocar la capa semántica en absoluto.
+    config = WatchGateConfig(
+        weights={"reputation": 1.0, "semantic": 1.0},
+        shortcircuit_enabled=True,
+    )
+    metadata = {
+        "repo": "owner/repo",
+        "reputation": ReputationMetadata(
+            author_login="veterano",
+            author_account_age_days=2000,
+            author_prior_contributions_to_repo=50,
+            commit_email_matches_verified_email=True,
+            commit_is_signed=True,
+            signing_key_seen_before_for_login=True,
+            repo_has_history_of_signed_commits=True,
+        ),
+    }
+
+    result = run_full_analysis(_empty_diff(), metadata, config)
+
+    assert result.layer_results["semantic"].skipped is True
+    assert calls == [], (
+        "_load_repo_graph_context se llamó aunque el cortocircuito evitó la capa semántica"
+    )

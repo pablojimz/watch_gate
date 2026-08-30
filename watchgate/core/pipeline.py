@@ -216,21 +216,39 @@ def run_full_analysis(
         except Exception as exc:  # noqa: BLE001 - un LLM mal configurado no debe tumbar el análisis: se degrada a "capa semántica omitida", no se propaga
             client_init_error = str(exc)
         repo_path_for_graph = str(metadata.get("repo") or diff.repo_path or "")
-        repo_graph_result = (
-            _load_repo_graph_context(repo_path_for_graph, diff) if repo_path_for_graph else None
-        )
-        repo_graph_context, repo_project_type, repo_languages = (
-            repo_graph_result if repo_graph_result is not None else (None, None, None)
-        )
-        layer_factories["semantic"] = lambda: SemanticLayer(
-            llm_client,
-            cost_control,
-            max_diff_tokens=config.max_diff_tokens,
-            client_init_error=client_init_error,
-            repo_graph_context=repo_graph_context,
-            project_type=repo_project_type or "desconocido",
-            languages=repo_languages or "desconocido",
-        )
+
+        def _build_semantic_layer() -> SemanticLayer:
+            # Optimización: el mapa de conocimiento del repo (consulta a
+            # Chroma + encoding del embedding, ver _load_repo_graph_context)
+            # se resuelve AQUÍ, dentro de la propia fábrica -- no antes --
+            # para pagar su coste solo cuando la capa semántica se
+            # construye de verdad. Antes se calculaba en cuanto
+            # weights["semantic"] > 0, de forma síncrona y ANTES de
+            # arrancar nada más: con el cortocircuito activado (caso común,
+            # ver más abajo) esa consulta se tiraba sin usarse en cada PR
+            # que el cortocircuito resolvía en VERDE/ROJO sin LLM -- justo
+            # el trabajo que el cortocircuito existe para evitar. Y sin
+            # cortocircuito, calcularla aquí (dentro del ThreadPoolExecutor
+            # de run_analysis) la solapa con las demás capas en vez de
+            # bloquear el arranque del pipeline entero antes de que
+            # cualquier capa empiece a correr.
+            repo_graph_result = (
+                _load_repo_graph_context(repo_path_for_graph, diff) if repo_path_for_graph else None
+            )
+            repo_graph_context, repo_project_type, repo_languages = (
+                repo_graph_result if repo_graph_result is not None else (None, None, None)
+            )
+            return SemanticLayer(
+                llm_client,
+                cost_control,
+                max_diff_tokens=config.max_diff_tokens,
+                client_init_error=client_init_error,
+                repo_graph_context=repo_graph_context,
+                project_type=repo_project_type or "desconocido",
+                languages=repo_languages or "desconocido",
+            )
+
+        layer_factories["semantic"] = _build_semantic_layer
 
     try:
         if config.shortcircuit_enabled:
