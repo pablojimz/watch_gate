@@ -146,7 +146,26 @@ def evaluate_shortcircuit(
         or _has_new_dependencies(diff)
     )
 
-    if partial_score < thresholds["yellow"] * 0.5 and not forces_semantic:
+    # Auditoría: `skipped=True` no distinguía "esta capa decidió que no
+    # había nada que comprobar" de "esta capa REVENTÓ" (safe_analyze /
+    # _build_and_analyze en orchestrator.py también ponen skipped=True al
+    # atrapar una excepción). Antes, si `static` se caía (timeout de
+    # Semgrep, fallo de proceso) y el resto de capas deterministas no veía
+    # nada sospechoso, este cortocircuito marcaba el diff VERDE sin que el
+    # análisis estático hubiese llegado a ejecutarse de verdad -- confirmado
+    # en vivo. `crashed=True` (ver models.py) marca ese caso de forma
+    # explícita; con cobertura reducida por un fallo real, nunca es seguro
+    # cortocircuitar a VERDE -- se deja caer a la capa semántica, la única
+    # capa que sigue pudiendo aportar señal real pese al fallo de otra.
+    any_partial_layer_crashed = any(
+        res.crashed for name, res in partial_results.items() if name in _PARTIAL_LAYER_NAMES
+    )
+
+    if (
+        partial_score < thresholds["yellow"] * 0.5
+        and not forces_semantic
+        and not any_partial_layer_crashed
+    ):
         if rng() < 1 / 20:
             if on_audit_sample is not None:
                 on_audit_sample()

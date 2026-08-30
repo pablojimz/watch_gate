@@ -93,6 +93,38 @@ def test_low_partial_score_and_no_forcing_shortcircuits_to_verde():
     assert result == Semaforo.VERDE
 
 
+def test_crashed_layer_never_shortcircuits_to_verde_even_with_low_partial_score():
+    """Auditoría (hallazgo severo, confirmado en vivo): antes,
+    `skipped=True` no distinguía "esta capa decidió que no había nada que
+    comprobar" de "esta capa REVENTÓ" (safe_analyze/_build_and_analyze en
+    orchestrator.py también ponen skipped=True al atrapar una excepción).
+    Si `static` se caía (timeout de Semgrep, fallo de proceso) y el resto
+    de capas deterministas no veía nada sospechoso, el diff se marcaba
+    VERDE sin que el análisis estático hubiese llegado a ejecutarse --
+    justo el mismo escenario que `test_low_partial_score_and_no_forcing_
+    shortcircuits_to_verde` de arriba, salvo que aquí `static` no
+    encontró nada porque se cayó, no porque el diff esté limpio."""
+    partial = {
+        "static": LayerResult(
+            layer_name="static",
+            risk_score=0,
+            justification="",
+            skipped=True,
+            crashed=True,
+            skip_reason="RuntimeError('semgrep crashed')",
+        ),
+        "deps": _lr("deps", 5),
+        "reputation": _lr("reputation", 5),
+    }
+    diff = _diff_with_paths(("normal_file.py", "+ print(1)"))
+
+    # Mismo rng que el test VERDE de arriba (no cae en el muestreo de
+    # auditoría) -- la única diferencia es el crash de `static`.
+    result = evaluate_shortcircuit(partial, _WEIGHTS, diff, _THRESHOLDS, rng=lambda: 0.5)
+
+    assert result is None  # nunca VERDE con cobertura reducida por un fallo real
+
+
 def test_low_partial_score_but_audit_sample_forces_semantic():
     partial = {
         "static": _lr("static", 5),

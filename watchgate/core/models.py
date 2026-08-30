@@ -104,6 +104,18 @@ class LayerResult(BaseModel):
     skipped: bool = False  # true si la capa se desactivó o se omitió por presupuesto
     skip_reason: str | None = None
     tool_calls_made: int = 0  # solo semántica; para auditoría de A.3.1
+    # Auditoría: `skipped=True` antes significaba dos cosas indistinguibles
+    # -- "esta capa decidió que no había nada que comprobar" (skip_reason
+    # legible, p.ej. "Sin metadatos de plataforma disponibles") y "esta
+    # capa REVENTÓ" (safe_analyze la atrapa y también pone skipped=True,
+    # con skip_reason=repr(excepción)). shortcircuit.py trataba ambas
+    # igual: si static/deps/etc. se caían y el resto no veía nada
+    # sospechoso, el diff se marcaba VERDE sin que el análisis estático
+    # llegara a ejecutarse -- confirmado en vivo. `crashed=True` marca
+    # específicamente el segundo caso para que el cortocircuito (y
+    # cualquier otro consumidor futuro) pueda tratarlo como "sin
+    # cobertura", no como "revisado y limpio".
+    crashed: bool = False
 
 
 class Semaforo(str, Enum):

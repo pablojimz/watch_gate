@@ -22,7 +22,7 @@ class AnalysisLayer(ABC):
     def analyze(self, diff: NormalizedDiff, metadata: dict[str, Any]) -> LayerResult:
         """Debe devolver siempre un LayerResult válido, nunca lanzar excepción
         no controlada. Cualquier error interno se captura y se traduce en
-        LayerResult(skipped=True, skip_reason=str(e), risk_score=0)."""
+        LayerResult(skipped=True, crashed=True, skip_reason=str(e), risk_score=0)."""
 
 
 LAYER_REGISTRY: dict[str, type[AnalysisLayer]] = {}
@@ -46,5 +46,6 @@ def safe_analyze(
             risk_score=0,
             justification="",
             skipped=True,
+            crashed=True,
             skip_reason=repr(e),
         )

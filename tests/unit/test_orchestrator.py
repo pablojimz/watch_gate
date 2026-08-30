@@ -104,7 +104,41 @@ def test_layer_that_raises_is_isolated_via_safe_analyze():
 
     layer_result = result.layer_results["fake_broken"]
     assert layer_result.skipped is True
+    assert layer_result.crashed is True
     assert "fallo simulado" in layer_result.skip_reason
+
+
+def test_layer_that_raises_during_construction_is_also_isolated():
+    """Auditoría (hallazgo severo, confirmado en vivo): antes solo
+    `.analyze()` estaba protegido por `safe_analyze` -- una excepción
+    durante la CONSTRUCCIÓN de la capa (p.ej. `VulnerabilitiesLayer.
+    __init__` -> `OSVCache.__init__` hace I/O real de disco) se propagaba
+    sin atrapar y tumbaba TODO `run_analysis`, perdiendo también los
+    resultados de las demás capas que sí habían terminado bien."""
+
+    @register_layer
+    class _BrokenConstructor(AnalysisLayer):
+        name = "fake_broken_ctor"
+
+        def __init__(self) -> None:
+            raise RuntimeError("fallo simulado en el constructor")
+
+        def analyze(self, diff, metadata):  # noqa: ANN001
+            raise AssertionError("nunca debería llegar a ejecutarse")
+
+    config = FakeConfig(weights={"fake_broken_ctor": 1.0, "reputation": 0.5})
+
+    result = run_analysis(_empty_diff(), metadata={"pr_id": "1", "repo": "org/repo"}, config=config)
+
+    broken = result.layer_results["fake_broken_ctor"]
+    assert broken.skipped is True
+    assert broken.crashed is True
+    assert "fallo simulado en el constructor" in broken.skip_reason
+    # La capa hermana (reputation, con weight > 0 en la misma llamada)
+    # debe seguir presente e intacta -- el punto central del hallazgo es
+    # que un fallo de construcción de UNA capa no debe tumbar las demás.
+    assert "reputation" in result.layer_results
+    assert result.layer_results["reputation"].crashed is False
 
 
 def test_semantic_layer_runs_end_to_end_via_layer_factories(tmp_path):
