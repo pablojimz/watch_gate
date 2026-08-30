@@ -34,6 +34,14 @@ on:
   #     - "docs/**"
   #     - "*.md"
 
+# Auditoría: a diferencia de watchgate.yml/sync-rules.yml/reconcile-
+# rules.yml/publish.yml, este workflow no declaraba `permissions:` -- sin
+# eso, GITHUB_TOKEN recibe los permisos por defecto del repo (pueden ser
+# de escritura amplia según la configuración del repo/organización) para
+# un job que solo hace lint/test/build, sin necesidad de escribir nada.
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true

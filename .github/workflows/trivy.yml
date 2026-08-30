@@ -37,7 +37,12 @@ jobs:
       - name: Build Docker Image
         run: docker build -f docker/engine-api.Dockerfile -t watchgate-engine:latest .
       - name: Scan Docker Image with Trivy
-        uses: aquasecurity/trivy-action@master
+        # Auditoría: @master es una rama viva (mutable), no una versión --
+        # a diferencia de todos los demás actions de este repo (pinnados a
+        # tag de versión: @v7/@v6), cualquiera con push a ese repo externo
+        # cambia lo que este workflow ejecuta sin que nadie aquí lo note.
+        # v0.36.0, última release estable en el momento del fix.
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: 'watchgate-engine:latest'
           format: 'table'
