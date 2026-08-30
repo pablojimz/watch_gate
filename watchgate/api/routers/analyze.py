@@ -177,7 +177,17 @@ def analyze_pr(
     try:
         with dashboard_db_session() as dash_conn:
             insert_aggregated(dash_conn, result, author_login=author_login)
-            upsert_role(dash_conn, user.name, result.repo, "admin_organizacion")
+            # AUDITORÍA (hallazgo crítico, corregido -- mismo patrón que
+            # tasks.py, ver ese fichero): esto daba "admin_organizacion",
+            # que `user_is_org_admin()` trata como admin GLOBAL sobre
+            # TODOS los repos de TODAS las organizaciones (repo_roles no
+            # tiene columna org_id). Como este endpoint corre en CADA
+            # análisis real vía API Key (git-hook/CI/Action), cualquier
+            # usuario con una API Key válida se autoconcedía superadmin
+            # cross-tenant con solo analizar un PR. "mantenedor" preserva
+            # la intención real (ver el propio repo en el dashboard) sin
+            # ceder poder sobre organizaciones ajenas.
+            upsert_role(dash_conn, user.name, result.repo, "mantenedor")
     except Exception:
         logger.warning(
             "No se pudo persistir el resultado en el dashboard para repo=%s pr_id=%s",
