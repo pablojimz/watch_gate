@@ -142,3 +142,12 @@ class ReputationMetadata(BaseModel):
     repo_has_history_of_signed_commits: bool
     author_public_repos: int | None = None
     author_followers: int | None = None
+    # A diferencia de los campos de arriba, esto NO lo rellena el adaptador
+    # de GitHub (no tiene forma de saberlo -- es historial propio de
+    # WatchGate, no de la plataforma): lo rellena la capa de persistencia
+    # del Dashboard (dashboard/backend/tasks.py, vía
+    # db.py::author_has_prior_high_risk_pr) consultando si este mismo autor
+    # ya tuvo, en cualquier repo, un PR anterior con score > 70. Por eso el
+    # default es False -- "no se ha comprobado o no hay historial", nunca
+    # "limpio confirmado".
+    author_has_prior_high_risk_pr: bool = False

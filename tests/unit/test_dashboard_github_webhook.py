@@ -20,6 +20,16 @@ from watchgate.dashboard.backend.routers import webhooks as webhooks_module
 _SECRET = "test-github-webhook-secret"
 
 
+@pytest.fixture(autouse=True)
+def _authorized_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """repo_is_authorized() consulta la BD real (Engine DB) -- este fichero
+    de tests monta el router aislado a propósito (ver docstring del
+    módulo), así que por defecto se mockea a "autorizado" para que los
+    tests existentes (que no prueban esta comprobación) no necesiten una
+    BD real. Los tests de rechazo de más abajo la sobreescriben."""
+    monkeypatch.setattr(webhooks_module, "repo_is_authorized", lambda *a, **k: (True, ""))
+
+
 @pytest.fixture
 def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     # El secreto se lee del entorno POR PETICIÓN (no en import), así que se
@@ -142,6 +152,69 @@ def test_missing_secret_fails_closed_with_503(monkeypatch: pytest.MonkeyPatch) -
         },
     )
     assert response.status_code == 503
+
+
+def test_unauthorized_repo_is_rejected_with_403_and_never_enqueued(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """El rechazo real de "repos no autorizados/suscritos" -- sin esto,
+    cualquier repo al que la GitHub App tuviera acceso se analizaba igual
+    (bug real, ver docstring de repo_is_authorized en tasks.py)."""
+    monkeypatch.setattr(
+        webhooks_module,
+        "repo_is_authorized",
+        lambda installation_id, repo_path: (False, "repo en estado 'paused', no 'active'"),
+    )
+    monkeypatch.setattr(
+        webhooks_module,
+        "get_queue",
+        lambda: (_ for _ in ()).throw(AssertionError("no debería encolarse")),
+    )
+    payload = {
+        "action": "opened",
+        "repository": {"full_name": "acme/no-autorizado"},
+        "pull_request": {"number": 42},
+        "installation": {"id": 999},
+    }
+    response = _post(client, payload)
+    assert response.status_code == 403
+
+
+def test_authorized_repo_reaches_the_queue_with_the_right_args(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Complementa el test de arriba: comprueba que repo_is_authorized()
+    recibe exactamente installation_id y repo_path del payload, no algún
+    otro valor por accidente (p. ej. intercambiados)."""
+    seen_args = []
+
+    def _fake_authorized(installation_id: str, repo_path: str) -> tuple[bool, str]:
+        seen_args.append((installation_id, repo_path))
+        return True, ""
+
+    monkeypatch.setattr(webhooks_module, "repo_is_authorized", _fake_authorized)
+
+    calls = []
+
+    class _FakeQueue:
+        def enqueue(self, *args):
+            calls.append(args)
+
+    monkeypatch.setattr(webhooks_module, "get_queue", lambda: _FakeQueue())
+
+    payload = {
+        "action": "synchronize",
+        "repository": {"full_name": "acme/widgets"},
+        "pull_request": {"number": 7},
+        "installation": {"id": 999},
+    }
+    response = _post(client, payload)
+
+    assert response.status_code == 202
+    assert seen_args == [("999", "acme/widgets")]
+    assert calls == [
+        ("watchgate.dashboard.backend.tasks.run_managed_scan", "acme/widgets", 7, "999")
+    ]
 
 
 def test_malformed_payload_with_valid_signature_returns_400(

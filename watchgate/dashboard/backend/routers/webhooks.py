@@ -1,14 +1,17 @@
 import hashlib
 import hmac
+import logging
 import os
 from typing import Annotated
 
 from fastapi import APIRouter, Header, HTTPException, Request, Response, status
 from starlette.concurrency import run_in_threadpool
 
-from watchgate.dashboard.backend.tasks import get_queue
+from watchgate.dashboard.backend.tasks import get_queue, repo_is_authorized
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
+
+logger = logging.getLogger("watchgate.webhooks")
 
 
 def _webhook_secret() -> str | None:
@@ -90,6 +93,23 @@ async def github_webhook(
 
     if not installation_id:
         return Response(status_code=status.HTTP_200_OK)
+
+    # Rechazo real de "repos no autorizados", ANTES de encolar nada: sin
+    # esto, cualquier repo al que la GitHub App tuviera acceso (decisión
+    # del admin de GitHub al instalarla, no nuestra) se analizaba igual, y
+    # pausar un repo desde el dashboard no tenía ningún efecto en este
+    # camino -- ver el docstring de repo_is_authorized() en tasks.py.
+    # session.exec() es bloqueante (SQLAlchemy síncrono), igual que el
+    # queue.enqueue() de abajo -- mismo motivo para el run_in_threadpool.
+    authorized, reason = await run_in_threadpool(repo_is_authorized, installation_id, repo_path)
+    if not authorized:
+        logger.warning(
+            "Webhook rechazado para %s (installation_id=%s): %s",
+            repo_path,
+            installation_id,
+            reason,
+        )
+        return Response(status_code=status.HTTP_403_FORBIDDEN)
 
     # queue.enqueue() habla con Redis por un socket bloqueante (redis-py
     # estándar, no async) -- este endpoint SÍ es `async def` (lo exige

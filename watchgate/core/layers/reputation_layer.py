@@ -43,10 +43,27 @@ class ReputationLayer(AnalysisLayer):
             reputation.author_account_age_days is not None
             and reputation.author_account_age_days < 30
         ):
-            score += 30
+            score += 10
             signals.append(
                 f"La cuenta autora tiene {reputation.author_account_age_days} días de "
                 "antigüedad (menos de 30)."
+            )
+
+        # Un autor con un PR anterior ya detectado como altamente malicioso
+        # (score > 70, en cualquier repo que audite este Dashboard, no solo
+        # el actual) es una señal de reputación tan fuerte que satura la
+        # capa entera a 100 en vez de sumar puntos como el resto de
+        # señales -- ver `final_score` más abajo. Lo resuelve
+        # dashboard/backend/tasks.py antes de llamar a esta capa (ver
+        # comentario de `author_has_prior_high_risk_pr` en
+        # ReputationMetadata); si nunca se resolvió, el default es False y
+        # esta señal simplemente no dispara.
+        prior_high_risk_pr = reputation.author_has_prior_high_risk_pr
+        if prior_high_risk_pr:
+            signals.append(
+                "El autor tiene un PR anterior detectado con puntuación de riesgo alta "
+                "(>70) en el historial de WatchGate, indicio de actividad maliciosa "
+                "recurrente."
             )
 
         if (
@@ -91,8 +108,12 @@ class ReputationLayer(AnalysisLayer):
             else "No se han detectado señales de reputación sospechosas para este autor."
         )
 
+        # Un PR previo de alto riesgo del autor satura la capa a 100
+        # independientemente de la suma del resto de señales.
+        final_score = 100 if prior_high_risk_pr else min(100, score)
+
         return LayerResult(
             layer_name=self.name,
-            risk_score=min(100, score),
+            risk_score=final_score,
             justification=justification,
         )

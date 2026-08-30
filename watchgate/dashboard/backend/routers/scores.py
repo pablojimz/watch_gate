@@ -8,11 +8,13 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlmodel import select
 
 from watchgate.dashboard.backend import db as database
 from watchgate.dashboard.backend.auth import CurrentUser, require_ingest_token, require_role
+from watchgate.dashboard.backend.live_events import stream_repo_events
 from watchgate.dashboard.backend.routers.keys import _get_or_create_db_user
 from watchgate.dashboard.backend.routers.repos import DBSession, _enqueue_repo_knowledge_graph
 from watchgate.dashboard.backend.schemas import (
@@ -68,6 +70,27 @@ def list_scores(repo: str, request: Request, user: CurrentUser) -> list[ScoreOut
     require_role(user, repo, min_role="revisor", request=request)
     with database.db_session() as conn:
         return database.list_scores(conn, repo)
+
+
+@router.get("/repos/{repo:path}/events")
+def stream_scores(repo: str, request: Request, user: CurrentUser) -> StreamingResponse:
+    """SSE: un `data: refresh` cada vez que `repo` tiene un score nuevo --
+    ver live_events.py. Mismo control de acceso que /scores (mismo dato,
+    solo cambia el transporte)."""
+    require_role(user, repo, min_role="revisor", request=request)
+    return StreamingResponse(
+        stream_repo_events(repo),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            # nginx (ver nginx.conf.template): no bufferizar esta
+            # respuesta -- sin esto, los eventos se quedarían atascados en
+            # el buffer de proxy hasta acumular varios KB o cerrar la
+            # conexión, en vez de llegar al navegador al instante.
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.get("/settings/defaults", response_model=RepoSettings)

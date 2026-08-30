@@ -7,7 +7,7 @@ import { ReportModal } from '@/components/dashboard/ReportModal'
 import { RiskBadge } from '@/components/dashboard/RiskBadge'
 import { ThreatNatureTag, ThreatSummaryBadges } from '@/components/dashboard/ThreatBadges'
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
+import { cn, layerRiskColor } from '@/lib/utils'
 
 export function ScoresTable({
   scores,
@@ -182,8 +182,19 @@ export function ScoresTable({
                                 <ThreatNatureTag nature={layer.threat_nature} />
                               ) : null}
                             </div>
-                            <div className="mt-1 text-lg font-semibold">
-                              {layer.skipped ? t('repo.skipped') : layer.risk_score}
+                            <div className="mt-1 flex items-center gap-1.5 text-lg font-semibold">
+                              {layer.skipped ? (
+                                t('repo.skipped')
+                              ) : (
+                                <>
+                                  <span
+                                    className="size-2.5 shrink-0 rounded-full"
+                                    style={{ background: layerRiskColor(layer.risk_score) }}
+                                    aria-hidden="true"
+                                  />
+                                  {layer.risk_score}
+                                </>
+                              )}
                             </div>
                             {layer.justification ? (
                               <p className="mt-2 text-xs break-words whitespace-pre-line text-muted-foreground">

@@ -54,3 +54,20 @@ export function semaforoColor(semaforo: string): string {
   if (semaforo === 'amarillo') return 'var(--semaforo-amarillo)'
   return 'var(--semaforo-rojo)'
 }
+
+// Mismos umbrales por defecto que el motor (core/aggregator.py::_semaforo /
+// dashboard/backend/db.py::DEFAULT_THRESHOLDS) -- se reutilizan aquí para
+// colorear cada CAPA individual (no solo el semáforo global del PR) con la
+// misma paleta ya configurable en Apariencia, sin depender de que el
+// backend exponga per-layer thresholds propios (hoy no los tiene).
+const LAYER_RISK_THRESHOLDS = { amarillo: 34, rojo: 66 }
+
+export function riskScoreToSemaforo(riskScore: number): 'verde' | 'amarillo' | 'rojo' {
+  if (riskScore >= LAYER_RISK_THRESHOLDS.rojo) return 'rojo'
+  if (riskScore >= LAYER_RISK_THRESHOLDS.amarillo) return 'amarillo'
+  return 'verde'
+}
+
+export function layerRiskColor(riskScore: number): string {
+  return semaforoColor(riskScoreToSemaforo(riskScore))
+}

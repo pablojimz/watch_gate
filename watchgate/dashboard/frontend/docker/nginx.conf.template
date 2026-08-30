@@ -11,6 +11,17 @@ server {
     root /usr/share/nginx/html;
     index index.html;
 
+    # DNS embebido de Docker (siempre 127.0.0.11 dentro de cualquier
+    # contenedor). `proxy_pass` con una URL literal resuelve el hostname
+    # UNA sola vez, al arrancar nginx, y cachea esa IP para siempre -- si
+    # dashboard-backend se recrea (redeploy, `up -d --no-deps`, etc.) y
+    # cambia de IP, nginx se queda apuntando a la IP vieja y devuelve 502
+    # hasta que alguien reinicie este contenedor a mano. Usar una variable
+    # en `proxy_pass` (más abajo) fuerza a nginx a resolver por request,
+    # respetando el TTL de `valid` en vez de cachear indefinidamente --
+    # así un redeploy del backend nunca vuelve a romper el proxy.
+    resolver 127.0.0.11 valid=10s ipv6=off;
+
     # SPA: cualquier ruta que no sea un fichero real cae en index.html
     # (react-router resuelve la navegación en el cliente).
     location / {
@@ -21,7 +32,14 @@ server {
     # código del frontend llama a rutas relativas /api/... sin conocer la
     # URL del backend, así que en producción nginx tiene que reenviarlas.
     location /api/ {
-        proxy_pass ${BACKEND_ORIGIN}/api/;
+        # Variable en vez de literal: ver el comentario de `resolver` de
+        # arriba -- es lo que activa la re-resolución periódica. OJO: con
+        # variable, nginx deja de reemplazar el prefijo de esta location
+        # -- reenvía la URI ORIGINAL completa tal cual (aquí ya incluye
+        # "/api/..."), así que el destino NO debe repetir el "/api/" o la
+        # ruta queda duplicada ("/api//api/auth/me" -> 404).
+        set $backend_upstream ${BACKEND_ORIGIN};
+        proxy_pass $backend_upstream;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

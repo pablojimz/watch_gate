@@ -596,6 +596,41 @@ def list_repos_for_user(session: Session, user_login: str, is_admin: bool) -> li
     return list(session.execute(stmt).scalars().all())
 
 
+def author_has_prior_high_risk_pr(
+    session: Session,
+    author_login: str,
+    *,
+    min_score: int = 70,
+    exclude_repo: str | None = None,
+    exclude_pr_number: int | None = None,
+) -> bool:
+    """Señal de reputación (ver `ReputationMetadata.author_has_prior_high_risk_pr`
+    y `core/layers/reputation_layer.py`): True si `author_login` tiene, en
+    CUALQUIER repo auditado por este Dashboard, al menos un PR anterior con
+    `score > min_score` -- un autor ya flaggeado como altamente malicioso en
+    otro repo es una alerta de reputación legítima aquí, aunque el commit
+    actual en sí parezca limpio.
+
+    `exclude_repo`/`exclude_pr_number` excluyen la fila de la propia PR que
+    se está analizando ahora mismo: sin esto, un re-análisis de la MISMA PR
+    (p. ej. tras un nuevo push) se auto-marcaría por su propia corrida
+    anterior en cuanto esta superase el umbral una vez, en vez de reflejar
+    un historial real en OTRA PR."""
+    stmt = select(DashboardPRScore).where(
+        DashboardPRScore.author_login == author_login,
+        DashboardPRScore.score > min_score,
+    )
+    if exclude_repo is not None and exclude_pr_number is not None:
+        stmt = stmt.where(
+            ~(
+                (DashboardPRScore.repo == exclude_repo)
+                & (DashboardPRScore.pr_number == exclude_pr_number)
+            )
+        )
+    stmt = stmt.limit(1)
+    return session.execute(stmt).scalars().first() is not None
+
+
 def user_is_org_admin(session: Session, user_login: str) -> bool:
     stmt = (
         select(RepoRole)

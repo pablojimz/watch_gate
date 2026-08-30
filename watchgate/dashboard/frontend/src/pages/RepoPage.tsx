@@ -41,19 +41,47 @@ export default function RepoPage() {
     // título/URL de un repo con los scores/rol de OTRO, si la petición del
     // repo anterior resuelve después de la del actual.
     let cancelled = false
-    void Promise.all([api.listScores(repo), api.myRole(repo)])
-      .then(([s, r]) => {
+
+    async function load(isInitial: boolean) {
+      try {
+        const [s, r] = await Promise.all([api.listScores(repo), api.myRole(repo)])
         if (cancelled) return
         setScores(s)
         setRole(r.role)
-      })
-      .catch((err: unknown) => {
+      } catch (err) {
         if (cancelled) return
-        toast.error(err instanceof Error ? err.message : 'Error')
-        setScores([])
-      })
+        if (isInitial) {
+          toast.error(err instanceof Error ? err.message : 'Error')
+          setScores([])
+        }
+        // Un fallo de fondo (red, un 502 pasajero...) no debe vaciar la
+        // tabla ni machacar con un toast -- solo se avisa así en la carga
+        // inicial.
+      }
+    }
+
+    void load(true)
+
+    // Un PR puede llegar por webhook en cualquier momento sin que el
+    // usuario haga nada (a diferencia de ExternalReposPage, que sondea
+    // tras un scan que el propio usuario acaba de disparar) -- antes se
+    // resolvía con un sondeo indefinido cada 15s desde AQUÍ. Con muchos
+    // clientes a la vez eso es mucho tráfico sin motivo casi siempre
+    // ("¿hay algo nuevo?" -> "no" -> repetir): mejor que el servidor
+    // avise cuando de verdad lo haya (SSE, ver
+    // dashboard/backend/live_events.py) -- una única conexión, sin
+    // tráfico mientras no pasa nada.
+    const events = new EventSource(`/api/repos/${encodeURIComponent(repo)}/events`, {
+      withCredentials: true,
+    })
+    events.onmessage = () => void load(false)
+    // Sin onerror explícito: EventSource ya reintenta la conexión sola
+    // (reconexión nativa del navegador) tras un corte -- no hay nada más
+    // que hacer aquí.
+
     return () => {
       cancelled = true
+      events.close()
     }
   }, [repo])
 

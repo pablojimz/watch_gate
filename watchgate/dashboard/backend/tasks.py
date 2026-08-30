@@ -37,6 +37,46 @@ def _repo_id_for(org_id: str, repo_path: str) -> str | None:
         return repo.id if repo else None
 
 
+def repo_is_authorized(installation_id: str, repo_path: str) -> tuple[bool, str]:
+    """Única comprobación real de "¿este repo está autorizado/suscrito?".
+
+    Hasta este cambio, nada la hacía: `run_managed_scan` solo comprobaba
+    que `installation_id` estuviera reclamado por una organización
+    (`VCSConnection`), pero nunca que `repo_path` fuera un `MonitoredRepo`
+    activo de esa organización. En la práctica, cualquier repo al que la
+    GitHub App tuviera acceso (decisión del admin de GitHub al instalarla,
+    no nuestra) se analizaba igual -- y pausar un repo desde el dashboard
+    (`MonitoredRepo.status = "paused"`) no tenía ningún efecto en el
+    camino real de producción (webhooks), solo en el de auditoría manual
+    (`service/repo_polling.py`, que sí filtra por `status == "active"`).
+
+    La llama tanto el router del webhook (`routers/webhooks.py`, para
+    rechazar con 403 ANTES de encolar nada) como `run_managed_scan` (
+    defensa en profundidad, por si ese job se encola alguna vez desde
+    otro sitio que no pasara por el router).
+
+    Devuelve `(autorizado, motivo)` -- `motivo` vacío si autorizado, para
+    poder loguear por qué se rechazó sin necesitar dos valores de retorno
+    con significado condicional."""
+    with next(get_session()) as session:
+        vcs = session.exec(
+            select(VCSConnection).where(VCSConnection.installation_id == installation_id)
+        ).first()
+        if not vcs or not vcs.org_id:
+            return False, "installation_id no reclamado por ninguna organización"
+
+        repo = session.exec(
+            select(MonitoredRepo).where(
+                MonitoredRepo.org_id == vcs.org_id, MonitoredRepo.repo_path == repo_path
+            )
+        ).first()
+        if repo is None:
+            return False, "repo no dado de alta como MonitoredRepo para esa organización"
+        if repo.status != "active":
+            return False, f"repo en estado '{repo.status}', no 'active'"
+        return True, ""
+
+
 def run_managed_scan(
     repo_path: str,
     pr_number: int,
@@ -54,6 +94,28 @@ def run_managed_scan(
             return  # No registrado
 
         org_id = vcs.org_id
+
+        # Defensa en profundidad: el router del webhook (routers/webhooks.py)
+        # ya llama a repo_is_authorized() y rechaza con 403 antes de encolar
+        # este job -- esta comprobación es por si algún día se encola desde
+        # otro sitio (un reintento manual, otra ruta futura). Reutiliza esta
+        # `session` ya abierta en vez de llamar a repo_is_authorized() (que
+        # abriría una segunda sesión anidada para la misma consulta).
+        repo = session.exec(
+            select(MonitoredRepo).where(
+                MonitoredRepo.org_id == org_id, MonitoredRepo.repo_path == repo_path
+            )
+        ).first()
+        if repo is None or repo.status != "active":
+            logger.warning(
+                "run_managed_scan rechazado para %s (org=%s): repo no autorizado o no "
+                "activo (encontrado=%s, status=%s)",
+                repo_path,
+                org_id,
+                repo is not None,
+                repo.status if repo else None,
+            )
+            return
 
         try:
             from watchgate.dashboard.backend.db import db_session as dashboard_db_session
@@ -84,12 +146,43 @@ def run_managed_scan(
 
             diff_text, metadata = client.get_pull_request_data(owner, repo_name, pr_number)
 
-            # Construir autores
+            # Construir autores y metadatos de reputación -- este era el
+            # único de los 3 caminos de análisis (junto a run_main_branch_scan
+            # y run_audit_scan) que NO llamaba a get_reputation_metadata en
+            # absoluto: la capa "reputation" del reporte salía siempre
+            # `skipped` para cualquier PR llegada por webhook de una GitHub
+            # App (el camino real de producción), aunque el adaptador sí
+            # sabe construirla -- reproducido en vivo contra un PR real.
             author_login = metadata.get("user", {}).get("login", "unknown")
             author = CommitAuthor(
                 name=author_login, email="unknown@example.com", login=author_login
             )
             parsed_diff = parse_diff_from_text(diff_text, authors=[author])
+
+            reputation_metadata = None
+            if author_login != "unknown":
+                try:
+                    reputation_metadata = client.get_reputation_metadata(
+                        owner, repo_name, author_login, pr_number=pr_number
+                    )
+                except Exception:
+                    pass
+
+            if reputation_metadata is not None:
+                try:
+                    from watchgate.dashboard.backend.db import author_has_prior_high_risk_pr
+
+                    with dashboard_db_session() as dash_conn:
+                        reputation_metadata.author_has_prior_high_risk_pr = (
+                            author_has_prior_high_risk_pr(
+                                dash_conn,
+                                author_login,
+                                exclude_repo=repo_path,
+                                exclude_pr_number=pr_number,
+                            )
+                        )
+                except Exception:
+                    pass
 
             # Análisis con control de cuota
             pipeline_metadata: dict[str, object] = {
@@ -97,6 +190,8 @@ def run_managed_scan(
                 "repo": repo_path,
                 "author_login": author_login,
             }
+            if reputation_metadata:
+                pipeline_metadata["reputation"] = reputation_metadata
             config = load_config()
 
             quota_service = QuotaService(session)
@@ -112,11 +207,13 @@ def run_managed_scan(
             # 5. Insertar en la BD del Dashboard para que se pueda visualizar
             from watchgate.dashboard.backend.db import db_session as dashboard_db_session
             from watchgate.dashboard.backend.db import insert_aggregated, upsert_role
+            from watchgate.dashboard.backend.live_events import publish_pr_update
 
             with dashboard_db_session() as dash_conn:
                 result.pr_id = str(pr_number)
                 result.repo = repo_path
                 insert_aggregated(dash_conn, result, author_login=author_login)
+                publish_pr_update(repo_path)
 
                 # Buscamos el usuario de la DB SQLModel asociado para darle
                 # permisos en el esquema del Dashboard
@@ -335,6 +432,26 @@ def run_main_branch_scan(
                 except Exception:
                     pass
 
+            if reputation_metadata is not None:
+                try:
+                    from watchgate.dashboard.backend.db import author_has_prior_high_risk_pr
+
+                    with dashboard_db_session() as dash_conn:
+                        # 0: mismo sentinel de pr_number que usa db.py para
+                        # los escaneos de rama principal (pr_id "main" no es
+                        # una PR real de GitHub -- ver
+                        # db.py::_MAIN_BRANCH_SCAN_PR_NUMBER).
+                        reputation_metadata.author_has_prior_high_risk_pr = (
+                            author_has_prior_high_risk_pr(
+                                dash_conn,
+                                author_login,
+                                exclude_repo=repo_path,
+                                exclude_pr_number=0,
+                            )
+                        )
+                except Exception:
+                    pass
+
             pipeline_metadata: dict[str, object] = {
                 "pr_id": MAIN_BRANCH_SCAN_PR_ID,
                 "repo": repo_path,
@@ -356,11 +473,13 @@ def run_main_branch_scan(
 
             from watchgate.dashboard.backend.db import db_session as dashboard_db_session
             from watchgate.dashboard.backend.db import insert_aggregated, upsert_role
+            from watchgate.dashboard.backend.live_events import publish_pr_update
 
             with dashboard_db_session() as dash_conn:
                 result.pr_id = MAIN_BRANCH_SCAN_PR_ID
                 result.repo = repo_path
                 insert_aggregated(dash_conn, result, author_login=author_login)
+                publish_pr_update(repo_path)
 
                 from watchgate.db.models import User
 
@@ -453,6 +572,22 @@ def run_audit_scan(
                 except Exception:
                     pass
 
+            if reputation_metadata is not None:
+                try:
+                    from watchgate.dashboard.backend.db import author_has_prior_high_risk_pr
+
+                    with dashboard_db_session() as dash_conn:
+                        reputation_metadata.author_has_prior_high_risk_pr = (
+                            author_has_prior_high_risk_pr(
+                                dash_conn,
+                                author_login,
+                                exclude_repo=repo_path,
+                                exclude_pr_number=pr_number,
+                            )
+                        )
+                except Exception:
+                    pass
+
             # 4. Análisis con control de cuota
             pipeline_metadata: dict[str, object] = {
                 "pr_id": str(pr_number),
@@ -477,11 +612,13 @@ def run_audit_scan(
             # 5. Insertar en la BD del Dashboard para que se pueda visualizar
             from watchgate.dashboard.backend.db import db_session as dashboard_db_session
             from watchgate.dashboard.backend.db import insert_aggregated, upsert_role
+            from watchgate.dashboard.backend.live_events import publish_pr_update
 
             with dashboard_db_session() as dash_conn:
                 result.pr_id = str(pr_number)
                 result.repo = repo_path
                 insert_aggregated(dash_conn, result, author_login=author_login)
+                publish_pr_update(repo_path)
 
                 # Buscamos el usuario de la DB SQLModel asociado para darle
                 # permisos en el esquema del Dashboard
