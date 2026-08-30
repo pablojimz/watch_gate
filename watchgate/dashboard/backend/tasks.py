@@ -124,7 +124,18 @@ def run_managed_scan(
 
                 user_obj = session.exec(select(User).where(User.org_id == org_id)).first()
                 if user_obj:
-                    upsert_role(dash_conn, user_obj.name, repo_path, "admin_organizacion")
+                    # AUDITORÍA (hallazgo crítico, corregido): esto daba antes
+                    # "admin_organizacion" -- role.py/db.py::user_is_org_admin
+                    # trata tener ESE rol en CUALQUIER fila de repo_roles (tabla
+                    # sin columna org_id) como admin GLOBAL sobre TODOS los repos
+                    # de TODAS las organizaciones, no solo la propia. Confirmado
+                    # en vivo: el primer escaneo de cualquier org nueva se
+                    # autoconcedía superadmin cross-tenant sobre datos de otros
+                    # clientes. La intención real aquí siempre fue solo dejar
+                    # ver/gestionar el repo que la propia org acaba de conectar
+                    # -- "mantenedor" (repo_roles.get_role, sí acotado por
+                    # (user_login, repo) real) es el rol correcto para eso.
+                    upsert_role(dash_conn, user_obj.name, repo_path, "mantenedor")
 
             # Actualizar last_scanned_at y limpiar la racha de fallos, si había
             repo_obj = session.exec(
@@ -355,7 +366,18 @@ def run_main_branch_scan(
 
                 user_obj = session.exec(select(User).where(User.org_id == org_id)).first()
                 if user_obj:
-                    upsert_role(dash_conn, user_obj.name, repo_path, "admin_organizacion")
+                    # AUDITORÍA (hallazgo crítico, corregido): esto daba antes
+                    # "admin_organizacion" -- role.py/db.py::user_is_org_admin
+                    # trata tener ESE rol en CUALQUIER fila de repo_roles (tabla
+                    # sin columna org_id) como admin GLOBAL sobre TODOS los repos
+                    # de TODAS las organizaciones, no solo la propia. Confirmado
+                    # en vivo: el primer escaneo de cualquier org nueva se
+                    # autoconcedía superadmin cross-tenant sobre datos de otros
+                    # clientes. La intención real aquí siempre fue solo dejar
+                    # ver/gestionar el repo que la propia org acaba de conectar
+                    # -- "mantenedor" (repo_roles.get_role, sí acotado por
+                    # (user_login, repo) real) es el rol correcto para eso.
+                    upsert_role(dash_conn, user_obj.name, repo_path, "mantenedor")
 
             repo_obj = session.exec(
                 select(MonitoredRepo).where(
@@ -467,7 +489,18 @@ def run_audit_scan(
 
                 user_obj = session.exec(select(User).where(User.org_id == org_id)).first()
                 if user_obj:
-                    upsert_role(dash_conn, user_obj.name, repo_path, "admin_organizacion")
+                    # AUDITORÍA (hallazgo crítico, corregido): esto daba antes
+                    # "admin_organizacion" -- role.py/db.py::user_is_org_admin
+                    # trata tener ESE rol en CUALQUIER fila de repo_roles (tabla
+                    # sin columna org_id) como admin GLOBAL sobre TODOS los repos
+                    # de TODAS las organizaciones, no solo la propia. Confirmado
+                    # en vivo: el primer escaneo de cualquier org nueva se
+                    # autoconcedía superadmin cross-tenant sobre datos de otros
+                    # clientes. La intención real aquí siempre fue solo dejar
+                    # ver/gestionar el repo que la propia org acaba de conectar
+                    # -- "mantenedor" (repo_roles.get_role, sí acotado por
+                    # (user_login, repo) real) es el rol correcto para eso.
+                    upsert_role(dash_conn, user_obj.name, repo_path, "mantenedor")
 
             # Actualizar last_scanned_at y limpiar la racha de fallos, si había
             repo_obj = session.exec(
