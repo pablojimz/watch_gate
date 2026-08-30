@@ -31,7 +31,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from watchgate.api.auth import get_current_user_from_api_key
 from watchgate.dashboard.backend import db as database
+from watchgate.dashboard.backend.org_scope import resolve_org_repo_paths
 from watchgate.dashboard.backend.schemas import OrgMetrics, ScoreOut
+from watchgate.db.connection import get_session
 from watchgate.db.models import Organization, User, UserAPIKey
 
 ApiKeyIdentity = Annotated[
@@ -47,11 +49,13 @@ def repo_score_history(
     _identity: ApiKeyIdentity,
     limit: int = 20,
 ) -> list[ScoreOut]:
-    _key, user, _org = _identity
+    _key, user, org = _identity
     user_login = user.name
 
     with database.db_session() as conn:
-        is_admin = database.user_is_org_admin(conn, user_login)
+        # Auditoría: `user_is_org_admin` ya no acepta "admin en cualquier
+        # repo" -- `org.id` viene ya resuelto por la propia API Key.
+        is_admin = database.user_is_org_admin(conn, user_login, org.id)
         if not is_admin:
             role = database.get_role(conn, user_login, repo)
             if role is None:
@@ -68,16 +72,27 @@ def org_metrics(
     _identity: ApiKeyIdentity,
     repos: Annotated[list[str] | None, Query()] = None,
 ) -> OrgMetrics:
-    _key, user, _org = _identity
+    _key, user, org = _identity
     user_login = user.name
 
+    with next(get_session()) as engine_session:
+        org_repo_paths = resolve_org_repo_paths(engine_session, org.id)
+
     with database.db_session() as conn:
-        is_admin = database.user_is_org_admin(conn, user_login)
+        # Auditoría: `user_is_org_admin` ya no acepta "admin en cualquier
+        # repo" -- `org.id` viene ya resuelto por la propia API Key.
+        is_admin = database.user_is_org_admin(conn, user_login, org.id)
         if repos:
             authorized_repos = [
                 r for r in repos if is_admin or database.get_role(conn, user_login, r) is not None
             ]
             selected = authorized_repos
         else:
-            selected = database.list_repos_for_user(conn, user_login, is_admin=is_admin)
+            selected = database.list_repos_for_user(
+                conn,
+                user_login,
+                is_admin=is_admin,
+                org_id=org.id,
+                org_repo_paths=org_repo_paths,
+            )
         return database.compute_org_metrics(conn, selected)

@@ -565,13 +565,24 @@ def _handle_repo_score_history(args: dict[str, Any]) -> McpToolCallResult:
                 content=[McpTextContent(text=_NO_MCP_IDENTITY_ERROR)],
                 isError=True,
             )
-        _key, user, _org = identity
+        _key, user, org = identity
         user_login = user.name
+        # `org.id` leído DENTRO de `with open_session()` -- fuera de ese
+        # bloque la sesión ya está cerrada y `resolve_mcp_identity` puede
+        # haber hecho `commit()` (actualiza `last_used_at` de la API Key),
+        # lo que expira los atributos de `org` (`expire_on_commit=True`
+        # por defecto) y convierte cualquier acceso posterior en
+        # `DetachedInstanceError` -- reproducido en la suite de tests.
+        org_id = org.id
 
     from watchgate.dashboard.backend import db as dashboard_db
 
     with dashboard_db.db_session() as conn:
-        is_admin = dashboard_db.user_is_org_admin(conn, user_login)
+        # Auditoría: `user_is_org_admin` ya no acepta "admin en cualquier
+        # repo" -- `org_id` (ya resuelto por `resolve_mcp_identity`,
+        # `WATCHGATE_MCP_API_KEY` real) es la organización real del
+        # llamador.
+        is_admin = dashboard_db.user_is_org_admin(conn, user_login, org_id)
         if not is_admin and dashboard_db.get_role(conn, user_login, repo) is None:
             return McpToolCallResult(
                 content=[McpTextContent(text=f"Permiso denegado: Sin rol asignado en '{repo}'.")],
@@ -593,13 +604,26 @@ def _handle_org_metrics(args: dict[str, Any]) -> McpToolCallResult:
                 content=[McpTextContent(text=_NO_MCP_IDENTITY_ERROR)],
                 isError=True,
             )
-        _key, user, _org = identity
+        _key, user, org = identity
         user_login = user.name
+        # `org.id` leído DENTRO de `with open_session()`, no después --
+        # ver el mismo hallazgo en `_handle_repo_score_history` (sesión
+        # cerrada + `expire_on_commit` = `DetachedInstanceError` al leer
+        # `org.id` más tarde).
+        org_id = org.id
 
     from watchgate.dashboard.backend import db as dashboard_db
+    from watchgate.dashboard.backend.org_scope import resolve_org_repo_paths
+
+    with open_session() as engine_session:
+        org_repo_paths = resolve_org_repo_paths(engine_session, org_id)
 
     with dashboard_db.db_session() as conn:
-        is_admin = dashboard_db.user_is_org_admin(conn, user_login)
+        # Auditoría: `user_is_org_admin` ya no acepta "admin en cualquier
+        # repo" -- `org_id` (ya resuelto por `resolve_mcp_identity`,
+        # `WATCHGATE_MCP_API_KEY` real) es la organización real del
+        # llamador.
+        is_admin = dashboard_db.user_is_org_admin(conn, user_login, org_id)
         if requested_repos:
             repos = [
                 r
@@ -607,7 +631,13 @@ def _handle_org_metrics(args: dict[str, Any]) -> McpToolCallResult:
                 if is_admin or dashboard_db.get_role(conn, user_login, r) is not None
             ]
         else:
-            repos = dashboard_db.list_repos_for_user(conn, user_login, is_admin=is_admin)
+            repos = dashboard_db.list_repos_for_user(
+                conn,
+                user_login,
+                is_admin=is_admin,
+                org_id=org_id,
+                org_repo_paths=org_repo_paths,
+            )
         metrics = dashboard_db.compute_org_metrics(conn, repos)
 
     return McpToolCallResult(content=[McpTextContent(text=metrics.model_dump_json(indent=2))])

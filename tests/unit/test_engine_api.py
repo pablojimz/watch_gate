@@ -217,12 +217,12 @@ def test_analyze_mirrors_result_into_dashboard_db(api_client, monkeypatch, tmp_p
     watchgate/dashboard/backend/db.py).
 
     Auditoría (hallazgo crítico, corregido): esto daba "admin_organizacion"
-    -- que `user_is_org_admin()` trata como admin GLOBAL sobre TODAS las
-    organizaciones (repo_roles no tiene columna org_id) -- así que
-    cualquier usuario con una API Key válida se autoconcedía superadmin
-    cross-tenant con solo analizar un PR. "mantenedor" (acotado de verdad
-    por (user_login, repo) real) preserva la visibilidad pretendida sin
-    ceder poder sobre organizaciones ajenas."""
+    -- que `user_is_org_admin()` (antes de exigir `org_id`) trataba como
+    admin GLOBAL sobre TODAS las organizaciones -- así que cualquier
+    usuario con una API Key válida se autoconcedía superadmin cross-tenant
+    con solo analizar un PR. "mantenedor" (acotado de verdad por
+    (user_login, repo) real) preserva la visibilidad pretendida sin ceder
+    poder sobre organizaciones ajenas."""
     from watchgate.dashboard.backend import db as dashboard_db
 
     dashboard_db_path = tmp_path / "dashboard.db"
@@ -256,8 +256,9 @@ def test_analyze_mirrors_result_into_dashboard_db(api_client, monkeypatch, tmp_p
         role = dashboard_db.get_role(dash_conn, "mirror.dev", "acme/mirror-repo")
         assert role == "mantenedor"
         # El punto central del hallazgo: este análisis NO debe convertir
-        # al usuario en admin global de la plataforma.
-        assert dashboard_db.user_is_org_admin(dash_conn, "mirror.dev") is False
+        # al usuario en admin de su propia organización, y mucho menos de
+        # ninguna otra.
+        assert dashboard_db.user_is_org_admin(dash_conn, "mirror.dev", org.id) is False
 
 
 def test_analyze_still_returns_200_when_dashboard_mirror_fails(api_client, monkeypatch, tmp_path):

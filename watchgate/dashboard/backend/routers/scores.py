@@ -15,6 +15,11 @@ from sqlmodel import select
 from watchgate.dashboard.backend import db as database
 from watchgate.dashboard.backend.auth import CurrentUser, require_ingest_token, require_role
 from watchgate.dashboard.backend.live_events import stream_repo_events
+from watchgate.dashboard.backend.org_scope import (
+    is_site_superadmin,
+    resolve_caller_org_id,
+    resolve_org_repo_paths,
+)
 from watchgate.dashboard.backend.routers.keys import _get_or_create_db_user
 from watchgate.dashboard.backend.routers.repos import DBSession, _enqueue_repo_knowledge_graph
 from watchgate.dashboard.backend.schemas import (
@@ -60,9 +65,31 @@ class RepoKnowledgeGraphOut(BaseModel):
 
 @router.get("/repos")
 def list_visible_repos(user: CurrentUser) -> list[str]:
+    # Auditoría: acotado a la organización real del llamador -- antes
+    # `is_admin` global hacía que un admin_organizacion (cualquier repo)
+    # viera los repos de TODAS las organizaciones, no solo la propia.
+    # Un superadmin de sitio sí ve todos los repos de la instancia a
+    # propósito (`unscoped=True`, nunca por un `org_id` vacío -- ver el
+    # bugfix en list_repos_for_user) -- es el mismo nivel que ya tiene
+    # sobre llm_settings.py/ui_settings.py, coherente con administrar la
+    # instancia entera, no solo su propia organización.
+    caller_is_site_superadmin = is_site_superadmin(user.login)
+
+    from watchgate.db.connection import get_session
+
+    with next(get_session()) as engine_session:
+        org_id = resolve_caller_org_id(engine_session, user.login)
+        org_repo_paths = resolve_org_repo_paths(engine_session, org_id)
     with database.db_session() as conn:
-        is_admin = database.user_is_org_admin(conn, user.login)
-        return database.list_repos_for_user(conn, user.login, is_admin=is_admin)
+        is_admin = caller_is_site_superadmin or database.user_is_org_admin(conn, user.login, org_id)
+        return database.list_repos_for_user(
+            conn,
+            user.login,
+            is_admin=is_admin,
+            org_id=org_id,
+            org_repo_paths=org_repo_paths,
+            unscoped=caller_is_site_superadmin,
+        )
 
 
 @router.get("/repos/{repo:path}/scores", response_model=list[ScoreOut])
@@ -101,9 +128,16 @@ def get_default_settings(_user: CurrentUser) -> RepoSettings:
 
 @router.put("/settings/defaults", response_model=RepoSettings)
 def put_default_settings(body: RepoSettings, user: CurrentUser) -> RepoSettings:
+    # Auditoría: `org_settings` es una fila SINGLETON compartida por TODA
+    # la instancia (get_org_settings/set_org_settings, sin `org_id` en
+    # ningún sitio) -- no es un dato por-organización, así que ya no basta
+    # con `admin_organizacion` (ahora acotado por org) -- exige superadmin
+    # de sitio (mismo criterio que llm_settings.py/ui_settings.py).
+    if not is_site_superadmin(user.login):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Se requiere superadmin de sitio"
+        )
     with database.db_session() as conn:
-        if not database.user_is_org_admin(conn, user.login):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Se requiere admin")
         return database.set_org_settings(conn, body)
 
 

@@ -11,6 +11,11 @@ from sqlmodel import Session, select
 from watchgate.adapters.github_client import GitHubClient
 from watchgate.dashboard.backend import db as database
 from watchgate.dashboard.backend.auth import CurrentUser, require_role
+from watchgate.dashboard.backend.org_scope import (
+    is_site_superadmin,
+    resolve_caller_org_id,
+    resolve_org_id_for_repo,
+)
 from watchgate.dashboard.backend.schemas import (
     AcceptScoreOut,
     DashboardUserCreate,
@@ -228,13 +233,17 @@ def unaccept_score(score_id: int, request: Request, user: CurrentUser) -> ScoreO
 def list_all_roles(
     request: Request, user: CurrentUser, engine_session: EngineDBSession
 ) -> list[RepoRoleOut]:
+    # Auditoría (hallazgo crítico, corregido): antes devolvía TODOS los
+    # roles de TODAS las organizaciones -- ahora acotado a la
+    # organización real del llamador.
+    org_id = resolve_caller_org_id(engine_session, user.login)
     with database.db_session() as conn:
-        if not database.user_is_org_admin(conn, user.login):
+        if not database.user_is_org_admin(conn, user.login, org_id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Se requiere admin_organizacion",
             )
-        rows = database.list_roles(conn)
+        rows = database.list_roles(conn, org_id=org_id)
 
     # `repo_roles` (Dashboard DB) es solo (user_login, repo, role) -- no
     # sabe si `repo` está conectado como repo externo, eso vive en
@@ -271,27 +280,60 @@ def list_all_roles(
 
 
 @router.put("/admin/roles", response_model=RepoRoleOut)
-def upsert_role(body: RepoRoleIn, request: Request, user: CurrentUser) -> RepoRoleOut:
+def upsert_role(
+    body: RepoRoleIn, request: Request, user: CurrentUser, engine_session: EngineDBSession
+) -> RepoRoleOut:
+    org_id = resolve_caller_org_id(engine_session, user.login)
+    # Auditoría: además de acotar la comprobación de admin, hay que
+    # comprobar que `body.repo` sea de verdad un repo de MI organización
+    # -- si no, un admin_organizacion (ya acotado) podría seguir
+    # concediendo roles (incluido "admin_organizacion") sobre el repo de
+    # OTRA organización con solo escribir su nombre en el body, sin que
+    # `user_is_org_admin` lo detectase (esa comprobación es sobre quién
+    # llama, no sobre a qué repo se refiere la petición).
+    target_org_id = resolve_org_id_for_repo(engine_session, body.repo)
     with database.db_session() as conn:
-        if not database.user_is_org_admin(conn, user.login):
+        if not database.user_is_org_admin(conn, user.login, org_id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Se requiere admin_organizacion",
             )
-        database.upsert_role(conn, body.user_login, body.repo, body.role)
+        if target_org_id != org_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"'{body.repo}' no pertenece a tu organización",
+            )
+        database.upsert_role(conn, body.user_login, body.repo, body.role, org_id=org_id)
     return RepoRoleOut(user_login=body.user_login, repo=body.repo, role=body.role)
 
 
 @router.delete("/admin/roles/{user_login}/{repo:path}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_role(user_login: str, repo: str, request: Request, user: CurrentUser) -> None:
+def delete_role(
+    user_login: str,
+    repo: str,
+    request: Request,
+    user: CurrentUser,
+    engine_session: EngineDBSession,
+) -> None:
+    org_id = resolve_caller_org_id(engine_session, user.login)
     with database.db_session() as conn:
-        if not database.user_is_org_admin(conn, user.login):
+        if not database.user_is_org_admin(conn, user.login, org_id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Se requiere admin_organizacion",
             )
-        if not database.delete_role(conn, user_login, repo):
+        existing_role = database.get_role(conn, user_login, repo)
+        if existing_role is None:
             raise HTTPException(status_code=404, detail="Rol no encontrado")
+        # Misma comprobación que en upsert_role: solo se puede borrar un
+        # rol sobre un repo de la propia organización.
+        target_org_id = resolve_org_id_for_repo(engine_session, repo)
+        if target_org_id != org_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"'{repo}' no pertenece a tu organización",
+            )
+        database.delete_role(conn, user_login, repo)
 
 
 @router.get("/admin/users", response_model=list[DashboardUserOut])
@@ -302,12 +344,16 @@ def list_all_users(request: Request, user: CurrentUser) -> list[DashboardUserOut
     vez dentro. Un login puede tener roles asignados sin tener cuenta
     local aquí (entra por GitHub/OIDC) -- las dos tablas son
     independientes a propósito."""
+    # Auditoría: `dashboard_users` (cuentas locales login/contraseña) no
+    # tiene columna de organización -- es una tabla de INSTANCIA completa,
+    # no por-organización, así que exige superadmin de sitio en vez de un
+    # admin_organizacion (que tras acotarlo por org ya no tendría poder
+    # real sobre cuentas que no son "suyas" de ningún modo verificable).
+    if not is_site_superadmin(user.login):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Se requiere superadmin de sitio"
+        )
     with database.db_session() as conn:
-        if not database.user_is_org_admin(conn, user.login):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Se requiere admin_organizacion",
-            )
         users = database.list_users(conn)
         # Construir los DTOs DENTRO del `with`: `conn.close()` al salir
         # expira los objetos ORM (`expire_on_commit=True` por defecto), y
@@ -319,13 +365,17 @@ def list_all_users(request: Request, user: CurrentUser) -> list[DashboardUserOut
 
 
 @router.post("/admin/users", response_model=DashboardUserOut, status_code=status.HTTP_201_CREATED)
-def create_user(body: DashboardUserCreate, request: Request, user: CurrentUser) -> DashboardUserOut:
+def create_user(
+    body: DashboardUserCreate,
+    request: Request,
+    user: CurrentUser,
+    engine_session: EngineDBSession,
+) -> DashboardUserOut:
+    if not is_site_superadmin(user.login):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Se requiere superadmin de sitio"
+        )
     with database.db_session() as conn:
-        if not database.user_is_org_admin(conn, user.login):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Se requiere admin_organizacion",
-            )
         if database.get_user(conn, body.login) is not None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -333,23 +383,34 @@ def create_user(body: DashboardUserCreate, request: Request, user: CurrentUser) 
             )
         database.upsert_user(conn, body.login, body.password, body.display_name)
         if body.repo and body.role:
-            database.upsert_role(conn, body.login, body.repo, body.role)
+            # Auditoría: el rol asignado aquí es sobre un repo real, que
+            # pertenece a una organización real -- resolverla igual que en
+            # upsert_role/delete_role, para que este admin_organizacion
+            # concedido por un superadmin de sitio quede correctamente
+            # acotado (org_id=None quedaría inerte por el diseño fail-closed
+            # de user_is_org_admin, rompiendo silenciosamente el flujo).
+            target_org_id = resolve_org_id_for_repo(engine_session, body.repo)
+            database.upsert_role(conn, body.login, body.repo, body.role, org_id=target_org_id)
     return DashboardUserOut(login=body.login, display_name=body.display_name)
 
 
 @router.delete("/admin/users/{login}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_user(login: str, request: Request, user: CurrentUser) -> None:
     """Borra la cuenta local y, en cascada, todos sus roles asignados
-    (`database.delete_user`). Dos guardas contra dejar la organización sin
+    (`database.delete_user`). Dos guardas contra dejar una organización sin
     forma de gestionarse: no se puede borrar la propia cuenta desde aquí
     (evita un auto-bloqueo accidental), ni la del único
-    `admin_organizacion` que quede."""
+    `admin_organizacion` que quede en alguna de sus organizaciones."""
+    # Auditoría: `dashboard_users` es una tabla de INSTANCIA completa (sin
+    # columna de organización, ver list_all_users) -- borrar una cuenta
+    # local es una acción de superadmin de sitio, no de admin_organizacion
+    # (que tras acotarlo por org no tiene autoridad verificable sobre
+    # cuentas de otras organizaciones).
+    if not is_site_superadmin(user.login):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Se requiere superadmin de sitio"
+        )
     with database.db_session() as conn:
-        if not database.user_is_org_admin(conn, user.login):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Se requiere admin_organizacion",
-            )
         if normalize_login(login) == normalize_login(user.login):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
