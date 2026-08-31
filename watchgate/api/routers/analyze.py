@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -15,8 +16,15 @@ from watchgate.api.auth import require_scope
 from watchgate.api.dependencies import get_db_session
 from watchgate.config import load_config
 from watchgate.core.diffparser import parse_diff_from_text
-from watchgate.core.models import AggregatedResult, CommitAuthor
-from watchgate.db.models import MonitoredRepo, Organization, User, UserAPIKey, VCSConnection
+from watchgate.core.models import AggregatedResult, CommitAuthor, ProposedYaraRule
+from watchgate.db.models import (
+    MonitoredRepo,
+    Organization,
+    PendingYaraRule,
+    User,
+    UserAPIKey,
+    VCSConnection,
+)
 from watchgate.service.policy import ClientConfigOverrideError, apply_client_config_override
 from watchgate.service.quota import QuotaService
 
@@ -86,6 +94,45 @@ def ensure_api_key_repo_binding(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Esta API key solo es válida para el repo '{bound_repo_path}'.",
             )
+
+
+def _persist_proposed_yara_rules(
+    session: Session,
+    proposed_rules: list[ProposedYaraRule],
+    *,
+    org_id: str,
+    repo: str,
+    pr_id: str,
+) -> None:
+    """Bucle de retroalimentación (tools.py::propose_yara_rule): una fila
+    `PendingYaraRule` (status="pending") por propuesta aceptada de este
+    análisis -- nunca se activa sola, queda pendiente de revisión humana
+    (ver `dashboard/backend/routers/yara_rules.py`, `is_site_superadmin`).
+
+    Deduplicado por `rule_name`: si el mismo PR se re-analiza (nuevo push,
+    reintento), no debe generar una fila nueva por cada re-análisis
+    mientras la propuesta anterior siga pendiente o ya se haya decidido
+    sobre ella -- una regla RECHAZADA tampoco se vuelve a proponer sola."""
+    for proposal in proposed_rules:
+        existing = session.exec(
+            select(PendingYaraRule).where(PendingYaraRule.rule_name == proposal.rule_name)
+        ).first()
+        if existing is not None:
+            continue
+        session.add(
+            PendingYaraRule(
+                id=str(uuid.uuid4()),
+                org_id=org_id,
+                repo=repo,
+                pr_id=pr_id,
+                rule_name=proposal.rule_name,
+                category=proposal.category,
+                yara_source=proposal.yara_source,
+                rationale=proposal.rationale,
+                status="pending",
+            )
+        )
+    session.commit()
 
 
 @router.post("/analyze", response_model=AggregatedResult)
@@ -159,6 +206,30 @@ def analyze_pr(
         user_id=user.id,
         agent_id=api_key.default_agent_name,
     )
+
+    # Bucle de retroalimentación: propuestas de reglas YARA de la capa
+    # semántica, si las hubo, quedan pendientes de revisión humana. Misma
+    # sesión/BD que el resto de esta petición (Engine DB) -- a diferencia
+    # del espejo al dashboard de más abajo, no hace falta abrir otra
+    # conexión. Best-effort: un fallo aquí no debe tumbar una respuesta
+    # 200 por un análisis que ya se hizo bien.
+    semantic_result = result.layer_results.get("semantic")
+    if semantic_result is not None and semantic_result.proposed_rules:
+        try:
+            _persist_proposed_yara_rules(
+                session,
+                semantic_result.proposed_rules,
+                org_id=org.id,
+                repo=result.repo,
+                pr_id=result.pr_id,
+            )
+        except Exception:
+            logger.warning(
+                "No se pudieron persistir las reglas YARA propuestas para repo=%s pr_id=%s",
+                result.repo,
+                result.pr_id,
+                exc_info=True,
+            )
 
     # Espejo best-effort en la base de datos del dashboard: sin esto, el
     # análisis existe (base de datos A, vía save_pr_score dentro de

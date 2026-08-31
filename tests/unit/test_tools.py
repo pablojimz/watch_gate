@@ -17,6 +17,7 @@ from watchgate.core.layers._semantic.tools import (
     gather_dependency_findings,
     lookup_package_registry,
     make_get_commit_history_tool,
+    propose_yara_rule,
 )
 from watchgate.core.models import FileChange, FileStatus, NormalizedDiff
 
@@ -30,11 +31,16 @@ def test_tool_call_budget_exhausted_after_max_calls():
     assert budget.calls_made == 3
 
 
-def test_tool_schemas_cover_the_three_base_tools_when_vt_not_configured(monkeypatch):
+def test_tool_schemas_cover_the_base_tools_when_vt_not_configured(monkeypatch):
     monkeypatch.delenv("WATCHGATE_VT_API_KEY", raising=False)
     schemas = build_tool_schemas()
     names = {schema["name"] for schema in schemas}
-    assert names == {"lookup_package_registry", "get_commit_history", "fetch_referenced_file"}
+    assert names == {
+        "lookup_package_registry",
+        "get_commit_history",
+        "fetch_referenced_file",
+        "propose_yara_rule",
+    }
     for schema in schemas:
         assert "description" in schema
         assert "input_schema" in schema
@@ -317,6 +323,115 @@ def test_gather_dependency_findings_caps_the_number_of_osv_calls(monkeypatch):
         gather_dependency_findings(diff)
 
     assert call_count == 2
+
+
+def _valid_yara_source(rule_name: str = "suspicious_marker") -> str:
+    return f"""
+rule {rule_name} {{
+    strings:
+        $a = "evil_marker_string"
+    condition:
+        $a
+}}
+"""
+
+
+def test_propose_yara_rule_accepts_a_valid_rule_matching_rule_name():
+    source = _valid_yara_source("suspicious_marker")
+    result = propose_yara_rule(
+        rule_name="suspicious_marker",
+        category="webshells",
+        yara_source=source,
+        rationale="Marcador de ejemplo visto en un webshell conocido.",
+    )
+    assert result == {
+        "accepted": True,
+        "rule_name": "suspicious_marker",
+        "category": "webshells",
+        "yara_source": source,
+        "rationale": "Marcador de ejemplo visto en un webshell conocido.",
+    }
+
+
+def test_propose_yara_rule_rejects_broken_syntax():
+    result = propose_yara_rule(
+        rule_name="broken_rule",
+        category="webshells",
+        yara_source="rule broken_rule { condition: this is not valid yara }",
+        rationale="x",
+    )
+    assert result["accepted"] is False
+    assert "no compila" in result["error"]
+
+
+def test_propose_yara_rule_rejects_when_identifier_does_not_match_rule_name():
+    """La regla declara 'otra_regla', pero rule_name dice 'mi_regla' -- se
+    rechaza en vez de aceptarla con un nombre distinto al que se usaría
+    como fichero/clave de deduplicación en la cola de revisión."""
+    result = propose_yara_rule(
+        rule_name="mi_regla",
+        category="webshells",
+        yara_source=_valid_yara_source("otra_regla"),
+        rationale="x",
+    )
+    assert result["accepted"] is False
+    assert "no coincide" in result["error"]
+
+
+def test_propose_yara_rule_rejects_source_defining_more_than_one_rule():
+    source = """
+rule primera { strings: $a = "x" condition: $a }
+rule segunda { strings: $b = "y" condition: $b }
+"""
+    result = propose_yara_rule(
+        rule_name="primera", category="webshells", yara_source=source, rationale="x"
+    )
+    assert result["accepted"] is False
+    assert "EXACTAMENTE una regla" in result["error"]
+
+
+@pytest.mark.parametrize("bad_name", ["", "1starts_with_digit", "has space", "a" * 65, "ñ_utf8"])
+def test_propose_yara_rule_rejects_unsafe_rule_name_charset(bad_name):
+    result = propose_yara_rule(
+        rule_name=bad_name,
+        category="webshells",
+        yara_source=_valid_yara_source(bad_name or "x"),
+        rationale="x",
+    )
+    assert result["accepted"] is False
+    assert "rule_name inválido" in result["error"]
+
+
+@pytest.mark.parametrize("bad_category", ["", "Webshells", "has space", "1digit_first"])
+def test_propose_yara_rule_rejects_unsafe_category_charset(bad_category):
+    result = propose_yara_rule(
+        rule_name="valid_rule",
+        category=bad_category,
+        yara_source=_valid_yara_source("valid_rule"),
+        rationale="x",
+    )
+    assert result["accepted"] is False
+    assert "category inválida" in result["error"]
+
+
+def test_propose_yara_rule_rejects_empty_rationale():
+    result = propose_yara_rule(
+        rule_name="valid_rule",
+        category="webshells",
+        yara_source=_valid_yara_source("valid_rule"),
+        rationale="   ",
+    )
+    assert result["accepted"] is False
+    assert "rationale" in result["error"]
+
+
+def test_propose_yara_rule_rejects_oversized_source():
+    huge_source = _valid_yara_source("valid_rule") + ("x" * 25_000)
+    result = propose_yara_rule(
+        rule_name="valid_rule", category="webshells", yara_source=huge_source, rationale="x"
+    )
+    assert result["accepted"] is False
+    assert "demasiado larga" in result["error"]
 
 
 def test_gather_dependency_findings_queries_osv_and_keeps_only_real_vulns():

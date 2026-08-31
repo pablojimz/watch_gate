@@ -26,13 +26,25 @@ from watchgate.core.layers._semantic.client import (
 )
 from watchgate.core.layers._shared import find_prompt_injection_attempts
 from watchgate.core.layers.base import AnalysisLayer, register_layer
-from watchgate.core.models import Finding, LayerResult, NormalizedDiff, RiskCategory, ThreatNature
+from watchgate.core.models import (
+    Finding,
+    LayerResult,
+    NormalizedDiff,
+    ProposedYaraRule,
+    RiskCategory,
+    ThreatNature,
+)
 from watchgate.core.rag.indexer import DEFAULT_INDEX_PATH
 from watchgate.core.rag.retriever import retrieve_relevant_context
 
 logger = logging.getLogger("watchgate.semantic")
 
 _MAX_TOOL_CALLS = 3
+# Bucle de retroalimentación (tools.py::propose_yara_rule): tope de
+# propuestas ACEPTADAS que se acumulan por análisis, aparte del
+# `_MAX_TOOL_CALLS` genérico -- una sola llamada al LLM no debe poder
+# inundar la cola de revisión humana con decenas de reglas.
+_MAX_PROPOSED_YARA_RULES = 3
 _NO_BUDGET_SKIP_REASON = "Presupuesto de tokens agotado para este repositorio este mes"
 
 # Análisis por chunks (diff que no cabe entero, ver `chunking.py`): cada
@@ -213,6 +225,10 @@ class _ToolCallCounter:
         # éste decide leerlo con esta tool. Sin esto, ese texto nunca se
         # escaneaba -- el suelo mecánico solo miraba `user_prompt`.
         self.fetched_contents: list[str] = []
+        # Bucle de retroalimentación: propuestas de `propose_yara_rule`
+        # YA validadas (accepted=True) durante esta conversación con el
+        # LLM -- ver `_MAX_PROPOSED_YARA_RULES` en `_build_tool_executor`.
+        self.proposed_yara_rules: list[dict[str, Any]] = []
 
 
 def _dispatch_tool(
@@ -237,6 +253,8 @@ def _dispatch_tool(
             return {"error": "get_commit_history no disponible: sin adaptador inyectado"}
         tool = tools.make_get_commit_history_tool(fetch_commit_history)
         return tool(tool_input["author_login"], tool_input["repo"])
+    if name == "propose_yara_rule":
+        return tools.propose_yara_rule(**tool_input)
     return {"error": f"tool desconocida: {name}"}
 
 
@@ -259,7 +277,21 @@ def _build_tool_executor(
                 raw_content, wrapped_content = _dispatch_tool(name, tool_input, diff, metadata)
                 counter.fetched_contents.append(raw_content)
                 return wrapped_content
-            return _dispatch_tool(name, tool_input, diff, metadata)
+            result = _dispatch_tool(name, tool_input, diff, metadata)
+            if name == "propose_yara_rule" and isinstance(result, dict) and result.get("accepted"):
+                if len(counter.proposed_yara_rules) < _MAX_PROPOSED_YARA_RULES:
+                    counter.proposed_yara_rules.append(result)
+                else:
+                    # No se descarta en silencio: el LLM ve por qué no se
+                    # acumuló, en vez de asumir que se guardó.
+                    result = {
+                        "accepted": False,
+                        "error": (
+                            f"Ya se alcanzó el máximo de {_MAX_PROPOSED_YARA_RULES} "
+                            "propuestas de reglas YARA para este análisis."
+                        ),
+                    }
+            return result
         except Exception as exc:  # noqa: BLE001 - un tool_call con argumentos
             # mal formados (o cualquier fallo interno de una tool) no debe
             # tirar abajo toda la conversación con el LLM; se le devuelve el
@@ -326,6 +358,11 @@ class _Outcome:
     fetched_paths: set[str]
     n_llm_calls: int
     prompt_tokens_total: int
+    # Bucle de retroalimentación: propuestas de reglas YARA aceptadas
+    # durante este análisis (una sola llamada, o unión de TODOS los
+    # candidatos del map-reduce, no solo el ganador -- ver
+    # `_analyze_chunked`), deduplicadas por `rule_name`.
+    proposed_yara_rules: list[dict[str, Any]]
 
 
 @register_layer
@@ -390,6 +427,12 @@ class SemanticLayer(AnalysisLayer):
         diff_hash = compute_diff_hash(diff)
         cached = self._cost_control.get_cached(diff_hash) if self._cost_control else None
         if cached is not None:
+            # `CostController.get_cached`/`store_cached` solo guardan el
+            # `SemanticOutput` (score/justificación/...), no las propuestas
+            # de reglas YARA hechas durante la llamada original -- ese diff
+            # exacto ya se propuso (o no) lo que tenía que proponer la
+            # primera vez que se analizó; no tiene sentido re-proponer nada
+            # aquí sin haber vuelto a llamar al LLM.
             return self._to_layer_result(cached, tool_calls_made=0)
 
         static_findings_paths: set[str] = set(metadata.get("static_findings_paths", set()))
@@ -454,7 +497,11 @@ class SemanticLayer(AnalysisLayer):
         # hay tool calls; documentado para quien integre cost_control.py de
         # verdad.
         self._cost_control.record_usage(repo, outcome.prompt_tokens_total)
-        return self._to_layer_result(output, tool_calls_made=outcome.tool_calls_made)
+        return self._to_layer_result(
+            output,
+            tool_calls_made=outcome.tool_calls_made,
+            proposed_yara_rules=outcome.proposed_yara_rules,
+        )
 
     def _analyze_single(
         self,
@@ -516,6 +563,7 @@ class SemanticLayer(AnalysisLayer):
             fetched_paths=counter.fetched_paths,
             n_llm_calls=n_calls,
             prompt_tokens_total=prompt_tokens,
+            proposed_yara_rules=list(counter.proposed_yara_rules),
         )
 
     def _run_map_chunk(
@@ -722,6 +770,23 @@ class SemanticLayer(AnalysisLayer):
         for c in candidates:
             fetched_paths |= c.counter.fetched_paths
 
+        # Unión de TODOS los candidatos (cada chunk del map + la síntesis),
+        # no solo el ganador -- un paquete que perdió por risk_score puede
+        # seguir habiendo detectado, en SU parte del diff, un patrón que
+        # merece una regla propia. Deduplicado por rule_name: el mismo
+        # patrón visto por dos chunks distintos (o repetido por la propia
+        # síntesis) no debe generar dos filas idénticas en la cola de
+        # revisión.
+        proposed_yara_rules: list[dict[str, Any]] = []
+        seen_rule_names: set[str] = set()
+        for c in candidates:
+            for proposal in c.counter.proposed_yara_rules:
+                rule_name = str(proposal.get("rule_name", ""))
+                if not rule_name or rule_name in seen_rule_names:
+                    continue
+                seen_rule_names.add(rule_name)
+                proposed_yara_rules.append(proposal)
+
         return _Outcome(
             output=combined_output,
             tool_calls_made=sum(c.counter.count for c in candidates),
@@ -730,6 +795,7 @@ class SemanticLayer(AnalysisLayer):
             fetched_paths=fetched_paths,
             n_llm_calls=n_llm_calls,
             prompt_tokens_total=prompt_tokens_total,
+            proposed_yara_rules=proposed_yara_rules,
         )
 
     def _call_llm_once(
@@ -751,7 +817,12 @@ class SemanticLayer(AnalysisLayer):
         )
         return output, counter
 
-    def _to_layer_result(self, output: SemanticOutput, tool_calls_made: int) -> LayerResult:
+    def _to_layer_result(
+        self,
+        output: SemanticOutput,
+        tool_calls_made: int,
+        proposed_yara_rules: list[dict[str, Any]] | None = None,
+    ) -> LayerResult:
         finding = Finding(
             file_path="diferencial_pr",
             rule_id="semantic-llm-analysis",
@@ -768,4 +839,13 @@ class SemanticLayer(AnalysisLayer):
             confidence=output.confidence,
             threat_nature=output.threat_nature,
             tool_calls_made=tool_calls_made,
+            proposed_rules=[
+                ProposedYaraRule(
+                    rule_name=p["rule_name"],
+                    category=p["category"],
+                    yara_source=p["yara_source"],
+                    rationale=p["rationale"],
+                )
+                for p in (proposed_yara_rules or [])
+            ],
         )

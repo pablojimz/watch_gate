@@ -5,6 +5,7 @@ import {
   Palette,
   Scale,
   Settings,
+  ShieldAlert,
   Trash2,
   Upload,
   Users,
@@ -12,9 +13,12 @@ import {
 import { toast } from 'sonner'
 import {
   api,
+  type ApprovedYaraRule,
   type DashboardUser,
   type LlmProvider,
   type LlmSettings,
+  type MeResponse,
+  type PendingYaraRule,
   type RepoRole,
   type RepoSettings,
   type RoleName,
@@ -51,7 +55,8 @@ const EMPTY_UI: UiSettings = {
 // caracteres de base64 ~= 290 KB reales) -- se valida aquí también para
 // dar un error inmediato en vez de esperar al 422 del servidor.
 const MAX_LOGO_FILE_BYTES = 280 * 1024
-type Tab = 'access' | 'config' | 'appearance' | 'llm'
+type Tab = 'access' | 'config' | 'appearance' | 'llm' | 'yara-rules'
+type YaraStatusFilter = 'pending' | 'approved' | 'rejected' | ''
 type ConfigScope = 'default' | 'repo'
 
 const EMPTY_SETTINGS: RepoSettings = {
@@ -68,6 +73,17 @@ const EMPTY_SETTINGS: RepoSettings = {
   block_on_high: true,
   require_feedback_on_high: false,
   source: 'default',
+}
+
+function yaraStatusBadgeClass(status: PendingYaraRule['status']) {
+  switch (status) {
+    case 'approved':
+      return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+    case 'rejected':
+      return 'bg-red-500/10 text-red-600 dark:text-red-400'
+    default:
+      return 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+  }
 }
 
 function SectionCard({
@@ -708,9 +724,12 @@ function LlmSettingsForm({
   )
 }
 
-export default function AdminPage() {
+export default function AdminPage({ me }: { me?: MeResponse | null }) {
   const { t } = useTranslation()
   const [tab, setTab] = useState<Tab>('access')
+  const [yaraRules, setYaraRules] = useState<PendingYaraRule[] | null>(null)
+  const [yaraStatusFilter, setYaraStatusFilter] = useState<YaraStatusFilter>('pending')
+  const [yaraActingOn, setYaraActingOn] = useState<string | null>(null)
   const [configScope, setConfigScope] = useState<ConfigScope>('default')
   const [roles, setRoles] = useState<RepoRole[] | null>(null)
   const [users, setUsers] = useState<DashboardUser[] | null>(null)
@@ -839,6 +858,48 @@ export default function AdminPage() {
     }
   }, [tab])
 
+  useEffect(() => {
+    if (tab !== 'yara-rules') return
+    let cancelled = false
+    setYaraRules(null)
+    void api
+      .listPendingYaraRules(yaraStatusFilter || undefined)
+      .then((data) => {
+        if (!cancelled) setYaraRules(data)
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return
+        toast.error(err instanceof Error ? err.message : 'Error')
+        setYaraRules([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [tab, yaraStatusFilter])
+
+  async function reviewYaraRule(rule: PendingYaraRule, decision: 'approve' | 'reject') {
+    setYaraActingOn(rule.id)
+    try {
+      if (decision === 'approve') {
+        const approved: ApprovedYaraRule = await api.approveYaraRule(rule.id)
+        toast.success(t('admin.yaraRuleApproved'))
+        if (approved.benign_matches.length > 0) {
+          toast.warning(
+            t('admin.yaraRuleBenignWarning', { count: approved.benign_matches.length }),
+          )
+        }
+      } else {
+        await api.rejectYaraRule(rule.id)
+        toast.success(t('admin.yaraRuleRejected'))
+      }
+      setYaraRules((prev) => (prev ? prev.filter((r) => r.id !== rule.id) : prev))
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Error')
+    } finally {
+      setYaraActingOn(null)
+    }
+  }
+
   async function addRole() {
     // El backend ya normaliza (minúsculas, sin espacios) y por tanto ya
     // impide duplicados de la misma persona con distinta may/min -- esto
@@ -945,6 +1006,7 @@ export default function AdminPage() {
     { id: 'config', label: t('admin.tabConfig'), icon: Scale },
     { id: 'appearance', label: t('admin.tabAppearance'), icon: Palette },
     { id: 'llm', label: t('admin.tabLlm'), icon: KeyRound },
+    { id: 'yara-rules', label: t('admin.tabYaraRules'), icon: ShieldAlert },
   ]
 
   if (roles === null || users === null) {
@@ -1231,6 +1293,114 @@ export default function AdminPage() {
               <LlmSettingsForm settings={llmSettings} onSaved={setLlmSettings} />
             ) : (
               <TableSkeleton rows={4} />
+            )}
+          </section>
+        ) : null}
+
+        {tab === 'yara-rules' ? (
+          <section className="flex flex-col gap-5">
+            <div className="flex items-start gap-2">
+              <ShieldAlert className="mt-1 size-5 text-primary" strokeWidth={1.75} />
+              <div>
+                <h1 className="text-xl font-semibold">{t('admin.yaraRulesTitle')}</h1>
+                <p className="text-sm text-muted-foreground">{t('admin.yaraRulesHint')}</p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {(['pending', 'approved', 'rejected', ''] as YaraStatusFilter[]).map((s) => (
+                <button
+                  key={s || 'all'}
+                  type="button"
+                  onClick={() => setYaraStatusFilter(s)}
+                  className={cn(
+                    buttonVariants({
+                      variant: yaraStatusFilter === s ? 'default' : 'outline',
+                      size: 'sm',
+                    }),
+                  )}
+                >
+                  {s === 'pending'
+                    ? t('admin.yaraRuleStatusPending')
+                    : s === 'approved'
+                      ? t('admin.yaraRuleStatusApproved')
+                      : s === 'rejected'
+                        ? t('admin.yaraRuleStatusRejected')
+                        : t('admin.yaraRuleFilterAll')}
+                </button>
+              ))}
+            </div>
+
+            {!me?.is_site_superadmin ? (
+              <p className="text-xs text-muted-foreground">
+                {t('admin.yaraRuleNeedsSuperadmin')}
+              </p>
+            ) : null}
+
+            {yaraRules === null ? (
+              <TableSkeleton rows={4} />
+            ) : yaraRules.length === 0 ? (
+              <div className="rounded-xl border p-6 text-center text-sm text-muted-foreground">
+                {t('admin.yaraRulesEmpty')}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-4">
+                {yaraRules.map((rule) => (
+                  <SectionCard
+                    key={rule.id}
+                    title={rule.rule_name}
+                    hint={t('admin.yaraRuleOrigin', { repo: rule.repo, pr: rule.pr_id })}
+                  >
+                    <div className="flex flex-col gap-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-xs font-medium ${yaraStatusBadgeClass(rule.status)}`}
+                        >
+                          {rule.status === 'pending'
+                            ? t('admin.yaraRuleStatusPending')
+                            : rule.status === 'approved'
+                              ? t('admin.yaraRuleStatusApproved')
+                              : t('admin.yaraRuleStatusRejected')}
+                        </span>
+                        <span className="text-xs text-muted-foreground">{rule.category}</span>
+                      </div>
+                      <div>
+                        <h3 className="text-xs font-semibold text-muted-foreground">
+                          {t('admin.yaraRuleRationale')}
+                        </h3>
+                        <p className="text-sm">{rule.rationale}</p>
+                      </div>
+                      <details>
+                        <summary className="cursor-pointer text-xs font-medium text-primary hover:underline">
+                          {t('admin.yaraRuleSource')}
+                        </summary>
+                        <pre className="mt-2 max-h-64 overflow-auto rounded-lg bg-muted p-3 text-xs">
+                          {rule.yara_source}
+                        </pre>
+                      </details>
+                      {rule.status === 'pending' && me?.is_site_superadmin ? (
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            disabled={yaraActingOn === rule.id}
+                            onClick={() => void reviewYaraRule(rule, 'approve')}
+                          >
+                            {t('admin.yaraRuleApprove')}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={yaraActingOn === rule.id}
+                            onClick={() => void reviewYaraRule(rule, 'reject')}
+                          >
+                            {t('admin.yaraRuleReject')}
+                          </Button>
+                        </div>
+                      ) : null}
+                    </div>
+                  </SectionCard>
+                ))}
+              </div>
             )}
           </section>
         ) : null}
