@@ -75,6 +75,18 @@ class Finding(BaseModel):
     threat_nature: ThreatNature = ThreatNature.VULNERABILITY
 
 
+class ProposedYaraRule(BaseModel):
+    """Regla YARA propuesta por la capa semántica (`tools.py::propose_yara_rule`)
+    para generalizar un patrón malicioso que ningún hallazgo estático cazó.
+    Nunca se activa sola -- ver `PendingYaraRule` en la BD del Dashboard y
+    el flujo de aprobación en `routers/yara_rules.py`."""
+
+    rule_name: str
+    category: str
+    yara_source: str
+    rationale: str
+
+
 def compute_dominant_threat_nature(findings: list[Finding]) -> ThreatNature | None:
     """Calcula la naturaleza de amenaza dominante a partir de una lista de hallazgos.
 
@@ -116,6 +128,14 @@ class LayerResult(BaseModel):
     # cualquier otro consumidor futuro) pueda tratarlo como "sin
     # cobertura", no como "revisado y limpio".
     crashed: bool = False
+    # Bucle de retroalimentación (solo semántica, ver tools.py::propose_yara_rule):
+    # reglas YARA que el LLM propuso para generalizar un patrón malicioso
+    # que ningún hallazgo estático cazó. Nunca se activan solas -- viajan
+    # tal cual hasta AggregatedResult.layer_results (aggregate() pasa el
+    # dict completo sin tocar campos individuales), y quien orquesta el
+    # análisis real (api/routers/analyze.py) las persiste como fila
+    # "pending" en la BD del Dashboard para revisión humana.
+    proposed_rules: list[ProposedYaraRule] = Field(default_factory=list)
 
 
 class Semaforo(str, Enum):

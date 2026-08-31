@@ -230,6 +230,47 @@ class BlockedAuthor(SQLModel, table=True):
     blocked_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
+class PendingYaraRule(SQLModel, table=True):
+    """Bucle de retroalimentación: regla YARA propuesta por la capa
+    semántica (`core/layers/_semantic/tools.py::propose_yara_rule`) para
+    generalizar un patrón malicioso que ningún hallazgo estático cazó en
+    un análisis real. `api/routers/analyze.py` crea la fila (status=
+    "pending") justo después de un análisis que produjo propuestas.
+
+    Vive en la Engine DB -- no en la del Dashboard -- porque, a diferencia
+    de un concepto puramente administrativo, SÍ hay un lector real durante
+    el análisis: `static_layer.py::_get_compiled_generated_yara_rules`
+    compila las filas `status == "approved"` en cada análisis (con caché
+    de proceso de TTL corto). El Dashboard sigue siendo quien gestiona la
+    cola de revisión (`dashboard/backend/routers/yara_rules.py`, mismo
+    patrón que `BlockedAuthor` arriba: lee/escribe esta tabla de la Engine
+    DB directamente vía `next(get_session())`, sin tabla espejo en su
+    propia base de datos).
+
+    Activación GLOBAL, no por organización: `_run_yara_on_text` compila un
+    único `yara.Rules` por proceso sin ningún concepto de organización, y
+    acotar por org_id sería una reestructuración grande sin relación con
+    esta función -- `org_id`/`repo`/`pr_id` son solo procedencia/auditoría
+    de la propuesta, nunca un filtro de qué se activa. Precisamente por
+    ser una activación de instancia completa, aprobar/rechazar exige
+    superadmin de sitio, no un mero admin_organizacion (ver org_scope.py)."""
+
+    __tablename__ = "pending_yara_rules"
+
+    id: str = Field(primary_key=True)
+    org_id: str | None = Field(default=None, foreign_key="organizations.id", index=True)
+    repo: str = Field(default="")
+    pr_id: str = Field(default="")
+    rule_name: str = Field(index=True)
+    category: str
+    yara_source: str
+    rationale: str
+    status: str = Field(default="pending", index=True)  # "pending" | "approved" | "rejected"
+    reviewed_by: str | None = Field(default=None)
+    reviewed_at: datetime | None = Field(default=None)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
 class PRScore(SQLModel, table=True):
     """Histórico de puntuaciones de análisis de Pull Requests."""
 
