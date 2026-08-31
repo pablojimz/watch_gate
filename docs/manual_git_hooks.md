@@ -177,9 +177,8 @@ ningún otro módulo del paquete Python `watchgate` -- es un script bash
 autocontenido (`git`+`curl`+`jq`, sin instalar nada de Python), que llama
 directamente a `POST /api/v1/analyze` del Engine API, con la misma lógica
 de cálculo de diff (`git merge-base` + `git diff -U3`) que usa
-`entrypoint.sh` (la GitHub Action, ver `docs/progreso/progreso_Pablo_Jiménez_Castro.md`
-§2.6) -- son dos clientes distintos del mismo Engine API, para dos momentos
-distintos del ciclo de vida de un cambio.
+`entrypoint.sh` (la GitHub Action) -- son dos clientes distintos del mismo
+Engine API, para dos momentos distintos del ciclo de vida de un cambio.
 
 ```
 +------------------+   git push   +---------------------------+
@@ -222,10 +221,9 @@ distintos del ciclo de vida de un cambio.
 `echo "... se deja pasar el push sin analizar."` y sale con código 0). El
 control que de verdad protege el repositorio sigue siendo, según el
 contexto: `pre-receive` en el servidor (§1-§4) para un servidor Git propio,
-o la GitHub Action + Check Run (`action.yml`/`entrypoint.sh`, ver
-`docs/progreso/progreso_Pablo_Jiménez_Castro.md` §2.6) para un repo alojado
-en GitHub -- ese sí usa credenciales gestionadas centralmente (secrets de
-GitHub) y no se puede saltar con un flag local.
+o la GitHub Action + Check Run (`action.yml`/`entrypoint.sh`) para un repo
+alojado en GitHub -- ese sí usa credenciales gestionadas centralmente
+(secrets de GitHub) y no se puede saltar con un flag local.
 
 ### 5.2 El script completo
 

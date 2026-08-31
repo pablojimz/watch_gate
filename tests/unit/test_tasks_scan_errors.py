@@ -7,7 +7,7 @@ del cuerpo principal: si `GitHubClient` o `QuotaService.analyze_with_quota`
 lanzaban (token inválido, PR inexistente, fallo de red...), la excepción se
 propagaba sin más -- no quedaba reflejada en `MonitoredRepo`
 (`consecutive_errors`/`status`), no había log de aplicación, y el usuario no
-tenía forma de enterarse (ver `.claude/informe-puerta-2.md`). Estos tests
+tenía forma de enterarse. Estos tests
 cubren justo ese hueco -- antes, ni siquiera existía `tests/unit/test_tasks.py`.
 """
 

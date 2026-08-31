@@ -1,8 +1,9 @@
 """Tests de watchgate/dashboard/backend/db.py: persistencia del desglose de
 naturaleza de amenaza (`threat_summary` / `LayerResult.threat_nature` de la
-capa estática) al guardar y releer un `AggregatedResult` -- ver
-docs/planificacion/plan_separacion_vulnerabilidad_malware.md §"Actualización
-del Dashboard queda diferida para una fase posterior" (esta es esa fase).
+capa estática) al guardar y releer un `AggregatedResult` -- la separación
+vulnerabilidad/malware llegó primero al motor de análisis, con la
+actualización del Dashboard diferida para una fase posterior; esta es esa
+fase.
 """
 
 from __future__ import annotations

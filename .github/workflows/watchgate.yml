@@ -33,10 +33,10 @@ jobs:
       # Cliente ligero: calcula el diff con git puro y delega TODO el
       # análisis (Semgrep + YARA + capa semántica) al Engine API
       # centralizado -- no instala el paquete Python "watchgate" en el
-      # runner (ver action.yml / entrypoint.sh en la raíz de este repo y
-      # docs/planificacion/... para el porqué: watchgate.core.layers
-      # importa incondicionalmente chromadb/sentence-transformers/torch a
-      # nivel de módulo, reventando cualquier imagen ligera).
+      # runner (ver action.yml / entrypoint.sh en la raíz de este repo):
+      # watchgate.core.layers importa incondicionalmente
+      # chromadb/sentence-transformers/torch a nivel de módulo, reventando
+      # cualquier imagen ligera).
       #
       # `uses: ./` referencia la Action de este mismo repo (dogfooding) --
       # un consumidor externo usaría `uses: pablojimz/watch_gate@<tag>`.

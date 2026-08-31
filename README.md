@@ -2,7 +2,7 @@
 
 Sistema de *scoring* de riesgo para la revisión automatizada de *pull requests* en pipelines CI/CD.
 
-Proyecto presentado a los **Premios de la Cátedra de Ciberseguridad a la Innovación en Ciberseguridad e Inteligencia Artificial** (Universidad de Málaga). Memoria completa en [`docs/WatchGate_memoria.pdf`](docs/WatchGate_memoria.pdf) y especificación de construcción módulo a módulo en [`docs/WatchGate_spec_implementacion_IA.md`](docs/WatchGate_spec_implementacion_IA.md) — es la referencia autoritativa para implementar cada fichero (interfaz exacta, algoritmo, casos límite y test de aceptación). Reparto de tareas del equipo en [`docs/planificacion/plan_tareas_equipo.md`](docs/planificacion/plan_tareas_equipo.md).
+Proyecto presentado a los **Premios de la Cátedra de Ciberseguridad a la Innovación en Ciberseguridad e Inteligencia Artificial** (Universidad de Málaga). Especificación de construcción módulo a módulo en [`docs/WatchGate_spec_implementacion_IA.md`](docs/WatchGate_spec_implementacion_IA.md) — es la referencia autoritativa para implementar cada fichero (interfaz exacta, algoritmo, casos límite y test de aceptación). Índice completo de la documentación en [`docs/README.md`](docs/README.md).
 
 ## Equipo
 
@@ -10,7 +10,7 @@ Proyecto presentado a los **Premios de la Cátedra de Ciberseguridad a la Innova
 - Pablo Ayllón García — núcleo, orquestador, agregador y CLI
 - Pablo Jiménez Castro — capa estática/dependencias y dashboard
 
-*(Reparto de líneas actualizado respecto a la memoria original — ver [`docs/planificacion/plan_tareas_equipo.md`](docs/planificacion/plan_tareas_equipo.md) para el detalle.)*
+*(Reparto de líneas actualizado respecto a la memoria original de la candidatura al premio.)*
 
 ## El problema
 
@@ -215,7 +215,7 @@ mypy watchgate
 
 ## Estado del desarrollo
 
-Arquitectura y spec de implementación cerradas (`docs/WatchGate_spec_implementacion_IA.md`). Estado de tareas (`docs/planificacion/plan_tareas_equipo.md`):
+Arquitectura y spec de implementación cerradas (`docs/WatchGate_spec_implementacion_IA.md`). Estado de tareas:
 
 - [x] Fase 0 — contratos de datos (`core/models.py`) + interfaz común de capas y registro (`core/layers/base.py`, A.0.0)
 - [x] Parser de diffs (`core/diffparser.py`, A.0)
@@ -255,7 +255,12 @@ Pendiente antes de un despliegue realmente terceros-friendly: registrar la Actio
 
 ## Licencia
 
-[MIT](LICENSE).
+[MIT](LICENSE) para el código propio de WatchGate. El conjunto de reglas de
+análisis estático que se distribuye con el proyecto agrega contenido de
+terceros bajo licencias distintas, documentado en detalle en:
+
+- [`rules/semgrep/NOTICE.md`](rules/semgrep/NOTICE.md) — reglas Semgrep (MIT, AGPL-3.0, LGPL-2.1+Commons Clause según la fuente).
+- [`rules/yara/NOTICE.md`](rules/yara/NOTICE.md) — reglas YARA, derivadas de [Yara-Rules/rules](https://github.com/Yara-Rules/rules) bajo **GPL-2.0** (texto completo en [`rules/yara/LICENSE`](rules/yara/LICENSE)).
 
 ## Referencias
 

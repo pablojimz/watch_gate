@@ -125,8 +125,6 @@ target-version = "py311"
 # real, aunque tengan extensión .py), que sin excluir producían ~840 falsos
 # positivos de "nombre no definido" y ahogaban cualquier señal real de
 # `ruff check .` sobre el código propio del proyecto.
-# scratchpad/ es un script de verificación manual suelto, no parte del
-# paquete ni de la suite de tests.
 # alembic/versions/ son migraciones generadas por
 # `alembic revision --autogenerate` con el estilo propio de Alembic
 # (imports sin ordenar, Union en vez de X | Y...) -- se generan así en
@@ -139,7 +137,6 @@ extend-exclude = [
   "docs",
   "tests/cases",
   "rules",
-  "scratchpad",
   "alembic/versions",
   "alembic/script.py.mako",
   "alembic_dashboard/versions",

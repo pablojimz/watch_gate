@@ -1,7 +1,7 @@
 # PYTHON_ARGCOMPLETE_OK
 """Entrypoint de la CLI de WatchGate (watchgate analyze / watchgate rag reindex).
 
-Ver docs/planificacion/mejoras_cli.md y docs/WatchGate_spec_implementacion_IA.md §9, §12.
+Ver docs/WatchGate_spec_implementacion_IA.md §9, §12.
 """
 
 from __future__ import annotations
