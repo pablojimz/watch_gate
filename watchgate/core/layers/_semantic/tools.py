@@ -11,6 +11,7 @@ from collections.abc import Callable
 from typing import Any
 
 import httpx
+import yara
 
 from watchgate.core.layers._shared import parse_requirements_txt
 from watchgate.core.models import NormalizedDiff
@@ -235,6 +236,98 @@ def check_file_reputation(path: str, ref: str, repo_path: str) -> dict[str, Any]
         return {"sha256": file_hash, "error": repr(exc)}
 
 
+_MAX_YARA_SOURCE_CHARS = 20_000
+_RULE_NAME_PATTERN = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]{2,63}$")
+_RULE_CATEGORY_PATTERN = re.compile(r"^[a-z][a-z0-9_]{1,31}$")
+
+
+def propose_yara_rule(
+    rule_name: str, category: str, yara_source: str, rationale: str
+) -> dict[str, Any]:
+    """Bucle de retroalimentación (A.3.1 extendido): valida y empaqueta una
+    regla YARA que el LLM propone para generalizar un patrón malicioso que
+    ningún hallazgo estático (Semgrep/YARA) cazó en este diff.
+
+    Auditoría de diseño: NUNCA escribe nada a disco ni activa nada -- solo
+    compila la regla de forma aislada (`yara.compile(source=...)`, nunca
+    contra los ficheros reales de `rules/yara/`) para rechazar de inmediato
+    sintaxis rota (el LLM ve el error y puede corregirlo en el mismo turno,
+    en vez de colar basura a la cola de revisión) y devuelve un dict simple
+    que `layer.py::_build_tool_executor` decide si acumular en
+    `_ToolCallCounter.proposed_yara_rules`. La activación real exige
+    aprobación humana explícita -- ver `PendingYaraRule`/`routers/yara_rules.py`.
+
+    Comprobaciones, todas fail-closed (`accepted=False` con `error`
+    explicativo si cualquiera falla):
+    - `rule_name`/`category` con charset seguro -- se usan más tarde como
+      nombre de fichero/carpeta al aprobar (`generated_yara_rules/<category>/
+      <rule_name>.yar`); nunca deben poder salirse de ese directorio ni
+      contener nada que no sea `[a-z0-9_]`.
+    - `yara_source` compila solo, define EXACTAMENTE una regla, y su
+      identificador coincide con `rule_name` (evita una regla que declara un
+      nombre distinto al que luego se usaría como fichero/clave de
+      deduplicación).
+    - Tope de tamaño (`_MAX_YARA_SOURCE_CHARS`) -- una regla YARA legítima
+      para un patrón de código nunca necesita decenas de miles de caracteres;
+      esto también acota el peor caso de lo que puede acabar en la cola de
+      revisión desde una sola llamada.
+    """
+    if not _RULE_NAME_PATTERN.match(rule_name):
+        return {
+            "accepted": False,
+            "error": (
+                "rule_name inválido -- usa minúsculas/mayúsculas/dígitos/guion bajo, "
+                "empezando por letra o '_', 3-64 caracteres."
+            ),
+        }
+    if not _RULE_CATEGORY_PATTERN.match(category):
+        return {
+            "accepted": False,
+            "error": (
+                "category inválida -- usa minúsculas/dígitos/guion bajo, empezando "
+                "por letra, 2-32 caracteres (p. ej. 'webshells', 'exfiltration')."
+            ),
+        }
+    if len(yara_source) > _MAX_YARA_SOURCE_CHARS:
+        return {
+            "accepted": False,
+            "error": f"yara_source demasiado larga (máximo {_MAX_YARA_SOURCE_CHARS} caracteres).",
+        }
+    if not rationale.strip():
+        return {"accepted": False, "error": "rationale no puede estar vacío."}
+
+    try:
+        compiled = yara.compile(source=yara_source)
+    except yara.Error as exc:
+        return {"accepted": False, "error": f"YARA no compila: {exc}"}
+
+    identifiers = [rule.identifier for rule in compiled]
+    if len(identifiers) != 1:
+        return {
+            "accepted": False,
+            "error": (
+                f"yara_source debe definir EXACTAMENTE una regla, encontradas "
+                f"{len(identifiers)}: {identifiers}."
+            ),
+        }
+    if identifiers[0] != rule_name:
+        return {
+            "accepted": False,
+            "error": (
+                f"El identificador de la regla ('{identifiers[0]}') no coincide con "
+                f"rule_name ('{rule_name}')."
+            ),
+        }
+
+    return {
+        "accepted": True,
+        "rule_name": rule_name,
+        "category": category,
+        "yara_source": yara_source,
+        "rationale": rationale,
+    }
+
+
 _BASE_TOOL_SCHEMAS: list[dict[str, Any]] = [
     {
         "name": "lookup_package_registry",
@@ -289,6 +382,56 @@ _BASE_TOOL_SCHEMAS: list[dict[str, Any]] = [
                 # por el LLM (evita que el modelo pueda apuntar a otra ruta del disco).
             },
             "required": ["path", "ref"],
+        },
+    },
+    {
+        "name": "propose_yara_rule",
+        "description": (
+            "Propón una regla YARA nueva SOLO cuando identifiques un patrón malicioso "
+            "o técnica sospechosa concreta que NINGÚN hallazgo estático (Semgrep/YARA) "
+            "de este análisis ya cubre, y que generaliza más allá de este PR concreto "
+            "(una técnica de ofuscación, un patrón de exfiltración, la forma de un "
+            "webshell...). La regla NO se activa de inmediato: queda pendiente de "
+            "revisión humana antes de entrar en producción, así que puedes proponerla "
+            "aunque no estés seguro al 100%, pero úsala con moderación -- nunca para "
+            "hardcodear un valor literal específico de este PR (un nombre de variable, "
+            "una URL exacta...), eso no generaliza a nada y sería rechazado en revisión. "
+            "La regla debe compilar como YARA válido y definir EXACTAMENTE una regla "
+            "cuyo identificador coincida con rule_name."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "rule_name": {
+                    "type": "string",
+                    "description": (
+                        "Identificador único en snake_case, 3-64 caracteres "
+                        "(letras/dígitos/guion bajo, empieza por letra o '_')."
+                    ),
+                },
+                "category": {
+                    "type": "string",
+                    "description": (
+                        "Carpeta lógica en minúsculas, p. ej. 'webshells', "
+                        "'exfiltration', 'obfuscation', 'backdoor'."
+                    ),
+                },
+                "yara_source": {
+                    "type": "string",
+                    "description": (
+                        "Cuerpo COMPLETO de la regla YARA: "
+                        "'rule <rule_name> { meta: ... strings: ... condition: ... }'."
+                    ),
+                },
+                "rationale": {
+                    "type": "string",
+                    "description": (
+                        "Por qué este patrón merece una regla propia: qué generaliza y "
+                        "qué falso positivo razonable podría tener."
+                    ),
+                },
+            },
+            "required": ["rule_name", "category", "yara_source", "rationale"],
         },
     },
 ]
