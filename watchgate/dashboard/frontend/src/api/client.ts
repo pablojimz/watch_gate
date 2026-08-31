@@ -353,6 +353,9 @@ export const api = {
     }),
   resetSettings: (repo: string) =>
     request<RepoSettings>(`/repos/${repo}/settings`, { method: 'DELETE' }),
+  // Acotado a UN repo (RBAC de "dueño de repo") -- distinto de `listRoles`
+  // (`/admin/roles`, exige admin_organizacion y trae TODA la organización).
+  listRepoRoles: (repo: string) => request<RepoRole[]>(`/repos/${repo}/roles`),
   getDefaultSettings: () => request<RepoSettings>('/settings/defaults'),
   putDefaultSettings: (body: RepoSettings) =>
     request<RepoSettings>('/settings/defaults', {

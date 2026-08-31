@@ -10,6 +10,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from sqlalchemy import delete
 from sqlmodel import select
 
 from watchgate.dashboard.backend import db as database
@@ -36,6 +37,7 @@ from watchgate.dashboard.backend.schemas import (
 from watchgate.db.models import (
     BlockedAuthor,
     MonitoredRepo,
+    PRScore,
     RepoArchitectureSummary,
     RepoGraphNode,
     UserAPIKey,
@@ -459,27 +461,34 @@ def unblock_author(repo: str, author_login: str, request: Request, user: Current
 def delete_repo_by_path(
     repo: str, request: Request, user: CurrentUser, session: DBSession
 ) -> dict[str, Any]:
-    """Elimina un repo de la vista del Dashboard. A diferencia de
-    `routers/repos.py::delete_external_repo` (borra solo la fila
-    `MonitoredRepo`, preserva el histórico a propósito), esto SÍ borra el
-    histórico de scores -- muchos repos reales llegan aquí solo vía
-    ingesta de CI (`POST /scores`), sin `MonitoredRepo` de por medio: para
-    esos, el histórico ES la única representación del repo en el
-    Dashboard, y sin esto nunca hay forma de quitarlos de la lista.
+    """Elimina TODOS los datos de un repo, en cualquier sitio del sistema
+    donde vivan -- botón "Eliminar" de `/repos` en el frontend. Purga:
 
-    Si además existe una fila `MonitoredRepo` para este `repo_path` en la
-    organización del usuario actual, se borra también -- con las filas del
-    mapa de conocimiento que le cuelgan
-    (`delete_monitored_repo_cascade`), porque esas tablas tienen FK sin
-    `ON DELETE CASCADE` y el borrado en crudo reventaba con un 500 opaco.
-    Mismo guardado que `delete_external_repo`: bloquea (409) si hay API
-    keys de agente atadas, en vez de dejarlas huérfanas en silencio.
+    - Histórico de `pr_scores` del Dashboard (`delete_scores_for_repo`).
+    - `pr_scores` de la Engine DB (análisis vía Engine API/Action/agente
+      para este `repo_path`, si los hay -- un repo puede tener historial
+      ahí sin haber pasado nunca por "Auditoría Externa" del Dashboard).
+    - `repo_settings` (umbrales/pesos propios de este repo, si los tenía).
+    - `repo_roles`: TODOS los accesos concedidos sobre este repo, de
+      cualquier usuario -- sin esto, si el mismo `repo_path` se vuelve a
+      conectar más adelante, resucitarían permisos de la conexión
+      anterior que nadie volvió a conceder.
+    - Si además existe una fila `MonitoredRepo` para este `repo_path` en
+      la organización del usuario actual: la propia fila, el mapa de
+      conocimiento que le cuelga (`delete_monitored_repo_cascade` --
+      FK sin `ON DELETE CASCADE`, el borrado en crudo reventaba con un
+      500 opaco) y cualquier API key de agente atada a él (se REVOCAN y
+      borran, no se bloquea el borrado por su culpa -- "eliminar todos
+      los datos" incluye las credenciales que solo servían para acceder
+      a ESTE repo; antes esto bloqueaba con 409 para no dejarlas
+      huérfanas, pero orfandad y "seguir viva sin repo que la respalde"
+      es justo el estado que un borrado completo debe evitar).
 
-    El orden importa: la comprobación de API keys atadas y el 409 van
-    ANTES de borrar el histórico de scores. Antes se borraban los scores
-    primero y luego se comprobaba -- un repo con una key atada acababa con
-    el histórico ya perdido y aun así un 409 "no se pudo desconectar",
-    estado partido irreversible.
+    Deliberadamente NO se tocan aquí `blocked_authors` (política de
+    bloqueo de AUTORES a nivel de ORGANIZACIÓN, no de este repo -- otros
+    repos de la misma organización siguen necesitándola) ni
+    `VCSConnection` (la instalación de la GitHub App puede dar acceso a
+    otros repos que siguen activos).
 
     `session` llega inyectado vía `Depends(get_db_session)` (mismo
     `DBSession` que usa `delete_external_repo`) en vez de abrir uno propio
@@ -495,29 +504,28 @@ def delete_repo_by_path(
     repo_row = session.exec(
         select(MonitoredRepo).where(MonitoredRepo.repo_path == repo, MonitoredRepo.org_id == org_id)
     ).first()
+
+    engine_scores_deleted = session.execute(delete(PRScore).where(PRScore.repo == repo)).rowcount or 0
+
+    with database.db_session() as conn:
+        deleted_scores = database.delete_scores_for_repo(conn, repo)
+        database.clear_repo_settings(conn, repo)
+        database.delete_roles_for_repo(conn, repo)
+
     if repo_row is not None:
         bound_keys = session.exec(
             select(UserAPIKey).where(UserAPIKey.monitored_repo_id == repo_row.id)
         ).all()
-        if bound_keys:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=(
-                    f"No se puede eliminar: hay {len(bound_keys)} API key(s) de agente "
-                    "atadas a este repo. Revócalas primero."
-                ),
-            )
-
-    with database.db_session() as conn:
-        deleted_scores = database.delete_scores_for_repo(conn, repo)
-
-    if repo_row is not None:
+        for key in bound_keys:
+            session.delete(key)
         delete_monitored_repo_cascade(session, repo_row)
         session.commit()
         monitored_repo_deleted = True
+    else:
+        session.commit()
 
     return {
         "repo": repo,
-        "scores_deleted": deleted_scores,
+        "scores_deleted": deleted_scores + engine_scores_deleted,
         "monitored_repo_deleted": monitored_repo_deleted,
     }

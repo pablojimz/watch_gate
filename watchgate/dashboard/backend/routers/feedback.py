@@ -279,10 +279,40 @@ def list_all_roles(
     ]
 
 
+def _require_role_manager(
+    conn: Session,
+    user_login: str,
+    org_id: str,
+    target_org_id: str | None,
+    repo: str,
+) -> bool:
+    """`True` si `user_login` puede gestionar accesos de `repo` -- o bien
+    `admin_organizacion` de la organización dueña (gestiona cualquier repo
+    suyo), o bien `mantenedor` de ESE repo concreto (el "dueño del repo"
+    del RBAC: gestiona SOLO lo suyo, nunca los repos de otros compañeros
+    de la misma organización). `False` si `repo` no es de mi organización
+    -- mismo fail-closed que antes, ahora también para el camino de
+    mantenedor."""
+    if target_org_id != org_id:
+        return False
+    if database.user_is_org_admin(conn, user_login, org_id):
+        return True
+    return database.get_role(conn, user_login, repo) == "mantenedor"
+
+
 @router.put("/admin/roles", response_model=RepoRoleOut)
 def upsert_role(
     body: RepoRoleIn, request: Request, user: CurrentUser, engine_session: EngineDBSession
 ) -> RepoRoleOut:
+    """Concede (o cambia) el rol de `body.user_login` sobre `body.repo`.
+
+    RBAC: dos perfiles pueden llegar aquí -- `admin_organizacion` (gestiona
+    cualquier repo de su organización, incluida la concesión de nuevos
+    `admin_organizacion`) y `mantenedor` del repo concreto (el "dueño del
+    repo": puede añadir gente a SU repo, pero nunca conceder
+    `admin_organizacion` -- eso sería auto-escalar el poder de un tercero
+    por encima del suyo propio -- ni tocar el acceso de quien YA es
+    `admin_organizacion` de la organización)."""
     org_id = resolve_caller_org_id(engine_session, user.login)
     # Auditoría: además de acotar la comprobación de admin, hay que
     # comprobar que `body.repo` sea de verdad un repo de MI organización
@@ -293,16 +323,23 @@ def upsert_role(
     # llama, no sobre a qué repo se refiere la petición).
     target_org_id = resolve_org_id_for_repo(engine_session, body.repo)
     with database.db_session() as conn:
-        if not database.user_is_org_admin(conn, user.login, org_id):
+        is_org_admin = database.user_is_org_admin(conn, user.login, org_id)
+        if not _require_role_manager(conn, user.login, org_id, target_org_id, body.repo):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Se requiere admin_organizacion",
+                detail="Se requiere ser mantenedor de este repo, o admin_organizacion",
             )
-        if target_org_id != org_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"'{body.repo}' no pertenece a tu organización",
-            )
+        if not is_org_admin:
+            if body.role == "admin_organizacion":
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Un mantenedor no puede conceder admin_organizacion",
+                )
+            if database.get_role(conn, body.user_login, body.repo) == "admin_organizacion":
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Solo admin_organizacion puede modificar a otro admin_organizacion",
+                )
         database.upsert_role(conn, body.user_login, body.repo, body.role, org_id=org_id)
     return RepoRoleOut(user_login=body.user_login, repo=body.repo, role=body.role)
 
@@ -315,25 +352,43 @@ def delete_role(
     user: CurrentUser,
     engine_session: EngineDBSession,
 ) -> None:
+    """Revoca el acceso de `user_login` a `repo` -- mismo RBAC que
+    `upsert_role`: admin_organizacion de cualquier repo suyo, o mantenedor
+    de ESE repo (nunca puede quitarle el acceso a un admin_organizacion)."""
     org_id = resolve_caller_org_id(engine_session, user.login)
+    target_org_id = resolve_org_id_for_repo(engine_session, repo)
     with database.db_session() as conn:
-        if not database.user_is_org_admin(conn, user.login, org_id):
+        is_org_admin = database.user_is_org_admin(conn, user.login, org_id)
+        if not _require_role_manager(conn, user.login, org_id, target_org_id, repo):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Se requiere admin_organizacion",
+                detail="Se requiere ser mantenedor de este repo, o admin_organizacion",
             )
         existing_role = database.get_role(conn, user_login, repo)
         if existing_role is None:
             raise HTTPException(status_code=404, detail="Rol no encontrado")
-        # Misma comprobación que en upsert_role: solo se puede borrar un
-        # rol sobre un repo de la propia organización.
-        target_org_id = resolve_org_id_for_repo(engine_session, repo)
-        if target_org_id != org_id:
+        if not is_org_admin and existing_role == "admin_organizacion":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"'{repo}' no pertenece a tu organización",
+                detail="Solo admin_organizacion puede revocar a otro admin_organizacion",
             )
         database.delete_role(conn, user_login, repo)
+
+
+@router.get("/repos/{repo:path}/roles", response_model=list[RepoRoleOut])
+def list_roles_for_repo(repo: str, request: Request, user: CurrentUser) -> list[RepoRoleOut]:
+    """Colaboradores con acceso a ESTE repo -- versión acotada de
+    `GET /admin/roles` (que exige `admin_organizacion` y lista TODA la
+    organización) para que un `mantenedor` (dueño de repo, ver RBAC en
+    `upsert_role`) pueda ver y gestionar el acceso de su propio repo sin
+    necesitar visibilidad sobre el resto de repos de su organización."""
+    require_role(user, repo, min_role="mantenedor", request=request)
+    with database.db_session() as conn:
+        rows = database.list_roles(conn, repo=repo)
+    return [
+        RepoRoleOut(user_login=r["user_login"], repo=r["repo"], role=cast(RoleName, r["role"]))
+        for r in rows
+    ]
 
 
 @router.get("/admin/users", response_model=list[DashboardUserOut])

@@ -95,6 +95,19 @@
       "blockedByLine": "Bloqueado por {{login}} el {{date}}",
       "blockedToast": "'{{login}}' bloqueado.",
       "unblockedToast": "'{{login}}' desbloqueado."
+    },
+    "tabAccess": "Acceso",
+    "access": {
+      "hint": "Quién puede ver y gestionar este repo en WatchGate -- como dueño (mantenedor), solo controlas el acceso a este repo concreto, no al resto de tu organización.",
+      "empty": "Nadie más tiene acceso explícito a este repo todavía.",
+      "loginPlaceholder": "login (ej: usuario-github)",
+      "roleMantenedor": "Mantenedor (dueño)",
+      "roleRevisor": "Revisor (solo lectura)",
+      "roleAdminOrganizacion": "Admin de organización",
+      "addButton": "Añadir",
+      "removeButton": "Quitar",
+      "addedToast": "'{{login}}' añadido como {{role}}.",
+      "removedToast": "Acceso de '{{login}}' revocado."
     }
   },
   "report": {

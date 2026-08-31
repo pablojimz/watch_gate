@@ -461,6 +461,20 @@ def delete_scores_for_repo(session: Session, repo: str) -> int:
     return result.rowcount or 0  # type: ignore[attr-defined]
 
 
+def delete_roles_for_repo(session: Session, repo: str) -> int:
+    """Borra TODOS los `repo_roles` (de cualquier usuario) de un repo --
+    parte del borrado completo de `routers/scores.py::delete_repo_by_path`
+    ("eliminar todos los datos del proyecto"). Sin esto, la lista de
+    acceso de un repo eliminado seguía viva en la tabla aunque el repo ya
+    no existiera en ningún otro sitio -- inofensivo mientras nadie
+    reconecte ese mismo `repo_path`, pero si alguien lo hace (repo
+    borrado y vuelto a añadir), resucitarían roles/permisos de la
+    conexión anterior sin que nadie los haya concedido de nuevo."""
+    result = session.execute(delete(RepoRole).where(RepoRole.repo == repo))
+    session.commit()
+    return result.rowcount or 0  # type: ignore[attr-defined]
+
+
 def delete_scores_older_than(session: Session, retention_days: int) -> int:
     """Borra `pr_scores` con `timestamp` anterior a `retention_days` días
     -- usado por la purga periódica (`tasks.py::purge_old_scores`).

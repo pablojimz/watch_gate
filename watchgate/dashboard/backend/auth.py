@@ -365,7 +365,20 @@ def resolve_role(user_login: str, repo: str, github_token: str | None = None) ->
     `POST /scores` genérico, sin conectar), `org_id` es `None` y
     `user_is_org_admin` devuelve `False` siempre -- fail-closed: sin
     poder verificar la organización, nadie es admin por esa vía, cae al
-    `get_role` de siempre (sí acotado por `(user_login, repo)` real)."""
+    `get_role` de siempre (sí acotado por `(user_login, repo)` real).
+
+    RBAC (dueño de repo vs. admin general): un superadmin de sitio (ver
+    `org_scope.py::is_site_superadmin`) debe poder VER cualquier repo de
+    la instancia (ya reflejado en `list_visible_repos`, `unscoped=True`),
+    pero nunca actuar como dueño de un repo que no es suyo -- "aceptar" un
+    PR, gestionar la blacklist o los roles de acceso exigen `mantenedor`+
+    (ver `feedback.py`/`scores.py`), así que un suelo de `"revisor"` (el
+    rango más bajo) es exactamente "ve todo, no puede tocar nada" sin
+    tocar ninguna otra comprobación. Se evalúa DESPUÉS de `get_role`/GitHub
+    a propósito: si el superadmin es ADEMÁS dueño real de este repo
+    concreto (fila explícita en `repo_roles`, o colaborador real de
+    GitHub), esa asignación manda y puede salir con un rango mayor -- este
+    suelo es solo la red de seguridad para cuando no hay ninguna."""
     with next(get_session()) as engine_session:
         org_id = resolve_org_id_for_repo(engine_session, repo)
 
@@ -384,6 +397,9 @@ def resolve_role(user_login: str, repo: str, github_token: str | None = None) ->
             with database.db_session() as conn:
                 database.upsert_role(conn, user_login, repo, mapped, org_id=org_id)
             return mapped
+
+    if is_site_superadmin(user_login):
+        return "revisor"
 
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,

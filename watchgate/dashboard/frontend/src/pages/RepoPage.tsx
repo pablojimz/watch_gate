@@ -2,13 +2,22 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { ClipboardList, History, MessageSquareWarning, Network, ShieldOff, Users } from 'lucide-react'
+import {
+  ClipboardList,
+  History,
+  KeyRound,
+  MessageSquareWarning,
+  Network,
+  ShieldOff,
+  Users,
+} from 'lucide-react'
 import { api, type RoleName, type ScoreOut } from '@/api/client'
 import { AuthorsBreakdown } from '@/components/dashboard/AuthorsBreakdown'
 import { BlockedAuthorsView } from '@/components/dashboard/BlockedAuthorsView'
 import { ChartSkeleton } from '@/components/dashboard/ChartSkeleton'
 import { CommitsVsThreatsChart } from '@/components/dashboard/CommitsVsThreatsChart'
 import { DashboardTabs } from '@/components/dashboard/DashboardTabs'
+import { RepoAccessView } from '@/components/dashboard/RepoAccessView'
 import { RepoKnowledgeGraphView } from '@/components/dashboard/RepoKnowledgeGraphView'
 import { ScoreTrendChart } from '@/components/dashboard/ScoreTrendChart'
 import { ScoresTable } from '@/components/dashboard/ScoresTable'
@@ -18,7 +27,7 @@ import { TableSkeleton } from '@/components/dashboard/TableSkeleton'
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
-type Tab = 'history' | 'authors' | 'knowledge-graph' | 'blocked-authors'
+type Tab = 'history' | 'authors' | 'knowledge-graph' | 'blocked-authors' | 'access'
 
 export default function RepoPage() {
   // Un solo segmento de URL codificado (ver App.tsx) -- no ":owner/:name",
@@ -91,6 +100,12 @@ export default function RepoPage() {
     { id: 'authors', label: t('repo.tabAuthors'), icon: Users },
     { id: 'knowledge-graph', label: t('repo.tabKnowledgeGraph'), icon: Network },
     { id: 'blocked-authors', label: t('repo.tabBlockedAuthors'), icon: ShieldOff },
+    // Solo el dueño del repo (mantenedor+) necesita ver/gestionar quién
+    // tiene acceso -- un revisor no gana nada viendo esta pestaña, ver
+    // RepoAccessView y el RBAC de feedback.py::upsert_role.
+    ...(canFeedback
+      ? [{ id: 'access' as const, label: t('repo.tabAccess'), icon: KeyRound }]
+      : []),
   ]
 
   return (
@@ -171,13 +186,19 @@ export default function RepoPage() {
                   </p>
                   <RepoKnowledgeGraphView repo={repo} />
                 </div>
-              ) : (
+              ) : tab === 'blocked-authors' ? (
                 <div>
                   <h2 className="mb-3 text-lg font-semibold">{t('repo.tabBlockedAuthors')}</h2>
                   <p className="mb-4 text-sm text-muted-foreground">
                     {t('repo.blockedAuthors.hint')}
                   </p>
                   <BlockedAuthorsView repo={repo} role={role} />
+                </div>
+              ) : (
+                <div>
+                  <h2 className="mb-3 text-lg font-semibold">{t('repo.tabAccess')}</h2>
+                  <p className="mb-4 text-sm text-muted-foreground">{t('repo.access.hint')}</p>
+                  <RepoAccessView repo={repo} role={role} />
                 </div>
               )}
             </div>
