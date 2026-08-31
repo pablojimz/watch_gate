@@ -162,6 +162,26 @@ _YARA_DEFAULT_RISK_SCORE = 60
 # una resincronización -- un proceso nuevo siempre recompila.
 _yara_rules_cache: dict[str, yara.Rules | None] = {}
 
+# Bucle de retroalimentación (tools.py::propose_yara_rule): caché en
+# proceso, SEPARADA de `_yara_rules_cache`, de las reglas YARA generadas
+# por la capa semántica y ya APROBADAS por un superadmin de sitio
+# (`PendingYaraRule`, Engine DB). TTL corto (no "hasta invalidación
+# explícita" como el corpus de terceros): `engine-api`/`dashboard-worker`
+# corren en contenedores Docker separados sin volumen compartido, así que
+# un mecanismo de invalidación cruzada entre procesos no es viable sin un
+# canal adicional (pub/sub) -- un TTL corto hace que CUALQUIER proceso
+# recoja una regla recién aprobada por su cuenta, sin coordinación.
+_GENERATED_YARA_RULES_TTL_SECONDS = 60.0
+_generated_yara_rules_cache: tuple[float, yara.Rules | None] | None = None
+
+# Timeout del match() contra las reglas generadas -- a diferencia del
+# corpus de terceros (ya revisado y estable), una regla generada por el
+# LLM y aprobada por un humano podría, en teoría, tener una condición
+# computacionalmente cara (el humano revisa intención/falsos positivos,
+# no necesariamente el coste de evaluación) -- esto acota el peor caso
+# incluso tras la aprobación.
+_GENERATED_YARA_MATCH_TIMEOUT_SECONDS = 5
+
 # Caché (misma vida de PROCESO que _yara_rules_cache) del mapeo
 # id-de-regla -> `finding_type` declarado en el propio YAML de cada regla
 # Semgrep ("vulnerability" | "malicious" | "needs_review" | "unclassified",
@@ -1153,22 +1173,69 @@ class StaticLayer(AnalysisLayer):
         _yara_rules_cache[cache_key] = compiled
         return compiled
 
-    def _run_yara_on_text(self, text: str, rules_dir: Path) -> list[dict[str, Any]]:
-        """Ejecuta YARA sobre el mismo contenido que Semgrep (spec §4 paso
-        3), con independencia del lenguaje detectado -- un webshell puede
-        llevar cualquier extensión, o ninguna, así que YARA no se filtra
-        por `_detect_language` como sí hace Semgrep (ver `analyze`)."""
-        results: list[dict[str, Any]] = []
-        compiled_rules = self._get_compiled_yara_rules(rules_dir)
-        if compiled_rules is None:
-            return results
+    def _get_compiled_generated_yara_rules(self) -> yara.Rules | None:
+        """Bucle de retroalimentación: compila las reglas YARA generadas
+        por la capa semántica y ya APROBADAS por un superadmin de sitio
+        (`PendingYaraRule.status == "approved"`, Engine DB) -- ruleset
+        SEPARADO del corpus de terceros de `_get_compiled_yara_rules`
+        (nunca se mezclan): evita que una regla generada localmente se
+        pierda en una resincronización futura del corpus de terceros
+        (`sync-rules.yml`/`reconcile-rules.yml`), y evita depender de un
+        fichero en disco que, en el despliegue real, no sería visible
+        entre `engine-api`/`dashboard-worker` (contenedores separados,
+        sin volumen compartido) -- se compila directamente `sources={}`
+        en memoria desde lo que la BD dice ahora mismo, ver el TTL en
+        `_generated_yara_rules_cache`."""
+        global _generated_yara_rules_cache
+        now = time.monotonic()
+        if _generated_yara_rules_cache is not None:
+            cached_at, compiled_cached = _generated_yara_rules_cache
+            if now - cached_at < _GENERATED_YARA_RULES_TTL_SECONDS:
+                return compiled_cached
+
+        from sqlmodel import select
+
+        from watchgate.db.connection import get_session
+        from watchgate.db.models import PendingYaraRule
 
         try:
-            matches = compiled_rules.match(data=text.encode("utf-8", errors="replace"))
-        except yara.Error as exc:
-            logger.debug("Excepción al ejecutar YARA: %r", exc)
-            return results
+            with next(get_session()) as session:
+                rows = session.exec(
+                    select(PendingYaraRule).where(PendingYaraRule.status == "approved")
+                ).all()
+        except Exception as exc:  # noqa: BLE001 - sin Engine DB disponible (p. ej. CLI
+            # local sin Postgres configurado), este ruleset queda vacío --
+            # nunca debe tumbar el análisis ni degradar el resto de
+            # static_layer, que sigue funcionando con el corpus de terceros.
+            logger.debug("No se pudieron leer las reglas YARA generadas: %r", exc)
+            _generated_yara_rules_cache = (now, None)
+            return None
 
+        if not rows:
+            _generated_yara_rules_cache = (now, None)
+            return None
+
+        # Un namespace por fila (misma razón que _get_compiled_yara_rules:
+        # evitar colisión de símbolos privados entre reglas), pero el
+        # rule_id que acaba reportándose (match.rule) es el identificador
+        # DENTRO de la propia regla (rule_name), no esta clave.
+        sources = {row.id: row.yara_source for row in rows}
+        try:
+            compiled = yara.compile(sources=sources)
+        except yara.Error as exc:
+            # No debería pasar -- ya se validó al proponerla (tools.py) y
+            # otra vez al aprobarla (routers/yara_rules.py) -- pero si una
+            # fila se corrompiera igualmente, degradar a "sin reglas
+            # generadas" en vez de tumbar TODO el análisis por una fila mala.
+            logger.warning("Fallo al compilar las reglas YARA generadas: %r", exc)
+            _generated_yara_rules_cache = (now, None)
+            return None
+
+        _generated_yara_rules_cache = (now, compiled)
+        return compiled
+
+    def _yara_matches_to_findings(self, matches: Any, *, tool_name: str) -> list[dict[str, Any]]:
+        findings: list[dict[str, Any]] = []
         for match in matches:
             meta = match.meta or {}
             risk_score = meta.get("risk_score", _YARA_DEFAULT_RISK_SCORE)
@@ -1177,9 +1244,9 @@ class StaticLayer(AnalysisLayer):
             message = meta.get("risk_justification") or (
                 f"Match for YARA rule '{match.rule}' (possible malware/webshell)."
             )
-            results.append(
+            findings.append(
                 {
-                    "tool": "yara",
+                    "tool": tool_name,
                     "rule_id": match.rule,
                     "message": message,
                     "line": 1,  # YARA opera sobre bytes, no líneas -- ver docstring de analyze()
@@ -1189,6 +1256,45 @@ class StaticLayer(AnalysisLayer):
                     # diferencia de Semgrep -- ver _infer_threat_nature_from_semgrep.
                     "threat_nature": ThreatNature.MALICIOUS,
                 }
+            )
+        return findings
+
+    def _run_yara_on_text(self, text: str, rules_dir: Path) -> list[dict[str, Any]]:
+        """Ejecuta YARA sobre el mismo contenido que Semgrep (spec §4 paso
+        3), con independencia del lenguaje detectado -- un webshell puede
+        llevar cualquier extensión, o ninguna, así que YARA no se filtra
+        por `_detect_language` como sí hace Semgrep (ver `analyze`).
+
+        Dos rulesets INDEPENDIENTES, nunca mezclados en un solo
+        `yara.compile()`: el corpus de terceros verificado por hash
+        (`_get_compiled_yara_rules`) y el bucle de retroalimentación de
+        reglas generadas y aprobadas (`_get_compiled_generated_yara_rules`,
+        ver esa docstring) -- cada uno con su propio `match()` y su propio
+        `tool` en el hallazgo, para que quede claro en el reporte cuál
+        detectó qué."""
+        results: list[dict[str, Any]] = []
+        data = text.encode("utf-8", errors="replace")
+
+        compiled_rules = self._get_compiled_yara_rules(rules_dir)
+        if compiled_rules is not None:
+            try:
+                matches = compiled_rules.match(data=data)
+            except yara.Error as exc:
+                logger.debug("Excepción al ejecutar YARA (corpus de terceros): %r", exc)
+                matches = []
+            results.extend(self._yara_matches_to_findings(matches, tool_name="yara"))
+
+        generated_rules = self._get_compiled_generated_yara_rules()
+        if generated_rules is not None:
+            try:
+                generated_matches = generated_rules.match(
+                    data=data, timeout=_GENERATED_YARA_MATCH_TIMEOUT_SECONDS
+                )
+            except yara.Error as exc:
+                logger.debug("Excepción al ejecutar YARA (reglas generadas): %r", exc)
+                generated_matches = []
+            results.extend(
+                self._yara_matches_to_findings(generated_matches, tool_name="yara_generated")
             )
 
         return results

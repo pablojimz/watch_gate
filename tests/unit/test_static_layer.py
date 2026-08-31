@@ -556,12 +556,15 @@ def _clear_yara_process_cache():
     que no haya contaminación entre tests con distintos `tmp_path` (que ya
     son únicos por test, pero esto lo deja explícito y hermético) -- sin
     esto, una vista verificada cacheada por un test se serviría tal cual
-    al siguiente mientras su tmp_path siga existiendo."""
+    al siguiente mientras su tmp_path siga existiendo. `_generated_yara_rules_cache`
+    (bucle de retroalimentación, TTL corto en vez de por clave) igual."""
     static_layer_module._yara_rules_cache.clear()
     static_layer_module._verified_rules_view_cache.clear()
+    static_layer_module._generated_yara_rules_cache = None
     yield
     static_layer_module._yara_rules_cache.clear()
     static_layer_module._verified_rules_view_cache.clear()
+    static_layer_module._generated_yara_rules_cache = None
 
 
 def _write_yara_rule(root: Path, relpath: str, content: str) -> None:
@@ -630,6 +633,157 @@ def test_run_yara_on_text_falls_back_to_default_score_when_meta_missing(tmp_path
 
     assert len(findings) == 1
     assert findings[0]["risk_score"] == static_layer_module._YARA_DEFAULT_RISK_SCORE
+
+
+# ---------------------------------------------------------------------------
+# Bucle de retroalimentación: reglas YARA generadas por la capa semántica y
+# aprobadas (PendingYaraRule, Engine DB) -- ver
+# _get_compiled_generated_yara_rules / _run_yara_on_text.
+# ---------------------------------------------------------------------------
+
+_GENERATED_YAR_SOURCE = """
+rule generated_marker_rule {
+    meta:
+        risk_score = 77
+        risk_justification = "Patrón generado de prueba"
+    strings:
+        $a = "GENERATED_RULE_MARKER_9999"
+    condition:
+        $a
+}
+"""
+
+
+class _FakeEngineSession:
+    def __init__(self, rows: list) -> None:
+        self._rows = rows
+
+    def __enter__(self) -> _FakeEngineSession:
+        return self
+
+    def __exit__(self, *exc_info: object) -> bool:
+        return False
+
+    def exec(self, _stmt: object) -> _FakeEngineSession:
+        return self
+
+    def all(self) -> list:
+        return self._rows
+
+
+def _fake_get_session(rows: list | None = None, raise_exc: Exception | None = None, calls=None):
+    def _factory():
+        if calls is not None:
+            calls.append(None)
+        if raise_exc is not None:
+            raise raise_exc
+        yield _FakeEngineSession(rows or [])
+
+    return _factory
+
+
+def _approved_rule_row(rule_id: str = "row-1", yara_source: str = _GENERATED_YAR_SOURCE):
+    from watchgate.db.models import PendingYaraRule
+
+    return PendingYaraRule(
+        id=rule_id,
+        org_id=None,
+        repo="owner/repo",
+        pr_id="1",
+        rule_name="generated_marker_rule",
+        category="webshells",
+        yara_source=yara_source,
+        rationale="x",
+        status="approved",
+    )
+
+
+def test_get_compiled_generated_yara_rules_returns_none_when_none_approved(monkeypatch) -> None:
+    monkeypatch.setattr("watchgate.db.connection.get_session", _fake_get_session(rows=[]))
+    layer = StaticLayer()
+    assert layer._get_compiled_generated_yara_rules() is None
+
+
+def test_get_compiled_generated_yara_rules_returns_none_on_db_error(monkeypatch) -> None:
+    """Sin Engine DB disponible (p. ej. CLI local sin Postgres), este
+    ruleset queda vacío -- nunca debe tumbar el análisis."""
+    monkeypatch.setattr(
+        "watchgate.db.connection.get_session",
+        _fake_get_session(raise_exc=RuntimeError("sin conexión")),
+    )
+    layer = StaticLayer()
+    assert layer._get_compiled_generated_yara_rules() is None
+
+
+def test_get_compiled_generated_yara_rules_compiles_approved_rows(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "watchgate.db.connection.get_session", _fake_get_session(rows=[_approved_rule_row()])
+    )
+    layer = StaticLayer()
+
+    compiled = layer._get_compiled_generated_yara_rules()
+
+    assert compiled is not None
+    matches = compiled.match(data=b"GENERATED_RULE_MARKER_9999")
+    assert len(matches) == 1
+    assert matches[0].rule == "generated_marker_rule"
+
+
+def test_get_compiled_generated_yara_rules_caches_within_ttl(monkeypatch) -> None:
+    calls: list[None] = []
+    monkeypatch.setattr(
+        "watchgate.db.connection.get_session",
+        _fake_get_session(rows=[_approved_rule_row()], calls=calls),
+    )
+    layer = StaticLayer()
+
+    first = layer._get_compiled_generated_yara_rules()
+    second = layer._get_compiled_generated_yara_rules()
+
+    assert first is second  # misma instancia -- no se recompiló
+    assert len(calls) == 1  # la BD solo se consultó una vez
+
+
+def test_get_compiled_generated_yara_rules_refreshes_after_ttl_expires(monkeypatch) -> None:
+    calls: list[None] = []
+    monkeypatch.setattr(
+        "watchgate.db.connection.get_session",
+        _fake_get_session(rows=[_approved_rule_row()], calls=calls),
+    )
+    layer = StaticLayer()
+    layer._get_compiled_generated_yara_rules()
+    assert len(calls) == 1
+
+    # Simula que el TTL ya expiró sin esperar de verdad -- el propio TTL
+    # es solo de 60s, un test real no debe depender de un sleep().
+    cached_at, compiled = static_layer_module._generated_yara_rules_cache
+    static_layer_module._generated_yara_rules_cache = (
+        cached_at - static_layer_module._GENERATED_YARA_RULES_TTL_SECONDS - 1,
+        compiled,
+    )
+
+    layer._get_compiled_generated_yara_rules()
+    assert len(calls) == 2  # se volvió a consultar la BD tras expirar el TTL
+
+
+def test_run_yara_on_text_combines_third_party_and_generated_matches(tmp_path, monkeypatch) -> None:
+    """Los dos rulesets son independientes pero sus hallazgos se combinan
+    en la misma lista -- cada uno etiquetado con su propio `tool`."""
+    _write_yara_rule(tmp_path, "rules/yara/webshells/test.yar", _WEBSHELL_YAR_RULE)
+    monkeypatch.setattr(
+        "watchgate.db.connection.get_session", _fake_get_session(rows=[_approved_rule_row()])
+    )
+    layer = StaticLayer()
+
+    findings = layer._run_yara_on_text(
+        "TOTALLY_A_WEBSHELL_MARKER_1234 and GENERATED_RULE_MARKER_9999", tmp_path
+    )
+
+    tools_seen = {f["tool"] for f in findings}
+    assert tools_seen == {"yara", "yara_generated"}
+    generated = next(f for f in findings if f["tool"] == "yara_generated")
+    assert generated["rule_id"] == "generated_marker_rule"
+    assert generated["risk_score"] == 77
 
 
 def test_analyze_runs_yara_and_full_semgrep_catalog_on_unrecognized_extension(tmp_path) -> None:
