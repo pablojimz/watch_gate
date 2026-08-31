@@ -21,7 +21,11 @@ from watchgate.dashboard.backend.org_scope import (
     resolve_org_repo_paths,
 )
 from watchgate.dashboard.backend.routers.keys import _get_or_create_db_user
-from watchgate.dashboard.backend.routers.repos import DBSession, _enqueue_repo_knowledge_graph
+from watchgate.dashboard.backend.routers.repos import (
+    DBSession,
+    _enqueue_repo_knowledge_graph,
+    delete_monitored_repo_cascade,
+)
 from watchgate.dashboard.backend.schemas import (
     CiConfigOut,
     IngestScoreIn,
@@ -464,9 +468,18 @@ def delete_repo_by_path(
     Dashboard, y sin esto nunca hay forma de quitarlos de la lista.
 
     Si además existe una fila `MonitoredRepo` para este `repo_path` en la
-    organización del usuario actual, se borra también (mismo guardado que
-    `delete_external_repo`: bloquea si hay API keys de agente atadas, en
-    vez de dejarlas huérfanas en silencio).
+    organización del usuario actual, se borra también -- con las filas del
+    mapa de conocimiento que le cuelgan
+    (`delete_monitored_repo_cascade`), porque esas tablas tienen FK sin
+    `ON DELETE CASCADE` y el borrado en crudo reventaba con un 500 opaco.
+    Mismo guardado que `delete_external_repo`: bloquea (409) si hay API
+    keys de agente atadas, en vez de dejarlas huérfanas en silencio.
+
+    El orden importa: la comprobación de API keys atadas y el 409 van
+    ANTES de borrar el histórico de scores. Antes se borraban los scores
+    primero y luego se comprobaba -- un repo con una key atada acababa con
+    el histórico ya perdido y aun así un 409 "no se pudo desconectar",
+    estado partido irreversible.
 
     `session` llega inyectado vía `Depends(get_db_session)` (mismo
     `DBSession` que usa `delete_external_repo`) en vez de abrir uno propio
@@ -475,9 +488,6 @@ def delete_repo_by_path(
     llamar a `get_session()` directamente, el override de sesión de test
     no tenía efecto y la consulta caía siempre sobre `default_engine`)."""
     require_role(user, repo, min_role="mantenedor", request=request)
-
-    with database.db_session() as conn:
-        deleted_scores = database.delete_scores_for_repo(conn, repo)
 
     monitored_repo_deleted = False
     db_user = _get_or_create_db_user(session, normalize_login(user.login))
@@ -493,12 +503,16 @@ def delete_repo_by_path(
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
-                    f"Histórico de scores borrado, pero no se pudo desconectar el "
-                    f"repo: hay {len(bound_keys)} API key(s) de agente atadas. "
-                    "Revócalas primero."
+                    f"No se puede eliminar: hay {len(bound_keys)} API key(s) de agente "
+                    "atadas a este repo. Revócalas primero."
                 ),
             )
-        session.delete(repo_row)
+
+    with database.db_session() as conn:
+        deleted_scores = database.delete_scores_for_repo(conn, repo)
+
+    if repo_row is not None:
+        delete_monitored_repo_cascade(session, repo_row)
         session.commit()
         monitored_repo_deleted = True
 

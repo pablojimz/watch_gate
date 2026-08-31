@@ -26,7 +26,14 @@ watchgate.db.crypto._fernet = Fernet("1Vn6eB6nE7xO4yH0JkL4A-9tN1X5mK3bH2P8gV0zM8
 from watchgate.adapters.github_client import GitHubClient  # noqa: E402
 from watchgate.dashboard.backend.main import app  # noqa: E402
 from watchgate.db.connection import build_engine, get_db_session  # noqa: E402
-from watchgate.db.models import MonitoredRepo, UserAPIKey, VCSConnection  # noqa: E402
+from watchgate.db.models import (  # noqa: E402
+    MonitoredRepo,
+    RepoArchitectureSummary,
+    RepoGraphEdge,
+    RepoGraphNode,
+    UserAPIKey,
+    VCSConnection,
+)
 from watchgate.db.repository import create_organization  # noqa: E402
 from watchgate.service.repo_polling import RepoPollingService  # noqa: E402
 
@@ -360,6 +367,201 @@ def test_delete_external_repo_blocked_when_api_key_bound_to_it(test_db_session):
     assert response.status_code == 409
     assert "API key" in response.json()["detail"]
     assert test_db_session.get(MonitoredRepo, "repo-delete-keyed") is not None
+
+    app.dependency_overrides.clear()
+
+
+def _seed_knowledge_graph(session, monitored_repo_id):
+    """Filas del mapa de conocimiento que cuelgan de un `MonitoredRepo` --
+    con FK hacia `monitored_repos.id` SIN `ON DELETE CASCADE`."""
+    node = RepoGraphNode(
+        id=f"node-{monitored_repo_id}",
+        monitored_repo_id=monitored_repo_id,
+        file_path="src/app.py",
+        summary="entrypoint",
+        content_hash="abc123",
+        loc=10,
+    )
+    session.add(node)
+    session.add(
+        RepoGraphEdge(
+            id=f"edge-{monitored_repo_id}",
+            monitored_repo_id=monitored_repo_id,
+            source_node_id=node.id,
+            target_node_id=node.id,
+        )
+    )
+    session.add(
+        RepoArchitectureSummary(
+            id=f"arch-{monitored_repo_id}",
+            monitored_repo_id=monitored_repo_id,
+            overview="resumen",
+            status="ready",
+        )
+    )
+    session.commit()
+
+
+def _assert_knowledge_graph_gone(session, monitored_repo_id):
+    from sqlmodel import select as _select
+
+    for model in (RepoGraphEdge, RepoGraphNode, RepoArchitectureSummary):
+        left = session.exec(
+            _select(model).where(model.monitored_repo_id == monitored_repo_id)
+        ).all()
+        assert left == [], f"{model.__name__} huérfano tras borrar el repo: {left}"
+
+
+def test_delete_external_repo_also_wipes_knowledge_graph(test_db_session):
+    """Regresión: `repo_graph_nodes`/`repo_graph_edges`/
+    `repo_architecture_summaries` tienen FK hacia `monitored_repos.id` sin
+    `ON DELETE CASCADE`. Borrar el repo sin limpiarlas antes revienta con
+    un `ForeignKeyViolation` (500 opaco en el Dashboard) en Postgres, y
+    deja filas huérfanas en SQLite."""
+
+    def get_test_db():
+        yield test_db_session
+
+    app.dependency_overrides[get_db_session] = get_test_db
+
+    user_admin = _setup_admin_and_revisor(test_db_session, "acme/kgrepo")
+    test_db_session.add(
+        MonitoredRepo(
+            id="repo-kg-1",
+            org_id=user_admin.org_id,
+            repo_path="acme/kgrepo",
+            monitor_type="audited",
+            status="active",
+        )
+    )
+    test_db_session.commit()
+    _seed_knowledge_graph(test_db_session, "repo-kg-1")
+
+    client = TestClient(app)
+    from watchgate.dashboard.backend.auth import create_session_token
+
+    client.cookies.set("watchgate_session", create_session_token("admin@corp.com"))
+    response = client.delete("/api/repos/external/repo-kg-1")
+    assert response.status_code == 204, response.text
+
+    assert test_db_session.get(MonitoredRepo, "repo-kg-1") is None
+    _assert_knowledge_graph_gone(test_db_session, "repo-kg-1")
+
+    app.dependency_overrides.clear()
+
+
+def test_delete_repo_by_path_wipes_monitored_repo_and_knowledge_graph(test_db_session):
+    """`DELETE /api/repos/{repo}` (borrado por path, borra también el
+    histórico de scores): mismo barrido de las filas del mapa de
+    conocimiento que `delete_external_repo`."""
+
+    def get_test_db():
+        yield test_db_session
+
+    app.dependency_overrides[get_db_session] = get_test_db
+
+    user_admin = _setup_admin_and_revisor(test_db_session, "acme/kgpath")
+    test_db_session.add(
+        MonitoredRepo(
+            id="repo-kg-path",
+            org_id=user_admin.org_id,
+            repo_path="acme/kgpath",
+            monitor_type="audited",
+            status="active",
+        )
+    )
+    test_db_session.commit()
+    _seed_knowledge_graph(test_db_session, "repo-kg-path")
+
+    client = TestClient(app)
+    from watchgate.dashboard.backend.auth import create_session_token
+
+    client.cookies.set("watchgate_session", create_session_token("admin@corp.com"))
+    response = client.delete("/api/repos/acme/kgpath")
+    assert response.status_code == 200, response.text
+    assert response.json()["monitored_repo_deleted"] is True
+
+    assert test_db_session.get(MonitoredRepo, "repo-kg-path") is None
+    _assert_knowledge_graph_gone(test_db_session, "repo-kg-path")
+
+    app.dependency_overrides.clear()
+
+
+def test_delete_repo_by_path_keeps_history_when_api_key_bound(test_db_session):
+    """El 409 por API key atada va ANTES de borrar el histórico de scores
+    -- antes se borraba primero y quedabas con el histórico perdido y aun
+    así un error, estado partido irreversible."""
+
+    def get_test_db():
+        yield test_db_session
+
+    app.dependency_overrides[get_db_session] = get_test_db
+
+    user_admin = _setup_admin_and_revisor(test_db_session, "acme/kgkeyed")
+    test_db_session.add(
+        MonitoredRepo(
+            id="repo-kg-keyed",
+            org_id=user_admin.org_id,
+            repo_path="acme/kgkeyed",
+            monitor_type="audited",
+            status="active",
+        )
+    )
+    test_db_session.add(
+        UserAPIKey(
+            id="key-kg-1",
+            user_id=user_admin.id,
+            org_id=user_admin.org_id,
+            monitored_repo_id="repo-kg-keyed",
+            name="CI runner",
+            key_prefix="wg_live_abcd",
+            key_hash="x" * 64,
+        )
+    )
+    test_db_session.commit()
+
+    from watchgate.dashboard.backend.db import db_session as dash_db_session
+
+    with dash_db_session() as dash_conn:
+        from watchgate.core.models import AggregatedResult, LayerResult, Semaforo
+
+        layers = {
+            n: LayerResult(layer_name=n, risk_score=10, justification="", skipped=False)
+            for n in ("static", "deps", "reputation", "semantic")
+        }
+        from watchgate.dashboard.backend import db as dash_db
+
+        dash_db.insert_aggregated(
+            dash_conn,
+            AggregatedResult(
+                score=10,
+                semaforo=Semaforo.VERDE,
+                layer_results=layers,
+                weights_used={
+                    "static": 0.25,
+                    "deps": 0.25,
+                    "reputation": 0.15,
+                    "semantic": 0.35,
+                },
+                pr_id="7",
+                repo="acme/kgkeyed",
+                timestamp="2026-08-01T12:00:00+00:00",
+            ),
+        )
+
+    client = TestClient(app)
+    from watchgate.dashboard.backend.auth import create_session_token
+
+    client.cookies.set("watchgate_session", create_session_token("admin@corp.com"))
+    response = client.delete("/api/repos/acme/kgkeyed")
+    assert response.status_code == 409
+    assert "API key" in response.json()["detail"]
+
+    assert test_db_session.get(MonitoredRepo, "repo-kg-keyed") is not None
+    with dash_db_session() as dash_conn:
+        from watchgate.dashboard.backend import db as dash_db
+
+        assert dash_db.list_scores(dash_conn, "acme/kgkeyed") != []
 
     app.dependency_overrides.clear()
 

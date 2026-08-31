@@ -7,14 +7,21 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
-from sqlmodel import Session, select
+from sqlmodel import Session, delete, select
 
 from watchgate.dashboard.backend.auth import CurrentUser, require_role
 from watchgate.dashboard.backend.routers.keys import _get_or_create_db_user
 from watchgate.dashboard.backend.schemas import normalize_login
 from watchgate.dashboard.backend.tasks import get_queue, run_audit_scan, run_main_branch_scan
 from watchgate.db.connection import get_db_session
-from watchgate.db.models import MonitoredRepo, UserAPIKey, VCSConnection
+from watchgate.db.models import (
+    MonitoredRepo,
+    RepoArchitectureSummary,
+    RepoGraphEdge,
+    RepoGraphNode,
+    UserAPIKey,
+    VCSConnection,
+)
 from watchgate.db.repository import create_api_key
 
 # Reexportado (no duplicado) desde `watchgate.service.repo_polling`, que
@@ -608,6 +615,41 @@ def update_external_repo(
     return repo
 
 
+def delete_monitored_repo_cascade(session: Session, repo: MonitoredRepo) -> None:
+    """Borra un `MonitoredRepo` junto con las filas del mapa de conocimiento
+    que le cuelgan (`repo_graph_edges` -> `repo_graph_nodes` ->
+    `repo_architecture_summaries`).
+
+    Esas tres tablas tienen una FK real hacia `monitored_repos.id` SIN `ON
+    DELETE CASCADE` (ver `watchgate/db/models.py`). Sin este barrido previo,
+    el `DELETE` del repo revienta con un `ForeignKeyViolation` opaco -- un
+    500 "Error interno" en el Dashboard -- en cuanto el repo ha tenido su
+    grafo de conocimiento construido alguna vez (o simplemente tiene la fila
+    de `RepoArchitectureSummary` en estado "pending"). SQLite en tests no lo
+    mostraba porque no fuerza FKs por defecto; Postgres en real sí.
+
+    Edges antes que nodes: `repo_graph_edges` referencia
+    `repo_graph_nodes.id`. Mismo orden que usa la reconstrucción del grafo
+    en `watchgate/core/repo_graph.py`. No hace `commit()` -- lo hace quien
+    llama, junto con el resto de su transacción."""
+    session.exec(
+        delete(RepoGraphEdge).where(
+            RepoGraphEdge.monitored_repo_id == repo.id  # type: ignore[arg-type]
+        )
+    )
+    session.exec(
+        delete(RepoGraphNode).where(
+            RepoGraphNode.monitored_repo_id == repo.id  # type: ignore[arg-type]
+        )
+    )
+    session.exec(
+        delete(RepoArchitectureSummary).where(
+            RepoArchitectureSummary.monitored_repo_id == repo.id  # type: ignore[arg-type]
+        )
+    )
+    session.delete(repo)
+
+
 @router.delete("/{repo_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_external_repo(
     repo_id: str,
@@ -656,5 +698,5 @@ def delete_external_repo(
             ),
         )
 
-    session.delete(repo)
+    delete_monitored_repo_cascade(session, repo)
     session.commit()
