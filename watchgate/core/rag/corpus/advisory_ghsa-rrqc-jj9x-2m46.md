@@ -1,0 +1,26 @@
+# Aviso: Malicious code in generate-schema-viem (npm) (GHSA-rrqc-jj9x-2m46)
+
+## Resumen
+
+The OpenSSF Package Analysis project identified 'generate-schema-viem' @ 1.0.0 (npm) as malicious.
+
+It is considered malicious because:
+
+- The package communicates with a domain associated with malicious activity.
+
+- The package executes one or more commands associated with malicious behavior.
+
+## Paquetes afectados
+
+- `generate-schema-viem` (npm), versiones afectadas: = 1.0.0
+
+## Datos del aviso
+
+- Tipo de aviso: malware
+- Severidad: critical
+- Publicado: 2026-08-31T00:30:26Z
+- Fuente: https://github.com/advisories/GHSA-rrqc-jj9x-2m46
+
+## Patrón a vigilar
+
+Diff que añade (o fija por primera vez) una dependencia sobre `generate-schema-viem`, en cualquier versión del rango afectado -- el paquete en sí ES el malware, no hace falta ningún otro cambio sospechoso en el diff para que el riesgo sea máximo.
