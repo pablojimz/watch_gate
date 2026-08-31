@@ -887,3 +887,105 @@ def test_tool_executor_survives_malformed_tool_arguments_from_the_llm(rag_index_
     assert isinstance(llm.observed_result, dict)
     assert "error" in llm.observed_result
     assert result.tool_calls_made == 1
+
+
+def _valid_yara_rule_input(rule_name: str = "test_generated_rule") -> dict:
+    return {
+        "rule_name": rule_name,
+        "category": "webshells",
+        "yara_source": f"""
+rule {rule_name} {{
+    strings:
+        $a = "evil_marker_string"
+    condition:
+        $a
+}}
+""",
+        "rationale": "Marcador visto en un webshell conocido, generaliza más allá de este PR.",
+    }
+
+
+def test_tool_executor_dispatches_propose_yara_rule_and_surfaces_it_on_the_result(rag_index_path):
+    """Bucle de retroalimentación: una propuesta aceptada llega hasta
+    `LayerResult.proposed_rules`, no solo al resultado que ve el LLM."""
+    tool_input = _valid_yara_rule_input()
+    llm = _ToolProbeLLMClient("propose_yara_rule", tool_input)
+    layer = SemanticLayer(llm, _FakeCostController(), rag_index_path=rag_index_path)
+
+    result = layer.analyze(_sample_diff(), {"repo": "owner/repo"})
+
+    assert llm.observed_result["accepted"] is True
+    assert result.tool_calls_made == 1
+    assert len(result.proposed_rules) == 1
+    proposed = result.proposed_rules[0]
+    assert proposed.rule_name == "test_generated_rule"
+    assert proposed.category == "webshells"
+    assert "evil_marker_string" in proposed.yara_source
+
+
+def test_tool_executor_propose_yara_rule_rejected_proposal_does_not_surface_on_result(
+    rag_index_path,
+):
+    """Una propuesta con sintaxis rota nunca llega a `proposed_rules` --
+    solo `accepted=True` (validado en tools.py) se acumula."""
+    llm = _ToolProbeLLMClient(
+        "propose_yara_rule",
+        {
+            "rule_name": "broken",
+            "category": "webshells",
+            "yara_source": "rule broken { condition: not valid yara at all }",
+            "rationale": "x",
+        },
+    )
+    layer = SemanticLayer(llm, _FakeCostController(), rag_index_path=rag_index_path)
+
+    result = layer.analyze(_sample_diff(), {"repo": "owner/repo"})
+
+    assert llm.observed_result["accepted"] is False
+    assert result.proposed_rules == []
+
+
+class _MultiProposalLLMClient(LLMClient):
+    """Fake que llama a `propose_yara_rule` `n_calls` veces DENTRO de una
+    misma conversación, con nombres de regla distintos -- para probar el
+    tope de `_MAX_PROPOSED_YARA_RULES` en `_build_tool_executor`."""
+
+    def __init__(self, n_calls: int) -> None:
+        self._n_calls = n_calls
+        self.observed_results: list[dict] = []
+
+    def complete_structured(self, system_prompt, user_prompt, tools, tool_executor, max_tool_calls):
+        for i in range(self._n_calls):
+            self.observed_results.append(
+                tool_executor("propose_yara_rule", _valid_yara_rule_input(f"rule_{i}"))
+            )
+        return SemanticOutput(
+            risk_score=1,
+            category=RiskCategory.NINGUNA,
+            justification="x",
+            confidence=Confidence.BAJA,
+        )
+
+    def summarize_file(self, file_path, content, symbols):
+        return FileSummary(category="unknown", summary="")
+
+    def synthesize_text(self, system_prompt, user_prompt):
+        return ""
+
+
+def test_propose_yara_rule_caps_accepted_proposals_per_analysis(rag_index_path):
+    """Una sola conversación con el LLM no debe poder inundar la cola de
+    revisión: más allá del tope, la tool devuelve un error explicativo (no
+    un fallo silencioso) y `proposed_rules` no crece más."""
+    llm = _MultiProposalLLMClient(n_calls=5)
+    layer = SemanticLayer(llm, _FakeCostController(), rag_index_path=rag_index_path)
+
+    result = layer.analyze(_sample_diff(), {"repo": "owner/repo"})
+
+    assert len(result.proposed_rules) == 3
+    assert [r.rule_name for r in result.proposed_rules] == ["rule_0", "rule_1", "rule_2"]
+    # Las dos últimas llamadas se rechazan explícitamente por el tope, no
+    # en silencio -- el LLM ve por qué no se acumularon.
+    assert llm.observed_results[3]["accepted"] is False
+    assert llm.observed_results[4]["accepted"] is False
+    assert "máximo" in llm.observed_results[3]["error"]
