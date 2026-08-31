@@ -30,6 +30,7 @@ from watchgate.dashboard.backend.routers.scores import router as scores_router
 from watchgate.dashboard.backend.routers.ui_settings import router as ui_router
 from watchgate.dashboard.backend.routers.user_settings import router as user_settings_router
 from watchgate.dashboard.backend.routers.webhooks import router as webhooks_router
+from watchgate.dashboard.backend.routers.yara_rules import router as yara_rules_router
 from watchgate.db.connection import init_db as init_api_keys_db
 from watchgate.logging_config import configure_logging, configure_sentry, setup_logging_sanitizer
 
@@ -203,6 +204,7 @@ def create_app() -> FastAPI:
     app.include_router(user_settings_router, prefix="/api")
     app.include_router(webhooks_router, prefix="/api")
     app.include_router(rag_router, prefix="/api")
+    app.include_router(yara_rules_router, prefix="/api")
 
     @app.get("/api/health")
     def health() -> dict[str, str]:

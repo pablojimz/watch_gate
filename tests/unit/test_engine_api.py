@@ -364,3 +364,62 @@ def test_cryptographic_log_filter():
     assert secret_raw not in record.msg
     assert "sk-ant-" not in record.msg
     assert "[REDACTED_SECRET]" in record.msg
+
+
+# ---------------------------------------------------------------------------
+# Bucle de retroalimentación: propuestas de reglas YARA de la capa semántica
+# persistidas como PendingYaraRule (Engine DB) -- ver
+# routers/analyze.py::_persist_proposed_yara_rules.
+# ---------------------------------------------------------------------------
+
+
+def test_persist_proposed_yara_rules_creates_pending_row(test_db_session):
+    from sqlmodel import select
+
+    from watchgate.api.routers.analyze import _persist_proposed_yara_rules
+    from watchgate.core.models import ProposedYaraRule
+    from watchgate.db.models import PendingYaraRule
+
+    session, _engine = test_db_session
+    proposal = ProposedYaraRule(
+        rule_name="suspicious_marker",
+        category="webshells",
+        yara_source="rule suspicious_marker { condition: true }",
+        rationale="x",
+    )
+
+    _persist_proposed_yara_rules(session, [proposal], org_id="org-1", repo="owner/repo", pr_id="42")
+
+    rows = session.exec(select(PendingYaraRule)).all()
+    assert len(rows) == 1
+    row = rows[0]
+    assert row.status == "pending"
+    assert row.rule_name == "suspicious_marker"
+    assert row.org_id == "org-1"
+    assert row.repo == "owner/repo"
+    assert row.pr_id == "42"
+
+
+def test_persist_proposed_yara_rules_deduplicates_by_rule_name(test_db_session):
+    """Re-analizar el mismo PR (nuevo push, reintento) no debe generar una
+    fila nueva por cada re-análisis mientras la propuesta anterior siga
+    pendiente (o ya se haya decidido sobre ella)."""
+    from sqlmodel import select
+
+    from watchgate.api.routers.analyze import _persist_proposed_yara_rules
+    from watchgate.core.models import ProposedYaraRule
+    from watchgate.db.models import PendingYaraRule
+
+    session, _engine = test_db_session
+    proposal = ProposedYaraRule(
+        rule_name="suspicious_marker",
+        category="webshells",
+        yara_source="rule suspicious_marker { condition: true }",
+        rationale="x",
+    )
+
+    _persist_proposed_yara_rules(session, [proposal], org_id="org-1", repo="owner/repo", pr_id="42")
+    _persist_proposed_yara_rules(session, [proposal], org_id="org-1", repo="owner/repo", pr_id="43")
+
+    rows = session.exec(select(PendingYaraRule)).all()
+    assert len(rows) == 1
