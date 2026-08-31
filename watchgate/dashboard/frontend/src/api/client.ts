@@ -69,6 +69,13 @@ export interface AcceptScoreOut extends ScoreOut {
 export interface MeResponse {
   login: string
   is_admin: boolean
+  // Auditoría: `is_admin` mezcla dos cosas distintas -- admin de la
+  // propia organización e instancia completa (ver org_scope.py). Se
+  // conservan por separado para poder ocultar acciones que exigen
+  // superadmin de sitio (p. ej. aprobar/rechazar reglas YARA generadas)
+  // aunque `is_admin` sea true por ser admin_organizacion.
+  is_org_admin?: boolean
+  is_site_superadmin?: boolean
   repos: string[]
 }
 
@@ -314,6 +321,30 @@ export interface BlockedAuthor {
   blocked_at: string
 }
 
+// Bucle de retroalimentación: regla YARA propuesta por la capa semántica
+// (ver core/layers/_semantic/tools.py::propose_yara_rule), pendiente de
+// revisión humana antes de activarse -- nunca se activa sola.
+export interface PendingYaraRule {
+  id: string
+  org_id: string | null
+  repo: string
+  pr_id: string
+  rule_name: string
+  category: string
+  yara_source: string
+  rationale: string
+  status: 'pending' | 'approved' | 'rejected'
+  reviewed_by: string | null
+  reviewed_at: string | null
+  created_at: string
+}
+
+export interface ApprovedYaraRule extends PendingYaraRule {
+  // Nombres de fixture benignos que la regla, ya aprobada, coincidió --
+  // aviso, no bloqueo (ver yara_review_fixtures/ en el backend).
+  benign_matches: string[]
+}
+
 export const api = {
   me: () => request<MeResponse>('/auth/me'),
   logout: () => request<{ status: string }>('/auth/logout', { method: 'POST' }),
@@ -492,4 +523,18 @@ export const api = {
       `/repos/${repo}`,
       { method: 'DELETE' },
     ),
+  // Bucle de retroalimentación (ver PendingYaraRule): `status` por
+  // defecto en el backend es "pending" si no se pasa nada.
+  listPendingYaraRules: (status?: PendingYaraRule['status']) =>
+    request<PendingYaraRule[]>(
+      `/admin/yara-rules${status ? `?status=${encodeURIComponent(status)}` : ''}`,
+    ),
+  approveYaraRule: (id: string) =>
+    request<ApprovedYaraRule>(`/admin/yara-rules/${encodeURIComponent(id)}/approve`, {
+      method: 'POST',
+    }),
+  rejectYaraRule: (id: string) =>
+    request<PendingYaraRule>(`/admin/yara-rules/${encodeURIComponent(id)}/reject`, {
+      method: 'POST',
+    }),
 }

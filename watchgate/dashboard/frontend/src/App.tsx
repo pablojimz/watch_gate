@@ -92,7 +92,7 @@ export default function App() {
           <Route
             path="admin"
             element={
-              me?.is_admin ? <AdminPage /> : <Navigate to="/repos" replace />
+              me?.is_admin ? <AdminPage me={me} /> : <Navigate to="/repos" replace />
             }
           />
         </Route>
