@@ -548,6 +548,17 @@ def test_mcp_tool_submit_feedback(monkeypatch, tmp_path) -> None:
     score_id = _seed_dashboard_score(
         tmp_path, monkeypatch, repo="acme/webapp", score=20, semaforo="verde"
     )
+    # `_seed_dashboard_score` da de alta "MCP User" como "revisor" (rol por
+    # defecto compartido con otros tests de este fichero) -- insuficiente
+    # para `_handle_submit_feedback`, que exige "mantenedor". Antes esto
+    # colaba igual por una vía de escalada ya retirada
+    # (`check_user_repo_permission` concedía acceso si `User.role ==
+    # "admin_organizacion"` en la Engine DB, sin comprobar organización --
+    # ver su docstring); con esa vía cerrada, hace falta el rol real.
+    from watchgate.dashboard.backend import db as dashboard_db
+
+    with dashboard_db.db_session() as conn:
+        dashboard_db.upsert_role(conn, "MCP User", "acme/webapp", "mantenedor")
 
     result = execute_mcp_tool(
         "watchgate_submit_feedback", {"score_id": score_id, "feedback": "correcto"}

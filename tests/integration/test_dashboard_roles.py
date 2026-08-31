@@ -82,6 +82,38 @@ def _login(client: TestClient, login: str, role: str) -> None:
     assert resp.status_code == 200, resp.text
 
 
+def _connect_repo_to_admin_org(repo_path: str) -> None:
+    """Da de alta un `MonitoredRepo` para `repo_path` bajo la organización
+    real de "admin" -- `_require_role_manager` (feedback.py, PUT/DELETE
+    /admin/roles) exige que el repo sobre el que se concede/revoca un rol
+    resuelva a la MISMA organización que quien llama
+    (`resolve_org_id_for_repo`, org_scope.py), y eso solo se resuelve vía
+    una fila `MonitoredRepo` real -- nunca sobre un repo que solo existe
+    por ingesta de CI (fail-closed, por diseño; ver el docstring de
+    `resolve_org_id_for_repo`). Los tests que llaman a esto necesitan que
+    su repo esté "conectado"; deliberadamente NO se hace en el fixture
+    `client` para no interferir con
+    `test_admin_roles_list_shows_connected_repo_type`, que depende de que
+    acme/payments-api NO tenga `MonitoredRepo`."""
+    from sqlmodel import Session
+
+    from watchgate.db.models import MonitoredRepo
+    from watchgate.dashboard.backend.org_scope import resolve_caller_org_id
+
+    with Session(db_connection.default_engine) as session:
+        org_id = resolve_caller_org_id(session, "admin")
+        session.add(
+            MonitoredRepo(
+                id=f"mr-{repo_path.replace('/', '-')}",
+                org_id=org_id,
+                repo_path=repo_path,
+                monitor_type="managed",
+                status="active",
+            )
+        )
+        session.commit()
+
+
 def test_password_login_with_seeded_user(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     _isolate_db_connection_engine(monkeypatch, tmp_path)
     db_path = tmp_path / "login.db"
@@ -320,6 +352,7 @@ def test_accept_score_reports_merge_failure_without_losing_acceptance(
 
 def test_admin_can_manage_roles_and_settings(client: TestClient) -> None:
     _login(client, "admin", "admin_organizacion")
+    _connect_repo_to_admin_org("acme/payments-api")
 
     assert client.get("/api/repos/acme/payments-api/scores").status_code == 200
     assert client.post("/api/scores/1/feedback", json={"feedback": "correcto"}).status_code == 200
@@ -491,6 +524,7 @@ def test_admin_can_assign_an_initial_role_when_creating_a_user(client: TestClien
     upsert_role que la gestión de roles por repo, PUT /api/admin/roles, ya
     usaba por separado), sin bloquear la creación de usuarios sin rol."""
     _login(client, "admin", "admin_organizacion")
+    _connect_repo_to_admin_org("acme/payments-api")
 
     created = client.post(
         "/api/admin/users",

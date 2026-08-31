@@ -487,10 +487,12 @@ def test_delete_repo_by_path_wipes_monitored_repo_and_knowledge_graph(test_db_se
     app.dependency_overrides.clear()
 
 
-def test_delete_repo_by_path_keeps_history_when_api_key_bound(test_db_session):
-    """El 409 por API key atada va ANTES de borrar el histórico de scores
-    -- antes se borraba primero y quedabas con el histórico perdido y aun
-    así un error, estado partido irreversible."""
+def test_delete_repo_by_path_revokes_bound_api_key_instead_of_blocking(test_db_session):
+    """`delete_repo_by_path` ya no bloquea con 409 si hay una API key de
+    agente atada al repo -- "eliminar todos los datos" incluye revocar y
+    borrar esa key (antes se dejaba huérfana bloqueando el borrado,
+    justo el estado que un borrado completo debe evitar; ver el
+    docstring de `delete_repo_by_path`)."""
 
     def get_test_db():
         yield test_db_session
@@ -554,14 +556,17 @@ def test_delete_repo_by_path_keeps_history_when_api_key_bound(test_db_session):
 
     client.cookies.set("watchgate_session", create_session_token("admin@corp.com"))
     response = client.delete("/api/repos/acme/kgkeyed")
-    assert response.status_code == 409
-    assert "API key" in response.json()["detail"]
+    assert response.status_code == 200
+    body = response.json()
+    assert body["monitored_repo_deleted"] is True
+    assert body["scores_deleted"] == 1
 
-    assert test_db_session.get(MonitoredRepo, "repo-kg-keyed") is not None
+    assert test_db_session.get(MonitoredRepo, "repo-kg-keyed") is None
+    assert test_db_session.get(UserAPIKey, "key-kg-1") is None
     with dash_db_session() as dash_conn:
         from watchgate.dashboard.backend import db as dash_db
 
-        assert dash_db.list_scores(dash_conn, "acme/kgkeyed") != []
+        assert dash_db.list_scores(dash_conn, "acme/kgkeyed") == []
 
     app.dependency_overrides.clear()
 

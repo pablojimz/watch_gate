@@ -50,7 +50,7 @@ pnpm-debug.log*
 *.log
 logs/
 
-# --- Auxiliares de compilación LaTeX (docs/presentacion) ---
+# --- Auxiliares de compilación LaTeX ---
 *.aux
 *.nav
 *.out
@@ -76,3 +76,27 @@ Thumbs.db
 
 # --- Casos de prueba con payloads reales (si se añaden, no publicar en claro) ---
 tests/cases/**/*.secret
+
+# --- Material interno/académico: diarios de progreso, planificación de
+# equipo, presentación del premio y notas de trabajo con Claude -- no es
+# documentación de uso/mantenimiento de la herramienta. Ver
+# docs/README.md para el índice de lo que sí se mantiene público.
+# (auditoría pre-publicación, ver historial de commits de este fichero)
+docs/progreso/
+docs/planificacion/
+docs/presentacion/
+docs/WatchGate_memoria.pdf
+docs/memoria_WatchGate.md
+docs/diagrama_estructura.png
+/presentacion.html
+/mio.md
+/scratchpad/
+.claude/commands/
+.claude/conectar_engine_front-end.md
+.claude/informe-puerta-2.md
+.claude/revaisar-puerta-2.md
+# NO se ignoran (son el rastro de auditoría de licencias que enlaza
+# rules/semgrep/NOTICE.md -- deben seguir públicos):
+#   .claude/README.md, .claude/rules-audit-report.md,
+#   .claude/rules-audit-report.pdf, .claude/vulnerability-mapping.md,
+#   .claude/vulnerability-mapping.pdf
