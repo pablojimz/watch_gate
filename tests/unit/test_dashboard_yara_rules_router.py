@@ -1,9 +1,9 @@
 """Tests para /api/admin/yara-rules (watchgate/dashboard/backend/routers/yara_rules.py).
 
 Bucle de retroalimentación: cola de revisión humana de reglas YARA
-propuestas por la capa semántica -- ver visibilidad (admin_organizacion,
-acotado a su propia org) vs. activación (superadmin de sitio, instancia
-completa) en el docstring del propio router.
+propuestas por la capa semántica -- se quitó el rol "admin_organizacion"
+del RBAC, así que ver y activar la cola exigen ambas superadmin de sitio
+(instancia completa), ver el docstring del propio router.
 """
 
 from __future__ import annotations
@@ -104,20 +104,21 @@ def test_list_denied_without_any_role(yara_client) -> None:
     assert response.status_code == 403
 
 
-def test_list_org_admin_sees_only_own_org(yara_client) -> None:
+def test_list_denied_for_mantenedor_of_a_repo(yara_client) -> None:
+    """Ser `mantenedor` de un repo (incluso de uno con propuestas
+    pendientes) no basta -- se quitó el rol "admin_organizacion" del
+    RBAC, así que ya no hay ningún nivel intermedio entre "sin rol" y
+    "superadmin de sitio" para esta cola."""
     client, login, engine_session, db_path = yara_client
     org = _make_org_and_bind_user(engine_session, login, "org-mine")
     _add_pending_rule(engine_session, org_id=org.id, rule_id="mine", rule_name="mine_rule")
-    _add_pending_rule(engine_session, org_id="org-other", rule_id="theirs", rule_name="their_rule")
 
     with database.db_session(db_path) as conn:
-        database.upsert_role(conn, login, "acme/repo", "admin_organizacion", org_id=org.id)
+        database.upsert_role(conn, login, "acme/repo", "mantenedor", org_id=org.id)
 
     response = client.get("/api/admin/yara-rules")
 
-    assert response.status_code == 200
-    rule_names = {r["rule_name"] for r in response.json()}
-    assert rule_names == {"mine_rule"}
+    assert response.status_code == 403
 
 
 def test_list_site_superadmin_sees_all_orgs(yara_client, monkeypatch) -> None:
@@ -133,15 +134,15 @@ def test_list_site_superadmin_sees_all_orgs(yara_client, monkeypatch) -> None:
     assert rule_names == {"rule_a", "rule_b"}
 
 
-def test_approve_denied_for_org_admin(yara_client) -> None:
-    """Ver la cola no basta para aprobar: activar una regla es de
-    instancia completa, exige superadmin de sitio (ver docstring del
-    router)."""
+def test_approve_denied_for_mantenedor(yara_client) -> None:
+    """Activar una regla es de instancia completa, exige superadmin de
+    sitio (ver docstring del router) -- ser mantenedor de un repo no
+    basta."""
     client, login, engine_session, db_path = yara_client
     org = _make_org_and_bind_user(engine_session, login, "org-mine")
     row = _add_pending_rule(engine_session, org_id=org.id)
     with database.db_session(db_path) as conn:
-        database.upsert_role(conn, login, "acme/repo", "admin_organizacion", org_id=org.id)
+        database.upsert_role(conn, login, "acme/repo", "mantenedor", org_id=org.id)
 
     response = client.post(f"/api/admin/yara-rules/{row.id}/approve")
 
@@ -217,12 +218,12 @@ def test_reject_site_superadmin_marks_rejected(yara_client, monkeypatch) -> None
     assert response.json()["status"] == "rejected"
 
 
-def test_reject_denied_for_org_admin(yara_client) -> None:
+def test_reject_denied_for_mantenedor(yara_client) -> None:
     client, login, engine_session, db_path = yara_client
     org = _make_org_and_bind_user(engine_session, login, "org-mine")
     row = _add_pending_rule(engine_session, org_id=org.id)
     with database.db_session(db_path) as conn:
-        database.upsert_role(conn, login, "acme/repo", "admin_organizacion", org_id=org.id)
+        database.upsert_role(conn, login, "acme/repo", "mantenedor", org_id=org.id)
 
     response = client.post(f"/api/admin/yara-rules/{row.id}/reject")
 

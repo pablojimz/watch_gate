@@ -51,14 +51,14 @@ def test_password_login_in_normalizes_username() -> None:
 def test_upsert_role_does_not_duplicate_by_case(tmp_path) -> None:
     db_path = tmp_path / "dashboard.db"
     with database.db_session(db_path) as conn:
-        database.upsert_role(conn, "Alice", "acme/payments-api", "revisor")
-        database.upsert_role(conn, "alice", "acme/payments-api", "mantenedor")
-        database.upsert_role(conn, " ALICE ", "acme/payments-api", "admin_organizacion")
+        database.upsert_role(conn, "Alice", "acme/payments-api", "mantenedor")
+        database.upsert_role(conn, "alice", "acme/payments-api", "revisor")
+        database.upsert_role(conn, " ALICE ", "acme/payments-api", "mantenedor")
 
         roles = database.list_roles(conn, "acme/payments-api")
         assert len(roles) == 1
         assert roles[0]["user_login"] == "alice"
-        assert roles[0]["role"] == "admin_organizacion"  # la última escritura gana
+        assert roles[0]["role"] == "mantenedor"  # la última escritura gana
 
 
 def test_get_and_delete_role_are_case_insensitive(tmp_path) -> None:

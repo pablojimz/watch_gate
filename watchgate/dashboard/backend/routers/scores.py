@@ -71,14 +71,14 @@ class RepoKnowledgeGraphOut(BaseModel):
 
 @router.get("/repos")
 def list_visible_repos(user: CurrentUser) -> list[str]:
-    # Auditoría: acotado a la organización real del llamador -- antes
-    # `is_admin` global hacía que un admin_organizacion (cualquier repo)
-    # viera los repos de TODAS las organizaciones, no solo la propia.
-    # Un superadmin de sitio sí ve todos los repos de la instancia a
-    # propósito (`unscoped=True`, nunca por un `org_id` vacío -- ver el
-    # bugfix en list_repos_for_user) -- es el mismo nivel que ya tiene
+    # Se quitó el rol "admin_organizacion" del RBAC -- ya no hay ningún
+    # rol capaz de ver TODOS los repos de una organización sin tener rol
+    # explícito en cada uno; cada quien ve solo los repos donde tiene una
+    # fila real en repo_roles. Único que sigue viendo todo: el superadmin
+    # de sitio, a propósito (`unscoped=True`, nunca por un `org_id` vacío
+    # -- ver el bugfix en list_repos_for_user), mismo nivel que ya tiene
     # sobre llm_settings.py/ui_settings.py, coherente con administrar la
-    # instancia entera, no solo su propia organización.
+    # instancia entera.
     caller_is_site_superadmin = is_site_superadmin(user.login)
 
     from watchgate.db.connection import get_session
@@ -87,11 +87,10 @@ def list_visible_repos(user: CurrentUser) -> list[str]:
         org_id = resolve_caller_org_id(engine_session, user.login)
         org_repo_paths = resolve_org_repo_paths(engine_session, org_id)
     with database.db_session() as conn:
-        is_admin = caller_is_site_superadmin or database.user_is_org_admin(conn, user.login, org_id)
         return database.list_repos_for_user(
             conn,
             user.login,
-            is_admin=is_admin,
+            is_admin=caller_is_site_superadmin,
             org_id=org_id,
             org_repo_paths=org_repo_paths,
             unscoped=caller_is_site_superadmin,
@@ -158,14 +157,17 @@ def get_repo_settings(repo: str, request: Request, user: CurrentUser) -> RepoSet
 def put_repo_settings(
     repo: str, body: RepoSettings, request: Request, user: CurrentUser
 ) -> RepoSettings:
-    require_role(user, repo, min_role="admin_organizacion", request=request)
+    # Se quitó el rol "admin_organizacion" del RBAC -- el dueño del repo
+    # (mantenedor, ya con autoridad sobre todo lo demás de este repo
+    # concreto) es ahora quien decide sus propios pesos/umbrales/política.
+    require_role(user, repo, min_role="mantenedor", request=request)
     with database.db_session() as conn:
         return database.set_settings(conn, repo, body)
 
 
 @router.delete("/repos/{repo:path}/settings", response_model=RepoSettings)
 def reset_repo_settings(repo: str, request: Request, user: CurrentUser) -> RepoSettings:
-    require_role(user, repo, min_role="admin_organizacion", request=request)
+    require_role(user, repo, min_role="mantenedor", request=request)
     with database.db_session() as conn:
         return database.clear_repo_settings(conn, repo)
 

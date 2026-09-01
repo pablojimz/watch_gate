@@ -215,9 +215,8 @@ TOOLS: list[McpToolDefinition] = [
             "Métricas agregadas de postura de seguridad tal como las ve el Dashboard: PRs "
             "analizados, score medio, distribución de semáforos, feedback humano acumulado y "
             "desglose por repositorio. Requiere WATCHGATE_MCP_API_KEY configurada. Sin "
-            "'repos', agrega los repositorios del Dashboard visibles para el usuario según su "
-            "rol (todos si es admin_organizacion); con 'repos', filtra a los que tenga rol "
-            "asignado."
+            "'repos', agrega los repositorios del Dashboard donde el usuario tiene rol "
+            "asignado; con 'repos', filtra a los que tenga rol asignado."
         ),
         inputSchema=McpToolParameterSchema(
             type="object",

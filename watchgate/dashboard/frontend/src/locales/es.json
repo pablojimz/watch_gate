@@ -103,7 +103,6 @@
       "loginPlaceholder": "login (ej: usuario-github)",
       "roleMantenedor": "Mantenedor (dueño)",
       "roleRevisor": "Revisor (solo lectura)",
-      "roleAdminOrganizacion": "Admin de organización",
       "addButton": "Añadir",
       "removeButton": "Quitar",
       "addedToast": "'{{login}}' añadido como {{role}}.",
@@ -226,6 +225,9 @@
     "roleRemoved": "Rol eliminado",
     "usersTitle": "Usuarios",
     "rolesTitle": "Roles de acceso",
+    "rolesFilterByRepo": "Filtrar por repositorio",
+    "rolesFilterAllRepos": "Todos los repositorios",
+    "rolesFilterEmpty": "Ningún usuario tiene rol asignado en este repositorio.",
     "user": "Usuario",
     "userHint": "Se guarda en minúsculas y sin espacios de sobra, para que la misma persona no quede duplicada por may/min.",
     "userRequired": "Escribe un nombre de usuario",
@@ -246,7 +248,7 @@
     "add": "Asignar",
     "remove": "Quitar",
     "yaraRulesTitle": "Reglas YARA propuestas",
-    "yaraRulesHint": "Cuando la capa semántica detecta un patrón malicioso que ninguna regla estática cazó, puede proponer una regla YARA nueva -- nunca se activa sola, queda pendiente de esta revisión. Ver una propuesta de tu organización es admin_organizacion; aprobarla o rechazarla exige superadmin de sitio (se activa para toda la instancia).",
+    "yaraRulesHint": "Cuando la capa semántica detecta un patrón malicioso que ninguna regla estática cazó, puede proponer una regla YARA nueva -- nunca se activa sola, queda pendiente de esta revisión. Ver, aprobar o rechazar propuestas exige superadmin de sitio (se activa para toda la instancia).",
     "yaraRulesEmpty": "No hay reglas propuestas pendientes.",
     "yaraRuleStatusPending": "Pendiente",
     "yaraRuleStatusApproved": "Aprobada",
@@ -263,7 +265,6 @@
     "yaraRuleNeedsSuperadmin": "Solo un superadmin de sitio puede aprobar o rechazar (esta activación afecta a toda la instancia)."
   },
   "roles": {
-    "admin_organizacion": "Admin organización",
     "mantenedor": "Mantenedor",
     "revisor": "Revisor"
   },

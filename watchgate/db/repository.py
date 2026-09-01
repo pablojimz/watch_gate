@@ -40,7 +40,6 @@ _TOKEN_PREFIX_TEST = "wg_test_"
 _ROLE_HIERARCHY: dict[str, int] = {
     "revisor": 1,
     "mantenedor": 2,
-    "admin_organizacion": 3,
 }
 
 
@@ -58,34 +57,18 @@ def check_user_repo_permission(
 ) -> bool:
     """Unifica la identidad y verifica el rol del usuario sobre un repositorio.
 
-    Comprueba si es `admin_organizacion` de la organización DUEÑA de
-    `repo` (ver `dashboard/backend/org_scope.py::resolve_org_id_for_repo`),
-    o el rol asignado en la base de datos del Dashboard para
-    `(user_login, repo)`.
-
-    Auditoría (hallazgo crítico, corregido): esto tenía DOS caminos que
-    concedían admin sin comprobar organización -- (a) `User.role ==
-    "admin_organizacion"` en la Engine DB, un campo que en la práctica
-    ningún código de este repo llega a poner a ese valor (confirmado por
-    búsqueda: cero asignaciones reales), así que era código muerto, pero
-    del mismo patrón peligroso; y (b) `dashboard_db.user_is_org_admin`
-    sin `org_id`, que SÍ era explotable (ver el fix de esa función). Se
-    retira (a) por completo (nunca alcanzable, y si algún día alguien
-    empezara a rellenar `User.role`, sería el mismo bug otra vez) y se
-    acota (b) a la organización real de `repo`."""
+    Comprueba el rol asignado en la base de datos del Dashboard para
+    `(user_login, repo)` -- se quitó el rol "admin_organizacion" del
+    RBAC, ya no hay ningún atajo de "admin de la organización dueña"."""
     if not user_login or not repo:
         return False
 
     norm_login = user_login.strip().lower()
 
     from watchgate.dashboard.backend import db as dashboard_db
-    from watchgate.dashboard.backend.org_scope import resolve_org_id_for_repo
 
     try:
-        org_id = resolve_org_id_for_repo(session, repo)
         with dashboard_db.db_session() as conn:
-            if dashboard_db.user_is_org_admin(conn, norm_login, org_id):
-                return True
             role = dashboard_db.get_role(conn, norm_login, repo)
             if role is not None:
                 return has_required_role(role, required_role)

@@ -35,7 +35,6 @@ SESSION_COOKIE = "watchgate_session"
 ROLE_RANK: dict[RoleName, int] = {
     "revisor": 1,
     "mantenedor": 2,
-    "admin_organizacion": 3,
 }
 
 # Único hardcodeado en todo el proyecto -- cualquiera que lea este fichero
@@ -183,7 +182,7 @@ def ensure_safe_startup_config() -> None:
     significa que un despliegue real que se olvide de fijar las variables de
     entorno arrancaría en silencio con el login de desarrollo abierto,
     firmando cookies de sesión con `INSECURE_DEFAULT_SECRET` (público en este
-    repo -- cualquiera podría forjar una sesión de admin_organizacion), y con
+    repo -- cualquiera podría forjar una sesión con cualquier rol), y con
     `POST /api/scores` (la ingesta desde la Action, sin cookie de usuario)
     aceptando cualquier llamada sin autenticar. En cuanto alguien apaga dev
     mode explícitamente (la señal de "esto es un despliegue real"), exigimos
@@ -358,14 +357,9 @@ def _github_token_from_request(request: Request) -> str | None:
 def resolve_role(user_login: str, repo: str, github_token: str | None = None) -> RoleName:
     """Resuelve el rol: fila en repo_roles, o inferencia desde GitHub Collaborators API.
 
-    Auditoría (hallazgo crítico, corregido): `user_is_org_admin` ya no
-    acepta "admin en cualquier repo" -- exige la organización real DUEÑA
-    de `repo` (`org_scope.py::resolve_org_id_for_repo`, consulta a la
-    Engine DB). Sin `MonitoredRepo` para `repo` (score ingerido solo vía
-    `POST /scores` genérico, sin conectar), `org_id` es `None` y
-    `user_is_org_admin` devuelve `False` siempre -- fail-closed: sin
-    poder verificar la organización, nadie es admin por esa vía, cae al
-    `get_role` de siempre (sí acotado por `(user_login, repo)` real).
+    Se quitó el rol "admin_organizacion" del RBAC -- ya no hay ningún
+    atajo de "admin de mi organización", solo la fila explícita en
+    `repo_roles` para `(user_login, repo)`.
 
     RBAC (dueño de repo vs. admin general): un superadmin de sitio (ver
     `org_scope.py::is_site_superadmin`) debe poder VER cualquier repo de
@@ -383,8 +377,6 @@ def resolve_role(user_login: str, repo: str, github_token: str | None = None) ->
         org_id = resolve_org_id_for_repo(engine_session, repo)
 
     with database.db_session() as conn:
-        if database.user_is_org_admin(conn, user_login, org_id):
-            return "admin_organizacion"
         existing = database.get_role(conn, user_login, repo)
         if existing is not None:
             return existing
@@ -582,31 +574,20 @@ def dev_login(body: DevLoginIn, response: Response) -> dict[str, str]:
     if not _dev_login_enabled():
         raise HTTPException(status_code=404, detail="Dev login deshabilitado")
 
-    # Auditoría: `list_repos_for_user`/`upsert_role` necesitan un `org_id`
-    # real -- sin él, un dev-login "admin_organizacion" concedía el rol con
-    # `org_id=None` (inerte por diseño, ver db.py) y `/me` nunca lo
-    # reconocía como admin después. Se resuelve la organización personal
-    # de `body.login` (se crea si no existía, igual que cualquier otro
-    # login nuevo) y se usa consistentemente.
+    # `org_id` real (organización personal de `body.login`, se crea si no
+    # existía) para que `list_repos_for_user`/`upsert_role` queden
+    # consistentes.
     with next(get_session()) as engine_session:
         org_id = resolve_caller_org_id(engine_session, body.login)
         org_repo_paths = resolve_org_repo_paths(engine_session, org_id)
 
     with database.db_session() as conn:
         # Asegura que el usuario de demo tenga al menos un rol visible.
-        is_admin = body.role == "admin_organizacion"
         repos = database.list_repos_for_user(
-            conn, body.login, is_admin=is_admin, org_id=org_id, org_repo_paths=org_repo_paths
+            conn, body.login, is_admin=False, org_id=org_id, org_repo_paths=org_repo_paths
         )
         if not repos:
             database.upsert_role(conn, body.login, "acme/payments-api", body.role, org_id=org_id)
-            if body.role == "admin_organizacion":
-                database.upsert_role(
-                    conn, body.login, "acme/auth-service", body.role, org_id=org_id
-                )
-        elif body.role == "admin_organizacion":
-            for repo in repos or ["acme/payments-api"]:
-                database.upsert_role(conn, body.login, repo, body.role, org_id=org_id)
         else:
             database.upsert_role(conn, body.login, repos[0], body.role, org_id=org_id)
 
@@ -617,29 +598,31 @@ def dev_login(body: DevLoginIn, response: Response) -> dict[str, str]:
 
 @router.get("/me")
 def me(user: CurrentUser, request: Request) -> dict[str, object]:
-    # Auditoría: `is_admin` era un único booleano que mezclaba dos cosas
-    # distintas -- admin de MI organización (repos/roles) y superadmin de
-    # TODA la instancia (LLM/branding/cuentas locales, ver org_scope.py).
-    # Se devuelven ambos por separado; `is_admin` se conserva (OR de los
-    # dos) solo para no romper clientes/consumidores que aún lo esperen.
+    # Se quitó el rol "admin_organizacion" del RBAC -- ya no hay ningún
+    # admin de organización, solo el superadmin de sitio (LLM/branding/
+    # cuentas locales, ver org_scope.py). `is_org_admin` se conserva
+    # siempre en `False` (en vez de quitar el campo) para no romper
+    # clientes/consumidores que aún lo esperen; `is_admin` pasa a ser
+    # sinónimo exacto de `is_site_superadmin` -- también es lo único que
+    # ahora decide si "Configuración" es alcanzable en el frontend
+    # (ver App.tsx).
     caller_is_site_superadmin = is_site_superadmin(user.login)
     with next(get_session()) as engine_session:
         org_id = resolve_caller_org_id(engine_session, user.login)
         org_repo_paths = resolve_org_repo_paths(engine_session, org_id)
 
     with database.db_session() as conn:
-        is_org_admin = database.user_is_org_admin(conn, user.login, org_id)
         repos = database.list_repos_for_user(
             conn,
             user.login,
-            is_admin=is_org_admin,
+            is_admin=caller_is_site_superadmin,
             org_id=org_id,
             org_repo_paths=org_repo_paths,
         )
     return {
         "login": user.login,
-        "is_admin": is_org_admin or caller_is_site_superadmin,
-        "is_org_admin": is_org_admin,
+        "is_admin": caller_is_site_superadmin,
+        "is_org_admin": False,
         "is_site_superadmin": caller_is_site_superadmin,
         "repos": repos,
     }

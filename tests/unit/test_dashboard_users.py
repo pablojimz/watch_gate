@@ -1,7 +1,6 @@
 """Tests de watchgate/dashboard/backend/db.py: cuentas locales del
 Dashboard (`dashboard_users` -- distinto de `repo_roles`, ver
-routers/feedback.py::list_all_users) y la guarda contra dejar la
-organización sin ningún `admin_organizacion` que pueda gestionar accesos.
+routers/feedback.py::list_all_users).
 """
 
 from __future__ import annotations
@@ -55,39 +54,3 @@ def test_delete_user_returns_false_for_unknown_login(tmp_path: Path) -> None:
         assert database.delete_user(conn, "no-existe") is False
 
 
-def test_is_last_org_admin(tmp_path: Path) -> None:
-    with database.db_session(tmp_path / "dashboard.db") as conn:
-        database.upsert_role(
-            conn, "unica", "acme/payments-api", "admin_organizacion", org_id="org-acme"
-        )
-
-        # Único admin_organizacion de "org-acme" -- bloquea.
-        assert database.is_last_org_admin(conn, "unica") is True
-        # Alguien sin ese rol nunca es "el último admin" (no lo tiene).
-        assert database.is_last_org_admin(conn, "nadie") is False
-
-        # Con un segundo admin_organizacion de la MISMA organización,
-        # ninguno de los dos es "el último" -- borrar cualquiera de los
-        # dos, en solitario, es seguro.
-        database.upsert_role(
-            conn, "otra", "acme/auth-service", "admin_organizacion", org_id="org-acme"
-        )
-        assert database.is_last_org_admin(conn, "unica") is False
-        assert database.is_last_org_admin(conn, "otra") is False
-
-
-def test_is_last_org_admin_is_scoped_per_organization(tmp_path: Path) -> None:
-    """Ser el único admin de la organización B no debe impedir borrar al
-    único admin de la organización A si esta última se queda sin nadie
-    -- y viceversa, ser admin en una organización ajena no debe "cubrir"
-    a un admin que se queda solo en la suya."""
-    with database.db_session(tmp_path / "dashboard.db") as conn:
-        database.upsert_role(
-            conn, "sola-a", "acme/payments-api", "admin_organizacion", org_id="org-a"
-        )
-        database.upsert_role(conn, "sola-b", "beta/infra", "admin_organizacion", org_id="org-b")
-
-        # Cada una es la única admin de su propia organización -- ambas
-        # bloquean, aunque el conjunto GLOBAL de admins tenga tamaño 2.
-        assert database.is_last_org_admin(conn, "sola-a") is True
-        assert database.is_last_org_admin(conn, "sola-b") is True

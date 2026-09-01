@@ -42,7 +42,7 @@ def client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[TestClie
         database.upsert_user(conn, "admin", "Admin123", "Admin User")
         database.upsert_user(conn, "reviewer", "review123", "Revisor User")
 
-        database.upsert_role(conn, "admin", "acme/payments-api", "admin_organizacion")
+        database.upsert_role(conn, "admin", "acme/payments-api", "mantenedor")
         database.upsert_role(conn, "reviewer", "acme/payments-api", "revisor")
 
     app = create_app()

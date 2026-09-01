@@ -242,7 +242,7 @@ def _seed_org_user_and_key(session, *, org_quota: int = 100_000):
 
     org = create_organization(session, name="Org MCP", monthly_token_quota=org_quota)
     user = create_user(
-        session, email="mcp@example.com", name="MCP User", role="admin_organizacion", org_id=org.id
+        session, email="mcp@example.com", name="MCP User", role="mantenedor", org_id=org.id
     )
     _api_key, raw_token = create_api_key(
         session, user_id=user.id, org_id=org.id, monitored_repo_id="test-repo-id"

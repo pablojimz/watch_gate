@@ -8,10 +8,8 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 
 // RBAC de "dueño de repo": un `mantenedor` gestiona SOLO el acceso a este
-// repo concreto (ver feedback.py::upsert_role/delete_role) -- por eso el
-// selector no ofrece "admin_organizacion" aquí, ni falta que hace: quien
-// necesite conceder ese rango ya tiene el panel de administración de la
-// organización completo (`/admin`).
+// repo concreto (ver feedback.py::upsert_role/delete_role) -- `RoleName`
+// ya solo tiene estos dos valores, no hace falta filtrar nada más.
 const ASSIGNABLE_ROLES: RoleName[] = ['revisor', 'mantenedor']
 
 export function RepoAccessView({ repo, role }: { repo: string; role: RoleName | null }) {
@@ -20,7 +18,7 @@ export function RepoAccessView({ repo, role }: { repo: string; role: RoleName | 
   const [login, setLogin] = useState('')
   const [newRole, setNewRole] = useState<RoleName>('revisor')
   const [submitting, setSubmitting] = useState(false)
-  const canManage = role === 'mantenedor' || role === 'admin_organizacion'
+  const canManage = role === 'mantenedor'
 
   function load() {
     void api
@@ -38,11 +36,7 @@ export function RepoAccessView({ repo, role }: { repo: string; role: RoleName | 
   }, [repo])
 
   function roleLabel(r: RoleName): string {
-    return r === 'mantenedor'
-      ? t('repo.access.roleMantenedor')
-      : r === 'admin_organizacion'
-        ? t('repo.access.roleAdminOrganizacion')
-        : t('repo.access.roleRevisor')
+    return r === 'mantenedor' ? t('repo.access.roleMantenedor') : t('repo.access.roleRevisor')
   }
 
   async function handleAdd(e: React.FormEvent) {

@@ -551,14 +551,13 @@ def _dialect_insert(session: Session) -> Any:
 def upsert_role(
     session: Session, user_login: str, repo: str, role: RoleName, org_id: str | None = None
 ) -> None:
-    """`org_id` (Auditoría, hallazgo crítico): quien concede
-    "admin_organizacion" DEBE pasar la organización real dueña de ese
-    poder -- ver `RepoRole.org_id`/`user_is_org_admin`. Se deja opcional
-    (default `None`) por compatibilidad con roles "mantenedor"/"revisor"
-    (acotados de por sí por `(user_login, repo)`, `org_id` no cambia su
-    alcance) y con demo/tests que no resuelven organización -- pero un
-    `admin_organizacion` concedido sin `org_id` no cuenta como admin de
-    NINGUNA organización (fail-closed, ver `user_is_org_admin`)."""
+    """`org_id` es opcional (default `None`): "mantenedor"/"revisor" están
+    acotados de por sí por `(user_login, repo)`, `org_id` no cambia su
+    alcance -- se guarda solo como dato informativo de qué organización
+    es dueña de ese repo (ver `RepoRole.org_id`). Se quitó el rol
+    "admin_organizacion" del RBAC, que sí dependía de este campo para su
+    propio alcance; `user_is_org_admin` se conserva devolviendo siempre
+    `False` (ver su docstring)."""
     table = RepoRole.__table__
     insert_ = _dialect_insert(session)
     stmt = insert_(table).values(
@@ -702,26 +701,18 @@ def author_has_prior_high_risk_pr(
 
 
 def user_is_org_admin(session: Session, user_login: str, org_id: str | None) -> bool:
-    """Auditoría (hallazgo crítico, corregido): antes no exigía `org_id`
-    en absoluto -- tener "admin_organizacion" en UNA fila de CUALQUIER
-    repo se trataba como admin GLOBAL sobre TODOS los repos de TODAS las
-    organizaciones (confirmado en vivo, compromiso cross-tenant
-    completo). Ahora exige que la fila con ese rol tenga el MISMO
-    `org_id` que se está comprobando -- `org_id=None` (el llamador no
-    pudo resolver una organización real para lo que está comprobando)
-    devuelve `False` siempre, fail-closed, nunca "vale cualquier admin"."""
-    if org_id is None:
-        return False
-    stmt = (
-        select(RepoRole)
-        .where(
-            RepoRole.user_login == normalize_login(user_login),
-            RepoRole.role == "admin_organizacion",
-            RepoRole.org_id == org_id,
-        )
-        .limit(1)
-    )
-    return session.execute(stmt).scalars().first() is not None
+    """Se quitó el rol "admin_organizacion" del RBAC -- ya no existe
+    ningún rol capaz de administrar una organización entera, solo
+    `mantenedor` (acotado a un repo concreto) y `revisor`. Se deja esta
+    función (en vez de borrarla) porque tiene bastantes llamadores fuera
+    del propio Dashboard (agent_access.py, mcp/tools.py,
+    db/repository.py::check_user_repo_permission) que ya degradan
+    correctamente a "sin atajo de admin, comprobar el rol normal por
+    repo" cuando esto devuelve `False` -- devolverlo siempre aquí evita
+    tocar cada uno de esos sitios por separado. `session`/`user_login`/
+    `org_id` se conservan sin usar en la firma para no romper esas
+    llamadas existentes."""
+    return False
 
 
 def ensure_org_settings(session: Session) -> None:
@@ -905,16 +896,9 @@ def set_llm_settings(session: Session, body: LlmSettingsIn) -> LlmSettingsOut:
 def get_user_highest_role(session: Session, user_login: str) -> RoleName:
     """Rol más alto que este usuario tiene en CUALQUIERA de sus repos --
     puramente informativo (mostrado en "Mi cuenta"), no se usa para
-    decidir acceso a nada. Por eso lee directamente de `roles` (ya
-    acotado por `user_login`) en vez de llamar a `user_is_org_admin`
-    (que ahora exige `org_id` -- no tendría sentido aquí, un usuario
-    puede ser admin de una organización y solo revisor de otra; esto
-    muestra su rol nominal más alto en cualquiera, sin implicar poder
-    real fuera de esa organización concreta)."""
+    decidir acceso a nada."""
     norm_login = normalize_login(user_login)
     roles = session.scalars(select(RepoRole.role).where(RepoRole.user_login == norm_login)).all()
-    if "admin_organizacion" in roles:
-        return "admin_organizacion"
     if "mantenedor" in roles:
         return "mantenedor"
     return "revisor"
@@ -1348,54 +1332,6 @@ def list_users(session: Session) -> list[DashboardUser]:
     return list(session.execute(stmt).scalars().all())
 
 
-def is_last_org_admin(session: Session, login: str) -> bool:
-    """`True` si `login` es `admin_organizacion` de alguna organización Y
-    es el ÚNICO admin_organizacion de ESA organización -- usado para
-    bloquear una acción (borrar la cuenta, quitarle el último rol de
-    admin) que dejaría a esa organización sin nadie capaz de gestionar
-    accesos después.
-
-    Auditoría: antes comparaba el conjunto GLOBAL de logins con
-    admin_organizacion en cualquier repo -- con `repo_roles.org_id` ya
-    acotando el rol por organización, ese conteo global permitía borrar
-    al único admin de la organización A mientras quedase algún admin
-    (de una organización B totalmente distinta) en el resto del
-    sistema. Ahora se comprueba organización por organización: cada
-    `org_id` donde `login` administra necesita, como mínimo, otro
-    admin_organizacion propio."""
-    norm_login = normalize_login(login)
-    my_admin_org_ids = set(
-        session.execute(
-            select(RepoRole.org_id)
-            .where(
-                RepoRole.role == "admin_organizacion",
-                RepoRole.user_login == norm_login,
-                RepoRole.org_id.is_not(None),
-            )
-            .distinct()
-        )
-        .scalars()
-        .all()
-    )
-    for org_id in my_admin_org_ids:
-        other_admins = (
-            session.execute(
-                select(RepoRole.user_login)
-                .where(
-                    RepoRole.role == "admin_organizacion",
-                    RepoRole.org_id == org_id,
-                    RepoRole.user_login != norm_login,
-                )
-                .limit(1)
-            )
-            .scalars()
-            .first()
-        )
-        if other_admins is None:
-            return True
-    return False
-
-
 def delete_user(session: Session, login: str) -> bool:
     """Borra la cuenta local y, en cascada, TODOS sus roles asignados
     (`repo_roles`) -- sin este segundo borrado quedarían filas huérfanas
@@ -1526,9 +1462,12 @@ def seed_demo(session: Session) -> None:
     upsert_user(session, "maintainer", "maint123", "Mantenedor demo")
     upsert_user(session, "reviewer", "review123", "Revisor demo")
 
-    upsert_role(session, "admin", "acme/payments-api", "admin_organizacion")
-    upsert_role(session, "admin", "acme/auth-service", "admin_organizacion")
-    upsert_role(session, "admin", "acme/infra-terraform", "admin_organizacion")
+    # Se quitó el rol "admin_organizacion" del RBAC -- "admin" (cuenta
+    # demo histórica) pasa a mantenedor de los mismos repos, igual que
+    # "maintainer".
+    upsert_role(session, "admin", "acme/payments-api", "mantenedor")
+    upsert_role(session, "admin", "acme/auth-service", "mantenedor")
+    upsert_role(session, "admin", "acme/infra-terraform", "mantenedor")
     upsert_role(session, "maintainer", "acme/payments-api", "mantenedor")
     upsert_role(session, "maintainer", "acme/auth-service", "mantenedor")
     upsert_role(session, "reviewer", "acme/payments-api", "revisor")

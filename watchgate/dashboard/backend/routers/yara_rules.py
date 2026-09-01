@@ -9,11 +9,10 @@ espejo en la BD del Dashboard -- mismo patrón que
 BD del Dashboard: hay un lector real durante el propio análisis,
 `static_layer.py`).
 
-Visibilidad vs. activación, a propósito distintas: ver las propuestas
-ORIGINADAS en tu propia organización es `admin_organizacion` (org-scoped,
-mismo criterio que el resto de esta arquitectura); aprobar/rechazar exige
-`is_site_superadmin` porque la activación es de INSTANCIA completa, nunca
-por organización (`_run_yara_on_text` compila un único ruleset por
+Se quitó el rol "admin_organizacion" del RBAC -- ya no hay ninguna
+distinción entre "ver la cola" y "aprobar/rechazar": las dos exigen
+`is_site_superadmin`, porque la activación es de INSTANCIA completa,
+nunca por organización (`_run_yara_on_text` compila un único ruleset por
 proceso, sin concepto de org) -- mismo criterio que `llm_settings.py`/
 `ui_settings.py`."""
 
@@ -28,9 +27,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
-from watchgate.dashboard.backend import db as database
 from watchgate.dashboard.backend.auth import CurrentUser
-from watchgate.dashboard.backend.org_scope import is_site_superadmin, resolve_caller_org_id
+from watchgate.dashboard.backend.org_scope import is_site_superadmin
 from watchgate.db.connection import get_db_session
 from watchgate.db.models import PendingYaraRule
 
@@ -82,40 +80,20 @@ def _to_out(row: PendingYaraRule) -> PendingYaraRuleOut:
     )
 
 
-def _require_org_admin_or_site_superadmin(user_login: str, org_id: str) -> bool:
-    """`True` si el llamador puede VER la cola (admin de su organización o
-    superadmin de sitio) -- comprobación separada de la de aprobar/rechazar
-    (`is_site_superadmin` a secas, ver docstring del módulo)."""
-    if is_site_superadmin(user_login):
-        return True
-    with database.db_session() as conn:
-        return database.user_is_org_admin(conn, user_login, org_id)
-
-
 @router.get("/admin/yara-rules", response_model=list[PendingYaraRuleOut])
 def list_pending_yara_rules(
     user: CurrentUser,
     engine_session: EngineDBSession,
     status_filter: str | None = Query(default="pending", alias="status"),
 ) -> list[PendingYaraRuleOut]:
-    caller_is_site_superadmin = is_site_superadmin(user.login)
-    org_id = resolve_caller_org_id(engine_session, user.login)
-
-    if not caller_is_site_superadmin and not _require_org_admin_or_site_superadmin(
-        user.login, org_id
-    ):
+    if not is_site_superadmin(user.login):
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Se requiere admin_organizacion"
+            status_code=status.HTTP_403_FORBIDDEN, detail="Se requiere superadmin de sitio"
         )
 
     stmt = select(PendingYaraRule)
     if status_filter:
         stmt = stmt.where(PendingYaraRule.status == status_filter)
-    if not caller_is_site_superadmin:
-        # Procedencia, no activación: un admin_organizacion solo ve las
-        # propuestas que se originaron en repos de SU organización, aunque
-        # (una vez aprobadas) se activen para toda la instancia.
-        stmt = stmt.where(PendingYaraRule.org_id == org_id)
     stmt = stmt.order_by(PendingYaraRule.created_at.desc())  # type: ignore[attr-defined]
 
     rows = engine_session.exec(stmt).all()
@@ -168,8 +146,8 @@ def approve_yara_rule(
     rule_id: str, user: CurrentUser, engine_session: EngineDBSession
 ) -> ApprovedYaraRuleOut:
     """Activa la regla para TODA la instancia (ver el docstring del
-    módulo) -- por eso exige superadmin de sitio, no un mero
-    admin_organizacion. No escribe ningún fichero: `static_layer.py`
+    módulo) -- por eso exige superadmin de sitio. No escribe ningún
+    fichero: `static_layer.py`
     recompila directamente desde esta fila (`status="approved"`) con un
     TTL corto, ver `_get_compiled_generated_yara_rules`."""
     if not is_site_superadmin(user.login):

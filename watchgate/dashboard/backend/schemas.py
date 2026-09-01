@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from watchgate.core.models import AggregatedResult, Semaforo
 
-RoleName = Literal["admin_organizacion", "mantenedor", "revisor"]
+RoleName = Literal["mantenedor", "revisor"]
 FeedbackValue = Literal["correcto", "falso_positivo"]
 
 

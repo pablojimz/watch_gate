@@ -33,7 +33,7 @@ import { Input } from '@/components/ui/input'
 import { applyRiskColors, applyUiTheme, cn } from '@/lib/utils'
 import { useTheme, type ThemeMode } from '@/lib/theme'
 
-const ROLES: RoleName[] = ['admin_organizacion', 'mantenedor', 'revisor']
+const ROLES: RoleName[] = ['mantenedor', 'revisor']
 const RISK_KEYS: Semaforo[] = ['verde', 'amarillo', 'rojo']
 const LLM_PROVIDERS: LlmProvider[] = ['anthropic', 'gemini', 'openai', 'local']
 const DEFAULT_MODELS: Record<LlmProvider, string> = {
@@ -735,6 +735,7 @@ export default function AdminPage({ me }: { me?: MeResponse | null }) {
   const [users, setUsers] = useState<DashboardUser[] | null>(null)
   const [repos, setRepos] = useState<string[]>([])
   const [selectedRepo, setSelectedRepo] = useState('')
+  const [accessRepoFilter, setAccessRepoFilter] = useState('')
   const [settings, setSettings] = useState<RepoSettings | null>(null)
   const [llmSettings, setLlmSettings] = useState<LlmSettings | null>(null)
   const [uiSettings, setUiSettings] = useState<UiSettings | null>(null)
@@ -1009,6 +1010,17 @@ export default function AdminPage({ me }: { me?: MeResponse | null }) {
     { id: 'yara-rules', label: t('admin.tabYaraRules'), icon: ShieldAlert },
   ]
 
+  // Repos derivados de los roles ya cargados (no de `repos`/listRepos,
+  // que solo trae repos externos conectados) -- así el filtro cubre
+  // también repos que solo existen vía ingesta genérica de `POST /scores`.
+  const accessRepos = Array.from(new Set((roles ?? []).map((r) => r.repo))).sort()
+  const filteredRoles =
+    roles === null
+      ? null
+      : accessRepoFilter
+        ? roles.filter((item) => item.repo === accessRepoFilter)
+        : roles
+
   if (roles === null || users === null) {
     return (
       <div className="p-4 sm:px-6 lg:px-8">
@@ -1155,6 +1167,26 @@ export default function AdminPage({ me }: { me?: MeResponse | null }) {
               <Button onClick={() => void addRole()}>{t('admin.add')}</Button>
             </div>
 
+            <div className="flex flex-wrap items-end gap-3 rounded-xl border bg-muted/20 p-4">
+              <label className="min-w-[14rem] flex-1 text-sm">
+                <span className="mb-1 block text-muted-foreground">
+                  {t('admin.rolesFilterByRepo')}
+                </span>
+                <select
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={accessRepoFilter}
+                  onChange={(e) => setAccessRepoFilter(e.target.value)}
+                >
+                  <option value="">{t('admin.rolesFilterAllRepos')}</option>
+                  {accessRepos.map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
             <div className="overflow-x-auto rounded-xl border">
               <table className="w-full min-w-[36rem] text-sm">
                 <thead className="bg-muted/50 text-left text-muted-foreground">
@@ -1167,7 +1199,7 @@ export default function AdminPage({ me }: { me?: MeResponse | null }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {roles.map((item) => (
+                  {(filteredRoles ?? []).map((item) => (
                     <tr key={`${item.user_login}:${item.repo}`} className="border-t">
                       <td className="px-4 py-3">{item.user_login}</td>
                       <td className="px-4 py-3">{item.repo}</td>
@@ -1186,6 +1218,13 @@ export default function AdminPage({ me }: { me?: MeResponse | null }) {
                       </td>
                     </tr>
                   ))}
+                  {(filteredRoles ?? []).length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-6 text-center text-sm text-muted-foreground">
+                        {t('admin.rolesFilterEmpty')}
+                      </td>
+                    </tr>
+                  ) : null}
                 </tbody>
               </table>
             </div>

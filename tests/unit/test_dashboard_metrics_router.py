@@ -5,10 +5,8 @@ ningún rol -- cualquier usuario autenticado, sin rol en ningún repo, veía
 el consumo de tokens/coste de TODA la plataforma y emails reales de otras
 cuentas (confirmado en vivo contra un dashboard-backend real). El dato es
 de INSTANCIA completa (compute_agent_metrics agrega toda la Engine DB, sin
-concepto de organización), así que ahora exige superadmin de sitio
-(`org_scope.py::is_site_superadmin`), no un mero `admin_organizacion` --
-ese rol, tras acotarlo por organización, ya no tiene autoridad verificable
-sobre un dato que no pertenece a ninguna organización en particular.
+concepto de organización), así que exige superadmin de sitio
+(`org_scope.py::is_site_superadmin`) -- ningún rol de `repo_roles` basta.
 """
 
 from __future__ import annotations
@@ -85,19 +83,6 @@ def test_agent_usage_metrics_denied_for_plain_repo_role(metrics_client) -> None:
     client, login, db_path = metrics_client
     with database.db_session(db_path) as conn:
         database.upsert_role(conn, login, "acme/some-other-repo", "mantenedor")
-    response = client.get("/api/metrics/agent-usage")
-    assert response.status_code == 403
-
-
-def test_agent_usage_metrics_denied_for_org_admin(metrics_client) -> None:
-    """Ser `admin_organizacion` de una organización tampoco basta -- el
-    dato es de instancia completa, no de una organización en particular
-    (ver auditoría arriba)."""
-    client, login, db_path = metrics_client
-    with database.db_session(db_path) as conn:
-        database.upsert_role(
-            conn, login, "acme/some-other-repo", "admin_organizacion", org_id="org-acme"
-        )
     response = client.get("/api/metrics/agent-usage")
     assert response.status_code == 403
 

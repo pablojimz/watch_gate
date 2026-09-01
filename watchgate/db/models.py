@@ -77,7 +77,7 @@ class User(SQLModel, table=True):
     id: str = Field(primary_key=True)
     email: str = Field(index=True, unique=True)
     name: str
-    role: str = Field(default="revisor")  # "admin_organizacion" | "mantenedor" | "revisor"
+    role: str = Field(default="revisor")  # "mantenedor" | "revisor"
     org_id: str | None = Field(default=None, foreign_key="organizations.id", index=True)
     custom_llm_api_key: str | None = Field(
         sa_column=Column(EncryptedString, nullable=True)

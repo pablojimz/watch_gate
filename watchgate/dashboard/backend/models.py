@@ -111,26 +111,20 @@ class DashboardPRScore(DashboardBase):
 class RepoRole(DashboardBase):
     """Rol de un usuario sobre un repositorio concreto.
 
-    `org_id` (Auditoría, hallazgo crítico -- ver watchgate/dashboard/
-    backend/db.py::user_is_org_admin y auth.py::resolve_role): antes esta
-    tabla no tenía ninguna columna de organización, así que tener
-    "admin_organizacion" en UNA SOLA fila (de CUALQUIER repo) se trataba
-    como admin GLOBAL sobre TODOS los repos de TODAS las organizaciones --
-    confirmado en vivo, compromiso cross-tenant completo. `org_id` es un
-    string plano sin FK real (apunta a `Organization.id` de la ENGINE DB,
-    una base de datos físicamente distinta -- `watchgate.db.models.
-    Organization`, ver el docstring del módulo sobre las dos bases
-    aisladas -- no se puede declarar una FK cruzada entre bases). Nullable
-    a propósito para las filas ya existentes antes de esta migración: una
-    fila con `org_id=NULL` NUNCA cuenta como admin de ninguna organización
-    (fail-closed) hasta que se reconceda explícitamente con `org_id` real,
-    en vez de asumir que un admin_organizacion antiguo sigue siendo válido
-    sin saber de qué organización."""
+    Se quitó el rol "admin_organizacion" del RBAC (ver migración
+    `f5a6b7c8d9e0_drop_admin_organizacion_role`) -- solo quedan
+    "mantenedor"/"revisor", ambos acotados de por sí por
+    `(user_login, repo)`, sin necesitar `org_id` para su propio alcance.
+    `org_id` se conserva como dato informativo de qué organización es
+    dueña de ese repo (string plano sin FK real -- apunta a
+    `Organization.id` de la ENGINE DB, una base de datos físicamente
+    distinta, ver el docstring del módulo sobre las dos bases aisladas;
+    no se puede declarar una FK cruzada entre bases)."""
 
     __tablename__ = "repo_roles"
     __table_args__ = (
         CheckConstraint(
-            "role IN ('admin_organizacion','mantenedor','revisor')",
+            "role IN ('mantenedor','revisor')",
             name="ck_repo_roles_role",
         ),
         Index("ix_repo_roles_org_id", "org_id"),

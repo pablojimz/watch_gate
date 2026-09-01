@@ -13,7 +13,7 @@ export function BlockedAuthorsView({ repo, role }: { repo: string; role: RoleNam
   const [authorLogin, setAuthorLogin] = useState('')
   const [reason, setReason] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const canManage = role === 'mantenedor' || role === 'admin_organizacion'
+  const canManage = role === 'mantenedor'
 
   function load() {
     void api

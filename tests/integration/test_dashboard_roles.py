@@ -39,7 +39,7 @@ def client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[TestClie
 
     with database.db_session(db_path) as conn:
         database.init_db(conn)
-        database.upsert_role(conn, "admin", "acme/payments-api", "admin_organizacion")
+        database.upsert_role(conn, "admin", "acme/payments-api", "mantenedor")
         database.upsert_role(conn, "maint", "acme/payments-api", "mantenedor")
         database.upsert_role(conn, "viewer", "acme/payments-api", "revisor")
         # El mantenedor también tiene auth-service; el revisor no.
@@ -176,7 +176,9 @@ def test_revisor_can_list_scores_but_not_feedback_or_settings_or_admin(client: T
     )
 
 
-def test_mantenedor_can_feedback_but_not_settings_or_admin(client: TestClient) -> None:
+def test_mantenedor_can_feedback_and_own_repo_settings_but_not_global_admin(
+    client: TestClient,
+) -> None:
     _login(client, "maint", "mantenedor")
 
     assert client.get("/api/repos/acme/payments-api/scores").status_code == 200
@@ -185,7 +187,7 @@ def test_mantenedor_can_feedback_but_not_settings_or_admin(client: TestClient) -
         == 200
     )
 
-    # Pesos/umbrales solo admin
+    # Pesos/umbrales de SU repo: el dueño del repo (mantenedor) decide.
     assert (
         client.put(
             "/api/repos/acme/payments-api/settings",
@@ -199,8 +201,9 @@ def test_mantenedor_can_feedback_but_not_settings_or_admin(client: TestClient) -
                 "thresholds": {"amarillo": 30, "rojo": 70},
             },
         ).status_code
-        == 403
+        == 200
     )
+    # Listado global de roles: solo superadmin de sitio.
     assert client.get("/api/admin/roles").status_code == 403
 
 
@@ -351,7 +354,7 @@ def test_accept_score_reports_merge_failure_without_losing_acceptance(
 
 
 def test_admin_can_manage_roles_and_settings(client: TestClient) -> None:
-    _login(client, "admin", "admin_organizacion")
+    _login(client, "admin", "mantenedor")
     _connect_repo_to_admin_org("acme/payments-api")
 
     assert client.get("/api/repos/acme/payments-api/scores").status_code == 200
@@ -478,7 +481,7 @@ def test_admin_can_manage_roles_and_settings(client: TestClient) -> None:
 
 
 def test_admin_can_manage_users(client: TestClient) -> None:
-    _login(client, "admin", "admin_organizacion")
+    _login(client, "admin", "mantenedor")
 
     assert client.get("/api/admin/users").status_code == 200
 
@@ -523,7 +526,7 @@ def test_admin_can_assign_an_initial_role_when_creating_a_user(client: TestClien
     los dos, el alta asigna ese rol inicial en el mismo paso (mismo
     upsert_role que la gestión de roles por repo, PUT /api/admin/roles, ya
     usaba por separado), sin bloquear la creación de usuarios sin rol."""
-    _login(client, "admin", "admin_organizacion")
+    _login(client, "admin", "mantenedor")
     _connect_repo_to_admin_org("acme/payments-api")
 
     created = client.post(
@@ -581,7 +584,7 @@ def test_admin_roles_list_shows_connected_repo_type(client: TestClient) -> None:
         )
         session.commit()
 
-    _login(client, "admin", "admin_organizacion")
+    _login(client, "admin", "mantenedor")
     roles = client.get("/api/admin/roles").json()
 
     auth_service_role = next(r for r in roles if r["repo"] == "acme/auth-service")

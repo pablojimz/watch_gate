@@ -1,4 +1,4 @@
-export type RoleName = 'admin_organizacion' | 'mantenedor' | 'revisor'
+export type RoleName = 'mantenedor' | 'revisor'
 export type Semaforo = 'verde' | 'amarillo' | 'rojo'
 export type FeedbackValue = 'correcto' | 'falso_positivo'
 
@@ -69,11 +69,10 @@ export interface AcceptScoreOut extends ScoreOut {
 export interface MeResponse {
   login: string
   is_admin: boolean
-  // Auditoría: `is_admin` mezcla dos cosas distintas -- admin de la
-  // propia organización e instancia completa (ver org_scope.py). Se
-  // conservan por separado para poder ocultar acciones que exigen
-  // superadmin de sitio (p. ej. aprobar/rechazar reglas YARA generadas)
-  // aunque `is_admin` sea true por ser admin_organizacion.
+  // Se quitó el rol "admin_organizacion" del RBAC -- `is_admin` es ahora
+  // sinónimo exacto de `is_site_superadmin` (ver auth.py::me). Se
+  // conserva `is_org_admin` (siempre `false`) para no romper
+  // consumidores que aún lo esperen.
   is_org_admin?: boolean
   is_site_superadmin?: boolean
   repos: string[]
@@ -385,7 +384,7 @@ export const api = {
   resetSettings: (repo: string) =>
     request<RepoSettings>(`/repos/${repo}/settings`, { method: 'DELETE' }),
   // Acotado a UN repo (RBAC de "dueño de repo") -- distinto de `listRoles`
-  // (`/admin/roles`, exige admin_organizacion y trae TODA la organización).
+  // (`/admin/roles`, ahora exige superadmin de sitio y trae TODA la instancia).
   listRepoRoles: (repo: string) => request<RepoRole[]>(`/repos/${repo}/roles`),
   getDefaultSettings: () => request<RepoSettings>('/settings/defaults'),
   putDefaultSettings: (body: RepoSettings) =>

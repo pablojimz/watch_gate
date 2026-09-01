@@ -94,7 +94,7 @@ export default function RepoPage() {
     }
   }, [repo])
 
-  const canFeedback = role === 'mantenedor' || role === 'admin_organizacion'
+  const canFeedback = role === 'mantenedor'
   const tabs: { id: Tab; label: string; icon: typeof History }[] = [
     { id: 'history', label: t('repo.tabHistory'), icon: History },
     { id: 'authors', label: t('repo.tabAuthors'), icon: Users },

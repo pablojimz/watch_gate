@@ -73,9 +73,10 @@ def test_upsert_role_and_get_role_roundtrip_in_postgres(dashboard_session) -> No
     assert database.get_role(dashboard_session, user_login, repo) == "mantenedor"
 
     # El upsert debe actualizar, no duplicar (ON CONFLICT DO UPDATE real
-    # contra Postgres, no solo contra SQLite).
-    database.upsert_role(dashboard_session, user_login, repo, "admin_organizacion")
-    assert database.get_role(dashboard_session, user_login, repo) == "admin_organizacion"
+    # contra Postgres, no solo contra SQLite) -- rol distinto para probar
+    # que de verdad cambia el valor, no un no-op que coincida por casualidad.
+    database.upsert_role(dashboard_session, user_login, repo, "revisor")
+    assert database.get_role(dashboard_session, user_login, repo) == "revisor"
 
 
 def test_insert_aggregated_returns_autoincrement_id_in_postgres(dashboard_session) -> None:

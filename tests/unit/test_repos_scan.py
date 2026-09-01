@@ -224,7 +224,7 @@ def test_patch_external_repo_endpoint_and_rbac(test_db_session):
     from watchgate.dashboard.backend.db import upsert_role
 
     with dash_db_session() as dash_conn:
-        upsert_role(dash_conn, "admin@corp.com", "acme/patchrepo", "admin_organizacion")
+        upsert_role(dash_conn, "admin@corp.com", "acme/patchrepo", "mantenedor")
         upsert_role(dash_conn, "revisor@corp.com", "acme/patchrepo", "revisor")
 
     client = TestClient(app)
@@ -264,7 +264,7 @@ def _setup_admin_and_revisor(test_db_session, repo_path):
     test_db_session.commit()
 
     with dash_db_session() as dash_conn:
-        upsert_role(dash_conn, "admin@corp.com", repo_path, "admin_organizacion")
+        upsert_role(dash_conn, "admin@corp.com", repo_path, "mantenedor")
         upsert_role(dash_conn, "revisor@corp.com", repo_path, "revisor")
 
     return user_admin
