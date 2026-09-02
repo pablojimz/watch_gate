@@ -325,6 +325,21 @@ def connect_git_server_repo(
     session.commit()
     session.refresh(new_repo)
 
+    # Da de alta a quien conecta el repo como "mantenedor" de INMEDIATO --
+    # a diferencia de `add_external_repo` (GitHub), aquí no hay ningún job
+    # de escaneo en background que lo haga después (ver docstring de esta
+    # función: no se encola ningún polling/scan), así que sin esto la
+    # fila de `repo_roles` para (usuario, repo) nunca llegaba a existir y
+    # cualquier intento posterior de gestionar o borrar este mismo repo
+    # (`update_external_repo`/`delete_external_repo`, que exigen
+    # `mantenedor`) devolvía 403 "Sin rol asignado en {repo}" incluso al
+    # propio usuario que lo acababa de conectar.
+    from watchgate.dashboard.backend.db import db_session as dashboard_db_session
+    from watchgate.dashboard.backend.db import upsert_role
+
+    with dashboard_db_session() as dash_conn:
+        upsert_role(dash_conn, user_login, repo_path_cleaned, "mantenedor", org_id=org_id)
+
     api_key, raw_token = create_api_key(
         session=session,
         user_id=db_user.id,
