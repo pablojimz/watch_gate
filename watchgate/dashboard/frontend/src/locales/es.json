@@ -320,7 +320,7 @@
     "gitServersTypeLabel": "Tipo de servidor Git",
     "gitServersTypePlain": "Bare Git / GitLab / Bitbucket / Gitolite",
     "gitServersTypeForgejo": "Gitea / Forgejo",
-    "gitServersTypeHintPlain": "Un bare repo Git normal, GitLab Self-Managed (Custom Hooks), Bitbucket Server o Gitolite solo ejecutan un fichero único llamado exactamente hooks/pre-receive.",
+    "gitServersTypeHintPlain": "Un bare repo Git normal, GitLab Self-Managed (Custom Hooks), Bitbucket Server o Gitolite solo ejecutan un fichero único llamado exactamente hooks/pre-receive; el fichero watchgate.env va en la raíz del bare repo, no dentro de hooks/.",
     "gitServersTypeHintForgejo": "Gitea/Forgejo sí soporta varios hooks a la vez en hooks/pre-receive.d/ — un bare Git plano no lee esa carpeta.",
     "gitServersNextStepsIntro": "Instálala con un solo comando (no hace falta clonar ningún repo):",
     "gitServersCopiedCommand": "Comando copiado",

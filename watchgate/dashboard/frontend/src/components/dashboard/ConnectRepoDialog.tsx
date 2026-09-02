@@ -125,9 +125,19 @@ export function ConnectRepoDialog({
           `printf 'WATCHGATE_ENGINE_API_URL=${gitServerResult.engineApiUrl}\\nWATCHGATE_ENGINE_API_KEY=${gitServerResult.apiKey}\\n' > hooks/watchgate.env`,
         ].join('\n')
       : [
+          // El hook resuelve su .env como "un nivel por encima de donde
+          // esté él mismo" ($(dirname "$0")/../watchgate.env, ver
+          // pre_receive_hook.sh) -- en la variante Forgejo eso cae en
+          // hooks/watchgate.env (sube desde hooks/pre-receive.d/), pero
+          // aquí el script vive directo en hooks/, así que un nivel por
+          // encima es la RAÍZ del bare repo, no hooks/ otra vez. Puesto
+          // en hooks/watchgate.env (como antes) el hook nunca lo
+          // encontraba -- verificado en vivo: "WATCHGATE_ENGINE_API_KEY
+          // no configurada" pese a que el fichero SÍ existía, solo que
+          // en el sitio equivocado.
           `curl -fsSL ${gitServerResult.hookDownloadUrl} -o hooks/pre-receive`,
           `chmod +x hooks/pre-receive`,
-          `printf 'WATCHGATE_ENGINE_API_URL=${gitServerResult.engineApiUrl}\\nWATCHGATE_ENGINE_API_KEY=${gitServerResult.apiKey}\\n' > hooks/watchgate.env`,
+          `printf 'WATCHGATE_ENGINE_API_URL=${gitServerResult.engineApiUrl}\\nWATCHGATE_ENGINE_API_KEY=${gitServerResult.apiKey}\\n' > watchgate.env`,
         ].join('\n')
     : ''
 
