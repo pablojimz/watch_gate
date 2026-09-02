@@ -227,6 +227,22 @@ def add_external_repo(
     session.commit()
     session.refresh(new_repo)
 
+    # Da de alta a quien conecta el repo como "mantenedor" de INMEDIATO,
+    # igual que connect_git_server_repo -- antes, para repos de GitHub,
+    # esto solo llegaba de forma asíncrona cuando terminaba el escaneo de
+    # línea base (tasks.py::run_audit_scan/run_main_branch_scan), Y ENCIMA
+    # se concedía a "el primer usuario de la organización" en vez de a
+    # quien realmente conectó el repo -- inofensivo con un solo usuario
+    # por org (el caso de hoy), pero incorrecto en cuanto una org tenga
+    # varios. No se quita esa concesión asíncrona (sigue sirviendo de red
+    # de seguridad si este upsert fallase), solo se adelanta la correcta
+    # para que no dependa de que el job en background llegue a terminar.
+    from watchgate.dashboard.backend.db import db_session as dashboard_db_session
+    from watchgate.dashboard.backend.db import upsert_role
+
+    with dashboard_db_session() as dash_conn:
+        upsert_role(dash_conn, user_login, repo_path_cleaned, "mantenedor", org_id=org_id)
+
     # Escaneo de línea base: al dar de alta CUALQUIER repo (tanto "audited"
     # -- auditoría externa, sin permisos de escritura -- como "managed" --
     # GitHub App/webhook, con permisos reales), se encola un análisis del
