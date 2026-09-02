@@ -78,6 +78,18 @@ export function ConnectRepoDialog({
       .catch(() => setAppInstallUrl(null))
   }, [open])
 
+  // Este diálogo lo monta ReposPage una única vez (solo alterna `open`,
+  // ver ExternalReposPage/ReposPage) -- sin este reset, gitServerResult
+  // se queda pegado en memoria para siempre tras el primer repo
+  // registrado: reabrir el diálogo mostraba el panel de resultado (clave +
+  // comando) del ÚLTIMO repo conectado en vez del formulario para
+  // registrar uno nuevo, ocultando por completo el campo de nombre.
+  useEffect(() => {
+    if (open) return
+    setGitServerResult(null)
+    setGitServerRepoPath('')
+  }, [open])
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!repoPath.trim()) return
