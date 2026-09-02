@@ -19,6 +19,17 @@ async function copyToClipboard(value: string, message: string) {
 
 type ConnectMode = 'github' | 'git_server'
 
+// La instalación del hook `pre-receive` cambia según el servidor: solo
+// Gitea/Forgejo soporta la convención `hooks/pre-receive.d/*` (varios
+// hooks a la vez); un bare Git plano, GitLab Self-Managed (Custom Hooks),
+// Bitbucket Server o Gitolite solo ejecutan un fichero único llamado
+// exactamente `hooks/pre-receive` -- ver docs/manual_git_hooks.md §3, §6.3.
+// Antes este diálogo daba SIEMPRE la variante `pre-receive.d/watchgate`
+// (la única probada en local contra el Forgejo de
+// docker-compose.gitserver.yml), así que copiar/pegar el comando en un
+// bare repo real no hacía nada -- git nunca mira esa carpeta.
+type GitServerType = 'plain' | 'forgejo'
+
 // Diálogo de "Conectar repositorio", reutilizable desde la página de
 // Repositorios (donde el usuario espera el botón de añadir) sin sacarle de
 // ella. Es distinto de la página de Auditoría Externa, que además LISTA y
@@ -48,6 +59,10 @@ export function ConnectRepoDialog({
   const [appInstallUrl, setAppInstallUrl] = useState<string | null>(null)
   const [gitServerRepoPath, setGitServerRepoPath] = useState('')
   const [isConnectingGitServer, setIsConnectingGitServer] = useState(false)
+  // Default "plain": es el caso general (bare Git/GitLab/Bitbucket/
+  // Gitolite) -- Forgejo/Gitea es la excepción que soporta la carpeta
+  // `.d/`, no al revés.
+  const [gitServerType, setGitServerType] = useState<GitServerType>('plain')
   const [gitServerResult, setGitServerResult] = useState<{
     repoPath: string
     apiKey: string
@@ -102,11 +117,18 @@ export function ConnectRepoDialog({
   }
 
   const installCommand = gitServerResult
-    ? [
-        `curl -fsSL ${gitServerResult.hookDownloadUrl} -o hooks/pre-receive.d/watchgate`,
-        `chmod +x hooks/pre-receive.d/watchgate`,
-        `printf 'WATCHGATE_ENGINE_API_URL=${gitServerResult.engineApiUrl}\\nWATCHGATE_ENGINE_API_KEY=${gitServerResult.apiKey}\\n' > hooks/watchgate.env`,
-      ].join('\n')
+    ? gitServerType === 'forgejo'
+      ? [
+          `mkdir -p hooks/pre-receive.d`,
+          `curl -fsSL ${gitServerResult.hookDownloadUrl} -o hooks/pre-receive.d/watchgate`,
+          `chmod +x hooks/pre-receive.d/watchgate`,
+          `printf 'WATCHGATE_ENGINE_API_URL=${gitServerResult.engineApiUrl}\\nWATCHGATE_ENGINE_API_KEY=${gitServerResult.apiKey}\\n' > hooks/watchgate.env`,
+        ].join('\n')
+      : [
+          `curl -fsSL ${gitServerResult.hookDownloadUrl} -o hooks/pre-receive`,
+          `chmod +x hooks/pre-receive`,
+          `printf 'WATCHGATE_ENGINE_API_URL=${gitServerResult.engineApiUrl}\\nWATCHGATE_ENGINE_API_KEY=${gitServerResult.apiKey}\\n' > hooks/watchgate.env`,
+        ].join('\n')
     : ''
 
   return (
@@ -297,6 +319,43 @@ export function ConnectRepoDialog({
                         <Copy className="size-4" strokeWidth={1.75} />
                       </Button>
                     </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-medium text-foreground">
+                      {t('externalRepos.gitServersTypeLabel')}
+                    </p>
+                    <div className="grid grid-cols-2 gap-2 rounded-lg bg-secondary/30 p-1">
+                      <button
+                        type="button"
+                        onClick={() => setGitServerType('plain')}
+                        className={cn(
+                          'rounded-md py-1.5 text-xs font-medium transition-colors',
+                          gitServerType === 'plain'
+                            ? 'bg-card text-foreground shadow-sm'
+                            : 'text-muted-foreground hover:text-foreground',
+                        )}
+                      >
+                        {t('externalRepos.gitServersTypePlain')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setGitServerType('forgejo')}
+                        className={cn(
+                          'rounded-md py-1.5 text-xs font-medium transition-colors',
+                          gitServerType === 'forgejo'
+                            ? 'bg-card text-foreground shadow-sm'
+                            : 'text-muted-foreground hover:text-foreground',
+                        )}
+                      >
+                        {t('externalRepos.gitServersTypeForgejo')}
+                      </button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {gitServerType === 'forgejo'
+                        ? t('externalRepos.gitServersTypeHintForgejo')
+                        : t('externalRepos.gitServersTypeHintPlain')}
+                    </p>
                   </div>
 
                   <div className="space-y-1">
