@@ -2,7 +2,7 @@
 -- señal de reputación nueva (ver core/layers/reputation_layer.py y
 ReputationMetadata.author_has_prior_high_risk_pr): True si el autor tiene,
 en cualquier repo auditado por este Dashboard, un PR anterior con
-score > 70."""
+score >= 70."""
 
 from __future__ import annotations
 
@@ -74,8 +74,12 @@ def test_excludes_the_pr_being_analyzed_right_now(tmp_path: Path) -> None:
     assert found_other_pr is True
 
 
-def test_min_score_is_strictly_greater_than_not_greater_or_equal(tmp_path: Path) -> None:
+def test_min_score_is_inclusive_not_strictly_greater_than(tmp_path: Path) -> None:
     with database.db_session(tmp_path / "dashboard.db") as conn:
         database.insert_aggregated(conn, _result("1", "acme/repo-a", 70), author_login="ana")
         found = database.author_has_prior_high_risk_pr(conn, "ana", min_score=70)
-    assert found is False
+    assert found is True
+    with database.db_session(tmp_path / "dashboard.db") as conn:
+        database.insert_aggregated(conn, _result("2", "acme/repo-a", 69), author_login="pepe")
+        not_found = database.author_has_prior_high_risk_pr(conn, "pepe", min_score=70)
+    assert not_found is False

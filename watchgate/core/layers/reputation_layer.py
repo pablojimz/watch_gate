@@ -50,7 +50,7 @@ class ReputationLayer(AnalysisLayer):
             )
 
         # Un autor con un PR anterior ya detectado como altamente malicioso
-        # (score > 70, en cualquier repo que audite este Dashboard, no solo
+        # (score >= 70, en cualquier repo que audite este Dashboard, no solo
         # el actual) es una señal de reputación tan fuerte que satura la
         # capa entera a 100 en vez de sumar puntos como el resto de
         # señales -- ver `final_score` más abajo. Lo resuelve
@@ -62,7 +62,7 @@ class ReputationLayer(AnalysisLayer):
         if prior_high_risk_pr:
             signals.append(
                 "El autor tiene un PR anterior detectado con puntuación de riesgo alta "
-                "(>70) en el historial de WatchGate, indicio de actividad maliciosa "
+                "(>=70) en el historial de WatchGate, indicio de actividad maliciosa "
                 "recurrente."
             )
 

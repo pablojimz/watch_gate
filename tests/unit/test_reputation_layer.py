@@ -89,7 +89,7 @@ def test_new_account_alone_adds_10():
 
 
 def test_prior_high_risk_pr_saturates_to_100():
-    """Señal nueva: un autor con un PR anterior ya detectado con score > 70
+    """Señal nueva: un autor con un PR anterior ya detectado con score >= 70
     (en cualquier repo, no solo el actual) satura la capa entera a 100 --
     ya no suma puntos como el resto de señales, se considera suficiente por
     sí sola. Se resuelve fuera de esta capa (dashboard/backend/tasks.py, vía

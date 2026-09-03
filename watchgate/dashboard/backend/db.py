@@ -679,7 +679,7 @@ def author_has_prior_high_risk_pr(
     """Señal de reputación (ver `ReputationMetadata.author_has_prior_high_risk_pr`
     y `core/layers/reputation_layer.py`): True si `author_login` tiene, en
     CUALQUIER repo auditado por este Dashboard, al menos un PR anterior con
-    `score > min_score` -- un autor ya flaggeado como altamente malicioso en
+    `score >= min_score` -- un autor ya flaggeado como altamente malicioso en
     otro repo es una alerta de reputación legítima aquí, aunque el commit
     actual en sí parezca limpio.
 
@@ -690,7 +690,7 @@ def author_has_prior_high_risk_pr(
     un historial real en OTRA PR."""
     stmt = select(DashboardPRScore).where(
         DashboardPRScore.author_login == author_login,
-        DashboardPRScore.score > min_score,
+        DashboardPRScore.score >= min_score,
     )
     if exclude_repo is not None and exclude_pr_number is not None:
         stmt = stmt.where(
