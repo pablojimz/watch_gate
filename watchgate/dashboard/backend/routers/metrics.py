@@ -26,12 +26,26 @@ def get_org_metrics(
     # Auditoría: acotado a la organización real del llamador -- antes
     # `is_admin=True` (global) hacía que `list_repos_for_user` devolviera
     # los repos de TODAS las organizaciones, no solo la propia.
+    #
+    # AUDITORÍA (bugfix): `user_is_org_admin` está hardcodeado a `False`
+    # siempre -- se quitó el rol "admin_organizacion" del RBAC (ver su
+    # docstring), así que este endpoint nunca dejaba ver métricas a nadie
+    # sin un `RepoRole` explícito, ni siquiera al superadmin de sitio
+    # (reproducido en vivo: el login "admin", superadmin de sitio por
+    # defecto, veía 0 en todo). `routers/scores.py::list_visible_repos` ya
+    # resuelve esto bien -- mismo patrón aquí: `is_site_superadmin` decide
+    # `is_admin`/`unscoped`, no la función muerta.
+    caller_is_site_superadmin = is_site_superadmin(user.login)
     org_id = resolve_caller_org_id(engine_session, user.login)
     org_repo_paths = resolve_org_repo_paths(engine_session, org_id)
     with database.db_session() as conn:
-        is_admin = database.user_is_org_admin(conn, user.login, org_id)
         repos = database.list_repos_for_user(
-            conn, user.login, is_admin=is_admin, org_id=org_id, org_repo_paths=org_repo_paths
+            conn,
+            user.login,
+            is_admin=caller_is_site_superadmin,
+            org_id=org_id,
+            org_repo_paths=org_repo_paths,
+            unscoped=caller_is_site_superadmin,
         )
         return database.compute_org_metrics(conn, repos)
 

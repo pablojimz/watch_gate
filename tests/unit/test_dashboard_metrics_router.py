@@ -92,3 +92,46 @@ def test_agent_usage_metrics_allowed_for_site_superadmin(metrics_client, monkeyp
     monkeypatch.setenv("WATCHGATE_DASHBOARD_SITE_ADMIN_LOGINS", login)
     response = client.get("/api/metrics/agent-usage")
     assert response.status_code == 200
+
+
+def test_org_metrics_visible_to_site_superadmin_without_any_role(
+    metrics_client, monkeypatch
+) -> None:
+    """Bug real (reproducido en vivo contra un dashboard-backend real):
+    GET /api/metrics usaba `user_is_org_admin`, hardcodeado a `False` desde
+    que se quitó el rol "admin_organizacion" del RBAC -- un superadmin de
+    sitio sin ningún `RepoRole` propio (el caso normal: administra la
+    instancia, no mantiene ningún repo en persona) veía 0 en absolutamente
+    todo, aunque hubiera PRs analizados reales de OTROS usuarios. Mismo
+    patrón que `routers/scores.py::list_visible_repos` ya resolvía bien
+    (`is_site_superadmin` -> `is_admin`/`unscoped`)."""
+    from watchgate.core.models import AggregatedResult, LayerResult, Semaforo
+
+    client, login, db_path = metrics_client
+    monkeypatch.setenv("WATCHGATE_DASHBOARD_SITE_ADMIN_LOGINS", login)
+
+    # Datos de OTRO usuario, sin ningún RepoRole para `login` -- antes del
+    # fix, esto seguía dando 0 en /api/metrics para el superadmin.
+    with database.db_session(db_path) as conn:
+        database.upsert_role(conn, "otro-usuario", "acme/repo-ajeno", "mantenedor")
+        database.insert_aggregated(
+            conn,
+            AggregatedResult(
+                score=42,
+                semaforo=Semaforo.AMARILLO,
+                layer_results={
+                    "static": LayerResult(layer_name="static", risk_score=42, justification="")
+                },
+                weights_used={"static": 1.0},
+                pr_id="1",
+                repo="acme/repo-ajeno",
+                timestamp="2026-08-01T00:00:00+00:00",
+            ),
+            author_login="otro-usuario",
+        )
+
+    response = client.get("/api/metrics")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["repos_count"] >= 1
+    assert body["total_prs"] >= 1
