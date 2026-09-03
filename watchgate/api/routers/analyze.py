@@ -193,6 +193,13 @@ def analyze_pr(
                 rep_metadata = client.get_reputation_metadata(
                     owner, repo_name, author_login, pr_number=pr_num, head_sha=request.head_sha
                 )
+                from watchgate.dashboard.backend.db import resolve_author_has_prior_high_risk_pr
+
+                rep_metadata.author_has_prior_high_risk_pr = (
+                    resolve_author_has_prior_high_risk_pr(
+                        author_login, exclude_repo=requested_repo, exclude_pr_number=pr_num
+                    )
+                )
                 request.metadata["reputation"] = rep_metadata
             except Exception:
                 logger.debug("No se pudieron enriquecer metadatos de reputación", exc_info=True)

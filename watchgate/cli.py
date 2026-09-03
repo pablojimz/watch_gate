@@ -308,9 +308,16 @@ def _cmd_analyze(args: argparse.Namespace) -> int:
             owner, repo_name = repo_str.split("/", 1)
             pr_num = int(args.pr_id) if args.pr_id and args.pr_id.isdigit() else None
             client = GitHubClient(token)
-            metadata["reputation"] = client.get_reputation_metadata(
+            reputation = client.get_reputation_metadata(
                 owner, repo_name, args.author_login, pr_number=pr_num, head_sha=args.head
             )
+
+            from watchgate.dashboard.backend.db import resolve_author_has_prior_high_risk_pr
+
+            reputation.author_has_prior_high_risk_pr = resolve_author_has_prior_high_risk_pr(
+                args.author_login, exclude_repo=repo_str, exclude_pr_number=pr_num
+            )
+            metadata["reputation"] = reputation
         except Exception:
             logger.debug("No se pudo obtener reputación en CLI", exc_info=True)
 

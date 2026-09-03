@@ -169,20 +169,13 @@ def run_managed_scan(
                     pass
 
             if reputation_metadata is not None:
-                try:
-                    from watchgate.dashboard.backend.db import author_has_prior_high_risk_pr
+                from watchgate.dashboard.backend.db import resolve_author_has_prior_high_risk_pr
 
-                    with dashboard_db_session() as dash_conn:
-                        reputation_metadata.author_has_prior_high_risk_pr = (
-                            author_has_prior_high_risk_pr(
-                                dash_conn,
-                                author_login,
-                                exclude_repo=repo_path,
-                                exclude_pr_number=pr_number,
-                            )
-                        )
-                except Exception:
-                    pass
+                reputation_metadata.author_has_prior_high_risk_pr = (
+                    resolve_author_has_prior_high_risk_pr(
+                        author_login, exclude_repo=repo_path, exclude_pr_number=pr_number
+                    )
+                )
 
             # Análisis con control de cuota
             pipeline_metadata: dict[str, object] = {
@@ -433,24 +426,16 @@ def run_main_branch_scan(
                     pass
 
             if reputation_metadata is not None:
-                try:
-                    from watchgate.dashboard.backend.db import author_has_prior_high_risk_pr
+                from watchgate.dashboard.backend.db import resolve_author_has_prior_high_risk_pr
 
-                    with dashboard_db_session() as dash_conn:
-                        # 0: mismo sentinel de pr_number que usa db.py para
-                        # los escaneos de rama principal (pr_id "main" no es
-                        # una PR real de GitHub -- ver
-                        # db.py::_MAIN_BRANCH_SCAN_PR_NUMBER).
-                        reputation_metadata.author_has_prior_high_risk_pr = (
-                            author_has_prior_high_risk_pr(
-                                dash_conn,
-                                author_login,
-                                exclude_repo=repo_path,
-                                exclude_pr_number=0,
-                            )
-                        )
-                except Exception:
-                    pass
+                # 0: mismo sentinel de pr_number que usa db.py para los
+                # escaneos de rama principal (pr_id "main" no es una PR real
+                # de GitHub -- ver db.py::_MAIN_BRANCH_SCAN_PR_NUMBER).
+                reputation_metadata.author_has_prior_high_risk_pr = (
+                    resolve_author_has_prior_high_risk_pr(
+                        author_login, exclude_repo=repo_path, exclude_pr_number=0
+                    )
+                )
 
             pipeline_metadata: dict[str, object] = {
                 "pr_id": MAIN_BRANCH_SCAN_PR_ID,
@@ -573,20 +558,13 @@ def run_audit_scan(
                     pass
 
             if reputation_metadata is not None:
-                try:
-                    from watchgate.dashboard.backend.db import author_has_prior_high_risk_pr
+                from watchgate.dashboard.backend.db import resolve_author_has_prior_high_risk_pr
 
-                    with dashboard_db_session() as dash_conn:
-                        reputation_metadata.author_has_prior_high_risk_pr = (
-                            author_has_prior_high_risk_pr(
-                                dash_conn,
-                                author_login,
-                                exclude_repo=repo_path,
-                                exclude_pr_number=pr_number,
-                            )
-                        )
-                except Exception:
-                    pass
+                reputation_metadata.author_has_prior_high_risk_pr = (
+                    resolve_author_has_prior_high_risk_pr(
+                        author_login, exclude_repo=repo_path, exclude_pr_number=pr_number
+                    )
+                )
 
             # 4. Análisis con control de cuota
             pipeline_metadata: dict[str, object] = {

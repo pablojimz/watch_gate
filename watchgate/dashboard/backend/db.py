@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import secrets
 import threading
@@ -71,6 +72,8 @@ from watchgate.dashboard.backend.schemas import (
 from watchgate.db.connection import build_engine
 from watchgate.db.models import MonitoredRepo, VCSConnection
 from watchgate.db.schema_guard import check_schema_matches_metadata
+
+logger = logging.getLogger("watchgate.dashboard.db")
 
 DEFAULT_WEIGHTS = {
     "static": 0.25,
@@ -698,6 +701,51 @@ def author_has_prior_high_risk_pr(
         )
     stmt = stmt.limit(1)
     return session.execute(stmt).scalars().first() is not None
+
+
+def resolve_author_has_prior_high_risk_pr(
+    author_login: str,
+    *,
+    exclude_repo: str | None = None,
+    exclude_pr_number: int | None = None,
+) -> bool:
+    """Envoltorio best-effort de `author_has_prior_high_risk_pr` para
+    consumidores que no tienen ya abierta una sesión contra la BD del
+    Dashboard: CLI y Engine API (`api/routers/analyze.py`), a diferencia de
+    `dashboard/backend/tasks.py`, que corre dentro del propio Dashboard y sí
+    puede abrir `db_session()` directamente.
+
+    Nunca lanza: si la BD del Dashboard no está configurada/alcanzable, o
+    falla por cualquier otro motivo, se degrada a `False` -- el mismo valor
+    que `ReputationMetadata` documenta como "no comprobado", nunca como
+    "limpio confirmado" (ver `core/layers/reputation_layer.py`).
+
+    Requiere `WATCHGATE_DASHBOARD_DATABASE_URL` explícita a propósito: sin
+    ella, `db_session()` cae a un SQLite local bajo `.watchgate/` del
+    directorio de trabajo actual -- adecuado para el propio Dashboard (que
+    siempre necesita esa base de datos, con o sin esta señal), pero un
+    efecto secundario sorprendente para CLI/Engine API si solo llegaran
+    aquí a comprobar el historial: crearían/tocarían un fichero local vacío
+    (sin el historial real, que vive en la BD compartida) por cada
+    análisis. Sin esta variable, no hay BD compartida que consultar --
+    degradar a `False` sin tocar el disco es el comportamiento correcto."""
+    if not os.environ.get("WATCHGATE_DASHBOARD_DATABASE_URL"):
+        return False
+    try:
+        with db_session() as session:
+            return author_has_prior_high_risk_pr(
+                session,
+                author_login,
+                exclude_repo=exclude_repo,
+                exclude_pr_number=exclude_pr_number,
+            )
+    except Exception:
+        logger.debug(
+            "No se pudo comprobar el histórico de reputación del Dashboard para %s",
+            author_login,
+            exc_info=True,
+        )
+        return False
 
 
 def user_is_org_admin(session: Session, user_login: str, org_id: str | None) -> bool:
