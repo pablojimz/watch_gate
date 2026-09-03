@@ -431,11 +431,20 @@ def claim_installation(
 
     Idempotente para la misma organización (reclamar dos veces devuelve lo
     mismo); 409 si otra organización ya la reclamó.
+
+    Asigna rol "mantenedor" al usuario que reclama sobre cada repo dado de
+    alta -- mismo motivo por el que `add_external_repo` lo hace para el
+    modo audited/git_server (ver el comentario ahí): sin esto,
+    `resolve_role`/`require_role` (`auth.py`) devolvían 403 "Sin rol
+    asignado en {repo}" incluso al propio usuario que acababa de instalar
+    la App, porque instalar la App no dejaba ninguna fila en `repo_roles`.
     """
     from watchgate.adapters.github_app import (
         github_app_configured,
         list_installation_repositories,
     )
+    from watchgate.dashboard.backend.db import db_session as dashboard_db_session
+    from watchgate.dashboard.backend.db import upsert_role
 
     installation_id = data.installation_id.strip()
     if not installation_id.isdigit():
@@ -501,6 +510,11 @@ def claim_installation(
                 session.commit()
                 session.refresh(repo)
             created_or_existing.append(repo)
+
+    if created_or_existing:
+        with dashboard_db_session() as dash_conn:
+            for repo in created_or_existing:
+                upsert_role(dash_conn, user_login, repo.repo_path, "mantenedor", org_id=org_id)
 
     return ClaimInstallationOut(
         vcs_connection_id=vcs.id,
