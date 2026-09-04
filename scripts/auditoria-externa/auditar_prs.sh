@@ -53,6 +53,15 @@
 #                      -- es la responsable del coste fijo de ~20-60s por PR;
 #                      desactivarla es la forma más directa de ir rápido a
 #                      costa de perder esa capa (default: 0 -- activa)
+#   SEMANTIC_SCORE_MIN Filtro de salida: una PR solo se escribe en
+#                      resultados.txt si el risk_score de la capa semantic
+#                      es ESTRICTAMENTE MAYOR que este valor (default: 60).
+#                      No afecta al análisis en sí (todas las capas
+#                      configuradas siguen corriendo) ni cuenta como
+#                      fallo -- una PR filtrada no aparece en errores.txt,
+#                      simplemente no sale en el informe. Con
+#                      DISABLE_SEMANTIC=1 el risk_score de semantic es
+#                      siempre 0, así que ninguna PR pasaría el filtro.
 #
 # Ejemplos:
 #   LIMIT=10 PRS_PER_REPO=3 ./auditar_prs.sh
@@ -80,6 +89,7 @@ API_TIMEOUT="${API_TIMEOUT:-30}"
 ANALYZE_TIMEOUT="${ANALYZE_TIMEOUT:-300}"
 DISABLE_SEMANTIC="${DISABLE_SEMANTIC:-0}"
 DISABLE_STATIC="${DISABLE_STATIC:-0}"
+SEMANTIC_SCORE_MIN="${SEMANTIC_SCORE_MIN:-60}"
 # .env del proyecto watch_gate: trae WATCHGATE_LLM_PROVIDER/API_KEY/etc. La
 # CLI (`watchgate/cli.py`) NO carga .env sola (no hay python-dotenv/
 # pydantic-settings env_file) -- sin esto, la capa semántica siempre se
@@ -188,6 +198,28 @@ analyze_one_pr() {
         return
     fi
 
+    # Comprobación de sanidad: el diff descargado debe tocar el mismo
+    # número de ficheros que GitHub dice que toca esta PR. Caso real
+    # reproducido: para una PR concreta, `gh api .../pulls/N -H
+    # "Accept: .../vnd.github.v3.diff"` devolvió el contenido de OTRA PR
+    # completamente distinta (cabecera -- número, autor, URL -- correcta;
+    # texto del diff, no), sin poder confirmar la causa raíz. En vez de
+    # analizar y dar por bueno un resultado que podría no pertenecer a
+    # esta PR, se descarta si no cuadra -- mejor "no sé" que "veredicto
+    # etiquetado con la PR equivocada".
+    expected_files="$(timeout "$API_TIMEOUT" gh api "repos/$owner/$repo/pulls/$pr_number" \
+        --jq '.changed_files' 2>/dev/null)"
+    if [[ "$expected_files" =~ ^[0-9]+$ ]]; then
+        actual_files="$(grep -c '^diff --git ' <<< "$diff_text")"
+        if [[ "$actual_files" != "$expected_files" ]]; then
+            echo "[$n/100] $owner/$repo PR #$pr_number -- diff descartado: GitHub dice $expected_files fichero(s) modificado(s) pero el diff descargado trae $actual_files (probable contenido de otra PR, no se analiza)" >> "$ERRORS_FILE"
+            return
+        fi
+    fi
+    # Si $expected_files no llegó (fallo/timeout de esta llamada extra), se
+    # sigue adelante sin bloquear el análisis por esta comprobación -- es
+    # una salvaguarda best-effort, no una dependencia dura.
+
     weight_args=()
     [[ "$DISABLE_SEMANTIC" == "1" ]] && weight_args+=(--weight "semantic=0")
     [[ "$DISABLE_STATIC" == "1" ]] && weight_args+=(--weight "static=0")
@@ -203,10 +235,20 @@ analyze_one_pr() {
     rc=$?
 
     if [[ $rc -eq 0 || $rc -eq 1 ]]; then
-        printf '%s' "$json_output" | python3 "$FORMATTER" "$pr_number" "$pr_author" "$pr_url" \
-            > "$OUT_DIR/$(printf '%03d' "$n")-${pr_number}.txt"
-        echo "" >> "$OUT_DIR/$(printf '%03d' "$n")-${pr_number}.txt"
-        echo "[$n/100] $owner/$repo PR #$pr_number -> veredicto OK" >&2
+        # Filtro: solo se escribe a resultados.txt si el risk_score de la
+        # capa semantic supera SEMANTIC_SCORE_MIN. No es un fallo (no va a
+        # errores.txt) -- simplemente no interesa para este informe. Si la
+        # capa semantic viene skipped (LLM desactivado/sin credenciales) su
+        # risk_score es 0, así que también queda fuera del filtro.
+        semantic_score="$(printf '%s' "$json_output" | jq -r '.layer_results.semantic.risk_score // 0' 2>/dev/null)"
+        if [[ "$semantic_score" =~ ^[0-9]+$ ]] && [[ "$semantic_score" -gt "$SEMANTIC_SCORE_MIN" ]]; then
+            printf '%s' "$json_output" | python3 "$FORMATTER" "$pr_number" "$pr_author" "$pr_url" \
+                > "$OUT_DIR/$(printf '%03d' "$n")-${pr_number}.txt"
+            echo "" >> "$OUT_DIR/$(printf '%03d' "$n")-${pr_number}.txt"
+            echo "[$n/100] $owner/$repo PR #$pr_number -> veredicto OK (semantic=$semantic_score, incluida)" >&2
+        else
+            echo "[$n/100] $owner/$repo PR #$pr_number -> veredicto OK (semantic=$semantic_score, filtrada: <= $SEMANTIC_SCORE_MIN)" >&2
+        fi
     else
         reason="exit code $rc"
         [[ $rc -eq 124 ]] && reason="timeout (${ANALYZE_TIMEOUT}s)"
@@ -215,7 +257,7 @@ analyze_one_pr() {
     fi
 }
 export -f analyze_one_pr
-export OUT_DIR API_TIMEOUT ANALYZE_TIMEOUT DISABLE_SEMANTIC DISABLE_STATIC ERRORS_FILE FORMATTER
+export OUT_DIR API_TIMEOUT ANALYZE_TIMEOUT DISABLE_SEMANTIC DISABLE_STATIC ERRORS_FILE FORMATTER SEMANTIC_SCORE_MIN
 
 # --- Cargar listado de repos y aplicar LIMIT si procede ---
 mapfile -t LINES < "$LINKS_FILE"
@@ -247,7 +289,7 @@ fi
 {
     echo "Auditoría externa WatchGate -- PRs abiertas de ${#LINES[@]} repos de GitHub (por estrellas)"
     echo "Generado: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-    echo "Máx. PRs por repo: $PRS_PER_REPO | Semántica: $([[ "$DISABLE_SEMANTIC" == "1" ]] && echo desactivada || echo activa) | Estática: $([[ "$DISABLE_STATIC" == "1" ]] && echo desactivada || echo activa)"
+    echo "Máx. PRs por repo: $PRS_PER_REPO | Semántica: $([[ "$DISABLE_SEMANTIC" == "1" ]] && echo desactivada || echo activa) | Estática: $([[ "$DISABLE_STATIC" == "1" ]] && echo desactivada || echo activa) | Filtro: solo semantic > $SEMANTIC_SCORE_MIN"
     echo "========================================================================"
     echo ""
 } > "$RESULTS_FILE"
@@ -290,7 +332,7 @@ URL: $url
     if [[ $ok_count -gt 0 ]]; then
         {
             echo "$header"
-            echo "[INFO] $ok_count/$pr_count PR(s) auditadas con éxito (de un máx. de $PRS_PER_REPO)."
+            echo "[INFO] $ok_count/$pr_count PR(s) con semantic > $SEMANTIC_SCORE_MIN (de un máx. de $PRS_PER_REPO auditadas)."
             echo ""
             printf '%s\n' "$block"
         } >> "$RESULTS_FILE"
