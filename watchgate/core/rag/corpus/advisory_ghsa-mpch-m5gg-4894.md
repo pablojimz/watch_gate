@@ -1,0 +1,46 @@
+# Aviso: Malicious code in syswatch (PyPI) (GHSA-mpch-m5gg-4894)
+
+## Resumen
+
+During import, malicious code is started in the background. On Windows, it downloads and installs a malicious executable, and disguises it as a system utility. After installation, the code attempts to cover its tracks by cleaning logs and removing downloaded files. The installed executable is a heavily obfuscated malware with multiple sandbox evasion techniques, finally running an infostealer identifying itself as "Snow Stealer". It collects at least browser data and modifies cryptowallet applications.
+
+Category: MALICIOUS - The campaign has clearly malicious intent, like infostealers.
+
+Campaign: 2026-08-envprovision
+
+Reasons (based on the campaign):
+
+ - infostealer
+
+ - Downloads and executes a remote executable.
+
+ - obfuscation
+
+ - action-hidden-in-lib-usage
+
+ - exfiltration-browser-data
+
+ - The package contains code to detect if it is running in a sandbox environment.
+
+ - exfiltration-crypto
+
+ - malware
+
+ - covering-tracks
+
+ - persistence
+
+## Paquetes afectados
+
+- `syswatch` (pip), versiones afectadas: = 1.0.0
+
+## Datos del aviso
+
+- Tipo de aviso: malware
+- Severidad: critical
+- Publicado: 2026-09-02T00:31:29Z
+- Fuente: https://github.com/advisories/GHSA-mpch-m5gg-4894
+
+## Patrón a vigilar
+
+Diff que añade (o fija por primera vez) una dependencia sobre `syswatch`, en cualquier versión del rango afectado -- el paquete en sí ES el malware, no hace falta ningún otro cambio sospechoso en el diff para que el riesgo sea máximo.
