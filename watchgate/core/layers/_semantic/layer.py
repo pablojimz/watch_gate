@@ -762,7 +762,21 @@ class SemanticLayer(AnalysisLayer):
                 }
             )
 
-        scanned_texts = [c.user_prompt for c in candidates]
+        # AUDITORÍA (falso positivo confirmado en vivo, PR #10211 de
+        # nilbuild/developer-roadmap): `reduce_call.user_prompt` NO lleva
+        # diff/contenido del atacante -- `build_reduce_user_prompt` solo
+        # resume los `risk_score`/`justification` YA calculados de cada
+        # chunk (texto generado por este mismo sistema, ver
+        # `_render_chunk_summary`). Cualquier chunk benigno con
+        # `risk_score: 0` seguido de su `justification` en ≤60 caracteres
+        # coincide con `_FAKE_JSON_RESPONSE_RE` (pensado para detectar un
+        # PR que intenta *dictar* la respuesta JSON), autoacusando al
+        # propio resumen interno de inyección de prompt. Por eso aquí se
+        # escanean los `user_prompt` de los chunks del map (diff real,
+        # donde SÍ puede haber una inyección real) pero no el del reduce
+        # -- su contenido fetcheado (`fetched_contents`) sigue
+        # escaneándose igual, eso sí es contenido de repo real.
+        scanned_texts = [c.user_prompt for c in calls]
         for c in candidates:
             scanned_texts.extend(c.counter.fetched_contents)
 
