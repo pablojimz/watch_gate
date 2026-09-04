@@ -350,6 +350,23 @@ def run_feedback_indexing(case_id: str, title: str, narrative: str, verdict: str
 
 _REDIS_URL = os.environ.get("WATCHGATE_REDIS_URL", "redis://localhost:6379/0")
 
+# RQ mata un job a los 180s por defecto (Queue.DEFAULT_TIMEOUT) si nadie le
+# pasa `job_timeout` al encolar -- ninguno de los `queue.enqueue(...)` de
+# análisis (run_main_branch_scan, run_audit_scan, run_managed_scan,
+# build_repo_knowledge_graph) lo hacía, así que CUALQUIER repo cuyo
+# análisis completo (todas las capas + posibles llamadas LLM
+# encadenadas/chunked) tardara más de 3 minutos se mataba a media
+# ejecución, en silencio, sin traceback útil ("Work-horse terminated
+# unexpectedly") y encima contando como fallo (sube consecutive_errors).
+# Reproducido en vivo y de forma repetible contra obra/superpowers,
+# 996icu/996.ICU y react/react -- ninguno de los tres es un caso raro, y el
+# propio `_SEMGREP_SUBPROCESS_TIMEOUT_SECONDS=60` de static_layer.py (por
+# invocación agrupada, puede haber varias) más el coste de la capa
+# semántica en modo "chunked" para un branch/PR grande ya deja poco margen
+# frente a 180s. 30 minutos es holgado sin ser "sin límite" -- un análisis
+# real que tarde más que esto sí merece contarse como fallo de verdad.
+ANALYSIS_JOB_TIMEOUT_SECONDS = 1800
+
 
 def get_redis_conn() -> redis.Redis:
     return redis.from_url(_REDIS_URL)

@@ -217,7 +217,11 @@ class RepoPollingService:
         # Filtrar PRs abiertas nuevas (no analizadas aún)
         new_prs = [p for p in prs if str(p["number"]) not in analyzed_pr_ids]
 
-        from watchgate.dashboard.backend.tasks import get_queue, run_audit_scan
+        from watchgate.dashboard.backend.tasks import (
+            ANALYSIS_JOB_TIMEOUT_SECONDS,
+            get_queue,
+            run_audit_scan,
+        )
 
         queue = get_queue()
 
@@ -246,6 +250,7 @@ class RepoPollingService:
                 candidate["org_id"],
                 candidate["vcs_connection_id"],
                 job_id=job_id,
+                job_timeout=ANALYSIS_JOB_TIMEOUT_SECONDS,
             )
             total_enqueued += 1
 

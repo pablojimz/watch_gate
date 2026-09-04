@@ -7,7 +7,11 @@ from typing import Annotated
 from fastapi import APIRouter, Header, HTTPException, Request, Response, status
 from starlette.concurrency import run_in_threadpool
 
-from watchgate.dashboard.backend.tasks import get_queue, repo_is_authorized
+from watchgate.dashboard.backend.tasks import (
+    ANALYSIS_JOB_TIMEOUT_SECONDS,
+    get_queue,
+    repo_is_authorized,
+)
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
@@ -125,6 +129,7 @@ async def github_webhook(
         repo_path,
         pr_number,
         installation_id,
+        job_timeout=ANALYSIS_JOB_TIMEOUT_SECONDS,
     )
 
     return Response(status_code=status.HTTP_202_ACCEPTED)
