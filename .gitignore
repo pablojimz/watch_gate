@@ -100,3 +100,8 @@ docs/diagrama_estructura.png
 #   .claude/README.md, .claude/rules-audit-report.md,
 #   .claude/rules-audit-report.pdf, .claude/vulnerability-mapping.md,
 #   .claude/vulnerability-mapping.pdf
+
+# --- Salida generada por scripts/auditoria-externa/auditar_prs.sh (se
+# regenera en cada ejecución; no es código ni documentación) ---
+scripts/auditoria-externa/resultados.txt
+scripts/auditoria-externa/errores.txt
