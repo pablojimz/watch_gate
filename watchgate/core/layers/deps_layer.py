@@ -210,7 +210,14 @@ class DepsLayer(AnalysisLayer):
             )
 
         scores: list[int] = []
+        # Solo entra aquí el detalle de un paquete con una señal REAL
+        # (typosquatting/script sospechoso/instalación directa) -- ver
+        # `has_real_signal` más abajo. `clean_count` cuenta el resto (incluida
+        # "nueva dependencia sin señales", que puntúa 10 pero no es una
+        # alerta, solo la base por ser dependencia nueva) para no perderlos
+        # del todo, solo sacarlos del muro de texto.
         justifications: list[str] = []
+        clean_count = 0
         structured_findings: list[Finding] = []
 
         # 3. Analizar cada cambio
@@ -218,6 +225,7 @@ class DepsLayer(AnalysisLayer):
             pkg_score = 0
             pkg_notes: list[str] = []
             pkg_nature: ThreatNature = ThreatNature.VULNERABILITY
+            has_real_signal = False
 
             # A. Typosquatting
             is_typosquat, ref_pkg = self.typosquat_checker.is_typosquatting(
@@ -231,6 +239,7 @@ class DepsLayer(AnalysisLayer):
                     "habitual para hacer pasar un paquete malicioso por uno legítimo)"
                 )
                 pkg_nature = ThreatNature.MALICIOUS
+                has_real_signal = True
 
             # B. Script de instalación
             if change.install_script:
@@ -243,6 +252,7 @@ class DepsLayer(AnalysisLayer):
                         "intervención de quien la instala"
                     )
                     pkg_nature = ThreatNature.MALICIOUS
+                    has_real_signal = True
 
             # C. Instalación directa por URL/Git
             if change.is_direct_url:
@@ -253,6 +263,7 @@ class DepsLayer(AnalysisLayer):
                     "controles de publicación"
                 )
                 pkg_nature = ThreatNature.MALICIOUS
+                has_real_signal = True
 
             # D. Si es nueva dependencia y no tuvo alertas
             if change.is_new and pkg_score == 0:
@@ -266,7 +277,17 @@ class DepsLayer(AnalysisLayer):
             scores.append(pkg_score)
             version_str = f"@{change.new_version}" if change.new_version else ""
             notes_str = "; ".join(pkg_notes) if pkg_notes else "sin señales de riesgo detectadas"
-            justifications.append(f"{change.name}{version_str} ({change.ecosystem}): {notes_str}")
+            if has_real_signal:
+                justifications.append(f"{change.name}{version_str} ({change.ecosystem}): {notes_str}")
+            else:
+                # Bug real, reproducido: antes esto entraba SIEMPRE en
+                # `justifications`, incluidas las ~90 dependencias "nueva
+                # dependencia sin señales..." de un PR de 97 paquetes -- el
+                # texto final era un muro con una entrada por dependencia,
+                # obligando a leer 97 líneas para encontrar la única con una
+                # señal real. Ahora solo entran aquí paquetes con una señal
+                # de verdad (A/B/C); el resto solo se cuenta (`clean_count`).
+                clean_count += 1
 
             if pkg_score > 0:
                 m_path = change.manifest_path if change.manifest_path else change.name
@@ -300,7 +321,15 @@ class DepsLayer(AnalysisLayer):
         else:
             summary = f"Puntuación {final_score}/100 por lo encontrado en esta dependencia."
 
-        final_justification = summary + " " + " | ".join(justifications)
+        # El conteo de "limpias" solo aporta algo cuando ya hay al menos una
+        # señal real que mostrar -- si no hay ninguna, `summary` ya deja
+        # claro que nada tiene señales (caso `final_score == 0` arriba) y
+        # añadir "(+N sin señales)" ahí sería ruido redundante, justo lo que
+        # se quiere evitar.
+        detail = " | ".join(justifications)
+        if clean_count and justifications:
+            detail += f" | (+{clean_count} dependencia(s) más sin señales de riesgo, omitidas por brevedad)"
+        final_justification = f"{summary} {detail}".strip()
 
         confidence = None
         if final_score >= 70:
