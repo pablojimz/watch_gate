@@ -36,17 +36,25 @@ _TEMPLATE_SOURCE = (
     "Amenazas: 🚨 {{ threat_summary.get('malicioso', 0) }} Maliciosa(s) | "
     "⚠️ {{ threat_summary.get('vulnerabilidad', 0) }} Vulnerabilidad(es) | "
     "❓ {{ threat_summary.get('incertidumbre', 0) }} Incertidumbre(s)\n"
-    "{% endif %}\n"
+    # Rule 2: el "+" tras cada tag de cierre de abajo desactiva trim_blocks
+    # SOLO para ese tag -- sin él, Jinja se come el "\n" literal que viene
+    # justo después de un "%}" (es lo que hace trim_blocks=True), y todas
+    # las líneas de capas/justificación/recomendación de más abajo colapsan
+    # en una única línea ilegible. Nunca se había visto en producción porque
+    # hasta ahora esta rama solo se ejercitaba con `redacted=False`, y en la
+    # práctica casi cualquier análisis real caía por la rama `redacted=True`
+    # de arriba (ver docstring de render_comment) -- que no pasa por aquí.
+    "{% endif +%}\n"
     "{% for name, result in layer_results.items() -%}\n"
     "{{ name | capitalize }}: {{ result.risk_score }}/100  "
     "(peso {{ effective_weights.get(name, weights_used.get(name, 0)) }})"
-    "{% if result.skipped %} — omitida: {{ result.skip_reason }}{% endif %}\n"
-    "{% endfor %}\n"
+    "{% if result.skipped %} — omitida: {{ result.skip_reason }}{% endif +%}\n"
+    "{% endfor +%}\n"
     "{%- if 'semantic' in layer_results and not layer_results['semantic'].skipped %}\n"
     "Justificación (capa semántica):\n"
     "\"{{ layer_results['semantic'].justification }}\"\n"
-    "{% endif %}\n"
-    "{% endif %}\n"
+    "{% endif +%}\n"
+    "{% endif +%}\n"
     "-> {{ recomendacion }}\n"
 )
 
