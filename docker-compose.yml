@@ -145,6 +145,18 @@ services:
         condition: service_healthy
       dashboard-backend:
         condition: service_started
+    # 3 réplicas en paralelo (Compose V2 lo aplica también fuera de swarm,
+    # sin necesidad de `docker compose up --scale`) -- con un solo worker,
+    # los jobs de análisis (Semgrep recompilando su catálogo desde cero por
+    # invocación, ~20-60s fijos, más las llamadas LLM de la capa semántica)
+    # se procesan de uno en uno: conectar varios repos seguidos deja a los
+    # últimos esperando en cola varios minutos aunque haya cores libres.
+    # Sin `container_name` fijo en este servicio, ni puertos publicados en
+    # el host -- escalar no choca con nada. Ajusta este número según cores
+    # disponibles; no hay problema de concurrencia en Redis/RQ por tener
+    # varios workers a la vez.
+    deploy:
+      replicas: 3
 
   dashboard-frontend:
     build:
