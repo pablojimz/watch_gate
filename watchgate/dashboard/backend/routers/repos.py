@@ -12,7 +12,12 @@ from sqlmodel import Session, delete, select
 from watchgate.dashboard.backend.auth import CurrentUser, require_role
 from watchgate.dashboard.backend.routers.keys import _get_or_create_db_user
 from watchgate.dashboard.backend.schemas import normalize_login
-from watchgate.dashboard.backend.tasks import get_queue, run_audit_scan, run_main_branch_scan
+from watchgate.dashboard.backend.tasks import (
+    ANALYSIS_JOB_TIMEOUT_SECONDS,
+    get_queue,
+    run_audit_scan,
+    run_main_branch_scan,
+)
 from watchgate.db.connection import get_db_session
 from watchgate.db.models import (
     MonitoredRepo,
@@ -55,6 +60,11 @@ class MonitoredRepoResponse(BaseModel):
     last_polled_at: datetime | None
     consecutive_errors: int
     created_at: datetime
+    warning: str | None = Field(
+        default=None,
+        description="Aviso no bloqueante (ej. el repo no tiene PRs abiertas ahora "
+        "mismo) -- el repo se conecta igual, esto es solo informativo para el frontend.",
+    )
 
 
 class MonitoredRepoUpdate(BaseModel):
@@ -163,6 +173,7 @@ def _enqueue_main_branch_scan(
         repo.vcs_connection_id,
         user_login=user_login,
         job_id=job_id,
+        job_timeout=ANALYSIS_JOB_TIMEOUT_SECONDS,
     )
     return True
 
@@ -264,11 +275,23 @@ def add_external_repo(
     # onboarding, no repolling periódico.
     from watchgate.service.repo_polling import RepoPollingService
 
-    RepoPollingService.poll_repo_by_id(new_repo.id)
+    prs_enqueued = RepoPollingService.poll_repo_by_id(new_repo.id)
 
     _enqueue_repo_knowledge_graph(new_repo)
 
-    return new_repo
+    response = MonitoredRepoResponse.model_validate(new_repo, from_attributes=True)
+    if prs_enqueued == 0:
+        # No distingue "el repo de verdad no tiene PRs abiertas" de "falló
+        # la consulta a la API de GitHub" (poll_repo_by_id no devuelve esa
+        # distinción, ver repo_polling.py::_poll_single_candidate) -- un
+        # mensaje honesto que cubre ambos casos es mejor que uno que
+        # adivine cuál de los dos pasó.
+        response.warning = (
+            "No se encontraron PRs abiertas para auditar en este repositorio ahora "
+            "mismo (puede que no tenga ninguna, o que no se haya podido consultar la "
+            "API de GitHub)."
+        )
+    return response
 
 
 _REPO_GRAPH_JOB_ID_PREFIX = "repo-graph"
@@ -291,7 +314,13 @@ def _enqueue_repo_knowledge_graph(repo: MonitoredRepo) -> bool:
         existing_job.delete()
     from watchgate.dashboard.backend.tasks import build_repo_knowledge_graph
 
-    queue.enqueue(build_repo_knowledge_graph, repo.id, repo.repo_path, job_id=job_id)
+    queue.enqueue(
+        build_repo_knowledge_graph,
+        repo.id,
+        repo.repo_path,
+        job_id=job_id,
+        job_timeout=ANALYSIS_JOB_TIMEOUT_SECONDS,
+    )
     return True
 
 
@@ -572,6 +601,7 @@ def scan_audited_repo(
             org_id,
             repo.vcs_connection_id,
             user_login=user_login,
+            job_timeout=ANALYSIS_JOB_TIMEOUT_SECONDS,
         )
         return {
             "message": "Escaneo de PR encolado",

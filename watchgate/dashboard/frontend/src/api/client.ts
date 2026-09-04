@@ -279,6 +279,9 @@ export interface MonitoredRepoResponse {
   last_polled_at: string | null
   consecutive_errors: number
   created_at: string
+  // Aviso no bloqueante (ej. el repo no tiene PRs abiertas ahora mismo) --
+  // el repo se conecta igual, ver MonitoredRepoResponse en routers/repos.py.
+  warning: string | null
 }
 
 // category: "entrypoint"|"api"|"model"|"test"|"config"|"infra"|"ui"|"util"|"docs"|"unknown"

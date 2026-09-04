@@ -95,8 +95,9 @@ export function ConnectRepoDialog({
     if (!repoPath.trim()) return
     setIsSubmitting(true)
     try {
-      await api.addExternalRepo(repoPath.trim(), monitorType)
+      const added = await api.addExternalRepo(repoPath.trim(), monitorType)
       toast.success(t('externalRepos.addSuccess'))
+      if (added.warning) toast.warning(added.warning)
       setRepoPath('')
       onConnected?.()
       onOpenChange(false)

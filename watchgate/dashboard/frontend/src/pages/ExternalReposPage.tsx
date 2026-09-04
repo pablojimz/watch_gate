@@ -121,8 +121,9 @@ export default function ExternalReposPage() {
 
     setIsSubmitting(true)
     try {
-      await api.addExternalRepo(newRepoPath.trim(), newMonitorType)
+      const added = await api.addExternalRepo(newRepoPath.trim(), newMonitorType)
       toast.success(t('externalRepos.addSuccess'))
+      if (added.warning) toast.warning(added.warning)
       setNewRepoPath('')
       await fetchRepos()
     } catch (err) {
