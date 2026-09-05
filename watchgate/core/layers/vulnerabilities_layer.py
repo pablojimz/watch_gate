@@ -70,10 +70,27 @@ _MAX_ENRICHMENT_WORKERS = 20
 # vivo con 60 consultas en una sola llamada, sin problema); 20 era un límite
 # autoimpuesto sin motivo real que además se aplicaba SIEMPRE, ignorando
 # cualquier valor mayor que un admin configurase vía policy
-# (max_dependency_checks) -- ver auditoría. 200 sigue acotado (payload/
-# timeout razonables) pero dejar de recortar en silencio configuraciones
-# explícitas.
-_HARD_MAX_BATCH_SIZE = 200
+# (max_dependency_checks) -- ver auditoría.
+#
+# Subido de 200 a 5000 a petición explícita ("un número enorme") -- un
+# lockfile de un monorepo grande (regenerado entero, no solo con una
+# dependencia nueva) puede traer varios cientos de paquetes "nuevos" en un
+# único diff, y 200 seguía dejando fuera casos reales. Pero NO se manda
+# todo el lote en una sola petición HTTP -- ver `_OSV_HTTP_CHUNK_SIZE`: el
+# límite de arriba es cuántos paquetes se consultan en TOTAL por análisis,
+# no el tamaño de cada llamada de red.
+_HARD_MAX_BATCH_SIZE = 5000
+# Tamaño de cada petición POST individual a /v1/querybatch -- 200 es el
+# tamaño ya probado en vivo sin problema (ver comentario de arriba antes
+# de la subida). Con _HARD_MAX_BATCH_SIZE en 5000, un único POST con las
+# 5000 consultas de golpe arriesga timeout (payload enorme, el servidor
+# tarda más en resolver 5000 paquetes que 200) -- y al ser una sola
+# petición, un timeout perdería TODOS los resultados, no solo los que se
+# salieran de un límite razonable. Se trocea en lotes de este tamaño,
+# lanzados en PARALELO (ver `_MAX_QUERYBATCH_WORKERS`), para que un fallo
+# de red en un lote no tumbe los demás.
+_OSV_HTTP_CHUNK_SIZE = 200
+_MAX_QUERYBATCH_WORKERS = 10
 
 
 def _fetch_vuln_details(vuln_id: str) -> dict[str, Any] | None:
@@ -510,50 +527,75 @@ class VulnerabilitiesLayer(AnalysisLayer):
         if not to_fetch_indices:
             return results
 
-        queries = []
-        for idx in to_fetch_indices:
-            change = changes[idx]
-            q: dict[str, Any] = {"package": {"name": change.name, "ecosystem": change.ecosystem}}
-            if change.new_version and not change.is_direct_url:
-                q["version"] = change.new_version
-            queries.append(q)
+        # Trocear en lotes de _OSV_HTTP_CHUNK_SIZE, uno por petición HTTP,
+        # lanzados en paralelo -- ver el comentario largo de
+        # _OSV_HTTP_CHUNK_SIZE sobre por qué (timeout de un lote gigante
+        # perdería TODO, no solo el exceso).
+        chunks = [
+            to_fetch_indices[i : i + _OSV_HTTP_CHUNK_SIZE]
+            for i in range(0, len(to_fetch_indices), _OSV_HTTP_CHUNK_SIZE)
+        ]
 
-        try:
-            response = httpx.post(
-                _OSV_QUERYBATCH_URL,
-                json={"queries": queries},
-                timeout=10.0,
-            )
-            response.raise_for_status()
-            res_data: dict[str, Any] = response.json()
-            batch_results = res_data.get("results", [])
+        to_cache: list[tuple[str, str, str | None, dict[str, Any]]] = []
+        items: list[dict[str, Any]] = []
 
-            to_cache: list[tuple[str, str, str | None, dict[str, Any]]] = []
-            items: list[dict[str, Any]] = []
-
-            for idx, res_item in zip(to_fetch_indices, batch_results, strict=False):
+        def _fetch_chunk(chunk_indices: list[int]) -> None:
+            queries = []
+            for idx in chunk_indices:
                 change = changes[idx]
-                item_data = res_item if isinstance(res_item, dict) else {}
-                results[idx] = (item_data, None)
-                items.append(item_data)
-                to_cache.append((change.name, change.ecosystem, change.new_version, item_data))
+                q: dict[str, Any] = {
+                    "package": {"name": change.name, "ecosystem": change.ecosystem}
+                }
+                if change.new_version and not change.is_direct_url:
+                    q["version"] = change.new_version
+                queries.append(q)
 
-            # querybatch da solo {id, modified} por vulnerabilidad -- sin
-            # esto ni el score (has_high_crit) ni el mensaje al usuario
-            # tenían datos reales que leer, aunque el código para leerlos
-            # ya existiera. Completa in situ, ANTES de cachear (para que un
-            # hit de caché futuro no repita las llamadas).
-            _enrich_batch_vulns(items)
-
-            if to_cache:
-                self.cache.set_many(to_cache)
-
-        except (httpx.HTTPError, json.JSONDecodeError) as exc:
-            for idx in to_fetch_indices:
-                results[idx] = (
-                    None,
-                    f"No verificable por fallo de red en OSV ({exc!r})",
+            try:
+                response = httpx.post(
+                    _OSV_QUERYBATCH_URL,
+                    json={"queries": queries},
+                    timeout=30.0,
                 )
+                response.raise_for_status()
+                res_data: dict[str, Any] = response.json()
+                batch_results = res_data.get("results", [])
+
+                for idx, res_item in zip(chunk_indices, batch_results, strict=False):
+                    change = changes[idx]
+                    item_data = res_item if isinstance(res_item, dict) else {}
+                    results[idx] = (item_data, None)
+                    items.append(item_data)
+                    to_cache.append(
+                        (change.name, change.ecosystem, change.new_version, item_data)
+                    )
+            except (httpx.HTTPError, json.JSONDecodeError) as exc:
+                # Un lote fallido no afecta a los demás -- cada uno tiene su
+                # propia petición y su propio manejo de errores.
+                for idx in chunk_indices:
+                    results[idx] = (
+                        None,
+                        f"No verificable por fallo de red en OSV ({exc!r})",
+                    )
+
+        if len(chunks) == 1:
+            _fetch_chunk(chunks[0])
+        else:
+            with ThreadPoolExecutor(
+                max_workers=min(_MAX_QUERYBATCH_WORKERS, len(chunks))
+            ) as pool:
+                list(pool.map(_fetch_chunk, chunks))
+
+        # querybatch da solo {id, modified} por vulnerabilidad -- sin esto
+        # ni el score (has_high_crit) ni el mensaje al usuario tenían datos
+        # reales que leer, aunque el código para leerlos ya existiera.
+        # Completa in situ, ANTES de cachear (para que un hit de caché
+        # futuro no repita las llamadas). Se hace una vez para TODOS los
+        # lotes juntos, no por lote -- _enrich_batch_vulns ya pagina sus
+        # propias llamadas en paralelo (_MAX_ENRICHMENT_WORKERS).
+        if items:
+            _enrich_batch_vulns(items)
+        if to_cache:
+            self.cache.set_many(to_cache)
 
         return results
 

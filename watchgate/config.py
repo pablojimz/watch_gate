@@ -97,8 +97,13 @@ class WatchGateConfig(BaseSettings):
     max_diff_tokens: int = 8000
     monthly_budget_tokens: int | None = 2_000_000
 
-    # Usado por deps_layer.py (§5).
-    max_dependency_checks: int = 20
+    # Usado por vulnerabilities_layer.py (§5) como VulnerabilitiesLayer.max_osv_queries
+    # -- cuántos paquetes NUEVOS de un mismo diff se consultan contra OSV.dev
+    # como máximo. Subido de 20 a 5000 a petición explícita ("un número
+    # enorme") -- ver el comentario de _HARD_MAX_BATCH_SIZE en
+    # vulnerabilities_layer.py sobre por qué 5000 sigue siendo seguro (las
+    # peticiones HTTP van troceadas en paralelo, no en un único lote).
+    max_dependency_checks: int = 5000
 
     # Usado por el adaptador de GitHub Action (§12).
     block_on_red: bool = True
