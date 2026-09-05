@@ -1,0 +1,166 @@
+\documentclass[border=14pt]{standalone}
+\usepackage[T1]{fontenc}
+\usepackage{XCharter}
+\usepackage{inconsolata}
+\usepackage{amssymb}
+\usepackage{fontawesome5}
+\usepackage[shorthands=off,spanish]{babel}
+\usepackage[table]{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,shapes.geometric,calc,backgrounds,fit}
+
+% ---------- paleta (idéntica a diagrama_capas.tex / diagrama_mcp_agentes.tex) ----------
+\definecolor{brandnavy}{HTML}{002959}
+\definecolor{brandnavy2}{HTML}{123A66}
+\definecolor{brandcyan}{HTML}{00ADCB}
+\definecolor{paper}{HTML}{F5F6F8}
+\definecolor{paperraised}{HTML}{FFFFFF}
+\definecolor{ink}{HTML}{14202E}
+\definecolor{inksoft}{HTML}{4B586A}
+\definecolor{linecol}{HTML}{D6DCE5}
+\definecolor{linestrong}{HTML}{AAB8CA}
+\definecolor{semred}{HTML}{B23A2E}
+\definecolor{samber}{HTML}{9C6B0C}
+\definecolor{semgreen}{HTML}{2E7D4F}
+\definecolor{boxfill}{HTML}{E7EEF6}
+\definecolor{optfill}{HTML}{EEF3F7}
+
+\hyphenpenalty=10000
+\exhyphenpenalty=10000
+\tolerance=3000
+\newcommand{\mono}[1]{{\ttfamily #1}}
+\newcommand{\hd}[1]{{\bfseries\color{brandnavy}#1}}
+\newcommand{\sft}[1]{{\footnotesize\color{inksoft}#1}}
+\newcommand{\icn}[1]{{\color{brandcyan}\faIcon{#1}}}
+
+\pagecolor{paper}
+
+\begin{document}
+\begin{tikzpicture}[
+  every node/.style={font=\normalsize},
+  colbox/.style={draw=brandnavy2, line width=0.7pt, fill=paperraised, rounded corners=2pt,
+                 align=left, inner sep=8pt, text width=7.9cm},
+  band/.style={draw=brandnavy2, line width=0.9pt, fill=boxfill, rounded corners=2pt,
+               align=center, inner sep=9pt, text width=16.4cm},
+  gatehalf/.style={draw=samber, line width=0.9pt, fill=samber!8, rounded corners=2pt,
+                   align=left, inner sep=7pt, text width=7.9cm},
+  small/.style={draw=brandnavy2, line width=0.6pt, fill=paperraised, rounded corners=2pt,
+                align=left, inner sep=6pt, text width=6.4cm, font=\footnotesize},
+  arrow/.style={-{Stealth[length=6pt,width=5pt]}, brandnavy2, line width=1pt},
+  arrowsam/.style={-{Stealth[length=6pt,width=5pt]}, samber, line width=1pt},
+  lbl/.style={font=\footnotesize\itshape, color=inksoft},
+]
+
+% ======================= COLUMNA IZQUIERDA: GITHUB =======================
+% ======================= COLUMNA DERECHA: SERVIDOR GIT PROPIO ============
+
+% ---- fila 1: evento + autorización ----
+\node[colbox] (l1) at (-4.1,0) {%
+  \icn{code-branch}\;\hd{GitHub: PR abierta/actualizada}\\[3pt]
+  \sft{webhook \mono{pull\_request} (\mono{opened}/\mono{synchronize}), firmado
+  \mono{HMAC X-Hub-Signature-256} \textrightarrow\ \mono{POST /api/webhooks/github}}\\[4pt]
+  \sft{\textbf{ASÍNCRONO}: \mono{repo\_is\_authorized} --- installation\_id
+  \textrightarrow\ VCSConnection.org \textrightarrow\ MonitoredRepo activo ---
+  encola RQ y responde \textbf{202} al instante}};
+
+\node[colbox] (r1) at (4.1,0) {%
+  \icn{code-branch}\;\hd{Servidor Git: PR abierta/actualizada}\\[3pt]
+  \sft{cada \mono{git push} que la sustenta dispara el hook
+  \mono{pre-receive} (bash+curl) --- Git no tiene un evento de ``PR'' propio}\\[4pt]
+  \sft{\textbf{SÍNCRONO}: \mono{Bearer} API key \textrightarrow\ \mono{require\_scope} +
+  \mono{ensure\_api\_key\_repo\_binding} (clave atada 1:1 al repo) --- el
+  \mono{git push} queda bloqueado esperando}};
+
+% ---- fila 2: obtención de datos para el análisis ----
+\node[colbox, below=0.75cm of l1] (l2) {%
+  \icn{search}\;\hd{Token + datos reales de la PR}\\[3pt]
+  \sft{token efímero de instalación (JWT de App firmado RS256
+  \textrightarrow\ \mono{access\_token} de 1h) \textrightarrow\
+  \mono{get\_pull\_request\_data} + \mono{get\_reputation\_metadata}
+  (siempre resuelta)}};
+
+\node[colbox, below=0.75cm of r1] (r2) {%
+  \icn{terminal}\;\hd{Payload del push}\\[3pt]
+  \sft{\mono{POST /api/v1/analyze} con \mono{diff\_text} + \mono{metadata}
+  (repo, ref\_name, author\_login extraído de \mono{git log})}};
+
+% ---- núcleo compartido (centrado: below=of l2 (x=-4.1) + xshift=+4.1 = x=0) ----
+\node[band, below=0.9cm of l2, xshift=4.1cm] (core) {%
+  \icn{sitemap}\;\hd{NÚCLEO WATCHGATE (compartido)}\\[3pt]
+  \sft{\mono{QuotaService.analyze\_with\_quota} \textrightarrow\
+  static \textperiodcentered\ dependencies \textperiodcentered\
+  vulnerabilities \textperiodcentered\ reputation \textperiodcentered\
+  semantic (LLM, opcional) \textrightarrow\ agregación \textrightarrow\
+  \mono{score}/\mono{semaforo}}};
+
+% ---- fila 3: divergencia justo después del núcleo ----
+\node[colbox, below=0.9cm of core.south, xshift=-4.1cm] (l3) {%
+  \icn{comments}\;\hd{Comentario + evento live}\\[3pt]
+  \sft{\mono{client.post\_comment} en la PR (best-effort) + actualización en
+  tiempo real al Dashboard}};
+
+\node[colbox, below=0.9cm of core.south, xshift=4.1cm] (r3) {%
+  \icn{terminal}\;\hd{Respuesta al script del hook}\\[3pt]
+  \sft{JSON \{\mono{score}, \mono{semaforo}\}\ --- \textbf{sin comentario en
+  la PR}, solo \mono{stderr} en la terminal de quien hizo el push}};
+
+% ---- fila 4: puerta de decisión (pequeño hueco de 0.3cm en el centro,
+% -- a diferencia del núcleo, aquí SÍ son dos decisiones independientes) ----
+\node[gatehalf, below=0.7cm of l3, xshift=-0.15cm] (l4) {%
+  \hd{\textcolor{samber}{¿semáforo amarillo/rojo?}}};
+
+\node[gatehalf, below=0.7cm of r3, xshift=0.15cm] (r4) {%
+  \hd{\textcolor{samber}{¿semáforo == rojo?}}};
+
+% ---- fila 5a (GitHub): ramas sí/no ----
+\node[colbox, below=0.8cm of l4, xshift=-1.55cm, text width=4.4cm] (l5y) {%
+  \footnotesize
+  \icn{check-circle}\;\hd{\footnotesize Aceptación humana en el Dashboard}\\[3pt]
+  \sft{\scriptsize mantenedor pulsa ``Aceptar'' (\mono{\scriptsize POST
+  /api/scores/\{id\}/accept}) \textrightarrow\ \mono{\scriptsize
+  \_try\_merge\_pull\_request} \textrightarrow\ merge real vía la API de
+  GitHub.\\[2pt] \textcolor{semgreen}{$\blacksquare$}~Si falla (rama
+  protegida, checks, conflictos) se reporta, sin romper la aceptación ya
+  registrada}};
+
+\node[small, below=0.8cm of l4, xshift=2.75cm, text width=2.2cm] (l5n) {%
+  \sft{\scriptsize PR sigue su flujo normal en GitHub --- sin acción de
+  WatchGate}};
+
+% ---- fila 5b (Git servidor): ramas rojo/no-rojo ----
+\node[small, below=0.8cm of r4, xshift=-2.15cm, text width=3.4cm] (r5y) {%
+  \textcolor{semred}{$\blacksquare$}~\textbf{\scriptsize exit 1} \textrightarrow\
+  el servidor Git \textbf{\scriptsize RECHAZA} la PR (la ref no se
+  actualiza; motivo por \mono{\scriptsize stderr})};
+
+\node[small, below=0.8cm of r4, xshift=2.15cm, text width=3.4cm] (r5n) {%
+  \textcolor{semgreen}{$\blacksquare$}~\textbf{\scriptsize exit 0} \textrightarrow\
+  el servidor Git \textbf{\scriptsize ACEPTA} la PR (la ref se actualiza; el
+  commit entra en el repo)};
+
+% ====================== flechas de flujo ======================
+\draw[arrow] (l1) -- (l2);
+\draw[arrow] (r1) -- (r2);
+\draw[arrow] (l2.south) -- (core.north west);
+\draw[arrow] (r2.south) -- (core.north east);
+\draw[arrow] (core.south west) -- (l3.north);
+\draw[arrow] (core.south east) -- (r3.north);
+\draw[arrow] (l3) -- (l4);
+\draw[arrow] (r3) -- (r4);
+
+% las cuatro ramas de decisión: usar "nodo.north |- gate.south" (coordenada
+% con la X del hijo y la Y del padre) en vez de un xshift repetido a mano --
+% así el codo siempre cae en la columna real del hijo, se mueva donde se
+% mueva, sin tener que sincronizar dos números por separado (ver la nota de
+% GUIA_ESTILO.md sobre el bug de la línea inclinada en este mismo diagrama).
+\draw[arrowsam] (l4.south) -- node[lbl, xshift=4pt, yshift=1pt] {sí} (l5y.north |- l4.south) -- (l5y.north);
+\draw[arrowsam] (l4.south) -- node[lbl, xshift=-4pt, yshift=1pt] {no} (l5n.north |- l4.south) -- (l5n.north);
+\draw[arrowsam] (r4.south) -- node[lbl, xshift=4pt, yshift=1pt] {rojo} (r5y.north |- r4.south) -- (r5y.north);
+\draw[arrowsam] (r4.south) -- node[lbl, xshift=-4pt, yshift=1pt] {no rojo} (r5n.north |- r4.south) -- (r5n.north);
+
+% ---- forzar caja delimitadora simétrica respecto al eje central (x=0) ----
+\path let \p1=(current bounding box.east), \p2=(current bounding box.west),
+          \n1={max(\x1,-\x2)} in (\n1,0) (-\n1,0);
+
+\end{tikzpicture}
+\end{document}
