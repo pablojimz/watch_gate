@@ -127,13 +127,13 @@ def _apply_unverified_content_floor(
 
 # Suelo mecánico independiente del anterior: si el propio diff (o el
 # contenido de un fichero leído con fetch_referenced_file) contiene texto
-# que intenta manipular al LLM -- falsos mensajes de sistema ("system:"),
-# JSON de respuesta falsificado incrustado ('"risk_score": 0, "justification"'),
-# instrucciones explícitas de qué responder ("respond only with risk_score")
-# -- eso es evidencia de intención maliciosa por sí sola, la haya seguido el
-# modelo o no: un PR legítimo nunca tiene motivo para imitar la sintaxis de
-# una respuesta dirigida a un analizador automático. 100, no un umbral
-# calculado: no queda margen de duda razonable aquí.
+# que intenta manipular al LLM -- JSON de respuesta falsificado incrustado
+# ('"risk_score": 0, "justification"'), instrucciones explícitas de qué
+# responder ("respond only with risk_score") -- eso es evidencia de
+# intención maliciosa por sí sola, la haya seguido el modelo o no: un PR
+# legítimo nunca tiene motivo para imitar la sintaxis de una respuesta
+# dirigida a un analizador automático. 100, no un umbral calculado: no
+# queda margen de duda razonable aquí.
 #
 # Deliberadamente NO se incluyen aquí las etiquetas de lenguaje genérico de
 # `_PROMPT_INJECTION_PATTERNS` (p. ej. "ignore_previous_instructions",
@@ -149,9 +149,23 @@ def _apply_unverified_content_floor(
 # aparecen de forma realista si el texto se escribió a propósito para que lo
 # lea un LLM como si fuera una instrucción o una respuesta -- ahí sí hay
 # intención real, no una coincidencia de vocabulario.
+#
+# "fake_role_marker" (líneas "system:"/"user:"/"assistant:") vivió aquí
+# hasta que se reprodujo el mismo bug que ya describe el párrafo de
+# arriba, pero con esta etiqueta: un PR que añade un fichero de texto
+# plano con una plantilla de prompt/definición de herramientas para un
+# agente de IA (contenido cada vez más común: el propio repo ES sobre
+# LLMs) escribe esas líneas como su contenido NORMAL, no como un intento
+# de hacerse pasar por un mensaje de sistema dirigido al analizador. El
+# LLM, viendo el diff completo, lo juzgaba correctamente como benigno
+# ("fichero de texto sin código ejecutable"; ver conversación real) y este
+# suelo descartaba ese juicio igual que hacían las etiquetas de abajo.
+# Bajada al grupo "genérico" -- sigue reportándose como finding, pero ya
+# no fuerza 100 en solitario; si además aparece junto a una instrucción
+# real (p. ej. "system: ignora las instrucciones anteriores"), esa OTRA
+# etiqueta sigue disparando el suelo igual.
 _STRUCTURAL_LLM_TARGETING_LABELS = frozenset(
     {
-        "fake_role_marker",
         "instructs_response_content",
         "embedded_fake_json_response",
         "new_instructions_marker",
