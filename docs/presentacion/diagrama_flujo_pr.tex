@@ -71,7 +71,7 @@
   encola RQ y responde \textbf{202} al instante}};
 
 \node[colbox] (r1) at (4.1,0) {%
-  \icn{code-branch}\;\hd{Servidor Git: PR abierta/actualizada}\\[3pt]
+  \icn{code-branch}\;\hd{Servidor Git (vía el hook pre-receive): PR abierta/actualizada}\\[3pt]
   \sft{cada \mono{git push} que la sustenta dispara el hook
   \mono{pre-receive} (bash+curl) --- Git no tiene un evento de ``PR'' propio}\\[4pt]
   \sft{\textbf{SÍNCRONO}: \mono{Bearer} API key \textrightarrow\ \mono{require\_scope} +
