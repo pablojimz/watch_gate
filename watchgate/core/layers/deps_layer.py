@@ -82,6 +82,25 @@ class TyposquatChecker:
     y de combosquatting (nombre real + sufijo genérico sospechoso, ver `_COMBOSQUAT_SUFFIXES`).
     """
 
+    # Falso positivo real, reproducido en vivo contra bitcoinjs-lib: 'gopd'
+    # (4) marcado como typosquatting de 'got' (3), 'tmp' (3) de 'jimp' (4),
+    # 'c8' (2) de 'd3' (2) -- los tres pares son paquetes npm reales,
+    # legítimos y sin relación alguna entre sí. Causa raíz: la distancia de
+    # Levenshtein NO es invariante a la escala -- un umbral fijo de <=2
+    # ediciones es una tolerancia enorme sobre un nombre de 2-4 caracteres
+    # (el espacio de nombres cortos es tan pequeño que casi cualquier par
+    # de paquetes distintos cae dentro), pero ínfima sobre un nombre de
+    # 8-10 (el caso real que este detector SÍ debe seguir cazando, p. ej.
+    # 'crossenv' -> 'cross-env', 'electorn' -> 'electron'). El typosquatting
+    # real, además, solo tiene valor de engaño cuando el nombre es CASI
+    # idéntico a simple vista -- nadie confunde 'c8' (herramienta de
+    # cobertura) con 'd3' (visualización) por compartir dos letras, aunque
+    # la distancia de edición sea baja. Por debajo de este mínimo, la
+    # comparación por distancia se omite entera (el combosquatting, en un
+    # bucle aparte, no depende de esto y sigue aplicando a cualquier
+    # longitud).
+    _MIN_NAME_LENGTH_FOR_DISTANCE_CHECK = 6
+
     def __init__(self, dataset_dir: Path | None = None) -> None:
         if dataset_dir is None:
             dataset_dir = (
@@ -148,15 +167,20 @@ class TyposquatChecker:
 
         len_norm = len(norm_name)
 
-        # Comparar distancia Levenshtein contra el listado popular (con normalización _ y -)
-        for ref_pkg in top_list:
-            ref_norm = ref_pkg.lower().replace("_", "-")
-            if abs(len_norm - len(ref_norm)) > 2:
-                continue
+        # Comparar distancia Levenshtein contra el listado popular (con
+        # normalización _ y -) -- solo para nombres suficientemente largos,
+        # ver `_MIN_NAME_LENGTH_FOR_DISTANCE_CHECK`.
+        if len_norm >= self._MIN_NAME_LENGTH_FOR_DISTANCE_CHECK:
+            for ref_pkg in top_list:
+                ref_norm = ref_pkg.lower().replace("_", "-")
+                if len(ref_norm) < self._MIN_NAME_LENGTH_FOR_DISTANCE_CHECK:
+                    continue
+                if abs(len_norm - len(ref_norm)) > 2:
+                    continue
 
-            dist = Levenshtein.distance(norm_name, ref_norm)
-            if 0 < dist <= 2:
-                return True, ref_pkg
+                dist = Levenshtein.distance(norm_name, ref_norm)
+                if 0 < dist <= 2:
+                    return True, ref_pkg
 
         # Combosquatting (ver comentario de _COMBOSQUAT_SUFFIXES): el nombre
         # completo, no un paquete de longitud parecida -- por eso va en un
