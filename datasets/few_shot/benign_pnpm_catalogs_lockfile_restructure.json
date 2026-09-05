@@ -1,0 +1,9 @@
+{
+  "diff_summary": "PR real fusionado en solana-foundation/solana-web3.js (#3872) que reestructura el monorepo moviendo el paquete raíz a packages/web3.js/ y adopta la función 'catalogs' de pnpm (workspaces, pnpm >= 9.5) en pnpm-lock.yaml: aparece una nueva sección de nivel superior 'catalogs: default: <paquete>: {specifier, version}' con las versiones compartidas centralizadas, y cada 'importer' del monorepo pasa a referenciarlas con 'specifier: \"catalog:\"' en vez de repetir el rango de versión en cada paquete. El importer '.' (raíz) queda vacío ('.: {}') y aparece un nuevo importer 'packages/web3.js:' con las mismas dependencias que antes tenía la raíz. No cambia ningún hash de integridad de un paquete ya resuelto, no se añade ninguna dependencia nueva fuera del catálogo declarado, y todos los paquetes referenciados siguen resolviendo a los mismos registros oficiales (npmjs.org).",
+  "expected_output": {
+    "risk_score": 5,
+    "category": "ninguna",
+    "justification": "La sección 'catalogs:' y el valor 'specifier: \"catalog:\"' son sintaxis legítima y documentada de pnpm workspaces (pnpm >= 9.5) para centralizar versiones compartidas entre paquetes de un monorepo -- no es una clave duplicada ni una técnica de 'lockfile poisoning'; es el mismo patrón que resolutions/overrides en npm/yarn, solo que con nombre distinto y aplicado durante una reestructuración de monorepo a subpaquetes.",
+    "confidence": "alta"
+  }
+}
