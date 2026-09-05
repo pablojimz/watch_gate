@@ -25,6 +25,8 @@ from __future__ import annotations
 import logging
 import os
 import re
+import threading
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -289,6 +291,35 @@ def sync_advisories_to_corpus(
             path = corpus_dir / f"{case_id}.md"
             if path.exists() and path.read_text(encoding="utf-8") == markdown:
                 continue
-            path.write_text(markdown, encoding="utf-8")
+            _write_atomic(path, markdown)
             written.append(path)
     return written
+
+
+def _write_atomic(path: Path, content: str) -> None:
+    """Escribe vía fichero temporal + `os.replace` en vez de
+    `path.write_text` directo -- defensa en profundidad frente a dos
+    ejecuciones de `sync_advisories_to_corpus` solapadas (el guardado
+    principal contra eso es deduplicar el `job_id` de la tarea que llama a
+    esto, ver `dashboard/backend/main.py::_enqueue_rag_sync_deduped`; esto
+    cubre cualquier otra vía de invocación concurrente, presente o
+    futura). Cada llamada escribe a su PROPIO fichero temporal (nombre con
+    PID -- dos ejecuciones nunca comparten uno), así que nunca hay dos
+    procesos con un descriptor abierto sobre el MISMO `path` a la vez;
+    `os.replace` es atómico incluso si otro proceso reemplaza `path` justo
+    antes: el resultado final es el contenido de quien reemplace último,
+    nunca un fichero truncado/a medio escribir ni un
+    `PermissionError` por colisión de escrituras simultáneas (reproducido
+    en vivo: 163 casos en una noche con `path.write_text` directo)."""
+    # PID + hilo + aleatorio: el PID solo no basta -- reproducido en vivo,
+    # dos ejecuciones concurrentes en el MISMO proceso (dos hilos, no dos
+    # jobs de RQ) comparten PID y podían pisarse el propio temporal antes
+    # de que `os.replace` corriera (`FileNotFoundError` en vez del
+    # `PermissionError` original, mismo síntoma de fondo: dos escritores a
+    # la vez). El caso real de este bug es entre PROCESOS (jobs de RQ en
+    # work-horses separados, PID distinto), pero un sufijo único de verdad
+    # no depende de esa suposición.
+    suffix = f"{os.getpid()}-{threading.get_ident()}-{uuid.uuid4().hex[:8]}"
+    tmp_path = path.with_name(f"{path.name}.{suffix}.tmp")
+    tmp_path.write_text(content, encoding="utf-8")
+    os.replace(tmp_path, path)

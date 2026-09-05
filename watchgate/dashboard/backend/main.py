@@ -50,21 +50,49 @@ def _rag_sync_interval_hours() -> float:
         return 24.0
 
 
+_RAG_SYNC_JOB_ID = "rag-sync-periodic"
+
+
+def _enqueue_rag_sync_deduped() -> None:
+    """Encola `run_rag_sync` con un `job_id` FIJO -- si ya hay uno en cola o
+    en curso, no se apila otro encima.
+
+    Bug real, reproducido en vivo: antes se encolaba sin `job_id` (uno
+    aleatorio nuevo cada vez). El comentario de este bucle decía "un
+    reinicio del backend que vuelva a encolar de inmediato es barato"
+    asumiendo que la tarea es idempotente -- lo es en el CONTENIDO final
+    (mismo aviso -> mismo fichero), pero no frente a EJECUCIÓN concurrente:
+    con varios reinicios del dashboard-backend seguidos (encola "al
+    arrancar" cada vez) y los 3 `dashboard-worker` libres, dos o tres
+    copias de `run_rag_sync` se recogían EN PARALELO y escribían a la vez
+    los MISMOS `.md` del corpus -- 163 `PermissionError` concurrentes sobre
+    el mismo fichero en una sola noche. Un `job_id` fijo hace que RQ
+    deduplique solo: `enqueue()` con un id ya en uso lo devuelve tal cual
+    en vez de crear un segundo job."""
+    from watchgate.dashboard.backend.tasks import get_queue
+
+    queue = get_queue()
+    existing = queue.fetch_job(_RAG_SYNC_JOB_ID)
+    if existing is not None and not existing.is_finished and not existing.is_failed:
+        return
+    if existing is not None:
+        existing.delete()
+    queue.enqueue("watchgate.dashboard.backend.tasks.run_rag_sync", job_id=_RAG_SYNC_JOB_ID)
+
+
 async def _rag_sync_loop(interval_hours: float) -> None:
     """Encola el RAG sync al arrancar y luego cada `interval_hours`.
 
     Solo ENCOLA (redis-py bloqueante -> run_in_threadpool); el trabajo real
     (descarga de avisos + embeddings + ChromaDB) corre en dashboard-worker,
     que es quien usa el índice en los análisis. La tarea es idempotente
-    (mismo aviso -> mismo fichero, sin cambios -> sin reindexar), así que
-    un reinicio del backend que vuelva a encolar de inmediato es barato."""
-    from watchgate.dashboard.backend.tasks import get_queue
-
+    (mismo aviso -> mismo fichero, sin cambios -> sin reindexar) y
+    deduplicada por `job_id` (ver `_enqueue_rag_sync_deduped`), así que un
+    reinicio del backend que vuelva a encolar de inmediato es barato y
+    seguro frente a solapes."""
     while True:
         try:
-            await run_in_threadpool(
-                get_queue().enqueue, "watchgate.dashboard.backend.tasks.run_rag_sync"
-            )
+            await run_in_threadpool(_enqueue_rag_sync_deduped)
             logger.info("RAG sync encolado; el próximo se encolará en %.1f horas.", interval_hours)
         except Exception:  # noqa: BLE001 -- Redis caído no debe matar el loop
             logger.exception("No se pudo encolar el RAG sync periódico; se reintentará.")
