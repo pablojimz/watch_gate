@@ -104,59 +104,93 @@
   \sft{JSON \{\mono{score}, \mono{semaforo}\}\ --- \textbf{sin comentario en
   la PR}, solo \mono{stderr} en la terminal de quien hizo el push}};
 
-% ---- fila 4: puerta de decisión (pequeño hueco de 0.3cm en el centro,
-% -- a diferencia del núcleo, aquí SÍ son dos decisiones independientes) ----
-\node[gatehalf, below=0.7cm of l3, xshift=-0.15cm] (l4) {%
-  \hd{\textcolor{samber}{¿semáforo amarillo/rojo?}}};
+% ---- fila 4 (GitHub): aceptación humana -- sin caja de decisión propia,
+% el "¿amarillo/rojo?" es solo la ETIQUETA de la flecha, tal cual se acordó
+% (aquí no hay puerta samber: es el mismo mantenedor humano quien decide) ----
+\node[colbox, below=0.9cm of l3] (l4) {%
+  \icn{check-circle}\;\hd{Aceptación humana en el Dashboard}\\[3pt]
+  \sft{el mantenedor ve el score y pulsa ``Aceptar''
+  (\mono{POST /api/scores/\{id\}/accept})}};
 
-\node[gatehalf, below=0.7cm of r3, xshift=0.15cm] (r4) {%
-  \hd{\textcolor{samber}{¿semáforo == rojo?}}};
+% ---- fila 5 (GitHub): el merge real ----
+\node[colbox, below=0.75cm of l4] (l5) {%
+  \icn{code-branch}\;\hd{Merge real en GitHub}\\[3pt]
+  \sft{\mono{\_try\_merge\_pull\_request} (token de instalación / PAT)
+  \textrightarrow\ \mono{POST} merge en la API de GitHub
+  (\mono{pulls/\{n\}/merge})\\[2pt]
+  \textcolor{semgreen}{$\blacksquare$}~la PR se mergea de verdad --- o
+  falla (rama protegida, checks, conflictos) y se reporta, sin romper la
+  aceptación ya registrada}};
 
-% ---- fila 5a (GitHub): ramas sí/no ----
-\node[colbox, below=0.8cm of l4, xshift=-1.55cm, text width=4.4cm] (l5y) {%
-  \footnotesize
-  \icn{check-circle}\;\hd{\footnotesize Aceptación humana en el Dashboard}\\[3pt]
-  \sft{\scriptsize mantenedor pulsa ``Aceptar'' (\mono{\scriptsize POST
-  /api/scores/\{id\}/accept}) \textrightarrow\ \mono{\scriptsize
-  \_try\_merge\_pull\_request} \textrightarrow\ merge real vía la API de
-  GitHub.\\[2pt] \textcolor{semgreen}{$\blacksquare$}~Si falla (rama
-  protegida, checks, conflictos) se reporta, sin romper la aceptación ya
-  registrada}};
+% ---- fila 4' (Git servidor): el servidor lee el exit code del hook --
+% "rojo"/"no rojo" son las dos etiquetas de las flechas que CONVERGEN aquí,
+% no una puerta de decisión propia (el servidor es el mismo componente
+% pase lo que pase por el hook) ----
+\node[colbox, below=1.05cm of r3] (r4) {%
+  \icn{server}\;\hd{Servidor Git: aplica el exit code}\\[3pt]
+  \sft{Forgejo \textperiodcentered\ GitLab \textperiodcentered\ Gitea
+  \textperiodcentered\ Gitolite \textperiodcentered\ bare SSH --- lee el
+  \mono{exit code} que devolvió el hook \mono{pre-receive} para ESA ref}};
 
-\node[small, below=0.8cm of l4, xshift=2.75cm, text width=2.2cm] (l5n) {%
-  \sft{\scriptsize PR sigue su flujo normal en GitHub --- sin acción de
-  WatchGate}};
-
-% ---- fila 5b (Git servidor): ramas rojo/no-rojo ----
-\node[small, below=0.8cm of r4, xshift=-2.15cm, text width=3.4cm] (r5y) {%
+% ---- fila 5' (Git servidor): las dos salidas reales ----
+\node[small, below=0.75cm of r4, xshift=-2.05cm, text width=3.3cm] (r5y) {%
   \textcolor{semred}{$\blacksquare$}~\textbf{\scriptsize exit 1} \textrightarrow\
-  el servidor Git \textbf{\scriptsize RECHAZA} la PR (la ref no se
-  actualiza; motivo por \mono{\scriptsize stderr})};
+  \textbf{\scriptsize RECHAZA} la PR (la ref no se actualiza; motivo por
+  \mono{\scriptsize stderr})};
 
-\node[small, below=0.8cm of r4, xshift=2.15cm, text width=3.4cm] (r5n) {%
+\node[small, below=0.75cm of r4, xshift=2.05cm, text width=3.3cm] (r5n) {%
   \textcolor{semgreen}{$\blacksquare$}~\textbf{\scriptsize exit 0} \textrightarrow\
-  el servidor Git \textbf{\scriptsize ACEPTA} la PR (la ref se actualiza; el
-  commit entra en el repo)};
+  \textbf{\scriptsize ACEPTA} la PR (la ref se actualiza; el commit entra
+  en el repo)};
 
 % ====================== flechas de flujo ======================
 \draw[arrow] (l1) -- (l2);
 \draw[arrow] (r1) -- (r2);
-\draw[arrow] (l2.south) -- (core.north west);
-\draw[arrow] (r2.south) -- (core.north east);
-\draw[arrow] (core.south west) -- (l3.north);
-\draw[arrow] (core.south east) -- (r3.north);
-\draw[arrow] (l3) -- (l4);
-\draw[arrow] (r3) -- (r4);
 
-% las cuatro ramas de decisión: usar "nodo.north |- gate.south" (coordenada
-% con la X del hijo y la Y del padre) en vez de un xshift repetido a mano --
-% así el codo siempre cae en la columna real del hijo, se mueva donde se
-% mueva, sin tener que sincronizar dos números por separado (ver la nota de
-% GUIA_ESTILO.md sobre el bug de la línea inclinada en este mismo diagrama).
-\draw[arrowsam] (l4.south) -- node[lbl, xshift=4pt, yshift=1pt] {sí} (l5y.north |- l4.south) -- (l5y.north);
-\draw[arrowsam] (l4.south) -- node[lbl, xshift=-4pt, yshift=1pt] {no} (l5n.north |- l4.south) -- (l5n.north);
-\draw[arrowsam] (r4.south) -- node[lbl, xshift=4pt, yshift=1pt] {rojo} (r5y.north |- r4.south) -- (r5y.north);
-\draw[arrowsam] (r4.south) -- node[lbl, xshift=-4pt, yshift=1pt] {no rojo} (r5n.north |- r4.south) -- (r5n.north);
+% Convergencia en el núcleo: dos flechas VERTICALES paralelas (no un
+% embudo en diagonal) -- l2/r2 ya están en el eje x=-4.1/+4.1, que cae
+% dentro del borde superior del núcleo (ancho 16.4cm, de -8.2 a 8.2), así
+% que basta bajar en línea recta hasta ese borde.
+\path let \p1=(l2.south), \p2=(core.north) in coordinate (l2drop) at (\x1,\y2);
+\path let \p1=(r2.south), \p2=(core.north) in coordinate (r2drop) at (\x1,\y2);
+\draw[arrow] (l2.south) -- (l2drop);
+\draw[arrow] (r2.south) -- (r2drop);
+
+% Divergencia simétrica de vuelta, mismo criterio (vertical, no diagonal).
+\path let \p1=(l3.north), \p2=(core.south) in coordinate (l3rise) at (\x1,\y2);
+\path let \p1=(r3.north), \p2=(core.south) in coordinate (r3rise) at (\x1,\y2);
+\draw[arrow] (l3rise) -- (l3.north);
+\draw[arrow] (r3rise) -- (r3.north);
+
+% GitHub: una sola flecha recta -- la etiqueta ES la decisión (sin caja de
+% puerta: decide un humano leyendo el Dashboard, no una condición que
+% evalúe WatchGate). Cuadrados de color en vez de texto largo, mismo
+% código semred/samber que ya usa el resto del diagrama.
+\draw[arrow] (l3) -- node[lbl, right=3pt, align=left]
+  {\textcolor{samber}{$\blacksquare$}~amarillo\\[1pt]
+   \textcolor{semred}{$\blacksquare$}~rojo} (l4);
+\draw[arrow] (l4) -- (l5);
+
+% Git servidor: UNA sola flecha recta (antes eran dos arcos que
+% convergían en el mismo punto -- correcto en el papel, pero la "lente"
+% que formaban entre r3 y r4 se leía rara). Es de verdad una única
+% llamada; lo único que cambia es qué exit code produce, así que ahora
+% es una sola línea con las dos salidas posibles apiladas al lado,
+% mismos cuadrados de color que ya identifican rojo/verde en el resto
+% del diagrama (r5y/r5n más abajo).
+\draw[arrow] (r3) -- node[lbl, right=3pt, align=left]
+  {\textcolor{semred}{$\blacksquare$}~rojo \textrightarrow\ \mono{\scriptsize exit 1}\\[1pt]
+   \textcolor{semgreen}{$\blacksquare$}~no rojo \textrightarrow\ \mono{\scriptsize exit 0}} (r4);
+
+% ... y de ahí sí hay dos salidas reales y distintas: un codo explícito de
+% 3 tramos (baja - cruza - baja), con las coordenadas calculadas a mano
+% para que el tramo intermedio caiga siempre en línea recta (nunca en
+% diagonal, que es justo lo que se veía "raro" en la versión anterior).
+\path let \p1=(r4.south) in coordinate (r4drop) at (\x1,{\y1-0.35cm});
+\path let \p1=(r4drop), \p2=(r5y.north) in coordinate (r4dropL) at (\x2,\y1);
+\path let \p1=(r4drop), \p2=(r5n.north) in coordinate (r4dropR) at (\x2,\y1);
+\draw[arrowsam] (r4.south) -- (r4drop) -- (r4dropL) -- (r5y.north);
+\draw[arrowsam] (r4.south) -- (r4drop) -- (r4dropR) -- (r5n.north);
 
 % ---- forzar caja delimitadora simétrica respecto al eje central (x=0) ----
 \path let \p1=(current bounding box.east), \p2=(current bounding box.west),
