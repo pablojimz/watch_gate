@@ -606,7 +606,11 @@ class VulnerabilitiesLayer(AnalysisLayer):
         osv_batch_results = self._query_osv_batch(named_changes)
 
         scores: list[int] = []
+        # Solo entra aquí el detalle de un paquete con hallazgo real (con
+        # vulnerabilidad, o no verificable) -- ver `clean_count` más abajo
+        # y el mismo criterio ya aplicado en deps_layer.py.
         justifications: list[str] = []
+        clean_count = 0
         structured_findings: list[Finding] = []
 
         for idx, change in enumerate(named_changes):
@@ -634,7 +638,15 @@ class VulnerabilitiesLayer(AnalysisLayer):
 
             scores.append(pkg_score)
             version_str = f"@{change.new_version}" if change.new_version else ""
-            justifications.append(f"{change.name}{version_str} ({change.ecosystem}): {note}")
+            if pkg_score > 0 or unverified:
+                justifications.append(f"{change.name}{version_str} ({change.ecosystem}): {note}")
+            else:
+                # Bug real, reproducido en vivo contra un lockfile de ~30
+                # dependencias: antes esto entraba SIEMPRE, incluidas todas
+                # las que OSV confirma limpias -- la justificación final
+                # era un muro de "sin vulnerabilidades conocidas" repetido
+                # por cada paquete, sin que resaltara ninguna señal real.
+                clean_count += 1
 
             if pkg_score > 0:
                 m_path = change.manifest_path if change.manifest_path else change.name
@@ -662,7 +674,18 @@ class VulnerabilitiesLayer(AnalysisLayer):
                 )
 
         final_score = max(scores, default=0)
-        final_justification = " | ".join(justifications)
+        if not justifications:
+            final_justification = (
+                f"Ninguna de las {len(named_changes)} dependencias consultadas presenta "
+                "vulnerabilidades conocidas en OSV."
+            )
+        else:
+            final_justification = " | ".join(justifications)
+            if clean_count:
+                final_justification += (
+                    f" | (+{clean_count} dependencia(s) más sin vulnerabilidades conocidas, "
+                    "omitidas por brevedad)"
+                )
 
         confidence = None
         if final_score >= 70:

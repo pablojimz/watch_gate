@@ -68,12 +68,23 @@ class DependencyChange(BaseModel):
 
 _PKG_JSON_DEP_REGEX = re.compile(r'^\+\s*"([^"]+)":\s*"([^"]+)"')
 _PKG_JSON_SCRIPT_REGEX = re.compile(r'^\+\s*"(preinstall|postinstall|install)":\s*"([^"]+)"')
+# Campos de nivel RAÍZ (no anidados en ningún objeto) que nunca son
+# dependencias -- ver también `_PKG_JSON_NON_DEP_SECTIONS` para objetos
+# anidados (scripts/engines/exports/...), que necesitan seguimiento de
+# sección porque sus claves internas son arbitrarias, no enumerables aquí.
 _PKG_JSON_NON_DEP_KEYS = frozenset(
     {
         "name",
         "version",
         "description",
         "main",
+        "module",
+        "types",
+        "typings",
+        "browser",
+        "bin",
+        "files",
+        "sideEffects",
         "author",
         "license",
         "private",
@@ -83,8 +94,52 @@ _PKG_JSON_NON_DEP_KEYS = frozenset(
         "homepage",
         "keywords",
         "scripts",
+        "packageManager",
+        "engines",
+        "publishConfig",
+        "exports",
+        "workspaces",
+        "directories",
+        "funding",
+        "os",
+        "cpu",
+        "contributors",
+        "maintainers",
+        "config",
     }
 )
+# Objetos anidados cuyas claves internas NUNCA son nombres de paquete --
+# bug real, reproducido en vivo contra solana-foundation/solana-web3.js
+# #3872: sin esto, "compile:js"/"test:lint" (de `scripts`), "node" (de
+# `engines`), "access" (de `publishConfig`), "url"/"directory" (de
+# `repository` como objeto, no string), "./lib/index.cjs.js" (de
+# `browser`/`exports`) se consultaban contra OSV como si fueran paquetes
+# npm reales -- docenas de "paquetes" inventados por análisis, agotando el
+# límite de consultas por lote (`OSV omitido: límite alcanzado`) ANTES de
+# llegar a las dependencias reales del fichero, además de ensuciar la
+# justificación con basura.
+_PKG_JSON_NON_DEP_SECTIONS = frozenset(
+    {
+        "scripts",
+        "engines",
+        "publishConfig",
+        "repository",
+        "exports",
+        "browser",
+        "directories",
+        "bin",
+        "config",
+        "husky",
+        "lint-staged",
+        "nyc",
+        "jest",
+        "babel",
+        "eslintConfig",
+        "prettier",
+    }
+)
+_PKG_JSON_SECTION_OPEN_RE = re.compile(r'^[+\- ](\s*)"([^"]+)":\s*\{\s*$')
+_PKG_JSON_SECTION_CLOSE_RE = re.compile(r"^[+\- ](\s*)\},?\s*$")
 
 
 def _is_npm_url_version(version_str: str) -> bool:
@@ -111,13 +166,57 @@ def parse_package_json(diff_hunk: str) -> list[DependencyChange]:
     changes: list[DependencyChange] = []
     install_scripts: list[str] = []
 
+    # Pila (indentación, nombre_de_sección) para saber en qué objeto vive
+    # cada línea -- ver `_PKG_JSON_NON_DEP_SECTIONS`. Se recorren TODAS las
+    # líneas del hunk (contexto y '-' incluidos, no solo '+'), porque la
+    # cabecera del objeto que abre una sección casi nunca es ella misma la
+    # línea añadida -- es contexto de alrededor. Se reinicia en cada nuevo
+    # bloque de hunk ('@@ ... @@'): el estado de un hunk anterior no dice
+    # nada fiable sobre en qué sección empieza uno nuevo.
+    section_stack: list[tuple[int, str]] = []
+
     for line in diff_hunk.splitlines():
-        if not line.startswith("+") or line.startswith("++"):
+        if line.startswith("@@"):
+            section_stack = []
+            continue
+        if not line or line[0] not in "+- " or line.startswith("+++") or line.startswith("---"):
+            continue
+
+        indent_str = line[1:]
+        indent = len(indent_str) - len(indent_str.lstrip(" "))
+
+        close_match = _PKG_JSON_SECTION_CLOSE_RE.match(line)
+        if close_match:
+            while section_stack and section_stack[-1][0] >= indent:
+                section_stack.pop()
+            continue
+
+        open_match = _PKG_JSON_SECTION_OPEN_RE.match(line)
+        if open_match:
+            while section_stack and section_stack[-1][0] >= indent:
+                section_stack.pop()
+            section_stack.append((indent, open_match.group(2)))
+            continue
+
+        if not line.startswith("+"):
             continue
 
         script_match = _PKG_JSON_SCRIPT_REGEX.search(line)
         if script_match:
             install_scripts.append(f"{script_match.group(1)}: {script_match.group(2)}")
+            continue
+
+        # Sección conocida como NO-dependencias (scripts/engines/...) y
+        # visible en este hunk -- se descarta sin más, aunque la clave
+        # interna (arbitraria: "compile:js", "node", "access"...) nunca
+        # pueda enumerarse en `_PKG_JSON_NON_DEP_KEYS`. Si no hay ninguna
+        # sección detectable en este hunk (`section_stack` vacía --
+        # frecuente: añadir UNA dependencia en medio de una lista larga no
+        # trae la cabecera "dependencies": { en el contexto visible), se
+        # sigue tratando la línea como posible dependencia -- igual que
+        # siempre, para no introducir falsos NEGATIVOS en el caso común.
+        current_section = section_stack[-1][1] if section_stack else None
+        if current_section in _PKG_JSON_NON_DEP_SECTIONS:
             continue
 
         dep_match = _PKG_JSON_DEP_REGEX.search(line)
