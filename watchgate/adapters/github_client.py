@@ -42,6 +42,64 @@ class DiffTooLargeError(Exception):
     """El diff descargado supera el límite de tamaño permitido."""
 
 
+# Cuánto esperar por defecto ante un 403 de límite SECUNDARIO sin
+# `Retry-After` (ver `_rate_limit_sleep_seconds`) -- GitHub no siempre lo
+# manda para este límite, a diferencia del primario (que sí trae
+# `x-ratelimit-reset`). 30s es el valor que la propia documentación de
+# GitHub sugiere como mínimo razonable de cortesía tras un 403 de abuso.
+_SECONDARY_RATE_LIMIT_DEFAULT_SLEEP = 30
+_MAX_RATE_LIMIT_SLEEP = 60
+
+
+def _rate_limit_sleep_seconds(response: httpx.Response) -> float | None:
+    """Cuántos segundos esperar antes de reintentar esta respuesta por
+    rate-limit -- `None` si no es un caso de rate-limit reintentable (no es
+    403/429, o la espera necesaria supera `_MAX_RATE_LIMIT_SLEEP`).
+
+    Bug real, reproducido en vivo: el código anterior SOLO reconocía el
+    límite PRIMARIO (cuota por hora agotada, `x-ratelimit-remaining: 0`,
+    con `x-ratelimit-reset` para saber cuánto esperar). El límite
+    SECUNDARIO de GitHub (demasiadas peticiones muy rápido -- "abuse
+    detection"/"secondary rate limit", el que de verdad se disparó con el
+    aluvión de esta auditoría: la cuota primaria seguía en 5000/5000)
+    también responde 403, pero SIN que `x-ratelimit-remaining` llegue a
+    0 -- la condición `== 0` de antes nunca era cierta para este caso, así
+    que caía directo a `raise_for_status()` sin ningún reintento. 2233
+    jobs de `run_audit_scan` fallaron así en una sola noche.
+
+    GitHub documenta `Retry-After` (segundos) como la señal para el límite
+    secundario cuando la manda; si no la manda, un backoff de cortesía fijo
+    (`_SECONDARY_RATE_LIMIT_DEFAULT_SLEEP`) es mejor que fallar sin
+    reintentar -- el propio límite de `_MAX_RATE_LIMIT_SLEEP` (no asfixiar
+    workers) sigue aplicando igual que ya aplicaba al primario."""
+    if response.status_code not in (403, 429):
+        return None
+
+    retry_after = response.headers.get("retry-after")
+    if retry_after is not None:
+        try:
+            sleep_time = float(retry_after) + 1
+        except ValueError:
+            sleep_time = _SECONDARY_RATE_LIMIT_DEFAULT_SLEEP
+        return sleep_time if sleep_time <= _MAX_RATE_LIMIT_SLEEP else None
+
+    remaining = response.headers.get("x-ratelimit-remaining")
+    if remaining is not None:
+        if remaining == "0":
+            reset_time = int(response.headers.get("x-ratelimit-reset", time.time() + 60))
+            sleep_time = max(0, reset_time - int(time.time())) + 1
+            return sleep_time if sleep_time <= _MAX_RATE_LIMIT_SLEEP else None
+        # `x-ratelimit-remaining` presente pero NO agotado y aun así 403 --
+        # la firma real del límite secundario (la cuota normal no tiene
+        # nada que ver con este 403 en concreto).
+        return _SECONDARY_RATE_LIMIT_DEFAULT_SLEEP
+
+    # 403/429 sin ninguna cabecera de rate-limit -- probablemente un
+    # permiso real (token sin acceso al repo), no un límite de tasa. No se
+    # reintenta: reintentar un 403 de permisos de verdad nunca lo arregla.
+    return None
+
+
 class GitHubClient:
     def __init__(self, token: str | None = None, api_url: str | None = None) -> None:
         resolved_token = (
@@ -76,20 +134,22 @@ class GitHubClient:
         for attempt in range(max_retries):
             response = httpx.request(method, f"{self._api_base}{path}", **kwargs)
 
-            # Manejo de Rate Limit
-            if response.status_code in (403, 429) and "x-ratelimit-remaining" in response.headers:
-                if int(response.headers["x-ratelimit-remaining"]) == 0:
-                    logger.warning(
-                        "Límite de peticiones de GitHub API (Rate Limit) alcanzado en %s. "
-                        "Configura WATCHGATE_GITHUB_TOKEN en tu .env para aumentar a 5000 req/h.",
-                        path,
-                    )
-                    reset_time = int(response.headers.get("x-ratelimit-reset", time.time() + 60))
-                    sleep_time = max(0, reset_time - int(time.time())) + 1
-                    # No esperar más de 60 segundos por defecto para evitar asfixiar workers
-                    if sleep_time <= 60 and attempt < max_retries - 1:
-                        time.sleep(sleep_time)
-                        continue
+            # Manejo de Rate Limit -- primario (cuota/hora agotada) y
+            # secundario (demasiadas peticiones muy rápido, "abuse
+            # detection"), ver `_rate_limit_sleep_seconds`.
+            sleep_time = _rate_limit_sleep_seconds(response)
+            if sleep_time is not None and attempt < max_retries - 1:
+                logger.warning(
+                    "Rate limit de GitHub API en %s (HTTP %d) -- esperando %.0fs antes de "
+                    "reintentar (intento %d/%d).",
+                    path,
+                    response.status_code,
+                    sleep_time,
+                    attempt + 1,
+                    max_retries,
+                )
+                time.sleep(sleep_time)
+                continue
 
             # Manejo de 304 Not Modified para peticiones condicionales (ETag)
             if response.status_code == 304:
@@ -195,19 +255,21 @@ class GitHubClient:
             try:
                 diff_text = ""
                 with httpx.stream("GET", url, headers=headers, timeout=_TIMEOUT) as response:
-                    # Manejo de Rate Limit
-                    if (
-                        response.status_code in (403, 429)
-                        and "x-ratelimit-remaining" in response.headers
-                    ):
-                        if int(response.headers["x-ratelimit-remaining"]) == 0:
-                            reset_time = int(
-                                response.headers.get("x-ratelimit-reset", time.time() + 60)
-                            )
-                            sleep_time = max(0, reset_time - int(time.time())) + 1
-                            if sleep_time <= 60 and attempt < max_retries - 1:
-                                time.sleep(sleep_time)
-                                continue
+                    # Manejo de Rate Limit -- primario y secundario, ver
+                    # `_rate_limit_sleep_seconds`.
+                    sleep_time = _rate_limit_sleep_seconds(response)
+                    if sleep_time is not None and attempt < max_retries - 1:
+                        logger.warning(
+                            "Rate limit de GitHub API descargando el diff de %s (HTTP %d) -- "
+                            "esperando %.0fs antes de reintentar (intento %d/%d).",
+                            size_error_context,
+                            response.status_code,
+                            sleep_time,
+                            attempt + 1,
+                            max_retries,
+                        )
+                        time.sleep(sleep_time)
+                        continue
                     response.raise_for_status()
 
                     downloaded = 0
