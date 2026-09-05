@@ -621,7 +621,19 @@ _SUSPICIOUS_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"curl\s+[^|\n]+\|\s*(sh|bash)", re.IGNORECASE), "curl_pipe_shell"),
     (re.compile(r"wget\s+[^|\n]+\|\s*(sh|bash)", re.IGNORECASE), "wget_pipe_shell"),
     (re.compile(r"eval\s*\(", re.IGNORECASE), "eval_dynamic"),
-    (re.compile(r"exec\s*\(", re.IGNORECASE), "exec_dynamic"),
+    # Falso positivo real, reproducido en vivo contra ccxt/ccxt: el regex
+    # anterior (`exec\s*\(` sin más) pillaba `regex.exec(...)` -- el método
+    # ESTÁNDAR de JavaScript para ejecutar una expresión regular
+    # (`RegExp.prototype.exec`), omnipresente en cualquier código JS/TS y
+    # sin relación alguna con ejecutar código dinámicamente. El
+    # `(?<!\.)` excluye justo la llamada a MÉTODO (precedida de un punto)
+    # sin perder el caso real que esta regla existe para cazar: los
+    # payloads reales de `tests/cases/` (`malicious_eval_base64`,
+    # `malreal_npm_malicious_intent_kubehook_19`...) siempre llaman a
+    # `exec(...)` a secas -- el builtin de Python o `child_process.exec`
+    # importado como `const { exec } = require('child_process')` y usado
+    # sin punto -- nunca como `algo.exec(...)`.
+    (re.compile(r"(?<!\.)\bexec\s*\(", re.IGNORECASE), "exec_dynamic"),
     (re.compile(r"base64\s+(-d|--decode)", re.IGNORECASE), "base64_decode_shell"),
     (re.compile(r"chmod\s+(\+x|777)", re.IGNORECASE), "permission_escalation"),
     (re.compile(r"nc\s+-[eE]\s+", re.IGNORECASE), "netcat_reverse_shell"),
