@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -669,9 +670,45 @@ _DISREGARD_RE = re.compile(
     r"disregard\s+.*(instruction|prompt|system|directive)",
     re.IGNORECASE,
 )
-_FAKE_ROLE_MARKER_RE = re.compile(
-    r"^\s*(system|assistant|user)\s*:\s*", re.IGNORECASE | re.MULTILINE
+_ROLE_MARKER_LINE_RE = re.compile(
+    r"^\s*(system|assistant|user)\s*:\s*\S", re.IGNORECASE | re.MULTILINE
 )
+
+
+class _FakeConversationDetector:
+    """Detecta una conversación FALSIFICADA -- no una sola línea "system:"/
+    "user:"/"assistant:" suelta.
+
+    Causa raíz de un falso positivo real, reproducido en vivo: la versión
+    anterior (una sola línea que empieza por uno de esos tres nombres +
+    ":") es un patrón enormemente común FUERA de cualquier contexto de
+    LLM -- una clave YAML/INI cualquiera ("user: root", "system: false"),
+    una plantilla de bug report ("System: Windows 11", "User: @octocat"),
+    o -- el caso real que la disparó -- un fichero de texto plano con la
+    plantilla de prompt de un agente de IA, donde "system:"/"user:"/
+    "assistant:" son el contenido LEGÍTIMO del propio fichero, no un
+    intento de suplantar un mensaje dirigido al analizador.
+
+    Lo que de verdad distingue un ataque real (forjar una conversación
+    para que el LLM crea que ya hubo un turno previo, normalmente
+    terminando en una respuesta de "assistant" ya "de acuerdo") es la
+    ESTRUCTURA de intercambio: al menos DOS marcadores de rol DISTINTOS en
+    el mismo texto. Una plantilla legítima de un solo campo aislado
+    ("user: root" en un docker-compose.yml) nunca tiene un segundo rol
+    distinto acompañándolo; una plantilla de prompt CON ejemplo de
+    conversación completo, en cambio, seguirá teniendo los 2-3 roles
+    juntos -- pero para ese caso ya no hace falta que este detector cargue
+    solo con la decisión: `_STRUCTURAL_LLM_TARGETING_LABELS` en
+    `_semantic/layer.py` solo fuerza el suelo de 100 cuando esta etiqueta
+    aparece JUNTO a otra evidencia real (instrucción explícita de qué
+    responder, JSON de veredicto falsificado) -- ver ese módulo."""
+
+    def search(self, text: str) -> bool:
+        roles = {m.group(1).lower() for m in _ROLE_MARKER_LINE_RE.finditer(text)}
+        return len(roles) >= 2
+
+
+_FAKE_ROLE_MARKER_RE = _FakeConversationDetector()
 _INSTRUCTS_RESPONSE_RE = re.compile(
     r"respond\s+(only\s+)?with.{0,40}risk_score", re.IGNORECASE | re.DOTALL
 )
@@ -690,7 +727,12 @@ _SKIP_ANALYSIS_RE = re.compile(
     re.IGNORECASE,
 )
 
-_PROMPT_INJECTION_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+# El segundo elemento de cada par expone `.search(text) -> object verdadero
+# si hay coincidencia` -- normalmente un `re.Pattern[str]`, salvo
+# `_FAKE_ROLE_MARKER_RE` (`_FakeConversationDetector`, ver arriba), que
+# necesita mirar el texto completo en vez de una coincidencia local.
+_PromptInjectionSignal = Any
+_PROMPT_INJECTION_PATTERNS: list[tuple[_PromptInjectionSignal, str]] = [
     (_IGNORE_INSTRUCTIONS_RE, "ignore_previous_instructions"),
     (_DISREGARD_RE, "disregard_instructions"),
     (re.compile(r"\byou\s+are\s+now\b", re.IGNORECASE), "role_override"),
