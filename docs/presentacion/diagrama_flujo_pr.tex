@@ -61,9 +61,11 @@
 
 % ---- fila 1: evento + autorización ----
 \node[colbox] (l1) at (-4.1,0) {%
-  \icn{code-branch}\;\hd{GitHub: PR abierta/actualizada}\\[3pt]
-  \sft{webhook \mono{pull\_request} (\mono{opened}/\mono{synchronize}), firmado
-  \mono{HMAC X-Hub-Signature-256} \textrightarrow\ \mono{POST /api/webhooks/github}}\\[4pt]
+  \icn{code-branch}\;\hd{GitHub (vía la GitHub App): PR abierta/actualizada}\\[3pt]
+  \sft{la \textbf{GitHub App} instalada en el repo (modo managed) manda un
+  webhook \mono{pull\_request} (\mono{opened}/\mono{synchronize}), firmado
+  \mono{HMAC X-Hub-Signature-256} \textrightarrow\ \mono{POST
+  /api/webhooks/github}}\\[4pt]
   \sft{\textbf{ASÍNCRONO}: \mono{repo\_is\_authorized} --- installation\_id
   \textrightarrow\ VCSConnection.org \textrightarrow\ MonitoredRepo activo ---
   encola RQ y responde \textbf{202} al instante}};
@@ -79,8 +81,8 @@
 % ---- fila 2: obtención de datos para el análisis ----
 \node[colbox, below=0.75cm of l1] (l2) {%
   \icn{search}\;\hd{Token + datos reales de la PR}\\[3pt]
-  \sft{token efímero de instalación (JWT de App firmado RS256
-  \textrightarrow\ \mono{access\_token} de 1h) \textrightarrow\
+  \sft{token efímero de instalación de la \textbf{GitHub App} (JWT de App
+  firmado RS256 \textrightarrow\ \mono{access\_token} de 1h) \textrightarrow\
   \mono{get\_pull\_request\_data} + \mono{get\_reputation\_metadata}
   (siempre resuelta)}};
 
