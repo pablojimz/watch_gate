@@ -1,0 +1,148 @@
+\documentclass[border=14pt]{standalone}
+\usepackage[T1]{fontenc}
+\usepackage{XCharter}
+\usepackage{inconsolata}
+\usepackage{amssymb}
+\usepackage[shorthands=off,spanish]{babel}
+\usepackage[table]{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,shapes.geometric,calc,backgrounds,fit}
+
+% ---------- paleta (misma que la presentación) ----------
+\definecolor{brandnavy}{HTML}{002959}
+\definecolor{brandnavy2}{HTML}{123A66}
+\definecolor{brandcyan}{HTML}{00ADCB}
+\definecolor{paper}{HTML}{F5F6F8}
+\definecolor{paperraised}{HTML}{FFFFFF}
+\definecolor{ink}{HTML}{14202E}
+\definecolor{inksoft}{HTML}{4B586A}
+\definecolor{linecol}{HTML}{D6DCE5}
+\definecolor{linestrong}{HTML}{AAB8CA}
+\definecolor{semred}{HTML}{B23A2E}
+\definecolor{samber}{HTML}{9C6B0C}
+\definecolor{semgreen}{HTML}{2E7D4F}
+\definecolor{boxfill}{HTML}{E7EEF6}
+\definecolor{optfill}{HTML}{EEF3F7}
+
+\hyphenpenalty=10000
+\exhyphenpenalty=10000
+\tolerance=3000
+\newcommand{\mono}[1]{{\ttfamily #1}}
+\newcommand{\hd}[1]{{\bfseries\color{brandnavy}#1}}
+\newcommand{\sft}[1]{{\footnotesize\color{inksoft}#1}}
+
+\pagecolor{paper}
+
+\begin{document}
+\begin{tikzpicture}[
+  every node/.style={font=\normalsize},
+  band/.style={draw=brandnavy2, line width=0.7pt, fill=boxfill, rounded corners=2pt,
+               align=center, inner sep=8pt, text width=16.4cm},
+  layer/.style={draw=brandnavy2, line width=0.7pt, fill=paperraised, rounded corners=2pt,
+                align=center, inner sep=6pt, text width=3.55cm, minimum height=1.85cm},
+  optlayer/.style={draw=brandnavy2, line width=0.9pt, dash pattern=on 3.5pt off 2.5pt,
+                   fill=optfill, rounded corners=2pt, align=center, inner sep=7pt,
+                   text width=16.4cm, minimum height=1.5cm},
+  gate/.style={draw=samber, line width=0.9pt, fill=samber!8, rounded corners=2pt,
+               align=center, inner sep=7pt, text width=16.4cm},
+  arrow/.style={-{Stealth[length=6pt,width=5pt]}, brandnavy2, line width=1pt},
+  fb/.style={-{Stealth[length=5pt,width=4pt]}, inksoft, line width=0.8pt,
+             dash pattern=on 2.6pt off 2.2pt},
+]
+
+% ---- fila 1: evento de plataforma ----
+\node[band] (evt) {%
+  \hd{Evento de la plataforma}\; \mono{pull\_request} (GitHub) \textperiodcentered\ %
+  \mono{merge\_request} (GitLab) \textperiodcentered\ hook \mono{pre-receive} (Git interno)\\[2pt]
+  \sft{Adaptadores finos por plataforma --- traducen cada plataforma al contrato común}};
+
+% ---- fila 2: orquestador ----
+\node[band, below=0.8cm of evt] (orq) {%
+  \hd{Orquestador determinista}\\[2pt]
+  \sft{lanza las cuatro capas deterministas en paralelo}};
+
+% ---- fila 3: 4 capas deterministas ----
+% l2 y l3 se colocan a horcajadas del eje central (x=0): la cara este de l2
+% en -0.21cm y la oeste de l3 en +0.21cm (medio hueco a cada lado). Como
+% las cuatro cajas tienen el mismo ancho, el grupo queda simétrico respecto
+% al eje sin depender del inner sep. l1 y l4 encadenan hacia fuera.
+\coordinate (drow) at ([yshift=-1.95cm]orq.south);
+\node[layer, anchor=east] (l2) at ([xshift=-0.21cm]drow) {%
+  \hd{Dependencias}\\[3pt]\sft{\emph{typosquatting}, scripts de instalación, URL/Git directas}};
+\node[layer, anchor=west] (l3) at ([xshift=0.21cm]drow) {%
+  \hd{Vulnerabilidades}\\[3pt]\sft{CVEs conocidas vía OSV en dependencias nuevas o actualizadas}};
+\node[layer, anchor=east, left=0.42cm of l2] (l1) {%
+  \hd{Estática}\\[3pt]\sft{Semgrep + YARA sobre los \mbox{\emph{hunks}} modificados}};
+\node[layer, anchor=west, right=0.42cm of l3] (l4) {%
+  \hd{Reputación}\\[3pt]\sft{identidad declarada frente al historial real de la cuenta}};
+
+\node[fit=(l1)(l4), inner sep=10pt, draw=linestrong, line width=0.6pt,
+      dash pattern=on 1.6pt off 1.6pt, rounded corners=3pt] (detbox) {};
+\node[anchor=south west, font=\footnotesize\itshape, color=inksoft]
+      at ([xshift=2pt,yshift=1pt]detbox.north west) {capas deterministas --- sin coste de tokens, no dependen del LLM};
+
+% ---- fila 4: cortocircuito / puerta a la capa semántica ----
+\node[gate, below=0.9cm of detbox.south] (gate) {%
+  \hd{\textcolor{samber}{Cortocircuito}}\; ¿hace falta la capa semántica?\\[3pt]
+  \sft{\textbf{Se omite la capa LLM} si las capas deterministas ya dan un veredicto claro,
+  no queda presupuesto de \emph{tokens} o el \emph{diff} ya se analizó antes.}};
+
+% ---- fila 5: capa semántica (opcional) ----
+\node[optlayer, below=0.8cm of gate] (sem) {%
+  \hd{Capa semántica (LLM + RAG local)}\; \textemdash\ \textbf{opcional}\\[3pt]
+  \sft{Solo se ejecuta si el cortocircuito no ha resuelto. RAG sirve casos reales parecidos;
+  el modelo puede invocar hasta 3 herramientas acotadas; salida JSON validada y cacheada.}};
+
+% ---- fila 6: agregador ----
+\node[band, below=0.8cm of sem] (agg) {%
+  \hd{Agregador de \emph{scoring}}\; media ponderada renormalizada sobre las capas activas\\[3pt]
+  \sft{Puntuación 0--100 explicada capa por capa. Clasifica cada hallazgo por naturaleza:
+  \textcolor{semred}{$\blacksquare$ malicioso} \textperiodcentered\
+  \textcolor{samber}{$\blacksquare$ vulnerabilidad} \textperiodcentered\
+  \textcolor{inksoft}{$\blacksquare$ incertidumbre}. Bloqueo estricto si hay hallazgo malicioso
+  de confianza alta/media. El resultado se persiste y alimenta el dashboard.}};
+
+% ---- fila 7: semáforo ----
+\node[band, below=0.8cm of agg] (out) {%
+  \raisebox{-1pt}{\textcolor{semgreen}{$\bullet$}\,\textcolor{samber}{$\bullet$}\,\textcolor{semred}{$\bullet$}}\;
+  \hd{Semáforo de riesgo}\; comentario explicado en el PR \textperiodcentered\
+  \emph{check} de CI \textperiodcentered\ bloqueo de \emph{merge} configurable};
+
+% ---- flechas de flujo ----
+\draw[arrow] (evt) -- node[right=2pt, font=\footnotesize\itshape, color=brandnavy2]
+      {\emph{diff} + metadatos (formato común)} (orq);
+\draw[arrow] (orq.south) -- (orq.south |- detbox.north);
+\draw[arrow] (detbox.south) -- (gate.north);
+\draw[arrow] (gate.south) -- node[right=2pt, font=\footnotesize\itshape, color=inksoft]
+      {si no se cortocircuita} (sem.north);
+\draw[arrow] (sem.south) -- (agg.north);
+\draw[arrow] (agg.south) -- (out.north);
+
+% cortocircuito: salta la capa semántica y va directo al agregador
+\draw[arrow, samber]
+  (gate.east) -- ([xshift=1.05cm]gate.east)
+  -- node[right=1pt, font=\footnotesize\itshape, color=samber, align=left]
+     {cortocircuito:\\ veredicto directo}
+  ([xshift=1.05cm]agg.east) -- (agg.east);
+
+% feedback humano: ajusta pesos, vuelve al agregador
+\draw[fb]
+  (out.west) -- ([xshift=-1.05cm]out.west)
+  -- node[left=1pt, font=\footnotesize\itshape, color=inksoft, align=right]
+     {feedback humano\\ (ajusta pesos)}
+  ([xshift=-1.05cm]agg.west) -- (agg.west);
+
+% ---- etiqueta lateral: núcleo agnóstico ----
+\node[fit=(orq)(agg), inner sep=13pt] (corebox) {};
+\draw[brandcyan, line width=1.4pt]
+  ([xshift=-6pt]corebox.north west) -- ([xshift=-6pt]corebox.south west);
+\node[rotate=90, anchor=south, font=\footnotesize\bfseries, color=brandnavy2]
+  at ([xshift=-12pt]corebox.west) {Núcleo agnóstico de plataforma};
+
+% ---- forzar caja delimitadora simétrica respecto al eje central (x=0),
+%      para que el borde de standalone quede centrado en el flujo de flechas ----
+\path let \p1=(current bounding box.east), \p2=(current bounding box.west),
+          \n1={max(\x1,-\x2)} in (\n1,0) (-\n1,0);
+
+\end{tikzpicture}
+\end{document}

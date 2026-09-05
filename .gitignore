@@ -84,7 +84,6 @@ tests/cases/**/*.secret
 # (auditoría pre-publicación, ver historial de commits de este fichero)
 docs/progreso/
 docs/planificacion/
-docs/presentacion/
 docs/WatchGate_memoria.pdf
 docs/memoria_WatchGate.md
 docs/diagrama_estructura.png

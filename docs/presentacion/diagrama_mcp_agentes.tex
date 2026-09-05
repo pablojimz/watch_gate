@@ -1,0 +1,146 @@
+\documentclass[border=14pt]{standalone}
+\usepackage[T1]{fontenc}
+\usepackage{XCharter}
+\usepackage{inconsolata}
+\usepackage{amssymb}
+\usepackage{fontawesome5}
+\usepackage[shorthands=off,spanish]{babel}
+\usepackage[table]{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,shapes.geometric,calc,backgrounds,fit}
+
+% ---------- paleta (idéntica a diagrama_capas.tex / main.tex) ----------
+\definecolor{brandnavy}{HTML}{002959}
+\definecolor{brandnavy2}{HTML}{123A66}
+\definecolor{brandcyan}{HTML}{00ADCB}
+\definecolor{paper}{HTML}{F5F6F8}
+\definecolor{paperraised}{HTML}{FFFFFF}
+\definecolor{ink}{HTML}{14202E}
+\definecolor{inksoft}{HTML}{4B586A}
+\definecolor{linecol}{HTML}{D6DCE5}
+\definecolor{linestrong}{HTML}{AAB8CA}
+\definecolor{semred}{HTML}{B23A2E}
+\definecolor{samber}{HTML}{9C6B0C}
+\definecolor{semgreen}{HTML}{2E7D4F}
+\definecolor{boxfill}{HTML}{E7EEF6}
+\definecolor{optfill}{HTML}{EEF3F7}
+
+\hyphenpenalty=10000
+\exhyphenpenalty=10000
+\tolerance=3000
+\newcommand{\mono}[1]{{\ttfamily #1}}
+\newcommand{\hd}[1]{{\bfseries\color{brandnavy}#1}}
+\newcommand{\sft}[1]{{\footnotesize\color{inksoft}#1}}
+\newcommand{\icn}[1]{{\color{brandcyan}\faIcon{#1}}}
+
+\pagecolor{paper}
+
+\begin{document}
+\begin{tikzpicture}[
+  every node/.style={font=\normalsize},
+  band/.style={draw=brandnavy2, line width=0.7pt, fill=boxfill, rounded corners=2pt,
+               align=center, inner sep=8pt, text width=16.4cm},
+  tool/.style={draw=brandnavy2, line width=0.7pt, fill=paperraised, rounded corners=2pt,
+               align=center, inner sep=6pt, text width=2.86cm, minimum height=2.05cm},
+  gate/.style={draw=samber, line width=0.9pt, fill=samber!8, rounded corners=2pt,
+               align=center, inner sep=7pt, text width=16.4cm},
+  outbox/.style={draw=brandnavy2, line width=0.7pt, fill=paperraised, rounded corners=2pt,
+                 align=center, inner sep=7pt, text width=7.9cm, minimum height=1.9cm},
+  arrow/.style={-{Stealth[length=6pt,width=5pt]}, brandnavy2, line width=1pt},
+  loopArrow/.style={-{Stealth[length=5pt,width=4pt]}, samber, line width=0.9pt,
+                     dash pattern=on 2.6pt off 2.2pt},
+]
+
+% ---- fila 1: agente de IA / IDE ----
+\node[band] (agent) {%
+  \icn{robot}\;\hd{Agente de IA en el IDE}\\[2pt]
+  \sft{Cursor \textperiodcentered\ Claude Code \textperiodcentered\ OpenCode \textperiodcentered\ Claude Desktop ---
+  escribe y corrige código en local, antes de abrir el PR}};
+
+% ---- fila 2: servidor MCP ----
+\node[band, below=0.8cm of agent] (mcp) {%
+  \icn{server}\;\hd{Servidor MCP de WatchGate}\; \mono{\small watchgate mcp serve -{}-transport stdio}\\[2pt]
+  \sft{Identidad opcional (\mono{WATCHGATE\_MCP\_API\_KEY}): con ella, cuota mensual y coste por
+  organización; sin ella, uso local sin límites}};
+
+% ---- fila 3: herramientas MCP (5 tarjetas; la del medio fija el eje x=0,
+%      el resto encadena simétricamente hacia los lados) ----
+\node[tool] (t3) at ([yshift=-2.05cm]mcp.south) {%
+  \icn{comments}\;\hd{\footnotesize explain\_risk}\\[2pt]
+  {\mono{\tiny watchgate\_explain\_risk}}\\[2pt]
+  \sft{\scriptsize desglosa por qué se marcó cada hallazgo}};
+\node[tool, left=0.28cm of t3] (t2) {%
+  \icn{search}\;\hd{\footnotesize analyze\_diff}\\[2pt]
+  {\mono{\tiny watchgate\_analyze\_diff}}\\[2pt]
+  \sft{\scriptsize análisis completo: mismo núcleo + LLM si hace falta}};
+\node[tool, left=0.28cm of t2] (t1) {%
+  \icn{bolt}\;\hd{\footnotesize precheck}\\[2pt]
+  {\mono{\tiny watchgate\_precheck}}\\[2pt]
+  \sft{\scriptsize determinista, sin LLM (peso semántico = 0)}};
+\node[tool, right=0.28cm of t3] (t4) {%
+  \icn{check-circle}\;\hd{\footnotesize verify\_fix}\\[2pt]
+  {\mono{\tiny watchgate\_verify\_fix}}\\[2pt]
+  \sft{\scriptsize compara el diff original contra el corregido}};
+\node[tool, right=0.28cm of t4] (t5) {%
+  \icn{database}\;\hd{\footnotesize query\_threat\_kb}\\[2pt]
+  {\mono{\tiny watchgate\_query\_threat\_kb}}\\[2pt]
+  \sft{\scriptsize RAG: casos reales y MITRE ATT\&CK}};
+
+\node[fit=(t1)(t5), inner sep=10pt, draw=linestrong, line width=0.6pt,
+      dash pattern=on 1.6pt off 1.6pt, rounded corners=3pt] (toolbox) {};
+\node[anchor=north west, font=\footnotesize\itshape, color=inksoft]
+      at ([xshift=2pt,yshift=-1pt]toolbox.south west)
+      {+ telemetría: submit\_feedback \textperiodcentered\ repo\_score\_history \textperiodcentered\ org\_metrics};
+
+% ---- fila 4: mismo núcleo que el resto de WatchGate ----
+\node[band, below=0.85cm of toolbox.south] (core) {%
+  \icn{sitemap}\;\hd{Mismo núcleo de WatchGate}\\[2pt]
+  \sft{Las cinco capas + agregador de la arquitectura general ---
+  \mono{precheck} solo pone a 0 el peso de la capa semántica, no toca el motor}};
+
+% ---- fila 5: AgentGuidance (gate) ----
+\node[gate, below=0.85cm of core] (guid) {%
+  \hd{\textcolor{samber}{AgentGuidance}}\; \icn{route}\; el veredicto viene con instrucciones para el agente, no solo una puntuación\\[4pt]
+  {\footnotesize
+  \textcolor{semgreen}{$\blacksquare$}~\textbf{PROCEED} --- el PR puede abrirse\quad\textperiodcentered\quad
+  \textcolor{samber}{$\blacksquare$}~\textbf{RETRY\_WITH\_FIX} --- pasos concretos de corrección\quad\textperiodcentered\quad
+  \textcolor{semred}{$\blacksquare$}~\textbf{BLOCK\_HUMAN\_REVIEW} --- se detiene}};
+
+% ---- fila 6: dos salidas ----
+\node[outbox, below=0.9cm of guid.south, xshift=-4.1cm] (human) {%
+  \icn{hand-paper}\;\hd{Revisión humana}\\[3pt]
+  \sft{\footnotesize \textbf{BLOCK\_HUMAN\_REVIEW}: el agente no resuelve solo un hallazgo así --- se detiene y pide a una persona que decida}};
+\node[outbox, below=0.9cm of guid.south, xshift=4.1cm] (pr) {%
+  \icn{code-branch}\;\hd{Pull request}\\[3pt]
+  \sft{\footnotesize \textbf{PROCEED}: se abre igual por GitHub/Git --- el análisis del agente adelanta la detección, no sustituye la puerta de CI/CD}};
+
+% ---- flechas de flujo ----
+\draw[arrow] (agent) -- node[right=2pt, font=\footnotesize\itshape, color=brandnavy2]
+      {JSON-RPC 2.0 sobre \emph{stdio}} (mcp);
+\draw[arrow] (mcp.south) -- node[right=2pt, font=\footnotesize\itshape, color=inksoft]
+      {el agente elige qué herramienta llamar, y cuántas veces} (mcp.south |- toolbox.north);
+\draw[arrow] (toolbox.south) -- (core.north);
+\draw[arrow] (core.south) -- (guid.north);
+\draw[arrow] (guid.south) -- ([xshift=-4.1cm]guid.south |- human.north) -- (human.north);
+\draw[arrow] (guid.south) -- ([xshift=4.1cm]guid.south |- pr.north) -- (pr.north);
+
+% bucle RETRY_WITH_FIX: el agente corrige y vuelve a llamar a las tools
+\draw[loopArrow]
+  (guid.east) -- ([xshift=1.05cm]guid.east)
+  -- node[right=1pt, font=\footnotesize\itshape, color=samber, align=left]
+     {\textbf{RETRY\_WITH\_FIX}:\\ el agente corrige\\ y reintenta}
+  ([xshift=1.05cm]toolbox.east) -- (toolbox.east);
+
+% ---- etiqueta lateral ----
+\node[fit=(mcp)(guid), inner sep=13pt] (corebox) {};
+\draw[brandcyan, line width=1.4pt]
+  ([xshift=-6pt]corebox.north west) -- ([xshift=-6pt]corebox.south west);
+\node[rotate=90, anchor=south, font=\footnotesize\bfseries, color=brandnavy2]
+  at ([xshift=-12pt]corebox.west) {\emph{Shift-left}: dentro del IDE, antes de abrir el PR};
+
+% ---- forzar caja delimitadora simétrica respecto al eje central (x=0) ----
+\path let \p1=(current bounding box.east), \p2=(current bounding box.west),
+          \n1={max(\x1,-\x2)} in (\n1,0) (-\n1,0);
+
+\end{tikzpicture}
+\end{document}
