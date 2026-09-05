@@ -38,12 +38,17 @@
 \begin{document}
 \begin{tikzpicture}[
   every node/.style={font=\normalsize},
+  % text width=7.1cm (no 7.9cm): con el relleno interno (8pt) y el borde
+  % sumados, un ancho de 7.9cm entre dos cajas centradas en xshift=+-4.1cm
+  % daba un semi-ancho real de ~4.26cm -- 0.16cm MÁS que el hueco
+  % disponible hasta el eje central, así que las dos columnas se pisaban
+  % por el medio en vez de solo tocarse (medido en píxeles del PNG:
+  % un único borde de 3px en x~1050 en vez de dos bordes separados).
+  % 7.1cm deja ~0.24cm de margen real a cada lado del eje.
   colbox/.style={draw=brandnavy2, line width=0.7pt, fill=paperraised, rounded corners=2pt,
-                 align=left, inner sep=8pt, text width=7.9cm},
+                 align=left, inner sep=8pt, text width=7.1cm},
   band/.style={draw=brandnavy2, line width=0.9pt, fill=boxfill, rounded corners=2pt,
                align=center, inner sep=9pt, text width=16.4cm},
-  gatehalf/.style={draw=samber, line width=0.9pt, fill=samber!8, rounded corners=2pt,
-                   align=left, inner sep=7pt, text width=7.9cm},
   small/.style={draw=brandnavy2, line width=0.6pt, fill=paperraised, rounded corners=2pt,
                 align=left, inner sep=6pt, text width=6.4cm, font=\footnotesize},
   arrow/.style={-{Stealth[length=6pt,width=5pt]}, brandnavy2, line width=1pt},
