@@ -123,47 +123,59 @@ def _apply_malicious_and_uncertain_policy(
     results: dict[str, LayerResult],
     thresholds: dict[str, int],
 ) -> tuple[int, Semaforo]:
+    # Exigir `confidence` explícita (no "o risk_score >= umbral") -- ese
+    # `or` trataba un risk_score alto como si fuera lo mismo que alta
+    # confianza, pero no lo es. Reproducido en vivo fijando "left-pad":
+    # "git+https://.../left-pad.git#v1.3.1-hotfix" en package.json (score
+    # ~10/100 real, ROJO forzado por el heurístico mecánico solo).
+    #
+    # Restringido a la capa `semantic` EXPLÍCITAMENTE, no "cualquier capa
+    # con confidence == ALTA/MEDIA" -- bug real, reproducido en vivo dos
+    # veces en la misma sesión: este comentario decía "deps_layer.py nunca
+    # rellena confidence (siempre None)" porque así era cuando se escribió
+    # el fix de arriba, pero tanto `deps_layer.py` como `static_layer.py`
+    # ganaron después su propia regla mecánica "si mi risk_score llega a
+    # 70, confidence = ALTA" (para mostrar algo razonable en el dashboard),
+    # sin que nadie revisara si ESTA función seguía asumiendo lo contrario.
+    # Resultado: el mismo veto absoluto de un heurístico mecánico sin
+    # corroboración que el fix de "left-pad" pretendía cerrar volvió a
+    # colarse por la puerta de al lado -- typosquatting por distancia de
+    # Levenshtein en nombres de 2-4 caracteres ('gopd'~'got', 'c8'~'d3') y
+    # el regex `exec_dynamic` cazando `regex.exec(...)` en JS/TS forzaban
+    # cualquier PR a 70/ROJO aunque semantic y el resto dijeran "esto es
+    # benigno". La `confidence` de `semantic` sí refleja razonamiento real
+    # (la rellena un LLM que ha visto el diff completo); la de
+    # `deps`/`static`/`vulnerabilities` es solo el propio `risk_score`
+    # reetiquetado -- no aporta corroboración independiente, así que no
+    # puede tener este veto.
+    semantic_for_escalation = results.get("semantic")
     has_high_confidence_malicious = False
     has_medium_confidence_malicious = False
-
-    for layer_res in results.values():
-        if layer_res.skipped:
-            continue
-        if layer_res.threat_nature == ThreatNature.MALICIOUS:
-            # Exigir `confidence` explícita (no "o risk_score >= umbral")
-            # -- ese `or` trataba un risk_score alto como si fuera lo mismo
-            # que alta confianza, pero no lo es: `deps_layer.py` nunca
-            # rellena `confidence` (siempre None) y puntúa 75-80 para
-            # patrones habituales y a menudo legítimos (pinnear una
-            # dependencia a un commit/fix vía URL de git, un script
-            # postinstall con chmod +x). Con la config por defecto, eso
-            # forzaba el combinado a 100/ROJO pese a que la media ponderada
-            # real diera ~10/100 -- un solo heurístico mecánico, sin
-            # corroboración de ninguna otra capa y sin que se haya
-            # establecido alta confianza en ningún sitio, tenía veto
-            # absoluto sobre el resultado agregado. Reproducido en vivo
-            # fijando "left-pad": "git+https://.../left-pad.git#v1.3.1-
-            # hotfix" en package.json. Ahora solo una capa que declare
-            # `confidence` de verdad (hoy, únicamente la semántica) puede
-            # disparar esta escalada.
-            if layer_res.confidence == Confidence.ALTA:
-                has_high_confidence_malicious = True
-            elif layer_res.confidence == Confidence.MEDIA:
-                has_medium_confidence_malicious = True
+    if (
+        semantic_for_escalation is not None
+        and not semantic_for_escalation.skipped
+        and semantic_for_escalation.threat_nature == ThreatNature.MALICIOUS
+    ):
+        if semantic_for_escalation.confidence == Confidence.ALTA:
+            has_high_confidence_malicious = True
+        elif semantic_for_escalation.confidence == Confidence.MEDIA:
+            has_medium_confidence_malicious = True
 
     if has_high_confidence_malicious or has_medium_confidence_malicious:
         score = max(score, thresholds["red"])
 
-    # Si alguna capa activa detecta un hallazgo de alta confianza con puntuación elevada (>= red),
-    # el resultado global no debe diluirse por debajo del umbral amarillo.
-    for layer_res in results.values():
-        if (
-            not layer_res.skipped
-            and layer_res.confidence == Confidence.ALTA
-            and layer_res.risk_score >= thresholds["red"]
-            and score < thresholds["yellow"]
-        ):
-            score = thresholds["yellow"]
+    # Mismo criterio que arriba (solo `semantic`, ver el comentario largo):
+    # si detecta un hallazgo de alta confianza con puntuación elevada
+    # (>= red), el resultado global no debe diluirse por debajo del umbral
+    # amarillo.
+    if (
+        semantic_for_escalation is not None
+        and not semantic_for_escalation.skipped
+        and semantic_for_escalation.confidence == Confidence.ALTA
+        and semantic_for_escalation.risk_score >= thresholds["red"]
+        and score < thresholds["yellow"]
+    ):
+        score = thresholds["yellow"]
 
     # Bug real encontrado regenerando el informe de validación (caso
     # `malreal_pypi_malicious_intent_mirrorbot_10`): esta escalada
