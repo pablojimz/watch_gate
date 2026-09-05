@@ -124,12 +124,16 @@
 \draw[arrow] (guid.south) -- ([xshift=-4.1cm]guid.south |- human.north) -- (human.north);
 \draw[arrow] (guid.south) -- ([xshift=4.1cm]guid.south |- pr.north) -- (pr.north);
 
-% bucle RETRY_WITH_FIX: el agente corrige y vuelve a llamar a las tools
+% bucle RETRY_WITH_FIX: el agente corrige y vuelve a llamar a las tools.
+% Los dos codos deben compartir la misma X -- si no, el tramo vertical sale
+% inclinado (guid y toolbox no miden exactamente lo mismo de ancho, así que
+% "([xshift=1.05cm]toolbox.east)" no cae en la misma columna que el primer
+% codo). Se fija la X del primer codo y se reutiliza con "|-" para el segundo.
 \draw[loopArrow]
-  (guid.east) -- ([xshift=1.05cm]guid.east)
+  (guid.east) -- ([xshift=1.05cm]guid.east) coordinate (retryelbow)
   -- node[right=1pt, font=\footnotesize\itshape, color=samber, align=left]
      {\textbf{RETRY\_WITH\_FIX}:\\ el agente corrige\\ y reintenta}
-  ([xshift=1.05cm]toolbox.east) -- (toolbox.east);
+  (retryelbow |- toolbox.east) -- (toolbox.east);
 
 % ---- etiqueta lateral ----
 \node[fit=(mcp)(guid), inner sep=13pt] (corebox) {};
