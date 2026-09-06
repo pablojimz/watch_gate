@@ -36,13 +36,13 @@
 \pagecolor{paper}
 
 % Diagrama en HORIZONTAL: dos carriles que van de izquierda a derecha
-% (GitHub arriba, Servidor Git abajo, separados +-6cm en Y) en vez de dos
+% (GitHub arriba, Servidor Git abajo, separados +-5cm en Y) en vez de dos
 % columnas de arriba a abajo -- misma información, misma lógica de
-% convergencia/divergencia en el núcleo, solo rotada 90°. El núcleo pasa
-% de banda ANCHA (horizontal, cubría las dos columnas) a banda ALTA
-% (vertical, cubre los dos carriles) con `minimum height`, para que el
-% mismo truco de "el punto de contacto cae dentro del borde del núcleo"
-% siga funcionando sin diagonales.
+% convergencia/divergencia en el núcleo, solo rotada 90°. +-5cm (no +-6cm,
+% la separación original) es lo mínimo verificado por píxeles que deja
+% margen real entre las cajas de cada carril y el núcleo sin que se toquen
+% -- ver el commit que quitó el `minimum height` del núcleo, con las
+% medidas exactas.
 \begin{document}
 \begin{tikzpicture}[
   every node/.style={font=\normalsize},
@@ -66,7 +66,7 @@
 % ======================= CARRIL INFERIOR: SERVIDOR GIT PROPIO =============
 
 % ---- etapa 1: evento + autorización ----
-\node[colbox] (l1) at (0,6) {%
+\node[colbox] (l1) at (0,5) {%
   \icn{code-branch}\;\hd{GitHub (vía la GitHub App): PR abierta/actualizada}\\[3pt]
   \sft{la \textbf{GitHub App} instalada en el repo (modo managed) manda un
   webhook \mono{pull\_request} (\mono{opened}/\mono{synchronize}), firmado
@@ -76,7 +76,7 @@
   \textrightarrow\ VCSConnection.org \textrightarrow\ MonitoredRepo activo ---
   encola RQ y responde \textbf{202} al instante}};
 
-\node[colbox] (r1) at (0,-6) {%
+\node[colbox] (r1) at (0,-5) {%
   \icn{code-branch}\;\hd{Servidor Git (vía el hook pre-receive): PR abierta/actualizada}\\[3pt]
   \sft{cada \mono{git push} que la sustenta dispara el hook
   \mono{pre-receive} (bash+curl) --- Git no tiene un evento de ``PR'' propio}\\[4pt]
@@ -97,10 +97,11 @@
   \sft{\mono{POST /api/v1/analyze} con \mono{diff\_text} + \mono{metadata}
   (repo, ref\_name, author\_login extraído de \mono{git log})}};
 
-% ---- núcleo compartido: banda VERTICAL (spans y=-6..+6 vía minimum
-% height) -- right=of l2 (y=6) + yshift=-6 recentra a y=0, mismo truco que
-% la versión vertical usaba con xshift. ----
-\node[band, right=1.2cm of l2, yshift=-6cm] (core) {%
+% ---- núcleo compartido, tamaño natural -- right=of l2 (y=5) + yshift=-5
+% recentra a y=0, mismo truco que la versión vertical usaba con xshift
+% (ahí sí importa: es lo que mantiene el núcleo alineado al eje central
+% aunque cambie la separación entre carriles). ----
+\node[band, right=1.2cm of l2, yshift=-5cm] (core) {%
   \icn{sitemap}\;\hd{NÚCLEO WATCHGATE}\\[2pt]
   \sft{(compartido)}\\[6pt]
   \sft{\mono{QuotaService.}\\\mono{analyze\_with\_quota}
@@ -110,12 +111,12 @@
   agregación \textrightarrow\ \mono{score}/\mono{semaforo}}};
 
 % ---- etapa 3: divergencia justo después del núcleo ----
-\node[colbox, right=1.2cm of core, yshift=6cm] (l3) {%
+\node[colbox, right=1.2cm of core, yshift=5cm] (l3) {%
   \icn{comments}\;\hd{Comentario + evento live}\\[3pt]
   \sft{\mono{client.post\_comment} en la PR (best-effort) + actualización en
   tiempo real al Dashboard}};
 
-\node[colbox, right=1.2cm of core, yshift=-6cm] (r3) {%
+\node[colbox, right=1.2cm of core, yshift=-5cm] (r3) {%
   \icn{terminal}\;\hd{Respuesta al script del hook}\\[3pt]
   \sft{JSON \{\mono{score}, \mono{semaforo}\}\ --- \textbf{sin comentario en
   la PR}, solo \mono{stderr} en la terminal de quien hizo el push}};
