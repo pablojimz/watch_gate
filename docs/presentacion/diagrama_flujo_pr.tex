@@ -48,8 +48,13 @@
   every node/.style={font=\normalsize},
   colbox/.style={draw=brandnavy2, line width=0.7pt, fill=paperraised, rounded corners=2pt,
                  align=left, inner sep=8pt, text width=5.3cm},
+  % Tamaño NATURAL (no minimum height=12.6cm que ocupaba todo el hueco
+  % entre carriles): esa banda alta dejaba mucho espacio en blanco dentro
+  % de la propia caja, sin contenido -- las flechas de conexión ahora
+  % usan un codo explícito (avanza-cruza-avanza) en vez de depender de
+  % que el núcleo cubra físicamente los dos carriles.
   band/.style={draw=brandnavy2, line width=0.9pt, fill=boxfill, rounded corners=2pt,
-               align=center, inner sep=9pt, text width=5.6cm, minimum height=12.6cm},
+               align=center, inner sep=9pt, text width=5.6cm},
   small/.style={draw=brandnavy2, line width=0.6pt, fill=paperraised, rounded corners=2pt,
                 align=left, inner sep=6pt, text width=4.6cm, font=\footnotesize},
   arrow/.style={-{Stealth[length=6pt,width=5pt]}, brandnavy2, line width=1pt},
@@ -161,20 +166,27 @@
 \draw[arrow] (l1) -- (l2);
 \draw[arrow] (r1) -- (r2);
 
-% Convergencia en el núcleo: dos flechas HORIZONTALES paralelas (no un
-% embudo en diagonal) -- l2/r2 ya están en Y=+-6, que cae dentro del
-% borde del núcleo (alto 12.6cm, de -6.3 a 6.3 gracias a minimum
-% height), así que basta avanzar en línea recta hasta ese borde.
-\path let \p1=(l2.east), \p2=(core.west) in coordinate (l2drop) at (\x2,\y1);
-\path let \p1=(r2.east), \p2=(core.west) in coordinate (r2drop) at (\x2,\y1);
-\draw[arrow] (l2.east) -- (l2drop);
-\draw[arrow] (r2.east) -- (r2drop);
+% Convergencia en el núcleo: codo explícito de 3 tramos (avanza -- cruza
+% en línea recta -- avanza), mismo patrón que ya usa la salida
+% rojo/no-rojo de más abajo -- el núcleo ya no es una banda alta que
+% cubra los dos carriles, así que hace falta cruzar de Y=+-6 a Y=0 a
+% mano en vez de aterrizar directamente en su borde.
+\path let \p1=(l2.east) in coordinate (l2mid) at ({\x1+0.5cm},\y1);
+\path let \p1=(l2mid), \p2=(core.west) in coordinate (l2turn) at (\x1,\y2);
+\draw[arrow] (l2.east) -- (l2mid) -- (l2turn) -- (core.west);
 
-% Divergencia simétrica de vuelta, mismo criterio (horizontal, no diagonal).
-\path let \p1=(l3.west), \p2=(core.east) in coordinate (l3rise) at (\x2,\y1);
-\path let \p1=(r3.west), \p2=(core.east) in coordinate (r3rise) at (\x2,\y1);
-\draw[arrow] (l3rise) -- (l3.west);
-\draw[arrow] (r3rise) -- (r3.west);
+\path let \p1=(r2.east) in coordinate (r2mid) at ({\x1+0.5cm},\y1);
+\path let \p1=(r2mid), \p2=(core.west) in coordinate (r2turn) at (\x1,\y2);
+\draw[arrow] (r2.east) -- (r2mid) -- (r2turn) -- (core.west);
+
+% Divergencia simétrica de vuelta, mismo criterio.
+\path let \p1=(core.east) in coordinate (l3mid) at ({\x1+0.5cm},\y1);
+\path let \p1=(l3mid), \p2=(l3.west) in coordinate (l3turn) at (\x1,\y2);
+\draw[arrow] (core.east) -- (l3mid) -- (l3turn) -- (l3.west);
+
+\path let \p1=(core.east) in coordinate (r3mid) at ({\x1+0.5cm},\y1);
+\path let \p1=(r3mid), \p2=(r3.west) in coordinate (r3turn) at (\x1,\y2);
+\draw[arrow] (core.east) -- (r3mid) -- (r3turn) -- (r3.west);
 
 % GitHub: una sola flecha recta -- la etiqueta ES la decisión (sin caja de
 % puerta: decide un humano leyendo el Dashboard, no una condición que
