@@ -1,0 +1,13 @@
+hashicorp/terraform
+hashicorp/consul
+hashicorp/nomad
+hashicorp/boundary
+home-assistant/core
+helm/helm
+containerd/containerd
+portainer/portainer
+coredns/coredns
+syncthing/syncthing
+rclone/rclone
+jenkinsci/jenkins
+argoproj/argo-cd
