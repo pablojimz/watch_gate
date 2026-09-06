@@ -1,0 +1,223 @@
+\documentclass[border=14pt]{standalone}
+\usepackage[T1]{fontenc}
+\usepackage{XCharter}
+\usepackage{inconsolata}
+\usepackage{amssymb}
+\usepackage{fontawesome5}
+\usepackage[shorthands=off,spanish]{babel}
+\usepackage[table]{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,shapes.geometric,calc,backgrounds,fit}
+
+% ---------- paleta (idéntica a diagrama_capas.tex / diagrama_mcp_agentes.tex) ----------
+\definecolor{brandnavy}{HTML}{002959}
+\definecolor{brandnavy2}{HTML}{123A66}
+\definecolor{brandcyan}{HTML}{00ADCB}
+\definecolor{paper}{HTML}{F5F6F8}
+\definecolor{paperraised}{HTML}{FFFFFF}
+\definecolor{ink}{HTML}{14202E}
+\definecolor{inksoft}{HTML}{4B586A}
+\definecolor{linecol}{HTML}{D6DCE5}
+\definecolor{linestrong}{HTML}{AAB8CA}
+\definecolor{semred}{HTML}{B23A2E}
+\definecolor{samber}{HTML}{9C6B0C}
+\definecolor{semgreen}{HTML}{2E7D4F}
+\definecolor{boxfill}{HTML}{E7EEF6}
+\definecolor{optfill}{HTML}{EEF3F7}
+
+\hyphenpenalty=10000
+\exhyphenpenalty=10000
+\tolerance=3000
+\newcommand{\mono}[1]{{\ttfamily #1}}
+\newcommand{\hd}[1]{{\bfseries\color{brandnavy}#1}}
+\newcommand{\sft}[1]{{\footnotesize\color{inksoft}#1}}
+\newcommand{\icn}[1]{{\color{brandcyan}\faIcon{#1}}}
+
+\pagecolor{paper}
+
+% Diagrama en HORIZONTAL: dos carriles que van de izquierda a derecha
+% (GitHub arriba, Servidor Git abajo, separados +-5cm en Y) en vez de dos
+% columnas de arriba a abajo -- misma información, misma lógica de
+% convergencia/divergencia en el núcleo, solo rotada 90°. +-5cm (no +-6cm,
+% la separación original) es lo mínimo verificado por píxeles que deja
+% margen real entre las cajas de cada carril y el núcleo sin que se toquen
+% -- ver el commit que quitó el `minimum height` del núcleo, con las
+% medidas exactas.
+\begin{document}
+\begin{tikzpicture}[
+  every node/.style={font=\normalsize},
+  colbox/.style={draw=brandnavy2, line width=0.7pt, fill=paperraised, rounded corners=2pt,
+                 align=left, inner sep=8pt, text width=5.3cm},
+  % Tamaño NATURAL (no minimum height=12.6cm que ocupaba todo el hueco
+  % entre carriles): esa banda alta dejaba mucho espacio en blanco dentro
+  % de la propia caja, sin contenido -- las flechas de conexión ahora
+  % usan un codo explícito (avanza-cruza-avanza) en vez de depender de
+  % que el núcleo cubra físicamente los dos carriles.
+  band/.style={draw=brandnavy2, line width=0.9pt, fill=boxfill, rounded corners=2pt,
+               align=center, inner sep=9pt, text width=5.6cm},
+  small/.style={draw=brandnavy2, line width=0.6pt, fill=paperraised, rounded corners=2pt,
+                align=left, inner sep=6pt, text width=4.6cm, font=\footnotesize},
+  arrow/.style={-{Stealth[length=6pt,width=5pt]}, brandnavy2, line width=1pt},
+  arrowsam/.style={-{Stealth[length=6pt,width=5pt]}, samber, line width=1pt},
+  lbl/.style={font=\footnotesize\itshape, color=inksoft},
+]
+
+% ======================= CARRIL SUPERIOR: GITHUB ==========================
+% ======================= CARRIL INFERIOR: SERVIDOR GIT PROPIO =============
+
+% ---- etapa 1: evento + autorización ----
+\node[colbox] (l1) at (0,5) {%
+  \icn{code-branch}\;\hd{GitHub (vía la GitHub App): PR abierta/actualizada}\\[3pt]
+  \sft{la \textbf{GitHub App} instalada en el repo (modo managed) manda un
+  webhook \mono{pull\_request} (\mono{opened}/\mono{synchronize}), firmado
+  \mono{HMAC X-Hub-Signature-256} \textrightarrow\ \mono{POST
+  /api/webhooks/github}}\\[4pt]
+  \sft{\textbf{ASÍNCRONO}: \mono{repo\_is\_authorized} --- installation\_id
+  \textrightarrow\ VCSConnection.org \textrightarrow\ MonitoredRepo activo ---
+  encola RQ y responde \textbf{202} al instante}};
+
+\node[colbox] (r1) at (0,-5) {%
+  \icn{code-branch}\;\hd{Servidor Git (vía el hook pre-receive): PR abierta/actualizada}\\[3pt]
+  \sft{cada \mono{git push} que la sustenta dispara el hook
+  \mono{pre-receive} (bash+curl) --- Git no tiene un evento de ``PR'' propio}\\[4pt]
+  \sft{\textbf{SÍNCRONO}: \mono{Bearer} API key \textrightarrow\ \mono{require\_scope} +
+  \mono{ensure\_api\_key\_repo\_binding} (clave atada 1:1 al repo) --- el
+  \mono{git push} queda bloqueado esperando}};
+
+% ---- etapa 2: obtención de datos para el análisis ----
+\node[colbox, right=1.0cm of l1] (l2) {%
+  \icn{search}\;\hd{Token + datos reales de la PR}\\[3pt]
+  \sft{token efímero de instalación de la \textbf{GitHub App} (JWT de App
+  firmado RS256 \textrightarrow\ \mono{access\_token} de 1h) \textrightarrow\
+  \mono{get\_pull\_request\_data} + \mono{get\_reputation\_metadata}
+  (siempre resuelta)}};
+
+\node[colbox, right=1.0cm of r1] (r2) {%
+  \icn{terminal}\;\hd{Payload del push}\\[3pt]
+  \sft{\mono{POST /api/v1/analyze} con \mono{diff\_text} + \mono{metadata}
+  (repo, ref\_name, author\_login extraído de \mono{git log})}};
+
+% ---- núcleo compartido, tamaño natural -- right=of l2 (y=5) + yshift=-5
+% recentra a y=0, mismo truco que la versión vertical usaba con xshift
+% (ahí sí importa: es lo que mantiene el núcleo alineado al eje central
+% aunque cambie la separación entre carriles). ----
+\node[band, right=1.2cm of l2, yshift=-5cm] (core) {%
+  \icn{sitemap}\;\hd{NÚCLEO WATCHGATE}\\[2pt]
+  \sft{(compartido)}\\[6pt]
+  \sft{\mono{QuotaService.}\\\mono{analyze\_with\_quota}
+  \textrightarrow\\ static \textperiodcentered\ dependencies
+  \textperiodcentered\ vulnerabilities \textperiodcentered\ reputation
+  \textperiodcentered\ semantic (LLM, opcional) \textrightarrow\
+  agregación \textrightarrow\ \mono{score}/\mono{semaforo}}};
+
+% ---- etapa 3: divergencia justo después del núcleo ----
+\node[colbox, right=1.2cm of core, yshift=5cm] (l3) {%
+  \icn{comments}\;\hd{Comentario + evento live}\\[3pt]
+  \sft{\mono{client.post\_comment} en la PR (best-effort) + actualización en
+  tiempo real al Dashboard}};
+
+\node[colbox, right=1.2cm of core, yshift=-5cm] (r3) {%
+  \icn{terminal}\;\hd{Respuesta al script del hook}\\[3pt]
+  \sft{JSON \{\mono{score}, \mono{semaforo}\}\ --- \textbf{sin comentario en
+  la PR}, solo \mono{stderr} en la terminal de quien hizo el push}};
+
+% ---- etapa 4 (GitHub): aceptación humana -- sin caja de decisión propia,
+% el "¿amarillo/rojo?" es solo la ETIQUETA de la flecha, tal cual se
+% acordó (aquí no hay puerta samber: es el mismo mantenedor humano quien
+% decide) ----
+\node[colbox, right=1.6cm of l3] (l4) {%
+  \icn{check-circle}\;\hd{Aceptación humana en el Dashboard}\\[3pt]
+  \sft{el mantenedor ve el score y pulsa ``Aceptar''
+  (\mono{POST /api/scores/\{id\}/accept})}};
+
+% ---- etapa 5 (GitHub): el merge real ----
+\node[colbox, right=1.0cm of l4] (l5) {%
+  \icn{code-branch}\;\hd{Merge real en GitHub}\\[3pt]
+  \sft{\mono{\_try\_merge\_pull\_request} (token de instalación / PAT)
+  \textrightarrow\ \mono{POST} merge en la API de GitHub
+  (\mono{pulls/\{n\}/merge})\\[2pt]
+  \textcolor{semgreen}{$\blacksquare$}~la PR se mergea de verdad --- o
+  falla (rama protegida, checks, conflictos) y se reporta, sin romper la
+  aceptación ya registrada}};
+
+% ---- etapa 4' (Git servidor): el servidor lee el exit code del hook --
+% "rojo"/"no rojo" son las dos etiquetas de la flecha que llega aquí, no
+% una puerta de decisión propia (el servidor es el mismo componente pase
+% lo que pase por el hook) ----
+\node[colbox, right=1.6cm of r3] (r4) {%
+  \icn{server}\;\hd{Servidor Git: aplica el exit code}\\[3pt]
+  \sft{Forgejo \textperiodcentered\ GitLab \textperiodcentered\ Gitea
+  \textperiodcentered\ Gitolite \textperiodcentered\ bare SSH --- lee el
+  \mono{exit code} que devolvió el hook \mono{pre-receive} para ESA ref}};
+
+% ---- etapa 5' (Git servidor): las dos salidas reales, apiladas en vez de
+% en paralelo (el carril ahora es horizontal, así que "en paralelo" pasa a
+% ser arriba/abajo del propio carril) ----
+\node[small, right=0.9cm of r4, yshift=1.6cm] (r5y) {%
+  \textcolor{semred}{$\blacksquare$}~\textbf{\scriptsize exit 1} \textrightarrow\
+  \textbf{\scriptsize RECHAZA} la PR (la ref no se actualiza; motivo por
+  \mono{\scriptsize stderr})};
+
+\node[small, right=0.9cm of r4, yshift=-1.6cm] (r5n) {%
+  \textcolor{semgreen}{$\blacksquare$}~\textbf{\scriptsize exit 0} \textrightarrow\
+  \textbf{\scriptsize ACEPTA} la PR (la ref se actualiza; el commit entra
+  en el repo)};
+
+% ====================== flechas de flujo ======================
+\draw[arrow] (l1) -- (l2);
+\draw[arrow] (r1) -- (r2);
+
+% Convergencia en el núcleo: codo explícito de 3 tramos (avanza -- cruza
+% en línea recta -- avanza), mismo patrón que ya usa la salida
+% rojo/no-rojo de más abajo -- el núcleo ya no es una banda alta que
+% cubra los dos carriles, así que hace falta cruzar de Y=+-6 a Y=0 a
+% mano en vez de aterrizar directamente en su borde.
+\path let \p1=(l2.east) in coordinate (l2mid) at ({\x1+0.5cm},\y1);
+\path let \p1=(l2mid), \p2=(core.west) in coordinate (l2turn) at (\x1,\y2);
+\draw[arrow] (l2.east) -- (l2mid) -- (l2turn) -- (core.west);
+
+\path let \p1=(r2.east) in coordinate (r2mid) at ({\x1+0.5cm},\y1);
+\path let \p1=(r2mid), \p2=(core.west) in coordinate (r2turn) at (\x1,\y2);
+\draw[arrow] (r2.east) -- (r2mid) -- (r2turn) -- (core.west);
+
+% Divergencia simétrica de vuelta, mismo criterio.
+\path let \p1=(core.east) in coordinate (l3mid) at ({\x1+0.5cm},\y1);
+\path let \p1=(l3mid), \p2=(l3.west) in coordinate (l3turn) at (\x1,\y2);
+\draw[arrow] (core.east) -- (l3mid) -- (l3turn) -- (l3.west);
+
+\path let \p1=(core.east) in coordinate (r3mid) at ({\x1+0.5cm},\y1);
+\path let \p1=(r3mid), \p2=(r3.west) in coordinate (r3turn) at (\x1,\y2);
+\draw[arrow] (core.east) -- (r3mid) -- (r3turn) -- (r3.west);
+
+% GitHub: una sola flecha recta -- la etiqueta ES la decisión (sin caja de
+% puerta: decide un humano leyendo el Dashboard, no una condición que
+% evalúe WatchGate). Cuadrados de color en vez de texto largo, mismo
+% código semred/samber que ya usa el resto del diagrama.
+\draw[arrow] (l3) -- node[lbl, above=3pt, align=left]
+  {\textcolor{samber}{$\blacksquare$}~amarillo\\[7pt]
+   \textcolor{semred}{$\blacksquare$}~rojo} (l4);
+\draw[arrow] (l4) -- (l5);
+
+% Git servidor: UNA sola flecha recta con las dos salidas posibles
+% apiladas al lado (mismos cuadrados de color que ya identifican
+% rojo/verde en el resto del diagrama, ver r5y/r5n).
+\draw[arrow] (r3) -- node[lbl, above=3pt, align=left]
+  {\textcolor{semred}{$\blacksquare$}~rojo\\[7pt]
+   \textcolor{semgreen}{$\blacksquare$}~no rojo} (r4);
+
+% ... y de ahí sí hay dos salidas reales y distintas: un codo explícito de
+% 3 tramos (avanza - cruza - avanza), con las coordenadas calculadas a
+% mano para que el tramo intermedio caiga siempre en línea recta (nunca
+% en diagonal).
+\path let \p1=(r4.east) in coordinate (r4drop) at ({\x1+0.3cm},\y1);
+\path let \p1=(r4drop), \p2=(r5y.west) in coordinate (r4dropT) at (\x1,\y2);
+\path let \p1=(r4drop), \p2=(r5n.west) in coordinate (r4dropB) at (\x1,\y2);
+\draw[arrowsam] (r4.east) -- (r4drop) -- (r4dropT) -- (r5y.west);
+\draw[arrowsam] (r4.east) -- (r4drop) -- (r4dropB) -- (r5n.west);
+
+% ---- forzar caja delimitadora simétrica respecto al eje central (y=0) ----
+\path let \p1=(current bounding box.north), \p2=(current bounding box.south),
+          \n1={max(\y1,-\y2)} in (0,\n1) (0,-\n1);
+
+\end{tikzpicture}
+\end{document}
