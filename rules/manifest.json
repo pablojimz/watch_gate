@@ -90,7 +90,7 @@
       "custom": 64,
       "third_party": 717
     },
-    "yara": 10108
+    "yara": 10106
   },
   "finding_type_summary": {
     "semgrep": {
@@ -439,9 +439,9 @@
         "unclassified": 0
       },
       "utils": {
-        "malicious": 23,
+        "malicious": 21,
         "vulnerability": 0,
-        "needs_review": 21,
+        "needs_review": 19,
         "unclassified": 0
       },
       "webshells": {
@@ -452,7 +452,7 @@
       }
     }
   },
-  "finding_type_notes": "De 10885 regla(s) puntuada(s) y clasificada(s): 10109 apuntan a codigo ya malicioso (webshells, backdoors, tecnicas sin uso legitimo razonable -- respuesta esperada: contencion/aislamiento), 776 a vulnerabilidades explotables en codigo legitimo (respuesta esperada: ciclo normal de remediacion); 9390 de ellas estan marcadas needs_review para confirmacion humana.",
+  "finding_type_notes": "De 10883 regla(s) puntuada(s) y clasificada(s): 10107 apuntan a codigo ya malicioso (webshells, backdoors, tecnicas sin uso legitimo razonable -- respuesta esperada: contencion/aislamiento), 776 a vulnerabilidades explotables en codigo legitimo (respuesta esperada: ciclo normal de remediacion); 9388 de ellas estan marcadas needs_review para confirmacion humana.",
   "official_registry_configs": [
     "p/security-audit",
     "p/owasp-top-ten"
