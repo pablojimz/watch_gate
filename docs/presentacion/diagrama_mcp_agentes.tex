@@ -27,7 +27,7 @@
 \exhyphenpenalty=10000
 
 \newcommand{\name}[1]{{\LARGE\bfseries\color{brandnavy}#1}}
-\newcommand{\tname}[1]{{\large\bfseries\color{brandnavy}#1}}
+\newcommand{\tname}[1]{{\LARGE\bfseries\color{brandnavy}#1}}
 \newcommand{\sub}[1]{{\normalsize\color{inksoft}#1}}
 \newcommand{\icn}[1]{{\color{brandcyan}\faIcon{#1}}}
 
@@ -37,11 +37,11 @@
 \begin{tikzpicture}[
   every node/.style={font=\normalsize},
   band/.style={draw=brandnavy2, line width=0.9pt, fill=boxfill, rounded corners=3pt,
-               align=center, inner sep=14pt, text width=17cm, minimum height=1.4cm},
+               align=center, inner sep=14pt, text width=18.6cm, minimum height=1.5cm},
   tool/.style={draw=brandnavy2, line width=0.9pt, fill=paperraised, rounded corners=3pt,
-               align=center, inner sep=7pt, text width=3.2cm, minimum height=2.6cm},
+               align=center, inner sep=9pt, text width=3.7cm, minimum height=2.7cm},
   gate/.style={draw=samber, line width=1.1pt, fill=samber!8, rounded corners=3pt,
-               align=center, inner sep=14pt, text width=17cm, minimum height=2cm},
+               align=center, inner sep=14pt, text width=18.6cm, minimum height=2cm},
   outbox/.style={draw=brandnavy2, line width=0.9pt, fill=paperraised, rounded corners=3pt,
                  align=center, inner sep=12pt, text width=8cm, minimum height=1.9cm},
   arrow/.style={-{Stealth[length=8pt,width=7pt]}, brandnavy2, line width=1.4pt},
@@ -58,15 +58,15 @@
 
 % ---- fila 3: herramientas (5; la del medio fija el eje x=0) ----
 \node[tool] (t3) at ([yshift=-2.7cm]mcp.south)
-  {{\Large\icn{comments}}\\[8pt] \tname{explain\_risk}};
+  {{\huge\icn{comments}}\\[8pt] \tname{explain\_risk}};
 \node[tool, left=0.2cm of t3] (t2)
-  {{\Large\icn{search}}\\[8pt] \tname{analyze\_diff}};
+  {{\huge\icn{search}}\\[8pt] \tname{analyze\_diff}};
 \node[tool, left=0.2cm of t2] (t1)
-  {{\Large\icn{bolt}}\\[8pt] \tname{precheck}};
+  {{\huge\icn{bolt}}\\[8pt] \tname{precheck}};
 \node[tool, right=0.2cm of t3] (t4)
-  {{\Large\icn{check-circle}}\\[8pt] \tname{verify\_fix}};
+  {{\huge\icn{check-circle}}\\[8pt] \tname{verify\_fix}};
 \node[tool, right=0.2cm of t4] (t5)
-  {{\Large\icn{database}}\\[8pt] \tname{query\_threat\_kb}};
+  {{\huge\icn{database}}\\[8pt] \tname{threat\_kb}};
 
 \node[fit=(t1)(t5), inner sep=12pt, draw=linestrong, line width=0.7pt,
       dash pattern=on 2pt off 2pt, rounded corners=4pt] (toolbox) {};
@@ -96,14 +96,16 @@
 \draw[arrow] (guid.south) -- ([xshift=-4.6cm]guid.south |- pr.north) -- (pr.north);
 \draw[arrow] (guid.south) -- ([xshift=4.6cm]guid.south |- human.north) -- (human.north);
 
-% bucle RETRY_WITH_FIX (los dos codos comparten X para que suba recto)
+% bucle RETRY_WITH_FIX (los dos codos comparten X, por fuera de la fila de
+% herramientas -- que es más ancha que las bandas -- para que suba recto y sin
+% cruzar ninguna caja)
 \draw[loopArrow]
-  (guid.east) -- ([xshift=1.15cm]guid.east) coordinate (elbow)
+  (guid.east) -- ([xshift=1.0cm]toolbox.east |- guid.east) coordinate (elbow)
   -- node[right=3pt, font=\normalsize\itshape, color=samber, align=left] {RETRY\_WITH\_FIX}
   (elbow |- toolbox.east) -- (toolbox.east);
 
-% ---- etiqueta lateral ----
-\node[fit=(mcp)(guid), inner sep=16pt] (corebox) {};
+% ---- etiqueta lateral (a la izquierda de todo, incluida la fila de tools) ----
+\node[fit=(mcp)(guid)(toolbox), inner sep=16pt] (corebox) {};
 \draw[brandcyan, line width=1.8pt]
   ([xshift=-8pt]corebox.north west) -- ([xshift=-8pt]corebox.south west);
 \node[rotate=90, anchor=south, font=\large\bfseries, color=brandnavy2]
