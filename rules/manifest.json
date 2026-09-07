@@ -1,6 +1,6 @@
 {
-  "version": "v0.3.2",
-  "generated_at": "2026-08-31T08:28:04Z",
+  "version": "v0.3.3",
+  "generated_at": "2026-09-07T10:24:01Z",
   "hashes": {
     "semgrep": {
       "custom": {
@@ -69,11 +69,11 @@
       }
     },
     "yara": {
-      "antidebug_antivm": "sha256:8af8cb196cdfb4a4d91df1a5d51c0da996d8131a6a70e74e4ea69801a53bdbc3",
-      "exploit_kits": "sha256:ca2ff968da13bdcefe131d6298cb69e1b3dc9480e3a5247fcfed50e5ecd2903f",
-      "packers": "sha256:f7f1295d35d11a4ac939bb9f258d88412d95975de722d83814c074e86f882171",
-      "utils": "sha256:6886198e354e33411963af59adcb2b3670ec75bef801c24586a84dfecf151ef7",
-      "webshells": "sha256:07a64587eaedd2644127115c44f227ca233a1232ae4de9f5831f502e6569b803"
+      "antidebug_antivm": "sha256:82916c8c3b17e0fac07e8f03aa7205711a743782bb97482a6ebc05f717ab8fb1",
+      "exploit_kits": "sha256:c2c7d5cc8858b85584138f01355e0a2790f7a79ca9472e9f9bfef62f3b7dc98f",
+      "packers": "sha256:57a728e7238226703961d5458f3c0324681517667b9c14b8367fbca6d307be7f",
+      "utils": "sha256:b6e78edbb802c1716ecc76245f3bf196d264fc8232c35b703a5d126a35a7d7df",
+      "webshells": "sha256:dea5932b9608ede3ad0dd60462c26fe18b15dc9953d709a6a5bcc620fe6d7241"
     }
   },
   "languages_changed": [],
