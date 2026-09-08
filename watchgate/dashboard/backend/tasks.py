@@ -722,6 +722,25 @@ def build_repo_knowledge_graph(
 
     try:
         token, api_url = github_token, github_api_url
+        if not token:
+            # Credencial preferente para repos "managed": el token efímero
+            # de la propia instalación de la GitHub App (misma prioridad
+            # que usa `run_managed_scan` más arriba) -- sin esto, un repo
+            # PRIVADO conectado únicamente vía App (sin PAT personal ni de
+            # VCSConnection) fallaba con 404 y pedía "añade un token
+            # personal" aunque la App ya tuviera acceso de lectura de
+            # sobra para construir el mapa.
+            if repo.vcs_connection_id:
+                from watchgate.adapters.github_app import (
+                    get_installation_token,
+                    github_app_configured,
+                )
+
+                with next(get_session()) as session:
+                    vcs = session.get(VCSConnection, repo.vcs_connection_id)
+                    installation_id = vcs.installation_id if vcs else None
+                if installation_id and github_app_configured():
+                    token = get_installation_token(installation_id)
         if not token or not api_url:
             from watchgate.dashboard.backend.db import db_session as dashboard_db_session
             from watchgate.dashboard.backend.db import resolve_github_credentials
