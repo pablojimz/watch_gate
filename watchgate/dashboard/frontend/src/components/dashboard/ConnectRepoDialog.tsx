@@ -234,7 +234,7 @@ export function ConnectRepoDialog({
                     </div>
                   </div>
                   <Button asChild className="gap-2">
-                    <a href={appInstallUrl}>
+                    <a href={appInstallUrl} target="_blank" rel="noopener noreferrer">
                       <GitBranch className="size-4" />
                       {t('externalRepos.installAppButton')}
                     </a>
