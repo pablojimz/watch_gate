@@ -108,6 +108,34 @@ export default function ReposPage() {
     void loadSummaries()
   }, [loadSummaries])
 
+  // Recarga en vivo: sin esto, una PR nueva (llega por webhook, sin que el
+  // usuario haga nada) no se refleja aquí hasta recargar la página a mano
+  // -- mismo mecanismo SSE que RepoPage.tsx (ver dashboard/backend/
+  // live_events.py), pero contra el stream SIN filtrar por repo
+  // (GET /api/events): esta vista lista TODOS los repos a la vez, así
+  // que basta con saber que "algo" cambió para volver a pedir el resumen
+  // completo -- no hace falta saber cuál.
+  //
+  // Debounce corto: un burst de varios avisos casi seguidos (varias PRs
+  // llegando juntas, o varios repos a la vez) dispararía, si no,
+  // una recarga completa por cada uno -- loadSummaries hace un fetch por
+  // repo visible, no es gratis repetirlo sin coalescer.
+  useEffect(() => {
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null
+    const events = new EventSource('/api/events', { withCredentials: true })
+    events.onmessage = () => {
+      if (debounceTimer) clearTimeout(debounceTimer)
+      debounceTimer = setTimeout(() => void loadSummaries(), 300)
+    }
+    // Sin onerror explícito: EventSource ya reintenta la conexión sola
+    // (reconexión nativa del navegador) tras un corte.
+
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer)
+      events.close()
+    }
+  }, [loadSummaries])
+
   // Aterrizaje desde la Setup URL de la GitHub App: tras instalar la App,
   // GitHub redirige aquí con ?installation_id=...&setup_action=install. Se
   // reclama la instalación para la organización del usuario (crea la

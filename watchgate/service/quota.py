@@ -11,6 +11,7 @@ from sqlmodel import Session
 from watchgate.config import WatchGateConfig
 from watchgate.core.models import AggregatedResult, LayerResult, NormalizedDiff
 from watchgate.core.pipeline import run_full_analysis
+from watchgate.db.models import DEFAULT_USER_MONTHLY_TOKEN_QUOTA, User
 from watchgate.db.repository import (
     get_organization,
     get_token_usage,
@@ -37,16 +38,31 @@ class QuotaService:
     def __init__(self, session: Session) -> None:
         self.session = session
 
-    def get_org_quota_status(self, org_id: str) -> tuple[bool, int, int]:
-        """Comprueba el consumo mensual acumulado de la organización contra su cuota.
+    def _get_user_monthly_quota(self, user_id: str) -> int:
+        """Cuota mensual del `user_id` dado -- casi ilimitada por defecto.
+
+        `user_id` no siempre es un `User.id` real: los escaneos
+        automáticos (webhook, rama principal, auditoría -- ver
+        `dashboard/backend/tasks.py`) no los dispara ninguna persona en
+        concreto, así que `analyze_with_quota` les asigna un id sintético
+        por-organización (`system:<org_id>`) en vez de reutilizar un único
+        `"system"` global (eso era precisamente el bug: una fila de
+        `UserTokenUsage` COMPARTIDA por todas las orgs, así que el tráfico
+        automático de una org agotaba, sin querer, la cuota de otra). Ese
+        id sintético nunca tiene fila en `users`, así que cae al mismo
+        valor por defecto que un usuario real recién creado."""
+        user = self.session.get(User, user_id)
+        return user.monthly_token_quota if user else DEFAULT_USER_MONTHLY_TOKEN_QUOTA
+
+    def get_user_quota_status(self, user_id: str) -> tuple[bool, int, int]:
+        """Comprueba el consumo mensual acumulado del usuario contra su cuota.
 
         Retorna: (is_quota_exceeded, tokens_used, monthly_quota)
         """
-        org = get_organization(self.session, org_id)
-        monthly_quota = org.monthly_token_quota if org else 1_000_000
+        monthly_quota = self._get_user_monthly_quota(user_id)
 
         current_month = datetime.now(UTC).strftime("%Y-%m")
-        tokens_used = get_token_usage(self.session, month=current_month, org_id=org_id)
+        tokens_used = get_token_usage(self.session, month=current_month, user_id=user_id)
 
         is_exceeded = tokens_used >= monthly_quota
         return is_exceeded, tokens_used, monthly_quota
@@ -60,11 +76,26 @@ class QuotaService:
         user_id: str | None = None,
         agent_id: str | None = None,
     ) -> tuple[AggregatedResult, bool]:
-        """Ejecuta el análisis de riesgo respetando las cuotas de tokens de la organización.
+        """Ejecuta el análisis de riesgo respetando las cuotas de tokens del usuario.
 
-        Si la cuota de la organización ha sido superada, conmuta automáticamente al
-        **Modo Degradado Inteligente** (Opción B), omitiendo la capa semántica y
-        re-normalizando las capas deterministas activas, retornando `HTTP 200 OK`.
+        La cuota es POR USUARIO (`User.monthly_token_quota`, casi ilimitada
+        por defecto -- ver `DEFAULT_USER_MONTHLY_TOKEN_QUOTA`), no por
+        organización: antes se comprobaba `Organization.monthly_token_quota`
+        contra un consumo acumulado en una única fila de `UserTokenUsage`
+        compartida por TODO el tráfico automático (`user_id="system"`) de
+        TODAS las organizaciones -- una org con mucho volumen automático
+        (p. ej. muchos repos con escaneo de rama principal) podía agotar,
+        sin ninguna relación real, la cuota de otra org completamente
+        distinta que solo compartiera ese contador global. Reproducido en
+        vivo: una org con un solo repo y cero PRs propias analizadas caía
+        en Modo Degradado porque OTRA org ya había consumido ~11M tokens
+        ese mes bajo el mismo "system".
+
+        Si la cuota del usuario (o del id sintético del disparador
+        automático, ver `effective_user_id` más abajo) ha sido superada,
+        conmuta automáticamente al **Modo Degradado Inteligente** (Opción
+        B), omitiendo la capa semántica y re-normalizando las capas
+        deterministas activas, retornando `HTTP 200 OK`.
 
         Retorna: (AggregatedResult, is_degraded)
         """
@@ -88,17 +119,27 @@ class QuotaService:
             # es el que resuelve la autenticación (`org_id` de este
             # parámetro), nunca el que declare el propio cliente.
             metadata = {**metadata, "org_id": org_id}
-        effective_user_id = user_id or "system"
+        # Id sintético por-organización para el tráfico SIN usuario humano
+        # (webhook/rama principal/auditoría -- ver `dashboard/backend/
+        # tasks.py`, siempre `user_id=None`): antes esto colapsaba a un
+        # único `"system"` global, así que `record_token_usage`/
+        # `UserTokenUsage` (clave `user_id`+`month`, SIN `org_id`) sumaba
+        # en la MISMA fila el consumo automático de todas las orgs. Con
+        # `system:<org_id>` cada organización tiene su propio contador
+        # automático, aislado del de las demás -- sigue sin ser un usuario
+        # real, pero ya no comparte cubo con otro tenant. Solo cae a
+        # `"system"` a secas si tampoco hay `org_id` (uso local sin SaaS).
+        effective_user_id = user_id or (f"system:{org_id}" if org_id else "system")
 
         is_degraded = False
         reserved = False
         if org_id:
-            monthly_quota = org.monthly_token_quota if org else 1_000_000
+            monthly_quota = self._get_user_monthly_quota(effective_user_id)
             # Reserva ATÓMICA antes de decidir si se llama al LLM. Antes,
-            # `get_org_quota_status` (un SELECT) se comprobaba ANTES de la
+            # `get_user_quota_status` (un SELECT) se comprobaba ANTES de la
             # llamada al LLM (que tarda segundos) y el consumo real solo se
-            # contabilizaba DESPUÉS -- peticiones concurrentes de la misma
-            # organización dentro de esa ventana leían todas "cuota no
+            # contabilizaba DESPUÉS -- peticiones concurrentes del mismo
+            # usuario dentro de esa ventana leían todas "cuota no
             # superada" y todas acababan llamando al LLM, permitiendo
             # sobrepasar la cuota proporcionalmente a la concurrencia,
             # incluso con `record_token_usage` ya siendo atómico por sí
@@ -116,9 +157,9 @@ class QuotaService:
             if usage_after_reservation > monthly_quota:
                 is_degraded = True
                 logger.warning(
-                    "Org %s ha excedido su cuota mensual (%d / %d tokens tras reservar). "
+                    "Usuario %s ha excedido su cuota mensual (%d / %d tokens tras reservar). "
                     "Activando Modo Degradado Determinista.",
-                    org_id,
+                    effective_user_id,
                     usage_after_reservation,
                     monthly_quota,
                 )

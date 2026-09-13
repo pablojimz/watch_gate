@@ -69,6 +69,20 @@ class MonitoredRepo(SQLModel, table=True):
     consecutive_errors: int = Field(default=0)
 
 
+# Cuota mensual de tokens de LLM por defecto para un usuario -- "casi
+# ilimitada" a propósito (ver `service/quota.py`, que ahora imputa el
+# consumo por `user_id`, no por `org_id`): antes una única cuota de
+# organización se comprobaba contra una fila `UserTokenUsage` compartida
+# por TODOS los escaneos automáticos (webhook, rama principal, auditoría)
+# de TODAS las organizaciones -- ver `user_id="system"` en
+# `QuotaService.analyze_with_quota` -- así que una org con mucho tráfico
+# automático podía agotar, sin querer, la cuota de otra org completamente
+# ajena que compartiera ese mismo contador. Con cuota por usuario y un
+# techo tan alto que en la práctica nunca se alcanza, el Modo Degradado
+# Determinista deja de dispararse por una fuga cruzada entre tenants.
+DEFAULT_USER_MONTHLY_TOKEN_QUOTA = 2_000_000_000
+
+
 class User(SQLModel, table=True):
     """Usuario registrado de la plataforma WatchGate / SaaS."""
 
@@ -82,6 +96,7 @@ class User(SQLModel, table=True):
     custom_llm_api_key: str | None = Field(
         sa_column=Column(EncryptedString, nullable=True)
     )  # Clave cifrada para modalidad BYOK
+    monthly_token_quota: int = Field(default=DEFAULT_USER_MONTHLY_TOKEN_QUOTA)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 

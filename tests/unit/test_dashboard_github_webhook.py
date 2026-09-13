@@ -16,6 +16,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from watchgate.dashboard.backend.routers import webhooks as webhooks_module
+from watchgate.dashboard.backend.tasks import ANALYSIS_JOB_TIMEOUT_SECONDS
 
 _SECRET = "test-github-webhook-secret"
 
@@ -69,10 +70,12 @@ def test_pull_request_opened_enqueues_the_managed_scan_without_blocking_the_even
     interno -- pero corre sobre la implementación real con
     `run_in_threadpool`, no una versión simplificada."""
     calls = []
+    kwargs_seen = []
 
     class _FakeQueue:
-        def enqueue(self, *args):
+        def enqueue(self, *args, **kwargs):
             calls.append(args)
+            kwargs_seen.append(kwargs)
 
     monkeypatch.setattr(webhooks_module, "get_queue", lambda: _FakeQueue())
 
@@ -85,6 +88,10 @@ def test_pull_request_opened_enqueues_the_managed_scan_without_blocking_the_even
     response = _post(client, payload)
 
     assert response.status_code == 202
+    # job_timeout=ANALYSIS_JOB_TIMEOUT_SECONDS (1bb244f): sin límite
+    # explícito, un análisis colgado (LLM sin responder, red caída a medio
+    # diff) se queda ocupando el worker indefinidamente.
+    assert kwargs_seen == [{"job_timeout": ANALYSIS_JOB_TIMEOUT_SECONDS}]
     assert calls == [
         ("watchgate.dashboard.backend.tasks.run_managed_scan", "acme/widgets", 42, "999")
     ]
@@ -195,10 +202,12 @@ def test_authorized_repo_reaches_the_queue_with_the_right_args(
     monkeypatch.setattr(webhooks_module, "repo_is_authorized", _fake_authorized)
 
     calls = []
+    kwargs_seen = []
 
     class _FakeQueue:
-        def enqueue(self, *args):
+        def enqueue(self, *args, **kwargs):
             calls.append(args)
+            kwargs_seen.append(kwargs)
 
     monkeypatch.setattr(webhooks_module, "get_queue", lambda: _FakeQueue())
 
@@ -212,6 +221,7 @@ def test_authorized_repo_reaches_the_queue_with_the_right_args(
 
     assert response.status_code == 202
     assert seen_args == [("999", "acme/widgets")]
+    assert kwargs_seen == [{"job_timeout": ANALYSIS_JOB_TIMEOUT_SECONDS}]
     assert calls == [
         ("watchgate.dashboard.backend.tasks.run_managed_scan", "acme/widgets", 7, "999")
     ]

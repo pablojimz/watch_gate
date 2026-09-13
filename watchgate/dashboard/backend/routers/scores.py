@@ -15,7 +15,7 @@ from sqlmodel import select
 
 from watchgate.dashboard.backend import db as database
 from watchgate.dashboard.backend.auth import CurrentUser, require_ingest_token, require_role
-from watchgate.dashboard.backend.live_events import stream_repo_events
+from watchgate.dashboard.backend.live_events import stream_all_events, stream_repo_events
 from watchgate.dashboard.backend.org_scope import (
     is_site_superadmin,
     resolve_caller_org_id,
@@ -120,6 +120,27 @@ def stream_scores(repo: str, request: Request, user: CurrentUser) -> StreamingRe
             # respuesta -- sin esto, los eventos se quedarían atascados en
             # el buffer de proxy hasta acumular varios KB o cerrar la
             # conexión, en vez de llegar al navegador al instante.
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.get("/events")
+def stream_all_scores(_user: CurrentUser) -> StreamingResponse:
+    """SSE para la lista `/repos` (ReposPage.tsx): un `data: refresh` cada
+    vez que CUALQUIER repo tiene un score nuevo -- ver live_events.py y el
+    `data: refresh` por-repo de `stream_scores` arriba (esta versión no
+    filtra por repo, así que basta con estar logueado; no expone qué repo
+    cambió, cada cliente re-pide su propia lista ya filtrada por rol/org).
+    """
+    return StreamingResponse(
+        stream_all_events(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            # Ver el mismo header en stream_scores -- sin esto nginx
+            # bufferiza la respuesta y los eventos no llegan al instante.
             "X-Accel-Buffering": "no",
         },
     )

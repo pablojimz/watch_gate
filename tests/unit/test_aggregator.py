@@ -235,7 +235,22 @@ def test_semantic_floor_never_lowers_a_score_that_was_already_higher():
     assert out.semaforo == Semaforo.ROJO
 
 
-def test_malicious_threat_forces_red_semaforo():
+def test_deps_layer_malicious_with_confidence_does_not_force_red():
+    """Actualizado tras 31029ee (fix(aggregator): la escalada por
+    confianza+malicioso solo debe fiarse de semantic) -- este test antes
+    esperaba que un `deps`/`dependencies` con `threat_nature=MALICIOUS` y
+    `confidence=ALTA` forzara el combinado a 70/ROJO, justo el bug
+    documentado en `_apply_malicious_and_uncertain_policy` (comentario
+    largo, ~línea 132): la `confidence` de `deps_layer.py`/`static_layer.py`
+    es una regla mecánica propia ("si mi risk_score llega a 70,
+    confidence=ALTA"), no corroboración independiente de un LLM que ha
+    visto el diff completo como sí lo es la de `semantic` -- confiar en
+    ella causaba falsos ROJO reales (typosquatting por Levenshtein en
+    nombres de 2-4 caracteres, `exec_dynamic` en JS/TS). Ahora la escalada
+    está restringida EXPLÍCITAMENTE a `semantic`, así que este mismo
+    escenario debe quedarse en la media ponderada normal (40 = 0.5*80),
+    sin escalar -- ver el positivo equivalente para `semantic` justo
+    debajo."""
     finding = Finding(
         file_path="setup.py",
         rule_id="postinstall-script",
@@ -259,23 +274,25 @@ def test_malicious_threat_forces_red_semaforo():
 
     out = aggregate(results, weights, diff=None, pr_id="1", repo="org/repo")
 
-    assert out.score == 70
-    assert out.semaforo == Semaforo.ROJO
+    assert out.score == 40
+    assert out.semaforo != Semaforo.ROJO
     assert out.threat_summary["malicioso"] == 1
 
 
-def test_deps_layer_malicious_escalates_to_red_threshold_without_forcing_100():
-    """Verifica que una detección maliciosa en dependencias eleva el score
-    al umbral rojo (70) con semáforo ROJO sin forzar arbitrariamente a 100."""
+def test_semantic_malicious_with_high_confidence_escalates_to_red_threshold():
+    """Contrapartida de test_deps_layer_malicious_with_confidence_does_not_force_red
+    -- MISMO escenario (hallazgo malicioso + confidence=ALTA), pero en la
+    capa `semantic`, la única que 31029ee sigue dejando escalar el
+    combinado al umbral rojo (70) sin forzar arbitrariamente a 100."""
     finding = Finding(
         file_path="package.json",
-        rule_id="dependency-npm",
+        rule_id="semantic-llm-analysis",
         message="Posible typosquatting: 'expresss' imita a 'express'",
         threat_nature=ThreatNature.MALICIOUS,
         severity="error",
     )
-    deps_layer = LayerResult(
-        layer_name="dependencies",
+    semantic_layer = LayerResult(
+        layer_name="semantic",
         risk_score=75,
         justification="typosquatting detectado",
         findings=[finding],
@@ -284,9 +301,9 @@ def test_deps_layer_malicious_escalates_to_red_threshold_without_forcing_100():
     )
     results = {
         "static": _result("static", 0),
-        "dependencies": deps_layer,
+        "dependencies": _result("dependencies", 0),
         "reputation": _result("reputation", 0),
-        "semantic": _result("semantic", 0),
+        "semantic": semantic_layer,
     }
     weights = {"static": 0.25, "dependencies": 0.10, "reputation": 0.25, "semantic": 0.40}
 

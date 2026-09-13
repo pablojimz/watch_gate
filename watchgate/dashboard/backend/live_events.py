@@ -63,12 +63,15 @@ def publish_pr_update(repo: str) -> None:
         logger.warning("No se pudo publicar el aviso de PR nuevo para %s", repo, exc_info=True)
 
 
-async def stream_repo_events(repo: str) -> AsyncIterator[str]:
-    """Generador SSE para `repo`: `data: refresh\\n\\n` cada vez que llega
-    un aviso de publish_pr_update() para ese mismo repo, y un comentario
-    de heartbeat cada _HEARTBEAT_SECONDS si no hay nada nuevo (mantiene
-    viva la conexión y sirve de latido para que el navegador note una
-    caída real)."""
+async def _stream_events(repo: str | None, log_label: str) -> AsyncIterator[str]:
+    """Generador SSE compartido: `data: refresh\\n\\n` cada vez que llega un
+    aviso de publish_pr_update() -- filtrado a `repo` si se pasa (ver
+    stream_repo_events, para la página de detalle de UN repo), o para
+    CUALQUIER repo si `repo` es `None` (ver stream_all_events, para la
+    lista `/repos` -- no necesita saber CUÁL repo cambió, solo que algo
+    cambió, para volver a pedir su resumen). Comentario de heartbeat cada
+    _HEARTBEAT_SECONDS si no hay nada nuevo (mantiene viva la conexión y
+    sirve de latido para que el navegador note una caída real)."""
     try:
         client: aioredis.Redis = aioredis.from_url(_REDIS_URL, socket_connect_timeout=2)
         pubsub = client.pubsub()
@@ -78,7 +81,7 @@ async def stream_repo_events(repo: str) -> AsyncIterator[str]:
         # inicial de /scores ya trae el dato), solo no hay aviso en vivo.
         logger.warning(
             "SSE de %s sin Redis disponible -- solo heartbeats, sin avisos en vivo",
-            repo,
+            log_label,
             exc_info=True,
         )
         while True:
@@ -97,7 +100,7 @@ async def stream_repo_events(repo: str) -> AsyncIterator[str]:
                 payload = json.loads(message["data"])
             except (TypeError, ValueError, KeyError):
                 continue
-            if payload.get("repo") == repo:
+            if repo is None or payload.get("repo") == repo:
                 yield "data: refresh\n\n"
     finally:
         # Se ejecuta también cuando el cliente cierra la pestaña/navega
@@ -107,3 +110,17 @@ async def stream_repo_events(repo: str) -> AsyncIterator[str]:
         await pubsub.unsubscribe(_CHANNEL)
         await pubsub.close()
         await client.close()
+
+
+def stream_repo_events(repo: str) -> AsyncIterator[str]:
+    """SSE para la página de detalle de UN repo -- solo sus propios avisos."""
+    return _stream_events(repo, log_label=repo)
+
+
+def stream_all_events() -> AsyncIterator[str]:
+    """SSE para la lista `/repos`: avisa de un score nuevo en CUALQUIER
+    repo visible para el usuario (el filtrado por org/rol lo sigue
+    aplicando, como siempre, el propio GET que el frontend repite al
+    recibir el aviso -- este stream no expone qué repo cambió, así que no
+    hace falta re-comprobar permisos por mensaje)."""
+    return _stream_events(None, log_label="*")

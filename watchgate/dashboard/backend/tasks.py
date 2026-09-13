@@ -22,6 +22,25 @@ from watchgate.service.quota import QuotaService
 logger = logging.getLogger("watchgate.tasks")
 
 
+def _split_owner_repo(repo_path: str) -> tuple[str, str]:
+    """`repo_path.split("/", 1)` con un error claro si no tiene forma
+    "owner/repo" -- las 4 tareas de escaneo de abajo lo hacían con el
+    `.split()` a pelo, que ante un `MonitoredRepo.repo_path` mal formado
+    (dato corrupto/mal introducido, ej. "freeCodeCamp" sin owner, visto en
+    vivo en la cola real) revienta con un `ValueError: not enough values
+    to unpack` genérico y opaco -- indistinguible de cualquier otro bug
+    salvo leyendo la traza entera. Esto en cambio deja explícito EN el
+    mensaje de error cuál es el repo_path culpable y qué formato faltaba,
+    para que aparezca directo en el log/`error_message` sin tener que
+    depurar."""
+    parts = repo_path.split("/", 1)
+    if len(parts) != 2 or not parts[0] or not parts[1]:
+        raise ValueError(
+            f"repo_path {repo_path!r} no tiene la forma 'owner/repo' esperada"
+        )
+    return parts[0], parts[1]
+
+
 def _repo_id_for(org_id: str, repo_path: str) -> str | None:
     """Busca el id de un `MonitoredRepo` por (org_id, repo_path) en una
     sesión NUEVA -- se llama desde los `except` de las tareas de escaneo de
@@ -142,7 +161,7 @@ def run_managed_scan(
                     api_url = api_url or res_url
 
             client = GitHubClient(token, api_url=api_url)
-            owner, repo_name = repo_path.split("/", 1)
+            owner, repo_name = _split_owner_repo(repo_path)
 
             diff_text, metadata = client.get_pull_request_data(owner, repo_name, pr_number)
 
@@ -420,7 +439,7 @@ def run_main_branch_scan(
                     api_url = api_url or res_url
 
             client = GitHubClient(token, api_url=api_url)
-            owner, repo_name = repo_path.split("/", 1)
+            owner, repo_name = _split_owner_repo(repo_path)
 
             diff_text, metadata = client.get_default_branch_scan_data(owner, repo_name)
 
@@ -554,7 +573,7 @@ def run_audit_scan(
 
             # 2. Descargar Diff y Metadata
             client = GitHubClient(token, api_url=api_url)
-            owner, repo_name = repo_path.split("/", 1)
+            owner, repo_name = _split_owner_repo(repo_path)
 
             diff_text, metadata = client.get_pull_request_data(owner, repo_name, pr_number)
 
@@ -722,6 +741,25 @@ def build_repo_knowledge_graph(
 
     try:
         token, api_url = github_token, github_api_url
+        if not token:
+            # Credencial preferente para repos "managed": el token efímero
+            # de la propia instalación de la GitHub App (misma prioridad
+            # que usa `run_managed_scan` más arriba) -- sin esto, un repo
+            # PRIVADO conectado únicamente vía App (sin PAT personal ni de
+            # VCSConnection) fallaba con 404 y pedía "añade un token
+            # personal" aunque la App ya tuviera acceso de lectura de
+            # sobra para construir el mapa.
+            if repo.vcs_connection_id:
+                from watchgate.adapters.github_app import (
+                    get_installation_token,
+                    github_app_configured,
+                )
+
+                with next(get_session()) as session:
+                    vcs = session.get(VCSConnection, repo.vcs_connection_id)
+                    installation_id = vcs.installation_id if vcs else None
+                if installation_id and github_app_configured():
+                    token = get_installation_token(installation_id)
         if not token or not api_url:
             from watchgate.dashboard.backend.db import db_session as dashboard_db_session
             from watchgate.dashboard.backend.db import resolve_github_credentials
@@ -732,7 +770,7 @@ def build_repo_knowledge_graph(
                 api_url = api_url or res_url
 
         client = GitHubClient(token, api_url=api_url)
-        owner, repo_name = repo_path.split("/", 1)
+        owner, repo_name = _split_owner_repo(repo_path)
         metadata = client.get_repo_metadata(owner, repo_name)
         default_branch = metadata.get("default_branch", "main")
 
