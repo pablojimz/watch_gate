@@ -271,7 +271,14 @@ def test_typosquatting_underscore_normalization() -> None:
 def test_new_dependency_without_attack_signals_gets_baseline_score() -> None:
     """Sin typosquatting/script/URL directa, una dependencia nueva sigue
     dando un score bajo pero no cero -- y la justificación ya no debe
-    mencionar CVEs/OSV, eso lo comprueba ahora vulnerabilities_layer.py."""
+    mencionar CVEs/OSV, eso lo comprueba ahora vulnerabilities_layer.py.
+
+    Actualizado tras 84cd6da (fix(deps): no listar cada dependencia sin
+    señales en la justificación): el detalle "sin señales de
+    typosquatting..." ya no aparece en la justificación DE LA CAPA (solo
+    en el `Finding` individual) -- sin este fix, un PR con 97 dependencias
+    limpias generaba un muro de 97 líneas casi idénticas en vez de un
+    resumen legible."""
     layer = DepsLayer()
     diff = _make_diff(
         [
@@ -287,7 +294,9 @@ def test_new_dependency_without_attack_signals_gets_baseline_score() -> None:
     res = layer.analyze(diff, {})
     assert res.risk_score == 10
     assert "vulnerabilidades" not in res.justification.lower()
-    assert "sin señales de typosquatting" in res.justification.lower()
+    assert "sin señales de typosquatting" not in res.justification.lower()
+    assert len(res.findings) == 1
+    assert "sin señales de typosquatting" in res.findings[0].message.lower()
 
 
 def test_deps_layer_analyze_go_mod_and_composer() -> None:
@@ -305,7 +314,13 @@ def test_deps_layer_analyze_go_mod_and_composer() -> None:
     )
     res_go = layer.analyze(diff_go, {})
     assert res_go.risk_score == 10
-    assert "github.com/gin-gonic/gin" in res_go.justification
+    # Tras 84cd6da (fix(deps): no listar cada dependencia sin señales en la
+    # justificación), una dependencia nueva SIN señal real ya no se nombra
+    # en la justificación de la capa (solo cuenta en el resumen) -- el
+    # detalle sigue vivo en su propio Finding estructurado.
+    assert "github.com/gin-gonic/gin" not in res_go.justification
+    assert len(res_go.findings) == 1
+    assert "github.com/gin-gonic/gin" in res_go.findings[0].message
 
     comp_diff_hunk = (
         '@@ -1,0 +1,2 @@\n+  "guzzlehttp/guzzle": "^7.8",\n'
@@ -377,7 +392,12 @@ def test_multiple_dependencies_take_the_max_never_the_sum() -> None:
     """Regla explícita de la capa (igual que la estática): el score final
     de un PR con varias dependencias es el MÁXIMO entre ellas, nunca la
     suma -- aquí una típica inofensiva (10) junto a un typosquat real
-    (75) debe dar 75, no 85."""
+    (75) debe dar 75, no 85.
+
+    Actualizado tras 84cd6da: `some-new-pkg` (sin señal real) ya no se
+    nombra en la justificación de la capa, solo cuenta en el resumen "(+N
+    dependencia(s) más sin señales...)" -- `1odash` (la señal real, el
+    typosquat) sigue nombrado tal cual."""
     layer = DepsLayer()
     diff = _make_diff(
         [
@@ -392,7 +412,8 @@ def test_multiple_dependencies_take_the_max_never_the_sum() -> None:
     )
     res = layer.analyze(diff, {})
     assert res.risk_score == 75
-    assert "some-new-pkg" in res.justification
+    assert "some-new-pkg" not in res.justification
+    assert "+1 dependencia(s) más sin señales" in res.justification
     assert "1odash" in res.justification
     # Ambos paquetes generan su propio Finding -- no se descarta el que no
     # disparó nada.
