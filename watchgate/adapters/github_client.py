@@ -254,7 +254,17 @@ class GitHubClient:
         for attempt in range(max_retries):
             try:
                 diff_text = ""
-                with httpx.stream("GET", url, headers=headers, timeout=_TIMEOUT) as response:
+                # follow_redirects=True: MISMO fix que `_request` de arriba,
+                # repetido aquí porque este método NO pasa por ahí (llama a
+                # httpx.stream() directo) -- sin esto, cualquier repo
+                # renombrado/transferido (GitHub responde 301 a la URL
+                # owner/repo, apuntando a /repositories/{id}) rompía la
+                # descarga del diff con un HTTPStatusError sin sentido en vez
+                # de seguir el redirect. Reproducido en vivo: era la causa de
+                # ~el 46% de los jobs de auditoría fallidos en cola.
+                with httpx.stream(
+                    "GET", url, headers=headers, timeout=_TIMEOUT, follow_redirects=True
+                ) as response:
                     # Manejo de Rate Limit -- primario y secundario, ver
                     # `_rate_limit_sleep_seconds`.
                     sleep_time = _rate_limit_sleep_seconds(response)
