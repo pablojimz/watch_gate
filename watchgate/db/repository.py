@@ -13,6 +13,7 @@ from sqlmodel import Session, select
 
 from watchgate.core.models import AggregatedResult
 from watchgate.db.models import (
+    DEFAULT_USER_MONTHLY_TOKEN_QUOTA,
     Organization,
     PRScore,
     User,
@@ -139,6 +140,7 @@ def create_user(
     role: str = "revisor",
     custom_llm_api_key: str | None = None,
     org_id: str | None = None,
+    monthly_token_quota: int = DEFAULT_USER_MONTHLY_TOKEN_QUOTA,
 ) -> User:
     """Crea o recupera un usuario de la plataforma.
 
@@ -170,6 +172,7 @@ def create_user(
         role=role,
         org_id=org_id,
         custom_llm_api_key=custom_llm_api_key,
+        monthly_token_quota=monthly_token_quota,
     )
     session.add(user)
     session.commit()

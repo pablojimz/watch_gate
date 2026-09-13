@@ -237,11 +237,17 @@ def get_agent_policy(
     auth: tuple[UserAPIKey, User, Organization] = Depends(require_scope("scores:read")),  # noqa: B008
     session: Session = Depends(get_db_session),  # noqa: B008
 ) -> AgentPolicyResponse:
-    """Devuelve las políticas corporativas y el estado de cuota restante de la organización."""
-    _, _, org = auth
+    """Devuelve las políticas corporativas y el estado de cuota restante del usuario.
+
+    La cuota ahora es POR USUARIO, no por organización (ver
+    `QuotaService.analyze_with_quota`) -- `org_id` en la respuesta sigue
+    siendo el de la organización autenticada (las políticas/pesos/umbrales
+    sí son corporativos), pero `monthly_token_quota`/`tokens_used`/
+    `quota_remaining` reflejan la cuota de ESTE usuario concreto."""
+    _, user, org = auth
 
     quota_service = QuotaService(session)
-    _is_exceeded, used, quota = quota_service.get_org_quota_status(org.id)
+    _is_exceeded, used, quota = quota_service.get_user_quota_status(user.id)
     remaining = max(0, quota - used)
 
     base_config = load_config()

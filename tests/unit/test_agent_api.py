@@ -298,9 +298,16 @@ def test_agent_analyze_rejects_config_override_of_weights(api_client):
 
 
 def test_agent_policy_endpoint(api_client):
+    """`monthly_token_quota`/`quota_remaining` reflejan la cuota del USUARIO
+    autenticado (ver `QuotaService.get_user_quota_status`), no la de la
+    organización -- `org_id` en la respuesta sí sigue siendo el de la org
+    (thresholds/weights son corporativos)."""
     client, session = api_client
-    org = create_organization(session, name="Policy Org", monthly_token_quota=500_000)
-    user = create_user(session, email="pol@corp.com", name="Policy User", org_id=org.id)
+    org = create_organization(session, name="Policy Org")
+    user = create_user(
+        session, email="pol@corp.com", name="Policy User", org_id=org.id,
+        monthly_token_quota=500_000,
+    )
     _, raw_token = create_api_key(
         session, user_id=user.id, org_id=org.id, monitored_repo_id="test-repo-id"
     )

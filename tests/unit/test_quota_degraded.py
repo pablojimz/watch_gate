@@ -68,8 +68,14 @@ def test_policy_service_overrides() -> None:
 
 def test_quota_service_standard_mode() -> None:
     session = _get_memory_session()
-    org = create_organization(session, name="Standard Org", monthly_token_quota=100_000)
-    user = create_user(session, email="std@example.com", name="Standard User", org_id=org.id)
+    org = create_organization(session, name="Standard Org")
+    user = create_user(
+        session,
+        email="std@example.com",
+        name="Standard User",
+        org_id=org.id,
+        monthly_token_quota=100_000,
+    )
     key_rec, _ = create_api_key(
         session, user_id=user.id, org_id=org.id, monitored_repo_id="test-repo-id"
     )
@@ -82,8 +88,9 @@ def test_quota_service_standard_mode() -> None:
 
     quota_service = QuotaService(session)
 
-    # Verificar estado de cuota
-    is_exceeded, used, quota = quota_service.get_org_quota_status(org.id)
+    # Verificar estado de cuota -- ahora es POR USUARIO, no por organización
+    # (ver QuotaService.analyze_with_quota / DEFAULT_USER_MONTHLY_TOKEN_QUOTA).
+    is_exceeded, used, quota = quota_service.get_user_quota_status(user.id)
     assert is_exceeded is False
     assert used == 0
     assert quota == 100_000
@@ -110,9 +117,12 @@ def test_quota_service_standard_mode() -> None:
 
 def test_quota_service_degraded_mode() -> None:
     session = _get_memory_session()
-    # Crear organización con cuota baja de 1,000 tokens
-    org = create_organization(session, name="Low Quota Org", monthly_token_quota=1000)
-    user = create_user(session, email="low@example.com", name="Low Quota User", org_id=org.id)
+    org = create_organization(session, name="Low Quota Org")
+    # Usuario con cuota baja de 1,000 tokens (la cuota es POR USUARIO)
+    user = create_user(
+        session, email="low@example.com", name="Low Quota User", org_id=org.id,
+        monthly_token_quota=1000,
+    )
 
     current_month = datetime.now(UTC).strftime("%Y-%m")
     # Consumir previamente 1,500 tokens (superando el límite de 1,000)
@@ -121,7 +131,7 @@ def test_quota_service_degraded_mode() -> None:
     )
 
     quota_service = QuotaService(session)
-    is_exceeded, used, quota = quota_service.get_org_quota_status(org.id)
+    is_exceeded, used, quota = quota_service.get_user_quota_status(user.id)
     assert is_exceeded is True
     assert used == 1500
 
@@ -217,7 +227,7 @@ def _fake_full_analysis(diff, metadata, config):  # noqa: ANN001, ARG001
 
 def test_analyze_with_quota_closes_toctou_window_under_concurrency(monkeypatch, tmp_path) -> None:
     """Caso real encontrado en revisión: la comprobación de cuota
-    (`get_org_quota_status`) ocurría ANTES de la llamada al LLM (que tarda
+    (`get_user_quota_status`) ocurría ANTES de la llamada al LLM (que tarda
     segundos) y el consumo se contabilizaba DESPUÉS -- peticiones
     concurrentes dentro de esa ventana leían todas "cuota no superada" y
     todas acababan llamando al LLM, permitiendo sobrepasar la cuota
@@ -237,8 +247,13 @@ def test_analyze_with_quota_closes_toctou_window_under_concurrency(monkeypatch, 
     init_db(test_engine)
 
     session = Session(test_engine)
-    org = create_organization(session, name="Race Org", monthly_token_quota=3000)
-    user = create_user(session, email="race@example.com", name="Race User", org_id=org.id)
+    org = create_organization(session, name="Race Org")
+    # Cuota baja en el USUARIO, no en la org -- la reserva/comprobación de
+    # analyze_with_quota ahora imputa por user_id (ver quota.py).
+    user = create_user(
+        session, email="race@example.com", name="Race User", org_id=org.id,
+        monthly_token_quota=3000,
+    )
     session.commit()
 
     diff = parse_diff_from_text(
