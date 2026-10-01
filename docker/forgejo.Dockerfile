@@ -3,6 +3,6 @@
 # docs/manual_git_hooks.md §6. La imagen oficial trae `curl` pero no `jq`,
 # que el hook de docker/git-server-hooks/pre-receive necesita para parsear
 # la respuesta JSON del Engine API.
-FROM codeberg.org/forgejo/forgejo:10
+FROM codeberg.org/forgejo/forgejo:16
 
 RUN apk add --no-cache jq
